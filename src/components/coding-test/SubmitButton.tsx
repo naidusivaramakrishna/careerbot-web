@@ -8,6 +8,7 @@ interface SubmitButtonProps {
   submitState: 'idle' | 'submitting' | 'done';
   runState: 'idle' | 'running' | 'done';
   submissionsRemaining: number | null;
+  isPracticeMode?: boolean;
   disabled?: boolean;
 }
 
@@ -17,6 +18,7 @@ export default function SubmitButton({
   submitState,
   runState,
   submissionsRemaining,
+  isPracticeMode = false,
   disabled = false,
 }: SubmitButtonProps) {
   const outOfCredits = submissionsRemaining === 0;
@@ -24,7 +26,7 @@ export default function SubmitButton({
 
   return (
     <div className="flex items-center gap-2">
-      {submissionsRemaining !== null && (
+      {submissionsRemaining !== null && !isPracticeMode && (
         <span
           className={`text-xs tabular-nums ${outOfCredits ? 'text-rose-500' : 'text-slate-400'}`}
           aria-live="polite"
@@ -55,19 +57,19 @@ export default function SubmitButton({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={disabled || busy || outOfCredits}
+        disabled={disabled || busy || (outOfCredits && !isPracticeMode)}
         aria-live="polite"
         className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
       >
         {submitState === 'submitting' ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Grading…
+            {isPracticeMode ? 'Running tests…' : 'Grading…'}
           </>
         ) : (
           <>
             <Play className="h-4 w-4" aria-hidden />
-            Submit for grading
+            {isPracticeMode ? 'Submit' : 'Submit for grading'}
           </>
         )}
       </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Play,
@@ -8,6 +9,8 @@ import {
   CheckCircle2,
   Lock,
   FileText,
+  LogOut,
+  AlertTriangle,
 } from "lucide-react";
 import { useMockInterview, MockStageState } from "../_context/MockInterviewContext";
 
@@ -66,13 +69,40 @@ export default function MockSidebar() {
   const router = useRouter();
   const { stageState } = useMockInterview();
   const stages = buildStages(stageState);
-  const completedCount = stages.filter((s) => s.status === "completed").length;
-  const progressPct = Math.round((completedCount / stages.length) * 100);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   if (pathname === "/mock-interview") return null;
 
   return (
-    <aside className="hidden min-h-screen w-16 shrink-0 flex-col items-center border-r border-gray-200 bg-white lg:flex">
+    <>
+    {showExitConfirm && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+            <AlertTriangle size={22} className="text-red-500" />
+          </div>
+          <h2 className="text-base font-semibold text-gray-900">Exit mock interview?</h2>
+          <p className="mt-1.5 text-sm text-gray-500">
+            Your current session progress may not be saved. Are you sure you want to leave?
+          </p>
+          <div className="mt-5 flex gap-2">
+            <button
+              onClick={() => setShowExitConfirm(false)}
+              className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Stay
+            </button>
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
+            >
+              Exit
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    <aside className="hidden h-full w-16 shrink-0 flex-col items-center border-r border-gray-200 bg-white lg:flex">
       <div className="flex h-16 w-full items-center justify-center border-b border-gray-100">
         <button
           onClick={() => router.push("/mock-interview/live")}
@@ -126,25 +156,13 @@ export default function MockSidebar() {
                 {isInProgress && !isActive && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#2557a7]" />}
               </button>
 
-              <RailTooltip title={stage.label} description={stage.locked ? stage.lockReason : stage.subLabel} />
             </div>
           );
         })}
       </nav>
 
       <div className="flex w-full flex-col items-center gap-3 border-t border-gray-100 px-2 py-4">
-        <div className="group relative flex flex-col items-center gap-1" aria-label={`Session progress ${completedCount} of ${stages.length}`}>
-          <div className="h-16 w-1.5 overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="w-full rounded-full bg-linear-to-t from-[#2557a7] to-[#5b8fd6] transition-all duration-700"
-              style={{ height: `${progressPct}%` }}
-            />
-          </div>
-          <span className="text-[10px] font-bold tabular-nums text-[#2557a7]">{completedCount}/{stages.length}</span>
-          <RailTooltip title="Session Area" description={`${completedCount} of ${stages.length} completed`} />
-        </div>
-
-        <div className="group relative w-full">
+<div className="group relative w-full">
           <button
             onClick={() => router.push("/notes/generate")}
             className="flex h-11 w-full items-center justify-center rounded-xl border border-[#2557a7]/15 bg-[#2557a7]/5 text-[#2557a7] transition-colors hover:bg-[#2557a7]/10"
@@ -153,9 +171,20 @@ export default function MockSidebar() {
           >
             <FileText size={17} />
           </button>
-          <RailTooltip title="Optional Prep" description="Notes & Practice" />
+        </div>
+
+        <div className="group relative w-full">
+          <button
+            onClick={() => setShowExitConfirm(true)}
+            className="flex h-11 w-full items-center justify-center rounded-xl border border-transparent text-gray-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
+            aria-label="Exit mock interview"
+            title="Exit"
+          >
+            <LogOut size={17} />
+          </button>
         </div>
       </div>
     </aside>
+    </>
   );
 }

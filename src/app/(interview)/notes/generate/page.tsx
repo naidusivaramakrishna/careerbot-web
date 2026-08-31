@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { logger } from "@/lib/logger";
 import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
 import { getAllResumesUnified } from "@/api/resumeApi";
+import { parseResumeForEnhancer } from "@/api/enhancerApi";
 import type { ResumeResponse } from "@/api/resumeApi";
 import type { EnhancedResumeSummary } from "@/types/api.types";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
@@ -20,10 +22,10 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
   Loader2,
   AlertCircle,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { escapeHtml } from "@/lib/sanitizeHtml";
 
@@ -63,6 +65,10 @@ interface NotesData {
     teamwork_example: string;
     handling_gaps: string;
     learning_attitude: string;
+    salary_discussion: string;
+    relocation_answer: string;
+    shift_answer: string;
+    weakness_answer: string;
   };
   unfilled_count: number;
 }
@@ -92,10 +98,10 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const projectExplanations: ProjectNote[] = (apiNotes.project_explanations ?? []).map((p: any) => {
-    const techStack = Array.isArray(p.tech_stack)
-      ? p.tech_stack.join(", ")
-      : p.tech_stack ?? (Array.isArray(p.key_tech_terms) ? p.key_tech_terms.join(", ") : (p.key_tech_terms ?? ""));
+  const projectExplanations: ProjectNote[] = (apiNotes.project_explanations ?? []).map((p: any, i: number) => {
+    const techStack = Array.isArray(p.key_tech_terms)
+      ? p.key_tech_terms.join(", ")
+      : (p.key_tech_terms ?? "");
 
     const followUpQuestions = Array.isArray(p.follow_up_questions)
       ? p.follow_up_questions
@@ -106,11 +112,11 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
       : [];
 
     return {
-      project_name: p.project_name ?? "",
+      project_name: p.project_name ?? p.title ?? `Project ${i + 1}`,
       overview: p.overview ?? p.one_liner ?? "",
       your_role: p.your_role ?? p.role ?? "",
       tech_stack: techStack,
-      how_it_works: p.how_it_works ?? p.explanation_script ?? "",
+      how_it_works: p.explanation_script ?? "",
       challenges: p.challenges ?? "",
       results: p.results ?? "",
       follow_up_questions: followUpQuestions,
@@ -130,6 +136,10 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
         ? additional.employment_gaps.talking_points.join("\n")
         : ""),
     learning_attitude: additional.learning_attitude ?? "",
+    salary_discussion: additional.salary_discussion?.script ?? additional.salary_discussion ?? "",
+    relocation_answer: additional.relocation_answer?.script ?? additional.relocation_answer ?? "",
+    shift_answer: additional.shift_answer?.script ?? additional.shift_answer ?? "",
+    weakness_answer: additional.weakness_answer?.script ?? additional.weakness_answer ?? "",
   };
 
   return {
@@ -165,7 +175,6 @@ function toResumeOption(r: ResumeResponse): ResumeOption {
 const TABS = [
   { id: "intro", label: "Self-Intro", icon: FileText },
   { id: "projects", label: "Projects", icon: Briefcase },
-  { id: "hr", label: "HR Answers", icon: MessageSquare },
   { id: "additional", label: "Additional Notes", icon: MoreHorizontal },
 ];
 
@@ -349,25 +358,50 @@ function GenerationProgress({ stage }: { stage: number }) {
 
 export default function NotesPage() {
   const router = useRouter();
-  const { userId, setNotesGenerated: setContextNotesGenerated, progressLoading } = useMockInterview();
+  const { setNotesGenerated: setContextNotesGenerated, progressLoading, userId } = useMockInterview();
   const [notes, setNotes] = useState<NotesData | null>(null);
   const [activeTab, setActiveTab] = useState("intro");
   const [experienceLevel, setExperienceLevel] = useState<"fresher" | "experienced">("fresher");
   const [generating, setGenerating] = useState(false);
   const [genStage, setGenStage] = useState(0);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving] = useState(false);
   const [notesGenerated, setNotesGenerated] = useState(false);
   const [notesLoading, setNotesLoading] = useState(true);
   const [targetRole, setTargetRole] = useState("");
   const [resumeId, setResumeId] = useState<string>("");
   const [availableResumes, setAvailableResumes] = useState<ResumeOption[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
+  // On mount: if we already have a resume_id, fetch notes directly.
+  // getAllResumesUnified is deferred to loadResumes() which only runs when
+  // the user opens the generation form (notes not yet generated).
   useEffect(() => {
     if (progressLoading) return;
 
     const storedId = localStorage.getItem("current_resume_id") ?? "";
+    if (storedId) {
+      setResumeId(storedId);
+      loadNotes(storedId);
+    } else {
+      setNotesLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressLoading]);
 
+  // Must be above the notesLoading early return — hooks cannot be called conditionally.
+  useEffect(() => {
+    if (!notesGenerated && !generating && availableResumes.length === 0) {
+      loadResumes();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesGenerated, generating]);
+
+  // Loads the resume list — only called when showing the generation form.
+  const loadResumes = () => {
+    const storedId = localStorage.getItem("current_resume_id") ?? "";
     getAllResumesUnified()
       .then(({ builder_resumes, enhanced_resumes }) => {
         const builderOptions = (builder_resumes as unknown as ResumeResponse[]).map(toResumeOption);
@@ -377,35 +411,23 @@ export default function NotesPage() {
           role: "",
         }));
         const allOptions: ResumeOption[] = [...builderOptions, ...enhancedOptions];
-
-        if (allOptions.length === 0) {
-          setAvailableResumes([]);
-          setNotesLoading(false);
-          return;
-        }
-
         setAvailableResumes(allOptions);
-
         const bestId = allOptions.some((r) => r.id === storedId)
           ? storedId
-          : allOptions[0].id;
+          : allOptions[0]?.id ?? "";
         setResumeId(bestId);
-        localStorage.setItem("current_resume_id", bestId);
-        loadNotes(bestId);
+        if (bestId) localStorage.setItem("current_resume_id", bestId);
       })
-      .catch(() => {
-        setNotesLoading(false);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progressLoading, userId]);
+      .catch(() => {});
+  };
 
   function loadNotes(_resumeId: string) {
-    if (!userId) {
+    if (!_resumeId) {
       setNotesLoading(false);
       return;
     }
 
-    getNotes(userId)
+    getNotes(_resumeId)
       .then((record) => {
         const hasNotes =
           record?.notes != null &&
@@ -423,6 +445,46 @@ export default function NotesPage() {
       })
       .finally(() => setNotesLoading(false));
   }
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!validTypes.includes(file.type)) {
+      setUploadError("Please upload a PDF or DOCX file.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("File must be under 10 MB.");
+      e.target.value = "";
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const parsed = await parseResumeForEnhancer(file);
+      const newId = parsed.resume_id;
+      if (!newId) throw new Error("No resume_id returned");
+      const name = parsed.file_name || file.name;
+      const newOption: ResumeOption = { id: newId, name, role: "" };
+      setAvailableResumes((prev) => {
+        const without = prev.filter((r) => r.id !== newId);
+        return [newOption, ...without];
+      });
+      setResumeId(newId);
+      localStorage.setItem("current_resume_id", newId);
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const handleGenerate = async () => {
     if (!resumeId) {
@@ -458,43 +520,64 @@ export default function NotesPage() {
     }
   };
 
-  const handleSaveAndContinue = async () => {
-    if (!userId) {
-      router.push("/notes/english");
-      return;
-    }
-    setSaving(true);
-    try {
-      if (notes) await updateNotes(userId, notes as unknown as Record<string, unknown>);
-    } catch {
-      // Non-blocking — navigate regardless
-    } finally {
-      setSaving(false);
-    }
+  const handleSaveAndContinue = () => {
     router.push("/notes/english");
   };
 
+  const persistNotes = (updated: NotesData) => {
+    // updateNotes takes a USER id: PUT /notes/{user_id} compares the segment to
+    // the authenticated user and 403s on any mismatch. Passing resumeId here
+    // meant every note edit failed with 403 — and the empty .catch() swallowed
+    // it, so the edit looked saved and was silently lost on reload.
+    // The notes document is keyed on user_id alone, so this writes the same
+    // record the resume-scoped GET reads.
+    if (!userId) return;
+    updateNotes(userId, updated as unknown as Record<string, unknown>)
+      .then(() => setSaveError(null))
+      .catch((err) => {
+      // Do not swallow: a failed autosave the user cannot see is worse than a
+      // visible error, because the next reload silently discards their edits.
+      logger.error("Failed to persist interview notes", err);
+      setSaveError("Your latest change could not be saved. Please retry.");
+    });
+  };
+
   const updateSelfIntro = (v: string) =>
-    setNotes((n) => n ? { ...n, self_introduction: v } : n);
+    setNotes((n) => {
+      const updated = n ? { ...n, self_introduction: v } : n;
+      if (updated) persistNotes(updated);
+      return updated;
+    });
 
   const updateProject = (i: number, k: keyof ProjectNote, v: string) =>
     setNotes((n) => {
       if (!n) return n;
       const projs = [...n.project_explanations];
       projs[i] = { ...projs[i], [k]: v } as ProjectNote;
-      return { ...n, project_explanations: projs };
+      const updated = { ...n, project_explanations: projs };
+      persistNotes(updated);
+      return updated;
     });
 
   const updateHR = (questionId: string, v: string) =>
-    setNotes((n) => n ? ({
-      ...n,
-      hr_answers: n.hr_answers.map((qa) =>
-        qa.question_id === questionId ? { ...qa, answer_script: v } : qa
-      ),
-    }) : n);
+    setNotes((n) => {
+      if (!n) return n;
+      const updated = {
+        ...n,
+        hr_answers: n.hr_answers.map((qa) =>
+          qa.question_id === questionId ? { ...qa, answer_script: v } : qa
+        ),
+      };
+      persistNotes(updated);
+      return updated;
+    });
 
   const updateAdditional = (k: keyof NotesData["additional_notes"], v: string) =>
-    setNotes((n) => n ? { ...n, additional_notes: { ...n.additional_notes, [k]: v } } : n);
+    setNotes((n) => {
+      const updated = n ? { ...n, additional_notes: { ...n.additional_notes, [k]: v } } : n;
+      if (updated) persistNotes(updated);
+      return updated;
+    });
 
   const toggleHobby = (hobby: string) =>
     setNotes((n) => {
@@ -502,8 +585,12 @@ export default function NotesPage() {
       const hobbies = n.additional_notes.hobbies.includes(hobby)
         ? n.additional_notes.hobbies.filter((h) => h !== hobby)
         : [...n.additional_notes.hobbies, hobby];
-      return { ...n, additional_notes: { ...n.additional_notes, hobbies } };
+      const updated = { ...n, additional_notes: { ...n.additional_notes, hobbies } };
+      persistNotes(updated);
+      return updated;
     });
+
+  // This effect MUST run before the notesLoading early-return below.
 
   if (notesLoading) {
     return (
@@ -517,13 +604,6 @@ export default function NotesPage() {
   if (!notesGenerated && !generating) {
     return (
       <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
-        <button
-          onClick={() => router.push("/mock-interview/live")}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
-        >
-          <ChevronLeft size={14} /> Back
-        </button>
-
         <h1 className="text-xl font-bold text-gray-900 tracking-tight mb-1">Generate Interview Notes</h1>
         <p className="text-sm text-gray-500 mb-5">
           AI-generated scripts for 12+ HR questions from your resume.
@@ -536,16 +616,24 @@ export default function NotesPage() {
             </p>
 
             {availableResumes.length === 0 ? (
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <FileText size={13} className="text-gray-400" />
-                </div>
-                <div>
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                    <FileText size={13} className="text-gray-400" />
+                  </div>
                   <p className="text-sm font-medium text-gray-700">No resume found</p>
-                  <a href="/builder/start" className="text-[11px] text-[#2557a7] hover:underline">
-                    Create or upload a resume first →
-                  </a>
                 </div>
+                <label className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg border-2 border-dashed cursor-pointer transition-all ${uploading ? "border-[#2557a7]/30 bg-[#2557a7]/5" : "border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#2557a7]/5"}`}>
+                  {uploading ? (
+                    <><Loader2 size={14} className="text-[#2557a7] animate-spin" /><span className="text-xs text-[#2557a7] font-medium">Uploading &amp; parsing…</span></>
+                  ) : (
+                    <><Upload size={14} className="text-[#2557a7]" /><span className="text-xs text-[#2557a7] font-medium">Upload Resume (PDF / DOCX)</span></>
+                  )}
+                  <input type="file" accept=".pdf,.doc,.docx" className="hidden" disabled={uploading} onChange={handleResumeUpload} />
+                </label>
+                {uploadError && (
+                  <p className="mt-1.5 text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{uploadError}</p>
+                )}
               </div>
             ) : availableResumes.length === 1 ? (
               <div className="flex items-center gap-2.5">
@@ -575,7 +663,10 @@ export default function NotesPage() {
                       name="resume_select"
                       value={r.id}
                       checked={resumeId === r.id}
-                      onChange={() => setResumeId(r.id)}
+                      onChange={() => {
+                        setResumeId(r.id);
+                        localStorage.setItem("current_resume_id", r.id);
+                      }}
                       className="accent-[#2557a7] shrink-0"
                     />
                     <div className="flex-1 min-w-0">
@@ -642,6 +733,16 @@ export default function NotesPage() {
           </div>
         )}
 
+        {/* Autosave failure. Rendered rather than logged only: these edits are
+            saved in the background, so a silent failure looks identical to a
+            successful save until the page is reloaded and the work is gone. */}
+        {saveError && (
+          <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 mb-3">
+            <AlertCircle size={12} className="text-red-400 shrink-0" />
+            {saveError}
+          </div>
+        )}
+
         <button
           onClick={handleGenerate}
           className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
@@ -669,12 +770,6 @@ export default function NotesPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <button
-            onClick={() => router.push("/mock-interview/live")}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-2 transition-colors"
-          >
-            <ChevronLeft size={14} /> Back
-          </button>
           <h1 className="text-lg font-bold text-gray-900 tracking-tight">Interview Notes</h1>
         </div>
         <button
@@ -856,39 +951,38 @@ export default function NotesPage() {
             <p className="text-xs text-gray-400 mt-2">💡 Only select hobbies you can talk about confidently for 30+ seconds.</p>
           </div>
 
-          {[
-            { key: "career_goals_short" as const, label: "Short-term Career Goals", note: "1–2 year goal. Should align with the role you're applying for." },
-            { key: "career_goals_long" as const, label: "Long-term Career Goals", note: "5-year vision. Realistic and ambitious — shows growth mindset." },
-            { key: "why_this_field" as const, label: "Why This Field", note: "Genuine reason only. Interviewers spot fake answers quickly." },
-            { key: "teamwork_example" as const, label: "Teamwork Example", note: "Use STAR format: Situation → Task → Action → Result." },
-          ].map(({ key, label, note }) => (
-            <div key={key} className="border border-gray-100 rounded-xl p-4">
-              <EditableBlock label={label} value={notes.additional_notes[key] as string} onChange={(v) => updateAdditional(key, v)} rows={3} />
-              <p className="text-xs text-gray-400 mt-2">💡 {note}</p>
-            </div>
-          ))}
-
-          <div className="border border-[#2557a7]/20 bg-[#2557a7]/5 rounded-xl p-4">
-            <p className="text-[10px] font-bold text-[#2557a7] uppercase tracking-widest mb-1.5">Handling Employment / Education Gaps</p>
-            <p className="text-xs text-gray-600 mb-3">Only fill this if you have a gap. Interviewers may ask about it directly.</p>
-            <EditableBlock
-              value={notes.additional_notes.handling_gaps}
-              onChange={(v) => updateAdditional("handling_gaps", v)}
-              rows={3}
-            />
-            <p className="text-xs text-gray-400 mt-2">💡 Be honest and brief. Always end with something positive you did during the gap.</p>
-          </div>
-
-          <div className="border border-gray-200 bg-gray-50 rounded-xl p-4">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Learning Attitude & Self-Development</p>
-            <p className="text-xs text-gray-600 mb-3">Interviewers ask: &ldquo;How do you stay updated?&rdquo; or &ldquo;What was the last thing you learned?&rdquo;</p>
-            <EditableBlock
-              value={notes.additional_notes.learning_attitude}
-              onChange={(v) => updateAdditional("learning_attitude", v)}
-              rows={3}
-            />
-            <p className="text-xs text-gray-400 mt-2">💡 Mention a specific resource, course, or recent thing you learned. Makes the answer credible.</p>
-          </div>
+          {(Object.keys(notes.additional_notes) as Array<keyof NotesData["additional_notes"]>)
+            .filter((key) => {
+              const val = notes.additional_notes[key];
+              return typeof val === "string" && val.trim().length > 0;
+            })
+            .map((key) => {
+              const LABELS: Partial<Record<keyof NotesData["additional_notes"], { label: string; note: string }>> = {
+                career_goals_short:  { label: "Short-term Career Goals",          note: "1–2 year goal. Should align with the role you're applying for." },
+                career_goals_long:   { label: "Long-term Career Goals",            note: "5-year vision. Realistic and ambitious — shows growth mindset." },
+                why_this_field:      { label: "Why This Field",                    note: "Genuine reason only. Interviewers spot fake answers quickly." },
+                teamwork_example:    { label: "Teamwork Example",                  note: "Use STAR format: Situation → Task → Action → Result." },
+                handling_gaps:       { label: "Handling Employment / Education Gaps", note: "Be honest and brief. Always end with something positive you did during the gap." },
+                learning_attitude:   { label: "Learning Attitude & Self-Development", note: "Mention a specific resource, course, or recent thing you learned." },
+                salary_discussion:   { label: "Salary Discussion",                 note: "Research the market range beforehand. Stay open to negotiation." },
+                weakness_answer:     { label: "Weakness Answer",                   note: "Mention a real weakness and always follow with what you're doing to improve it." },
+                relocation_answer:   { label: "Relocation / Work Location",        note: "Be clear and honest about your flexibility." },
+                shift_answer:        { label: "Shift / Availability",              note: "Confirm your actual availability — don't over-promise." },
+              };
+              const meta = LABELS[key];
+              if (!meta) return null;
+              return (
+                <div key={key} className="border border-gray-100 rounded-xl p-4">
+                  <EditableBlock
+                    label={meta.label}
+                    value={notes.additional_notes[key] as string}
+                    onChange={(v) => updateAdditional(key, v)}
+                    rows={3}
+                  />
+                  <p className="text-xs text-gray-400 mt-2">💡 {meta.note}</p>
+                </div>
+              );
+            })}
         </div>
       )}
 

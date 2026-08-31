@@ -22,7 +22,10 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface ProjectEntry {
   title: string;
@@ -66,6 +69,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Projects: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -80,6 +85,7 @@ const Projects: React.FC = () => {
     clearError,
     clearSectionIndexErrors,
     reindexErrors,
+    setFieldError,
   } = useValidation();
 
   const [showTips, setShowTips] = useState(true);
@@ -262,7 +268,11 @@ const Projects: React.FC = () => {
       // // console.log("🗑️ Deleting project item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "projects", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "projects", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "projects", itemId);
+      }
 
       // // console.log("✅ Project item deleted from backend successfully");
 
@@ -399,9 +409,9 @@ Engineered machine learning recommendation system using Python and TensorFlow th
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -414,18 +424,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {
@@ -621,9 +620,24 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                         type="text"
                         value={project.link || ""}
                         placeholder="https://github.com/..."
-                        onChange={(e) => handleChange(editIndex, "link", e.target.value)}
-                        className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
+                        onChange={(e) => {
+                          handleChange(editIndex, "link", e.target.value);
+                          clearError("project", globalIndex, "link");
+                        }}
+                        onBlur={() => {
+                          const link = project.link?.trim();
+                          if (!link) return;
+                          if (!link.startsWith("http://") && !link.startsWith("https://")) {
+                            setFieldError("project", globalIndex, "link", "Project link must start with http:// or https://");
+                          }
+                        }}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 focus:outline-none ${errors[`project-${globalIndex}-link`] ? "border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
+                      {errors[`project-${globalIndex}-link`] && (
+                        <span className="text-xs text-red-500">
+                          {errors[`project-${globalIndex}-link`]}
+                        </span>
+                      )}
                     </div>
 
                     {/* Description */}

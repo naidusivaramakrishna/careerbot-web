@@ -260,7 +260,7 @@ export default function ReportPage() {
           {/* Back to Dashboard */}
           <div className="flex justify-center">
             <button
-              onClick={() => router.push('/communication/dashboard')}
+              onClick={() => router.push('/dashboard')}
               className="bg-[#2557a7] hover:bg-[#1e4a94] text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors"
             >
               Back to Dashboard {'->'}

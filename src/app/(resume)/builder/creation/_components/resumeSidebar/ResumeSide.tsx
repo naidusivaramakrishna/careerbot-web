@@ -24,9 +24,11 @@ import Awards from "../editor/sections/Awards";
 
 import { initialSections } from "../../_utils/sectionsConfig";
 import Publications from "../editor/sections/Publications";
+import Patents from "../editor/sections/Patents";
 import Interests from "../editor/sections/Interests";
 import Hobbies from "../editor/sections/Hobbies";
 import Languages from "../editor/sections/Languages";
+import Declaration from "../editor/sections/Declaration";
 
 interface SectionProps {
   formData: Record<string, string>;
@@ -49,9 +51,11 @@ const sectionComponents: Record<string, React.FC<SectionProps>> = {
   Internships,
   Awards,
   Publications,
+  Patents,
   Interests,
   Hobbies,
   Languages,
+  Declaration,
 };
 
 // Maps ATS report section names → builder section names
@@ -95,8 +99,8 @@ interface ResumeSideProps {
 const standardSectionNames = new Set([
   "Personal Info", "Professional Summary", "Education", "Skills",
   "Work Experience", "Projects", "Certifications", "Internships",
-  "Achievements", "Publications", "Volunteering", "Awards",
-  "Hobbies", "Interests", "Languages", "References",
+  "Achievements", "Publications", "Patents", "Volunteering", "Awards",
+  "Hobbies", "Interests", "Languages", "References", "Declaration",
 ]);
 
 const ResumeSide: React.FC<ResumeSideProps> = ({
@@ -121,6 +125,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const defaultExtraSections: { name: string; ai: boolean }[] = [
     { name: "Achievements", ai: true },
     { name: "Publications", ai: false },
+    { name: "Patents", ai: false },
     { name: "Volunteering", ai: false },
     { name: "Awards", ai: false },
     { name: "Hobbies", ai: true },
@@ -141,7 +146,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     if (hasSavedOrder) {
       // localStorage sectionOrder = exact main list (core + any extras the user added).
       // Use the full known-sections map so restored extra sections resolve correctly.
-      const allKnownSections = [...initialSections, ...defaultExtraSections];
+      // Only include Declaration if the backend sent it (domain-specific for government_standard).
+      const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+      const allKnownSections = [...initialSections, ...defaultExtraSections, ...declarationSection];
       const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
       return sectionOrder
         .filter(name => sectionMap.has(name))
@@ -149,9 +156,10 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         .filter(Boolean);
     }
 
-    // No saved order: sectionOrder comes from getSectionOrder() which lists ALL sections.
-    // Only pick initialSections from it — extras stay in "Add New Sections".
-    const sectionMap = new Map(initialSections.map(s => [s.name, s]));
+    // No saved order: sectionOrder comes from getSectionOrderByDomainAndCareer() which lists ALL sections.
+    // Only include Declaration if the backend sent it (domain-specific for government_standard).
+    const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+    const sectionMap = new Map([...initialSections, ...declarationSection].map(s => [s.name, s]));
     const reordered = sectionOrder
       .filter(name => sectionMap.has(name))
       .map(name => sectionMap.get(name)!)
@@ -243,26 +251,46 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["nationality"] = resumeData.personalInfo?.nationality || "";
       newFormData["category"] = resumeData.personalInfo?.category || "";
       newFormData["languages"] = resumeData.personalInfo?.languages || "";
+      newFormData["fathersName"] = resumeData.personalInfo?.fathersName || "";
+      newFormData["gender"] = resumeData.personalInfo?.gender || "";
+      newFormData["maritalStatus"] = resumeData.personalInfo?.maritalStatus || "";
+      newFormData["permanentAddress"] = resumeData.personalInfo?.permanentAddress || "";
 
       // Healthcare Fields
       newFormData["titlePrefix"] = resumeData.personalInfo?.titlePrefix || "";
       newFormData["qualifications"] = resumeData.personalInfo?.qualifications || "";
+      newFormData["specialisation"] = resumeData.personalInfo?.specialisation || "";
+      newFormData["medicalRegNo"] = resumeData.personalInfo?.medicalRegNo || "";
+
+      // Legal Fields
+      newFormData["barEnrollmentNo"] = resumeData.personalInfo?.barEnrollmentNo || "";
+      newFormData["yearOfEnrollment"] = resumeData.personalInfo?.yearOfEnrollment || "";
+      newFormData["courtsOfPractise"] = resumeData.personalInfo?.courtsOfPractise || "";
+
+      // Marine Fields
+      newFormData["rank"] = resumeData.personalInfo?.rank || "";
+      newFormData["cocNumber"] = resumeData.personalInfo?.cocNumber || "";
+      newFormData["vesselTypes"] = resumeData.personalInfo?.vesselTypes || "";
+      newFormData["stcwCertificates"] = resumeData.personalInfo?.stcwCertificates || "";
+
+      // Research Scholar Fields
+      newFormData["orcidId"] = resumeData.personalInfo?.orcidId || "";
+      newFormData["hIndex"] = resumeData.personalInfo?.hIndex || "";
+      newFormData["googleScholarUrl"] = resumeData.personalInfo?.googleScholarUrl || "";
       
       // Professional Summary
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";
       newFormData["targetRole"] = resumeData.professionalSummary.targetRole || "";
       
-      // Skills
-      if (Array.isArray(resumeData.skills)) {
-        newFormData["skills"] = resumeData.skills.join(", ");
-      }
-      
-      // Multi-entry sections (Education, Work Experience, Projects, etc.) are intentionally
+      // Skills is intentionally excluded from formData — the Skills component writes
+      // directly to resumeData.categorizedSkills via chip inputs and autosave reads
+      // from context, not formData. Including it here created a stale snapshot that
+      // caused validateSectionFields to treat the empty initial value as a missing
+      // required field and block Save with "Please fill in all required fields".
+      //
+      // Multi-entry sections (Education, Work Experience, Projects, etc.) are also
       // excluded from formData. They manage their own state (savedEntries / editingEntries)
       // and write directly to resumeData — they never read from formData.
-      // Including them here caused validateSectionFields to scan stale snapshot values
-      // (including any partial/duplicate entries from the backend) and incorrectly
-      // block the Save button with "Please fill in all required fields".
       
       setFormData(newFormData);
     }
@@ -292,14 +320,17 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   useEffect(() => {
     if (!sectionOrder || sectionOrder.length === 0) return;
 
-    const allKnownSections = [...initialSections, ...defaultExtraSections];
+    // Only include Declaration if the backend sent it (domain-specific for government_standard).
+    const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+    const allKnownSections = [...initialSections, ...defaultExtraSections, ...declarationSection];
     const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
 
     setSections(prev => {
       const prevMap = new Map(prev.map(s => [s.name, s]));
+      const initialNames = new Set(initialSections.map(s => s.name));
       const newSections = sectionOrder
         .map(name => sectionMap.get(name) || prevMap.get(name))
-        .filter((s): s is { name: string; ai: boolean } => !!s);
+        .filter((s): s is { name: string; ai: boolean } => !!s && (initialNames.has(s.name) || prevMap.has(s.name)));
 
       const prevNames = prev.map(s => s.name).join(',');
       const newNames = newSections.map(s => s.name).join(',');
@@ -345,6 +376,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     "Awards": "awards",
     "Volunteering": "volunteering",
     "Publications": "publications",
+    "Patents": "patents",
     "References": "references",
     "Hobbies": "hobbies",
     "Interests": "interests",
@@ -365,7 +397,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     const dataKey = SECTION_DATA_KEY_MAP[removed.name];
     if (dataKey) {
       const emptyValue = dataKey === "categorizedSkills"
-        ? { programming_languages: [], frameworks: [], databases: [], tools: [], cloud_platforms: [], soft_skills: [] }
+        ? { programming_languages: [], frameworks: [], soft_skills: [], project_management: [], marketing_sales: [] }
         : [];
       setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
     }
@@ -428,7 +460,6 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   //   }
   // };
   const handleBlur = (key: string, value: string) => {
-  // Check if this is a required field
   const lowerKey = key.toLowerCase();
   const optionalFields = [
     "linkedin",
@@ -442,23 +473,51 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     "category",
     "proficiencylevel",
   ];
-  
+
   const isRequired = !optionalFields.some((optional) => lowerKey.includes(optional));
-  
-  // Only set error if field is required AND empty
-  if (isRequired && (!value || value.trim() === "")) {
-    setErrors(prev => ({
-      ...prev,
-      [key]: "This field is required"
-    }));
-  } else {
-    // Clear error if field has value
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[key];
-      return newErrors;
-    });
+
+  const trimmed = value?.trim() ?? "";
+
+  // Required-field empty check
+  if (isRequired && !trimmed) {
+    setErrors(prev => ({ ...prev, [key]: "This field is required" }));
+    return;
   }
+
+  // URL domain/prefix validation for LinkedIn, GitHub, Portfolio
+  if (trimmed) {
+    let urlError: string | null = null;
+
+    if (key === "linkedinUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "LinkedIn URL must start with http:// or https://";
+      } else if (!trimmed.includes("linkedin.com")) {
+        urlError = "LinkedIn URL must be a linkedin.com address";
+      }
+    } else if (key === "githubUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "GitHub URL must start with http:// or https://";
+      } else if (!trimmed.includes("github.com")) {
+        urlError = "GitHub URL must be a github.com address";
+      }
+    } else if (key === "portfolioUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "Portfolio URL must start with http:// or https://";
+      }
+    }
+
+    if (urlError) {
+      setErrors(prev => ({ ...prev, [key]: urlError as string }));
+      return;
+    }
+  }
+
+  // Clear error
+  setErrors(prev => {
+    const newErrors = { ...prev };
+    delete newErrors[key];
+    return newErrors;
+  });
 };
 
 
@@ -522,6 +581,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         (lang) => isFilled(lang.language)),
       Publications: resumeData.publications.some(
         (pub) => isFilled(pub.title)),
+      Patents: (resumeData.patents ?? []).some(
+        (pat) => isFilled(pat.title)),
     };
     
     // ✅ Update context completion status (used for progress circle)

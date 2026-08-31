@@ -23,6 +23,8 @@ import type {
   CoverLetterExportFormat,
   CoverLetterDefaultResumeRequest,
   CoverLetterDefaultResumeResponse,
+  CoverLetterDefaultTemplateRequest,
+  CoverLetterDefaultTemplateResponse,
   CoverLetterGenerateRequest,
   CoverLetterListResponse,
   CoverLetterResumeOptionsResponse,
@@ -58,6 +60,12 @@ export class CoverLetterApiError extends Error {
   /** Number of seconds the caller can retry after (parsed from
    *  Retry-After header on 429; undefined otherwise). */
   readonly retryAfterSeconds?: number;
+  /** Backend-issued diagnostic identifiers (`error.error_id` /
+   *  `error.request_id`). Safe to surface as a support reference for unrecoverable
+   *  failures (upstream service issues, timeouts, contract errors). For
+   *  recoverable errors (validation, not-found), kept in console logs only. */
+  readonly errorId?: string;
+  readonly requestId?: string;
 
   constructor(args: {
     reason: CoverLetterApiErrorReason;
@@ -66,6 +74,8 @@ export class CoverLetterApiError extends Error {
     validationErrors?: Array<{ field: string; message: string }>;
     backendErrorCode?: string;
     retryAfterSeconds?: number;
+    errorId?: string;
+    requestId?: string;
   }) {
     super(args.message ?? args.reason);
     this.name = "CoverLetterApiError";
@@ -74,6 +84,8 @@ export class CoverLetterApiError extends Error {
     this.validationErrors = args.validationErrors;
     this.backendErrorCode = args.backendErrorCode;
     this.retryAfterSeconds = args.retryAfterSeconds;
+    this.errorId = args.errorId;
+    this.requestId = args.requestId;
   }
 }
 
@@ -87,6 +99,8 @@ function mapError(err: unknown): CoverLetterApiError {
           error?: {
             message?: string;
             error_code?: string;
+            error_id?: string;
+            request_id?: string;
             details?: {
               validation_errors?: Array<{
                 field?: string;
@@ -102,8 +116,18 @@ function mapError(err: unknown): CoverLetterApiError {
         }
       | undefined;
     const backendErrorCode = data?.error?.error_code;
+    const errorId = data?.error?.error_id;
+    const requestId = data?.error?.request_id;
     const detailMessage = typeof data?.detail === "string" ? data.detail : undefined;
     const message = data?.error?.message ?? detailMessage ?? err.message;
+
+    if (!err.response && (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT")) {
+      return new CoverLetterApiError({
+        reason: "timeout",
+        message,
+        backendErrorCode,
+      });
+    }
 
     // Per impl-blueprint §4 canonical 7-status map. 402 is NOT in
     // V1 (free feature; paid-tier deferred).
@@ -124,8 +148,14 @@ function mapError(err: unknown): CoverLetterApiError {
       });
     }
     if (status === 409) {
+      const conflictText = `${backendErrorCode ?? ""} ${message ?? ""} ${
+        typeof data?.detail === "string" ? data.detail : JSON.stringify(data?.detail ?? "")
+      }`.toUpperCase();
       return new CoverLetterApiError({
-        reason: "download_unavailable",
+        reason: conflictText.includes("IDEMPOTENCY_IN_PROGRESS")
+          || conflictText.includes("GENERATION")
+          ? "generation_in_progress"
+          : "download_unavailable",
         status,
         message,
         backendErrorCode,
@@ -185,6 +215,8 @@ function mapError(err: unknown): CoverLetterApiError {
         status,
         message,
         backendErrorCode,
+        errorId,
+        requestId,
       });
     }
     if (status === 503) {
@@ -209,6 +241,8 @@ function mapError(err: unknown): CoverLetterApiError {
       status,
       message,
       backendErrorCode,
+      errorId,
+      requestId,
     });
   }
 
@@ -259,7 +293,10 @@ export async function generateCoverLetter(
       `${BASE}/generate`,
       stripDebugMetadata(body),
       {
-        timeout: 120000,
+        // Must exceed the backend's 180s AI deadline plus persistence and
+        // bounded post-processing, otherwise a valid saved letter can look
+        // like a client-side failure.
+        timeout: 240000,
         headers: {
           "Idempotency-Key": idempotencyKey,
           "X-Skip-Auth-Redirect": "true",
@@ -330,6 +367,33 @@ export async function listCoverLetterTemplates(): Promise<CoverLetterTemplateCat
   try {
     const { data } = await httpClient.get<CoverLetterTemplateCatalogResponse>(
       `${BASE}/templates`,
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function getDefaultCoverLetterTemplate(): Promise<CoverLetterDefaultTemplateResponse> {
+  try {
+    const { data } = await httpClient.get<CoverLetterDefaultTemplateResponse>(
+      `${BASE}/default-template`,
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function setDefaultCoverLetterTemplate(
+  body: CoverLetterDefaultTemplateRequest,
+): Promise<CoverLetterDefaultTemplateResponse> {
+  try {
+    const { data } = await httpClient.put<CoverLetterDefaultTemplateResponse>(
+      `${BASE}/default-template`,
+      body,
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
     );
     return data;
   } catch (err) {
@@ -414,7 +478,8 @@ export async function updateCoverLetter(
 
 export interface DownloadCoverLetterParams {
   format: CoverLetterExportFormat;
-  template_id: CoverLetterTemplateId;
+  /** Omit to let the backend resolve the user's saved default. */
+  template_id?: CoverLetterTemplateId;
 }
 
 export async function downloadCoverLetter(

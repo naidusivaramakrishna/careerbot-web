@@ -1,0 +1,21 @@
+# pnpm 11+ settings. Despite the filename, this file is read even when
+# there is no workspace — it's the new home for pnpm settings (the
+# package.json "pnpm" field is no longer read in pnpm 11+).
+#
+# Build-script approval:
+#   onlyBuiltDependencies      — packages whose install scripts WILL run
+#   ignoredBuiltDependencies   — packages we've explicitly decided NOT to run
+#
+# Listing both clears [ERR_PNPM_IGNORED_BUILDS] because pnpm has confirmation
+# that every package with install scripts has been triaged.
+#
+# - unrs-resolver: native binary speedup for ESLint's module resolution.
+#   We want it built. Without it, ESLint falls back to a slower JS path.
+# - msw: postinstall copies a browser service worker we don't use in RN.
+#   Explicitly skipped.
+
+onlyBuiltDependencies:
+  - unrs-resolver
+
+ignoredBuiltDependencies:
+  - msw

@@ -10,6 +10,9 @@ export interface PreviewScoreBreakdown {
   metrics: number;
   certifications: number;
   formatting: number;
+  achievements: number;
+  languages: number;
+  extras: number;
 }
 
 export interface PreviewScoreSuggestion {

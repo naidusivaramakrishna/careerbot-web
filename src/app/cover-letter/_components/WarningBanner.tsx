@@ -11,6 +11,13 @@ export interface WarningBannerProps {
 export default function WarningBanner({ warnings }: WarningBannerProps) {
   if (warnings.length === 0) return null;
 
+  // The backend can emit repeated or unrecognized codes that all resolve to
+  // the same static copy (e.g. the unknown-code fallback) — collapse those
+  // so the list never shows the same line more than once.
+  const uniqueMessages = Array.from(
+    new Set(warnings.map((warning) => warningMessage(warning.code))),
+  );
+
   return (
     <div
       role="alert"
@@ -30,12 +37,12 @@ export default function WarningBanner({ warnings }: WarningBannerProps) {
             Review before export
           </h3>
           <p className="mt-1 text-sm leading-6 text-amber-800">
-            The letter can be exported, but CareerBot found {warnings.length} item
-            {warnings.length === 1 ? "" : "s"} worth checking first.
+            The letter can be exported, but CareerBot found {uniqueMessages.length} item
+            {uniqueMessages.length === 1 ? "" : "s"} worth checking first.
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-900">
-            {warnings.map((warning, index) => (
-              <li key={`${warning.code}-${index}`}>{warningMessage(warning.code)}</li>
+            {uniqueMessages.map((message) => (
+              <li key={message}>{message}</li>
             ))}
           </ul>
         </div>

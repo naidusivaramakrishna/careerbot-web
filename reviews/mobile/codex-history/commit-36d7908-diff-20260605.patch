@@ -1,0 +1,57 @@
+diff --git a/src/features/resumes/__tests__/templatesApi.test.ts b/src/features/resumes/__tests__/templatesApi.test.ts
+index 61cfb7b..15328df 100644
+--- a/src/features/resumes/__tests__/templatesApi.test.ts
++++ b/src/features/resumes/__tests__/templatesApi.test.ts
+@@ -58,9 +58,11 @@ describe('getTemplatesByCategory — 4-URL fallback', () => {
+ 
+   it('falls back to the first non-empty payload when no URL has a matching category', async () => {
+     // No URL returns the requested category — but every URL returns *some*
+-    // templates. We should still get the fallback payload back (with all the
+-    // off-category templates), so the UI has something to show, instead of
+-    // an empty list.
++    // templates. The user-visible behaviour MUST be: show what we have
++    // (off-category templates) instead of an empty list, so the UI doesn't
++    // claim "no templates" when there are some, just not in this category.
++    // Codex r2 caught that we were returning [] here and the test was
++    // masking the bug by also asserting [].
+     mockGet
+       .mockResolvedValueOnce({
+         data: [{ id: 'mongo-1', template_id: 'aaa', name: 'A', category: 'unrelated' }],
+@@ -73,11 +75,13 @@ describe('getTemplatesByCategory — 4-URL fallback', () => {
+ 
+     const cards = await getTemplatesByCategory('professional');
+ 
+-    // The category filter only fires when at least one item HAS a category
+-    // field and the requested category matches. Since none matched, list
+-    // stays [] — verifying that we never fall back to wrong-category data
+-    // implicitly. Important: we must not crash or hang on no-match.
+-    expect(cards).toEqual([]);
++    // The FIRST non-empty payload is the one we should surface as the
++    // fallback (not the second non-empty one — first-wins keeps behaviour
++    // deterministic and lets the loop short-circuit logging).
++    expect(cards).toHaveLength(1);
++    expect(cards[0].id).toBe('mongo-1');
++    expect(cards[0].templateId).toBe('aaa');
++    expect(cards[0].name).toBe('A');
+   });
+ 
+   it('returns [] when every URL returns nothing', async () => {
+diff --git a/src/features/resumes/templatesApi.ts b/src/features/resumes/templatesApi.ts
+index 98e2bda..cab2cf4 100644
+--- a/src/features/resumes/templatesApi.ts
++++ b/src/features/resumes/templatesApi.ts
+@@ -172,6 +172,14 @@ export async function getTemplatesByCategory(category: string): Promise<Template
+       }
+     }
+ 
++    // Codex r2: if no candidate URL had a matching-category payload, use the
++    // first non-empty raw payload as a graceful fallback so the UI shows the
++    // available templates instead of an empty list. (Previously `rawList` was
++    // remembered for logging only and the user-visible cards stayed `[]`.)
++    if (!list.length && rawList.length) {
++      list = rawList;
++    }
++
+     const cards = list.map(normalizeTemplateCard).filter((t) => t.id);
+ 
+     logger.info('[getTemplatesByCategory]', category, '→ url:', usedUrl || '(none)', 'raw:', rawList.length, 'cards:', cards.length);

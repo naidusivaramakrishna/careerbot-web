@@ -13,7 +13,7 @@ import logger from '@/lib/logger';
 function FeedbackPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isTimeout = searchParams.get('reason') === 'timeout';
+  const isEarlyTermination = searchParams.get('reason') !== null; // covers timeout and violations
 
   // Exit fullscreen when feedback page loads - assessment is over regardless of how we got here
   useEffect(() => {
@@ -44,8 +44,12 @@ function FeedbackPageContent() {
 
     try {
       logger.info('Feedback submitted:', { rating, feedbackText });
+      if (isEarlyTermination) {
+        router.push('/dashboard');
+        return;
+      }
       await submitFinalReportAPI();
-      router.push(isTimeout ? '/dashboard' : '/communication/report');
+      router.push('/communication/report');
     } catch (error) {
       logger.error('Error submitting feedback:', error);
       alert('Failed to submit feedback. Please try again.');
@@ -56,8 +60,12 @@ function FeedbackPageContent() {
   const handleSkip = async () => {
     setIsSubmitting(true);
     try {
+      if (isEarlyTermination) {
+        router.push('/dashboard');
+        return;
+      }
       await submitFinalReportAPI();
-      router.push(isTimeout ? '/dashboard' : '/communication/report');
+      router.push('/communication/report');
     } catch (error) {
       logger.error('Error submitting final report:', error);
       alert('Failed to generate report. Please try again.');
@@ -214,7 +222,7 @@ function FeedbackPageContent() {
           </div>
 
           <p className="text-center text-xs text-slate-400 mt-4">
-            {isTimeout
+            {isEarlyTermination
               ? 'Submitting or skipping will take you to your dashboard.'
               : 'Submitting or skipping will take you to your assessment report.'}
           </p>

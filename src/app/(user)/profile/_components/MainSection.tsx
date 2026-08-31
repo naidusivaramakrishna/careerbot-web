@@ -9,7 +9,6 @@ import { ProfileData } from '../_types/ProfileData';
 import { PersonalInfoRef } from '../_types/PersonalInfoRef';
 import { getProfile, getProfilePicture, uploadProfilePicture, deleteProfilePicture, UserProfile, getEducation, getExperience, getSkills, getEmploymentInfo, Skill } from '@/api/userApi';
 import { logger } from '@/lib/logger';
-import { EmailVerificationBanner } from '@/components/EmailVerificationBanner';
 
 interface ProfileAvatarProps {
   selectedImage: string | null;
@@ -74,7 +73,7 @@ const ProfileAvatar = ({
 function mapBackendToFrontend(backendProfile: UserProfile): ProfileData {
   return {
     personalInformation: {
-      fullName: backendProfile.full_name || backendProfile.username || '',
+      fullName: backendProfile.full_name || '',
       headline: backendProfile.headline || '',
       location: backendProfile.location || '',
       email: backendProfile.email || '',
@@ -93,16 +92,11 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isHoveringImage, setIsHoveringImage] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleImageChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { setSelectedImage(reader.result as string); };
-    reader.readAsDataURL(file);
 
     try {
       const res = await uploadProfilePicture(file);
@@ -121,8 +115,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
     } catch (error) {
       logger.error("Error uploading profile picture:", error);
       toast.error("Failed to upload image");
-    } finally {
-      toast.dismiss();
     }
   }, [setProfilePicUrl]);
 
@@ -154,8 +146,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
         if (ignore) return;
 
         setUsername(backendProfile.username ?? null);
-        setUserEmail(backendProfile.email ?? null);
-        setIsEmailVerified(backendProfile.is_verified ?? false);
         const mappedProfile = mapBackendToFrontend(backendProfile);
 
         // Fetch all profile sections in parallel to ensure completion score calculates correctly
@@ -220,7 +210,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   // Show loading state
   if (loading) {
     return (
-      <div className="flex-4 min-w-0 overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center justify-center min-h-[400px]">
+      <div className="flex-4 min-w-0 overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center justify-center min-h-[400px] my-4">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-[#2257a7] border-t-transparent rounded-full animate-spin"></div>
           <span className="text-gray-500 text-sm">Loading your profile...</span>
@@ -231,13 +221,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
 
   return (
     <div className="flex-4 min-w-0 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col my-4">
-      {/* Email Verification Banner */}
-      {userEmail && !isEmailVerified && (
-        <div className="px-6 pt-4">
-          <EmailVerificationBanner userEmail={userEmail} isVerified={isEmailVerified} />
-        </div>
-      )}
-
       {/* ── Profile Header ── */}
       <div className="px-6 pt-6 pb-5 border-b border-gray-100">
         {!hasProfileData ? (

@@ -174,6 +174,11 @@ export default function SituationExplainingPage() {
       sessionStorage.setItem(`q_44_completed`, 'true');
       logger.info('✅ Marked question 44 as completed');
 
+      // Stop the timer as soon as the panel opens — assessment questions are all done
+      const startDate = localStorage.getItem('test_start_date');
+      if (startDate) localStorage.setItem('assessment_start_time', startDate);
+      localStorage.removeItem('test_start_date');
+
       // Open the summary panel
       setIsSubmitting(false);
       setIsPanelOpen(true);
@@ -189,10 +194,6 @@ export default function SituationExplainingPage() {
   // Step 2: Complete session and run evaluations (called from panel)
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
-    // Preserve start time for report page before removing the active-assessment key
-    const startDate = localStorage.getItem('test_start_date');
-    if (startDate) localStorage.setItem('assessment_start_time', startDate);
-    localStorage.removeItem('test_start_date');
 
     try {
       const profile = await getProfile();
@@ -292,51 +293,70 @@ export default function SituationExplainingPage() {
 
       const evaluationPromises = [];
 
-      // Audio evaluation promise
-      const audioEvalPromise = evaluateAudio({
-        session_id: sessionId,
-        email_id: emailId,
-        test_id: testId,
-        allow_partial: true,
-      })
-        .then((audioEvalResponse) => {
-          logger.info('✅ Audio evaluation completed:', audioEvalResponse.status);
+      // Audio evaluation with 2 retries — getAudioStatus confirmed 25/25 but the evaluate
+      // endpoint reads from a different data source that may lag by a few seconds.
+      const audioEvalPromise = (async () => {
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 3000;
 
-          if (audioEvalResponse.status === 'insufficient') {
-            const missing = audioEvalResponse.missing_sections?.length || 0;
-            throw new Error(`Missing ${missing} audio recordings. Please complete all sections.`);
+        const isIncompleteError = (err: unknown): boolean => {
+          const e = err as { response?: { data?: { error?: string } }; message?: string };
+          const msg = (e?.message || '').toLowerCase();
+          return (
+            e?.response?.data?.error === 'Incomplete submission' ||
+            msg.includes('complete all') ||
+            msg.includes('audio questions') ||
+            msg.includes('progressive audio')
+          );
+        };
+
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const audioEvalResponse = await evaluateAudio({
+              session_id: sessionId,
+              email_id: emailId,
+              test_id: testId,
+              allow_partial: true,
+            });
+
+            logger.info('✅ Audio evaluation completed:', audioEvalResponse.status);
+
+            if (audioEvalResponse.status === 'insufficient') {
+              const missing = audioEvalResponse.missing_sections?.length || 0;
+              throw new Error(`Missing ${missing} audio recordings. Please complete all sections.`);
+            }
+
+            if (audioEvalResponse.status === 'partial') {
+              logger.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.join(', ')}`);
+            }
+
+            if (audioEvalResponse.audio_evaluation_id) {
+              localStorage.setItem('audio_evaluation_id', audioEvalResponse.audio_evaluation_id);
+              logger.info('✅ Stored audio_evaluation_id:', audioEvalResponse.audio_evaluation_id);
+            }
+
+            return { type: 'audio' as const, success: true, data: audioEvalResponse };
+          } catch (audioError: unknown) {
+            if (isIncompleteError(audioError) && attempt < MAX_RETRIES) {
+              logger.warn(`⚠️ Evaluate endpoint not yet consistent (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${RETRY_DELAY_MS / 1000}s...`);
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+              continue;
+            }
+
+            logger.error('❌ Audio evaluation failed:', audioError);
+
+            if (isIncompleteError(audioError)) {
+              throw new Error(
+                `Audio transcriptions are still processing on the server.\n\nPlease wait a moment and click "Finish Assessment" again.`
+              );
+            }
+
+            const e = audioError as { message?: string };
+            return { type: 'audio' as const, success: false, error: e.message || 'Audio evaluation failed' };
           }
-
-          if (audioEvalResponse.status === 'partial') {
-            logger.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.join(', ')}`);
-          }
-
-          if (audioEvalResponse.audio_evaluation_id) {
-            localStorage.setItem('audio_evaluation_id', audioEvalResponse.audio_evaluation_id);
-            logger.info('✅ Stored audio_evaluation_id:', audioEvalResponse.audio_evaluation_id);
-          }
-
-          return { type: 'audio', success: true, data: audioEvalResponse };
-        })
-        .catch((audioError: unknown) => {
-          logger.error('❌ Audio evaluation failed:', audioError);
-
-          // Check for incomplete submission error
-          const error = audioError as { response?: { data?: { error?: string; missing_sections?: string[]; missing_count?: number; completed?: number; total_required?: number } }; message?: string };
-          if (error?.response?.data?.error === 'Incomplete submission') {
-            const errorData = error.response?.data || {};
-            const missing = errorData.missing_sections || [];
-            const message = `⏳ Transcriptions Still Processing!\n\n` +
-              `The backend is still processing ${errorData.missing_count || 9} audio transcriptions.\n\n` +
-              `Completed: ${errorData.completed || 0}/${errorData.total_required || 44}\n` +
-              `Missing: ${missing.join(', ')}\n\n` +
-              `Please wait 30 seconds and click "Finish Assessment" again.\n\n` +
-              `This happens because audio transcription runs in the background and may take a few seconds to complete.`;
-            throw new Error(message);
-          }
-
-          return { type: 'audio', success: false, error: error.message || 'Audio evaluation failed' };
-        });
+        }
+        return { type: 'audio' as const, success: false, error: 'Audio evaluation failed after retries' };
+      })();
 
       evaluationPromises.push(audioEvalPromise);
 
@@ -540,7 +560,7 @@ export default function SituationExplainingPage() {
                       Uploading…
                     </>
                   ) : (
-                    'Finish Assessment →'
+                    'Finish →'
                   )}
                 </button>
               </div>

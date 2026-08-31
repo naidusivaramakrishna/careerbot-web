@@ -2,25 +2,36 @@
 
 import NotesSidebar from "./_components/NotesSidebar";
 import { MockInterviewProvider } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
-import { Montserrat } from "next/font/google";
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "900"],
-});
+import { DashboardProvider } from "@/contexts/DashboardContext";
+import Sidebar from "@/components/layout/Sidebar";
+import Header from "@/components/layout/Header";
+import { usePathname } from "next/navigation";
 
 export default function NotesLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isLandingPage = pathname === "/notes";
+
   return (
-    <MockInterviewProvider>
-      <div className={`${montserrat.variable} antialiased font-(family-name:--font-montserrat) min-h-screen bg-gray-50`}>
-        <div className="flex flex-col min-h-screen">
-          <NotesSidebar />
-          <div className="flex-1 overflow-auto min-w-0">
+    <DashboardProvider>
+      <MockInterviewProvider>
+        {isLandingPage ? (
+          <div className="min-h-screen bg-white antialiased">
+            {children}
+          </div>
+        ) : (
+        <div className="antialiased">
+          <Sidebar />
+          <Header />
+          <div
+            className="pt-14 min-h-screen bg-gray-50"
+            style={{ marginLeft: "var(--sidebar-width, 56px)" }}
+          >
+            <NotesSidebar />
             {children}
           </div>
         </div>
-      </div>
-    </MockInterviewProvider>
+        )}
+      </MockInterviewProvider>
+    </DashboardProvider>
   );
 }

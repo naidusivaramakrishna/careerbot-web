@@ -6,7 +6,7 @@ import { PricingCard } from './PricingCard';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import {
   RefreshCw, ShieldCheck, ChevronDown, ChevronUp,
-  Check, Minus, Users, Star, Award, Zap,
+  Check, Minus,
 } from 'lucide-react';
 
 interface PricingPlansProps {
@@ -150,44 +150,23 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
   const proYearlySavings = proMonthly > 0 ? proMonthly * 12 - proYearly : 0;
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-12">
 
       {/* ── Hero ───────────────────────────────────────────────── */}
-      <div className="text-center max-w-2xl mx-auto">
-        <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-4 py-1.5 rounded-full mb-4">
-          <Zap className="w-3.5 h-3.5" />
-          No hidden fees. Secure payment.
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">
-          Invest in your career.<br className="hidden sm:block" />
-          <span className="text-blue-600">Land your dream job faster.</span>
+      <div className="mx-auto max-w-xl text-center">
+        <p className="mb-2 text-sm font-semibold text-[#2557a7]">Plans and pricing</p>
+        <h1 className="mb-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+          Choose the right plan
         </h1>
-        <p className="text-lg text-gray-500 mb-8">
-          AI-powered tools trusted by thousands of job seekers across India.
-          Pick a plan and start applying smarter today.
+        <p className="mx-auto mb-7 max-w-lg text-base leading-7 text-gray-600">
+          Start free or upgrade for more credits and advanced career tools. You can change your plan at any time.
         </p>
 
-        {/* Social proof */}
-        <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500 mb-8">
-          <div className="flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-blue-500" />
-            <span><strong className="text-gray-900">15,000+</strong> professionals</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-            <span><strong className="text-gray-900">4.8 / 5</strong> average rating</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Award className="w-4 h-4 text-emerald-500" />
-            <span><strong className="text-gray-900">3× faster</strong> job placement</span>
-          </div>
-        </div>
-
         {/* Billing toggle */}
-        <div className="inline-flex items-center bg-gray-100 rounded-xl p-1 gap-1">
+        <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
           <button
             onClick={() => setBillingCycle('monthly')}
-            className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+            className={`rounded-md px-5 py-2 text-sm font-semibold transition-colors ${
               billingCycle === 'monthly'
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
@@ -197,7 +176,7 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
           </button>
           <button
             onClick={() => setBillingCycle('yearly')}
-            className={`relative px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+            className={`relative rounded-md px-5 py-2 text-sm font-semibold transition-colors ${
               billingCycle === 'yearly'
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
@@ -214,7 +193,7 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
       </div>
 
       {/* ── Plan Cards ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start pt-4">
+      <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
         {plans.map((plan) => (
           <PricingCard
             key={plan.id}
@@ -229,7 +208,7 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
       </div>
 
       {/* ── Trust strip ────────────────────────────────────────── */}
-      <div className="flex flex-wrap justify-center gap-6 py-4 border-y border-gray-100">
+      <div className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
           256-bit SSL encryption
@@ -293,48 +272,6 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
             </table>
           </div>
         )}
-      </div>
-
-      {/* ── Testimonials ───────────────────────────────────────── */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 text-center mb-8">
-          Loved by job seekers across India
-        </h2>
-        <div className="grid md:grid-cols-3 gap-5">
-          {[
-            {
-              name: 'Priya Sharma',
-              role: 'Software Engineer @ Zomato',
-              body: 'The ATS scanner alone is worth the Pro plan. I rewrote my resume based on its suggestions and got 3 interviews in a week.',
-              rating: 5,
-            },
-            {
-              name: 'Arjun Mehta',
-              role: 'Product Manager @ Razorpay',
-              body: "CareerBot's AI tailored my resume for each job role automatically. I stopped getting rejected at the screening stage.",
-              rating: 5,
-            },
-            {
-              name: 'Sneha Rao',
-              role: 'Data Analyst @ Flipkart',
-              body: "Switched from the Free plan to Pro. The unlimited job matches and priority AI processing made all the difference.",
-              rating: 5,
-            },
-          ].map((t) => (
-            <div key={t.name} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-              <div className="flex gap-0.5 mb-3">
-                {Array.from({ length: t.rating }).map((_, i) => (
-                  <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
-                ))}
-              </div>
-              <p className="text-gray-700 text-sm leading-relaxed mb-4">&quot;{t.body}&quot;</p>
-              <div>
-                <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
-                <p className="text-gray-400 text-xs">{t.role}</p>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* ── FAQ ────────────────────────────────────────────────── */}

@@ -116,9 +116,6 @@ export default function SectionsPage() {
 
       logger.info('Session ID stored in localStorage:', localStorage.getItem('session_id'));
       logger.info('Verified session_id in localStorage:', localStorage.getItem('session_id'));
-      const startDate = new Date().toISOString();
-      localStorage.setItem('test_start_date', startDate);
-      window.dispatchEvent(new CustomEvent('assessment-timer-start', { detail: startDate }));
 
       if (needsRecording) {
         try {
@@ -132,10 +129,19 @@ export default function SectionsPage() {
           }
         } catch (recordingError) {
           logger.error('Failed to start video recording:', recordingError);
+          throw recordingError; // block navigation — camera must be working before assessment starts
         }
       }
 
-      logger.info('ðŸš€ Navigating to see-and-repeat page...');
+      // Arm timer and proctoring ONLY after recording is confirmed working.
+      // Setting test_start_date earlier would start the countdown and arm all
+      // violation rules (tab-switch, fullscreen-exit) before the user is actually
+      // in the assessment — a camera failure would leave them stranded with a live timer.
+      const startDate = new Date().toISOString();
+      localStorage.setItem('test_start_date', startDate);
+      window.dispatchEvent(new CustomEvent('assessment-timer-start', { detail: startDate }));
+
+      logger.info('Navigating to see-and-repeat page...');
       router.push('/communication/see-and-repeat');
     } catch (err) {
       setIsRequesting(false);
@@ -144,6 +150,8 @@ export default function SectionsPage() {
         setError('Microphone and camera permissions are required. Please allow both and try again.');
       } else if (e.name === 'NotFoundError') {
         setError('No microphone or camera found. Please connect both devices and try again.');
+      } else if (e.name === 'NotReadableError' || (e.message || '').toLowerCase().includes('could not start video source')) {
+        setError('Camera is in use by another application (e.g. Zoom, Teams, another tab). Please close it and try again.');
       } else if (e.message) {
         setError(e.message);
       } else {

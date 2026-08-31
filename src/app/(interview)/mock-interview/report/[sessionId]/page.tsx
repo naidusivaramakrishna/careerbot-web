@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { CodingPerformanceSection } from "@/components/interview/CodingPerformanceSection";
 import type { CodingRoundData } from "@/components/interview/CodingPerformanceSection";
+import type { ScoreBreakdown } from "@/app/coding-test/_lib/types";
 
 // ─── UI report shape ─────────────────────────────────────────────────────────
 
@@ -83,6 +84,88 @@ function mapReport(api: ReportResponse): UiReport {
     ? Math.round(api.overall_score * 10)
     : api.overall_score;
 
+  // Map coding_performance from API to CodingRoundData
+  let codingRound: CodingRoundData | undefined;
+  if (api.coding_performance) {
+    // Typed via ReportResponse; every read below is guarded because the
+    // backend evolves this payload independently of the frontend.
+    const perf = api.coding_performance;
+    const str = (v: unknown, fallback: string) =>
+      typeof v === "string" && v !== "" ? v : fallback;
+    const num = (v: unknown, fallback: number) =>
+      typeof v === "number" && Number.isFinite(v) ? v : fallback;
+    // Convert criteria object to grading_result breakdown format
+    // criteria values are objects ({score, weight, feedback}) on the current
+    // backend; older payloads used a bare number. Handle both, drop anything
+    // we cannot read a numeric score out of.
+    const breakdown = {} as ScoreBreakdown;
+    if (perf.criteria && typeof perf.criteria === "object") {
+      Object.entries(perf.criteria).forEach(([key, value]) => {
+        let score: number | undefined;
+        let weight = 100;
+        let feedback = "";
+
+        if (typeof value === "number") {
+          score = value;
+        } else if (value && typeof value === "object") {
+          const c = value as { score?: unknown; weight?: unknown; feedback?: unknown };
+          if (typeof c.score === "number") score = c.score;
+          if (typeof c.weight === "number" && c.weight > 0) weight = c.weight;
+          if (typeof c.feedback === "string") feedback = c.feedback;
+        }
+
+        if (score === undefined) return;
+        breakdown[key as keyof ScoreBreakdown] = {
+          name: key,
+          score,
+          weight,
+          feedback,
+          suggestions: [],
+        };
+      });
+    }
+
+    // Backend field is ai_feedback_summary; `summary` is a legacy alias.
+    const summary =
+      typeof perf.ai_feedback_summary === "string"
+        ? perf.ai_feedback_summary
+        : typeof perf.summary === "string"
+          ? perf.summary
+          : "";
+    const improvements = Array.isArray(perf.improvements)
+      ? perf.improvements.filter((v: unknown): v is string => typeof v === "string")
+      : Array.isArray(perf.suggestions)
+        ? perf.suggestions.filter((v: unknown): v is string => typeof v === "string")
+        : [];
+    const hasGrading = summary !== "" || Object.keys(breakdown).length > 0;
+    codingRound = {
+      problem_slug: str(perf.problem_slug, "coding-round"),
+      problem_title: str(perf.problem_title, "Coding Problem"),
+      language: str(perf.language, "python"),
+      score: typeof perf.score === "number" ? perf.score : null,
+      // Previously gated on perf.summary alone, which is never present on the
+      // current backend — the whole breakdown and AI feedback were dropped.
+      grading_result: hasGrading ? {
+        total_score: typeof perf.score === "number" ? perf.score : 0,
+        breakdown,
+        summary,
+        suggestions: improvements,
+      } : null,
+      time_taken_s: num(perf.time_taken_s, 0),
+      followup_answers: Array.isArray(perf.followup_scores)
+        ? perf.followup_scores.map((raw: unknown) => {
+            const fs = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+            return {
+              attempt_number: num(fs.attempt_number, 0),
+              follow_up_question: str(fs.follow_up_question, str(fs.question, "")),
+              score: num(fs.score, 0),
+              max_score: num(fs.max_score, 100),
+            };
+          })
+        : undefined,
+    };
+  }
+
   return {
     session_id: api.session_id,
     date: new Date(api.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
@@ -105,6 +188,7 @@ function mapReport(api: ReportResponse): UiReport {
       { dimension: "HR Readiness", score: Math.round((api.scores?.hr ?? api.scores?.overall ?? 0) * 10) },
       { dimension: "Communication", score: Math.round((api.scores?.communication ?? api.scores?.overall ?? 0) * 10) },
       { dimension: "Confidence", score: Math.round((api.scores?.confidence ?? api.scores?.overall ?? 0) * 10) },
+      ...(api.scores?.technical ? [{ dimension: "Technical", score: Math.round(api.scores.technical * 10) }] : []),
     ],
     strengths: api.strengths ?? [],
     areas_to_improve: api.improvement_areas ?? [],
@@ -116,7 +200,7 @@ function mapReport(api: ReportResponse): UiReport {
       filler_count: a.filler_count ?? 0,
       feedback: a.feedback,
     })),
-    coding_round: (api as unknown as { coding_round?: CodingRoundData }).coding_round,
+    coding_round: codingRound,
   };
 }
 
@@ -573,7 +657,7 @@ export default function ReportPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">{q.score.toFixed(1)}/10</span>
                   <button
-                    onClick={() => router.push("/notes/practice")}
+                    onClick={() => router.push("/notes/managerial")}
                     className="text-[10px] font-bold px-2.5 py-1.5 bg-[#2557a7] text-white rounded-lg hover:bg-[#1e4a8f] transition-all whitespace-nowrap"
                   >
                     Practice This
@@ -678,7 +762,7 @@ export default function ReportPage() {
           Take Another Mock Interview
         </button>
         <button
-          onClick={() => router.push("/notes/practice")}
+          onClick={() => router.push("/notes/managerial")}
           className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm transition-all"
         >
           Practice Weak Questions

@@ -8,6 +8,9 @@ interface Props {
   disabled?: boolean;
   minDate?: string;
   maxDate?: string;
+  // Opt out of the "no future dates" cap (e.g. an expected/future graduation date).
+  // Only meant for a lone end-date field — the paired start date should keep the default.
+  allowFutureDates?: boolean;
 }
 
 const monthNames = [
@@ -44,8 +47,23 @@ export default function MonthYearPicker({
   placeholder,
   disabled,
   minDate,
-  maxDate = getTodayMonthYear(),
+  maxDate,
+  allowFutureDates = false,
 }: Props) {
+  // Default param only triggers on `undefined` — callers passing an unset date as ""
+  // (e.g. maxDate={education.endDate} before endDate is filled in) would otherwise
+  // bypass the "no future dates" cap entirely, so normalize "" here too.
+  //
+  // allowFutureDates lets a lone field (e.g. an expected/future graduation end date)
+  // skip the cap. It never widens a *paired* field's cap beyond today though: if a
+  // future-allowed end date is fed in here as this field's maxDate (e.g. the start
+  // date field, which is capped by min(endDate, today)), we still clamp to today
+  // rather than trust the possibly-future value passed in.
+  const todayYM = toYearMonth(getTodayMonthYear())!;
+  const passedYM = maxDate ? toYearMonth(maxDate) : null;
+  const effectiveMaxDate = allowFutureDates
+    ? (maxDate || undefined)
+    : (passedYM !== null && passedYM < todayYM ? maxDate : getTodayMonthYear());
   const [open, setOpen] = useState(false);
   const [showYearGrid, setShowYearGrid] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -100,7 +118,7 @@ export default function MonthYearPicker({
   }, [open]);
 
   const minYM = toYearMonth(minDate ?? "");
-  const maxYM = toYearMonth(maxDate ?? "");
+  const maxYM = toYearMonth(effectiveMaxDate ?? "");
 
   const isMonthDisabled = (mIndex: number): boolean => {
     const ym = displayYear * 100 + mIndex;

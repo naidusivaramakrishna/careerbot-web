@@ -1,0 +1,177 @@
+.jobs-premium-theme {
+  --jobs-blue: #0b5bd3;
+  --jobs-blue-hover: #084bac;
+  --jobs-blue-soft: #eef5ff;
+  --jobs-ink: #0f172a;
+  --jobs-muted: #64748b;
+  --jobs-line: #dde5ef;
+  --jobs-canvas: #f7f8fa;
+  color: var(--jobs-ink);
+  background: var(--jobs-canvas);
+}
+
+.jobs-premium-theme .jobs-workspace {
+  gap: 0;
+  background: var(--jobs-canvas);
+}
+
+.jobs-premium-theme #jobs-main-scroll {
+  border-color: var(--jobs-line);
+  box-shadow: none;
+}
+
+.jobs-premium-theme .jobs-page-topbar {
+  gap: 24px;
+  padding-top: 20px;
+  padding-bottom: 20px;
+  border-color: var(--jobs-line);
+}
+
+.jobs-premium-theme .jobs-page-topbar h1 {
+  color: var(--jobs-ink);
+  font-size: 26px;
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+.jobs-premium-theme .jobs-search-input {
+  min-height: 48px;
+  border-color: #d8e1ec;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.jobs-premium-theme .jobs-search-input:focus {
+  border-color: rgba(11, 91, 211, 0.52);
+  box-shadow: 0 0 0 3px rgba(11, 91, 211, 0.09);
+}
+
+.jobs-premium-theme .jobs-search-button {
+  min-height: 48px;
+  border-radius: 12px;
+  background: var(--jobs-blue);
+  box-shadow: 0 5px 14px rgba(11, 91, 211, 0.18);
+}
+
+.jobs-premium-theme .jobs-search-button:hover {
+  background: var(--jobs-blue-hover);
+  box-shadow: 0 7px 18px rgba(11, 91, 211, 0.22);
+}
+
+.jobs-premium-theme .jobs-controls {
+  border-color: var(--jobs-line);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.jobs-premium-theme .jobs-controls button {
+  letter-spacing: -0.01em;
+}
+
+.jobs-premium-theme .jobs-controls button[class*="border-gray-200"],
+.jobs-premium-theme .jobs-controls button[class*="border-slate-200"] {
+  border-color: #dce4ee;
+  background: #fff;
+  box-shadow: none;
+}
+
+.jobs-premium-theme .jobs-controls button[class*="border-gray-200"]:hover,
+.jobs-premium-theme .jobs-controls button[class*="border-slate-200"]:hover {
+  border-color: #b9cae0;
+  background: #f9fbfe;
+}
+
+.jobs-premium-theme [class*="bg-[#4F46E5]"] {
+  background-color: var(--jobs-blue) !important;
+}
+
+.jobs-premium-theme [class*="hover:bg-[#4338CA]"]:hover {
+  background-color: var(--jobs-blue-hover) !important;
+}
+
+.jobs-premium-theme [class*="text-[#4F46E5]"] {
+  color: var(--jobs-blue) !important;
+}
+
+.jobs-premium-theme [class*="bg-[#eef3ff]"],
+.jobs-premium-theme [class*="bg-[#f0f4ff]"] {
+  background-color: var(--jobs-blue-soft) !important;
+}
+
+.jobs-premium-theme .jobs-premium-card {
+  border-color: #dfe6ef;
+  border-radius: 16px;
+}
+
+.jobs-premium-theme .jobs-premium-card:hover {
+  border-color: #ccd8e8;
+}
+
+.jobs-premium-theme .jobs-premium-card h3 {
+  color: var(--jobs-ink);
+  letter-spacing: -0.025em;
+}
+
+.jobs-premium-theme .jobs-premium-card [class*="bg-slate-50"] {
+  background: #f8fafc;
+}
+
+.jobs-premium-theme .jobs-premium-card [class*="border-slate-200"] {
+  border-color: #dce4ee;
+}
+
+.jobs-premium-theme .jobs-card-actions {
+  border-color: #e2e8f0;
+  background: #fbfcfe;
+}
+
+.jobs-premium-theme .jobs-score-panel {
+  background: #14243a !important;
+}
+
+.jobs-premium-theme .jobs-score-panel > div:first-child {
+  display: none;
+}
+
+.jobs-premium-theme .jobs-intelligence-panel {
+  border-color: var(--jobs-line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.jobs-premium-theme .jobs-intelligence-header {
+  border-color: var(--jobs-line);
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.jobs-premium-theme .jobs-intelligence-body {
+  background: var(--jobs-canvas);
+}
+
+.jobs-premium-theme .jobs-intelligence-body > div > div {
+  border-color: #dfe6ef;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+}
+
+.jobs-premium-theme .jobs-intelligence-body [class*="bg-linear-to-r"] {
+  background: #3557d4 !important;
+  box-shadow: none !important;
+}
+
+.jobs-premium-theme .jobs-intelligence-body [class*="text-gray-400"],
+.jobs-premium-theme .jobs-intelligence-body [class*="text-slate-400"] {
+  color: #718096;
+}
+
+.jobs-premium-theme .jobs-intelligence-body h3,
+.jobs-premium-theme .jobs-intelligence-header h2 {
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 1279px) {
+  .jobs-premium-theme .jobs-workspace {
+    background: #fff;
+  }
+}

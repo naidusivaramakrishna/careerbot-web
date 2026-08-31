@@ -1,7 +1,7 @@
 /**
  * Domain-family and career-level specific section ordering
  * Different domain families show different sections as main sections
- * For Mid-Level, Senior-Level, Lead, Architect, and Manager, Education moves to the end
+ * For Mid-Level and above (Senior-Level, Lead, Architect, Manager, Director, VP), Education moves to the end
  */
 
 export const getSectionOrderByDomainAndCareer = (
@@ -11,17 +11,34 @@ export const getSectionOrderByDomainAndCareer = (
   // Get base domain-specific order
   const baseOrder = getDomainSectionOrder(domainFamily);
 
-  // For Mid-Level, Senior-Level, Lead, Architect, and Manager: move Education to end
+  // For Mid-Level and above: move Education to end
   const level = careerLevel?.toLowerCase() || '';
-  const isAdvancedLevel = level.includes('mid') || level.includes('senior') || level.includes('lead') || level.includes('architect') || level.includes('manager');
+  const isAdvancedLevel = level.includes('mid') || level.includes('senior') || level.includes('lead') || level.includes('architect') || level.includes('manager') || level.includes('director') || level.includes('vice');
 
   console.warn("🎯 getSectionOrderByDomainAndCareer - domainFamily:", domainFamily, "careerLevel:", careerLevel);
   console.warn("🎯 getSectionOrderByDomainAndCareer - baseOrder:", baseOrder);
   console.warn("🎯 getSectionOrderByDomainAndCareer - isAdvancedLevel:", isAdvancedLevel);
 
+  // For Research Scholar at Senior-Level and above, Publications moves before Work Experience
+  const domain = domainFamily?.toLowerCase() || '';
+  const isResearchSenior = domain.includes('research') && isAdvancedLevel;
+
   if (isAdvancedLevel && baseOrder.includes('Education')) {
-    const withoutEducation = baseOrder.filter(s => s !== 'Education');
-    const finalOrder = [...withoutEducation, 'Education'];
+    // Declaration must always stay last — pull it out, reorder, put it back
+    const hasDeclaration = baseOrder.includes('Declaration');
+    const withoutFixed = baseOrder.filter(s => s !== 'Education' && s !== 'Declaration');
+
+    let reordered = [...withoutFixed];
+
+    // Research Scholar senior: Publications before Work Experience
+    if (isResearchSenior && reordered.includes('Publications') && reordered.includes('Work Experience')) {
+      const withoutPub = reordered.filter(s => s !== 'Publications');
+      const weIdx = withoutPub.indexOf('Work Experience');
+      withoutPub.splice(weIdx, 0, 'Publications');
+      reordered = withoutPub;
+    }
+
+    const finalOrder = [...reordered, 'Education', ...(hasDeclaration ? ['Declaration'] : [])];
     console.warn("🎯 getSectionOrderByDomainAndCareer - moved Education to end:", finalOrder);
     return finalOrder;
   }
@@ -95,7 +112,7 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
     ];
   }
 
-  // Government: Standard order with all sections
+  // Government: Declaration is mandatory and always last
   if (domain.includes('government')) {
     return [
       'Personal Info',
@@ -105,7 +122,8 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
       'Projects',
       'Education',
       'Certifications',
-      'Internships'
+      'Internships',
+      'Declaration',
     ];
   }
   // Legal: Standard order with all sections

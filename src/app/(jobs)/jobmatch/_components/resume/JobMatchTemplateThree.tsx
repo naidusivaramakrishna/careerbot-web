@@ -13,6 +13,11 @@ interface JobMatchTemplateTHREEProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editOverrides?: Record<string, any>;
   addedFields?: Record<string, string[]>;
+  /** Missing-skill suggestions not yet added — rendered as red "ghost" chips until added. */
+  pendingSkills?: string[];
+  pendingSoftSkills?: string[];
+  /** Same shape as addedFields, for suggestions (title/summary/bullets) not yet applied — red instead of green. */
+  pendingFields?: Record<string, string[]>;
   onEditSection?: (key: string) => void;
   onDeleteSection?: (key: string) => void;
   deletedSections?: string[];
@@ -84,6 +89,9 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   activeSection,
   editOverrides,
   addedFields,
+  pendingSkills,
+  pendingSoftSkills,
+  pendingFields,
   onEditSection,
   onDeleteSection,
   deletedSections,
@@ -93,6 +101,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const data = deepSanitize(rawData);
   const deleted = deletedSections ?? [];
   const af = addedFields ?? {};
+  const pf = pendingFields ?? {};
   const ov = editOverrides ?? {};
 
   const hlStyle: React.CSSProperties = {
@@ -100,10 +109,24 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     borderRadius: "3px",
     padding: "0 2px",
   };
-  const hl = (section: string, field: string, value: React.ReactNode): React.ReactNode =>
-    (af[section] || []).includes(field) ? <span style={hlStyle}>{value}</span> : <>{value}</>;
+  // Red counterpart of hlStyle — a suggestion targeting this text hasn't been
+  // applied yet. Dashed underline keeps it distinguishable from hlStyle at a
+  // glance even for readers who can't rely on color alone.
+  const missingStyle: React.CSSProperties = {
+    backgroundColor: "rgba(239,68,68,0.13)",
+    borderRadius: "3px",
+    padding: "0 2px",
+    borderBottom: "1.5px dashed rgba(220,38,38,0.55)",
+  };
+  const hl = (section: string, field: string, value: React.ReactNode): React.ReactNode => {
+    if ((af[section] || []).includes(field)) return <span style={hlStyle}>{value}</span>;
+    if ((pf[section] || []).includes(field)) return <span style={missingStyle}>{value}</span>;
+    return <>{value}</>;
+  };
   const hlIdx = (section: string, idx: number): boolean =>
     (af[section] || []).includes(String(idx));
+  const pendingIdx = (section: string, idx: number): boolean =>
+    (pf[section] || []).includes(String(idx));
 
   const parsedData = data?.parsed_data || data || {};
   const llmData = parsedData?.llm_data || {};
@@ -700,13 +723,27 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const startDate = toStr(exp.startDate || exp.start_date || exp.from || exp.start || "");
                   const endDate = exp.currentlyWorking ? "Present" : toStr(exp.endDate || exp.end_date || exp.to || exp.end || "");
                   const dateStr = duration || (startDate ? `${formatDate(startDate)}${endDate ? ` – ${formatDate(endDate)}` : ""}` : "");
-                  const desc = exp.description || exp.responsibilities || exp.details || null;
+                  // Bullets can live in any of these raw arrays — the backend PDF
+                  // export merges responsibilities/description with achievements and
+                  // key_contributions into one list, so the preview must too or jobs
+                  // whose bullets only live under achievements render with no bullets.
+                  const descItems = [
+                    ...parseDescription(exp.description || exp.responsibilities || exp.details || null),
+                    ...parseDescription(exp.achievements || null),
+                    ...parseDescription(exp.key_contributions || exp.keyContributions || null),
+                  ];
+                  const desc = descItems.length ? descItems : null;
+                  const rawTechStack = exp.tech_stack || exp.technologies || exp.techStack || exp.tools;
+                  const techStack: string[] = Array.isArray(rawTechStack)
+                    ? rawTechStack.map((t: unknown) => toStr(t)).filter(Boolean)
+                    : rawTechStack ? [toStr(rawTechStack)].filter(Boolean) : [];
                   const isModified = hlIdx("experience", idx);
+                  const isPending = !isModified && pendingIdx("experience", idx);
                   return (
                     <div key={idx} className="page-break-inside-avoid" style={{
                       marginBottom: "10px",
-                      paddingLeft: isModified ? "8px" : 0,
-                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : "none",
+                      paddingLeft: isModified || isPending ? "8px" : 0,
+                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : isPending ? "3px dashed rgba(220,38,38,0.5)" : "none",
                     }}>
                       {/* Row 1: Company | Date */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -719,6 +756,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                           <span style={{ fontSize: "13.5px", fontStyle: "italic", color: "#374151" }}>{role}</span>
                           {loc && <span style={{ fontSize: "13px", color: "#6b7280", whiteSpace: "nowrap", marginLeft: "8px" }}>{loc}</span>}
                         </div>
+                      )}
+                      {techStack.length > 0 && (
+                        <p style={{ fontSize: "13px", color: "#4b5563", fontStyle: "italic", margin: "2px 0 0" }}>
+                          <strong>Tech Stack:</strong> {techStack.join(", ")}
+                        </p>
                       )}
                       {desc && renderBullets(desc)}
                     </div>
@@ -789,11 +831,12 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const rawTech = proj.tech_stack || proj.technologies || proj.techStack || proj.tools;
                   const tech: string[] = Array.isArray(rawTech) ? rawTech.map((t: unknown) => toStr(t)).filter(Boolean) : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
                   const isModified = hlIdx("projects", idx);
+                  const isPending = !isModified && pendingIdx("projects", idx);
                   return (
                     <div key={idx} className="page-break-inside-avoid" style={{
                       marginBottom: "10px",
-                      paddingLeft: isModified ? "8px" : 0,
-                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : "none",
+                      paddingLeft: isModified || isPending ? "8px" : 0,
+                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : isPending ? "3px dashed rgba(220,38,38,0.5)" : "none",
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -821,50 +864,71 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             )}
 
             {/* ══ SKILLS ══ */}
-            {!deleted.includes("skills") && skills.length > 0 && (
+            {!deleted.includes("skills") && (skills.length > 0 || (pendingSkills && pendingSkills.length > 0)) && (
               <div id="resume-section-skills" className={sc("skills")} style={{ marginBottom: "14px" }}>
                 <SectionActions sectionKey="skills" />
                 <SectionDivider label="Skills" />
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  {categorizeTechnicalSkills(skills as string[]).map(({ label, skills: groupSkills }) => {
+                  {(() => {
+                    const realSkills = skills as string[];
+                    // Missing skills not yet added — merged into the same
+                    // categorized line as real skills (not a separate list)
+                    // so e.g. "Languages: React, Node, Python" reads as one
+                    // group with Python still outstanding, shown in red.
+                    const pendingList = (pendingSkills ?? []).filter(
+                      (s) => !realSkills.some((x) => x.toLowerCase() === s.toLowerCase())
+                    );
+                    const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.skills || []).map((s: string) => s.toLowerCase()));
-                    return (
+                    return categorizeTechnicalSkills([...realSkills, ...pendingList]).map(({ label, skills: groupSkills }) => (
                       <p key={label} style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
                         <strong>{label}:</strong>{" "}
                         {groupSkills.map((skill, idx) => {
-                          const isNew = newlyAddedSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
+                          const lower = skill.toLowerCase();
+                          const isPending = pendingSet.has(lower);
+                          const isNew = !isPending && (newlyAddedSkillsSet.has(lower) || editorAdded.has(lower));
                           return (
                             <React.Fragment key={idx}>
-                              {isNew ? <span style={hlStyle}>{skill}</span> : skill}
+                              {isPending ? <span style={missingStyle}>{skill}</span> : isNew ? <span style={hlStyle}>{skill}</span> : skill}
                               {idx < groupSkills.length - 1 ? ", " : ""}
                             </React.Fragment>
                           );
                         })}
                       </p>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
 
             {/* ══ SOFT SKILLS ══ */}
-            {!deleted.includes("softSkills") && softSkills.length > 0 && (
+            {!deleted.includes("softSkills") && (softSkills.length > 0 || (pendingSoftSkills && pendingSoftSkills.length > 0)) && (
               <div id="resume-section-softSkills" className={sc("softSkills")} style={{ marginBottom: "14px" }}>
                 <SectionActions sectionKey="softSkills" />
                 {skills.length === 0 && <SectionDivider label="Skills" />}
                 <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
                   <strong>Soft Skills:</strong>{" "}
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {(softSkills as any[]).map((skill: string, idx: number) => {
-                    const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
-                    const isNew = newlyAddedSoftSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
-                    return (
-                      <React.Fragment key={idx}>
-                        {isNew ? <span style={hlStyle}>{skill}</span> : skill}
-                        {idx < softSkills.length - 1 ? ", " : ""}
-                      </React.Fragment>
+                  {(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const realSoft = softSkills as any[];
+                    const pendingList = (pendingSoftSkills ?? []).filter(
+                      (s) => !realSoft.some((x: string) => x.toLowerCase() === s.toLowerCase())
                     );
-                  })}
+                    const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
+                    const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
+                    const combined = [...realSoft, ...pendingList];
+                    return combined.map((skill: string, idx: number) => {
+                      const lower = skill.toLowerCase();
+                      const isPending = pendingSet.has(lower);
+                      const isNew = !isPending && (newlyAddedSoftSkillsSet.has(lower) || editorAdded.has(lower));
+                      return (
+                        <React.Fragment key={idx}>
+                          {isPending ? <span style={missingStyle}>{skill}</span> : isNew ? <span style={hlStyle}>{skill}</span> : skill}
+                          {idx < combined.length - 1 ? ", " : ""}
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
                 </p>
               </div>
             )}
@@ -892,11 +956,12 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     return combined.length ? combined : null;
                   })();
                   const isModified = hlIdx("internships", idx);
+                  const isPending = !isModified && pendingIdx("internships", idx);
                   return (
                     <div key={idx} className="page-break-inside-avoid" style={{
                       marginBottom: "10px",
-                      paddingLeft: isModified ? "8px" : 0,
-                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : "none",
+                      paddingLeft: isModified || isPending ? "8px" : 0,
+                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : isPending ? "3px dashed rgba(220,38,38,0.5)" : "none",
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{company}</span>
@@ -926,7 +991,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const certName = typeof cert === "string"
                       ? cert
                       : toStr(cert.name || cert.full_name || cert.title || cert.certification || cert.course_name || cert.course || cert.certification_name || cert.certificate_name || cert.cert_name || "");
-                    const issuedBy = typeof cert === "object" ? toStr(cert.issuedBy || cert.issued_by || cert.organization || cert.issuer || cert.institution || "") : "";
+                    const issuedBy = typeof cert === "object" ? toStr(cert.issuedBy || cert.issued_by || cert.issuing_organization || cert.organization || cert.issuer || cert.institution || "") : "";
                     const year = typeof cert === "object" ? toStr(cert.year || cert.date || cert.issue_date || cert.completion_date || "") : "";
                     if (!certName) return null;
                     const isModified = hlIdx("certifications", idx);

@@ -1,7 +1,7 @@
 import { isAxiosError } from 'axios';
 
 import { httpClient } from '@/lib/http';
-import type { CodingTestLanguage, JudgeResponse } from './types';
+import type { CodingTestLanguage, ExecuteJobQueued, JudgeResponse } from './types';
 
 const BASE = '/coding-test';
 
@@ -48,6 +48,25 @@ export async function runCode(
     return data;
   } catch (err) {
     throw toRunError(err, 'Failed to run your code.');
+  }
+}
+
+/** Enqueue a free-form async execution job — no problem slug, no test cases. Returns job_id + stream_url. */
+export async function executeCode(
+  language: CodingTestLanguage,
+  code: string,
+  stdin = '',
+  timeoutMs = 5000,
+): Promise<ExecuteJobQueued> {
+  try {
+    const { data } = await httpClient.post<ExecuteJobQueued>(
+      `${BASE}/execute`,
+      { language, code, stdin, timeout_ms: timeoutMs },
+      INLINE_AUTH_CONFIG,
+    );
+    return data;
+  } catch (err) {
+    throw toRunError(err, 'Failed to start code execution.');
   }
 }
 

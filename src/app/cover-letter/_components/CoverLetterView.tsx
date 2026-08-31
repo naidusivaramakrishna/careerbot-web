@@ -18,12 +18,14 @@ import {
 import { toast } from "sonner";
 import type { CoverLetterResponse, CoverLetterTemplateId } from "@/types/coverLetter";
 import { useCoverLetterTemplates } from "@/hooks/useCoverLetterTemplates";
+import { useDefaultCoverLetterTemplate } from "@/hooks/useDefaultCoverLetterTemplate";
 import { useDownloadCoverLetter } from "@/hooks/useDownloadCoverLetter";
 import { useUpdateCoverLetter } from "@/hooks/useUpdateCoverLetter";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
-import { CoverLetterTemplatePreview } from "./CoverLetterTemplatePreview";
+import { CoverLetterTemplatePreview, CoverLetterTemplatePreviewModal } from "./CoverLetterTemplatePreview";
 import CoverLetterStatusPill from "./CoverLetterStatusPill";
 import WarningBanner from "./WarningBanner";
+import { getMatchBand, getMatchLabel, getMatchLabelTone, type MatchBand } from "../_utils/matchLabel";
 
 export interface CoverLetterViewProps {
   letter: CoverLetterResponse;
@@ -169,6 +171,7 @@ function redirectToLoginForExport() {
 
 export default function CoverLetterView({ letter, actions }: CoverLetterViewProps) {
   const { templates, isLoading: templatesLoading } = useCoverLetterTemplates();
+  const templatePreference = useDefaultCoverLetterTemplate();
   const [currentLetter, setCurrentLetter] = useState(letter);
   const [selectedDisplayTemplateId, setSelectedDisplayTemplateId] =
     useState<DisplayTemplateId>(() => getStoredGeneratedLetterTemplate(letter.letter_id) ?? "modern");
@@ -228,6 +231,12 @@ export default function CoverLetterView({ letter, actions }: CoverLetterViewProp
       setSelectedDisplayTemplateId(storedTemplateId);
     }
   }, [currentLetter.letter_id]);
+
+  useEffect(() => {
+    if (getStoredGeneratedLetterTemplate(currentLetter.letter_id)) return;
+    const preferred = templatePreference.defaultTemplate?.template_id as DisplayTemplateId | undefined;
+    if (preferred && displayTemplateIds.has(preferred)) setSelectedDisplayTemplateId(preferred);
+  }, [currentLetter.letter_id, templatePreference.defaultTemplate?.template_id]);
 
   const wordCount = currentLetter.metadata?.word_count ?? currentLetter.plain_text?.split(/\s+/).filter(Boolean).length ?? 0;
   const titleLine = `${formatGeneratedFull(currentLetter.created_at)} - ${wordCount} words`;
@@ -301,6 +310,17 @@ export default function CoverLetterView({ letter, actions }: CoverLetterViewProp
       templatesOpen={templatesOpen}
       onTemplatesOpenChange={setTemplatesOpen}
       templatesLoading={templatesLoading}
+      templates={templates}
+      defaultTemplateId={templatePreference.defaultTemplate?.template_id}
+      isSavingDefaultTemplate={templatePreference.isSaving}
+      onSetDefaultTemplate={async (id) => {
+        try {
+          await templatePreference.setDefault(id);
+          toast.success("Default cover-letter template updated.");
+        } catch {
+          toast.error("Could not update your default template.");
+        }
+      }}
       canDownload={canDownload}
       supportsPdf={supportsPdf}
       supportsDocx={supportsDocx}
@@ -333,6 +353,10 @@ function ReadyCoverLetterReview({
   templatesOpen,
   onTemplatesOpenChange,
   templatesLoading,
+  templates,
+  defaultTemplateId,
+  isSavingDefaultTemplate,
+  onSetDefaultTemplate,
   canDownload,
   supportsPdf,
   supportsDocx,
@@ -361,6 +385,10 @@ function ReadyCoverLetterReview({
   templatesOpen: boolean;
   onTemplatesOpenChange: (open: boolean) => void;
   templatesLoading: boolean;
+  templates: import("@/types/coverLetter").CoverLetterTemplate[];
+  defaultTemplateId?: CoverLetterTemplateId;
+  isSavingDefaultTemplate: boolean;
+  onSetDefaultTemplate: (id: CoverLetterTemplateId) => Promise<void>;
   canDownload: boolean;
   supportsPdf: boolean;
   supportsDocx: boolean;
@@ -527,6 +555,10 @@ function ReadyCoverLetterReview({
           onTemplatesOpenChange(false);
         }}
         templatesLoading={templatesLoading}
+        templates={templates}
+        defaultTemplateId={defaultTemplateId}
+        isSavingDefaultTemplate={isSavingDefaultTemplate}
+        onSetDefaultTemplate={onSetDefaultTemplate}
       />
     </article>
   );
@@ -582,10 +614,10 @@ function InsightsPanel({
       <div className="rounded-lg border border-[#dfe6f5] bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] 2xl:p-5">
         <h2 className="text-lg font-black text-[#070b33]">Insights</h2>
         <div className="mt-4 flex items-center gap-3 2xl:mt-5 2xl:gap-4">
-          <ScoreRing value={overallScore} tone="green" />
+          <ScoreRing value={overallScore} tone={getRingTone(overallScore)} />
           <div>
             <p className="text-xl font-black text-[#070b33] 2xl:text-2xl">{overallScore}%</p>
-            <p className="text-sm font-bold text-emerald-700">{overallScore >= 85 ? "Excellent Match" : "Good Match"}</p>
+            <p className={`text-sm font-bold ${getMatchLabelTone(overallScore)}`}>{getMatchLabel(overallScore)}</p>
           </div>
         </div>
         <div className="mt-5 space-y-3">
@@ -610,8 +642,24 @@ function InsightsPanel({
   );
 }
 
-function ScoreRing({ value, tone }: { value: number; tone: "green" | "blue" | "purple" }) {
-  const color = tone === "green" ? "#22c55e" : tone === "blue" ? "#2557a7" : "#7c3aed";
+// Keyed on the FULL MatchBand union, not a subset. getMatchBand returns
+// "excellent" for scores >= 85 (matchLabel.ts:20); a partial Record left that
+// key missing, so RING_TONE_COLOR[tone] was undefined and the ring rendered
+// conic-gradient(undefined ...) on exactly the best-scoring cover letters.
+const RING_TONE_COLOR: Record<MatchBand, string> = {
+  excellent: "#16a34a",
+  good: "#22c55e",
+  moderate: "#d97706",
+  low: "#ea580c",
+  "very-low": "#b91c1c",
+};
+
+function getRingTone(score: number): MatchBand {
+  return getMatchBand(score);
+}
+
+function ScoreRing({ value, tone }: { value: number; tone: MatchBand }) {
+  const color = RING_TONE_COLOR[tone];
   return (
     <div
       className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-lg font-black text-[#070b33] 2xl:h-20 2xl:w-20 2xl:text-xl"
@@ -718,13 +766,22 @@ function TemplateBrowseDrawer({
   selectedTemplateId,
   onTemplateChange,
   templatesLoading,
+  templates: catalogTemplates,
+  defaultTemplateId,
+  isSavingDefaultTemplate,
+  onSetDefaultTemplate,
 }: {
   open: boolean;
   onClose: () => void;
   selectedTemplateId: DisplayTemplateId;
   onTemplateChange: (id: DisplayTemplateId) => void;
   templatesLoading: boolean;
+  templates: import("@/types/coverLetter").CoverLetterTemplate[];
+  defaultTemplateId?: CoverLetterTemplateId;
+  isSavingDefaultTemplate: boolean;
+  onSetDefaultTemplate: (id: CoverLetterTemplateId) => Promise<void>;
 }) {
+  const [previewing, setPreviewing] = useState<{ name: string; url: string } | null>(null);
   if (!open) return null;
   const grouped = displayTemplates.reduce<Record<string, Array<(typeof displayTemplates)[number]>>>((acc, template) => {
     const key = template.badge;
@@ -764,7 +821,10 @@ function TemplateBrowseDrawer({
                       selectedTemplateId === template.id ? "border-[#2557a7] bg-blue-50 ring-1 ring-[#2557a7]" : "border-[#dfe6f5] bg-white",
                     ].join(" ")}
                   >
-                    <MiniDoc template={template} />
+                    <MiniDoc
+                      template={template}
+                      previewUrl={catalogTemplates.find((item) => item.template_id === template.backendTemplateId)?.preview_url}
+                    />
                     <span className="min-w-0 pr-6">
                       <span className="block text-sm font-black text-[#070b33]">{template.name}</span>
                       <span className="mt-1 block text-xs font-black uppercase tracking-[0.14em] text-[#2557a7]">
@@ -774,6 +834,52 @@ function TemplateBrowseDrawer({
                         {template.description}
                       </span>
                       <span className="mt-2 block text-xs font-semibold text-slate-500">Best for {template.bestFor}</span>
+                      <span className="mt-3 flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const previewUrl = catalogTemplates.find((item) => item.template_id === template.backendTemplateId)?.preview_url;
+                          return <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (previewUrl) setPreviewing({ name: template.name, url: previewUrl });
+                            }}
+                            onKeyDown={(event) => {
+                              if ((event.key === "Enter" || event.key === " ") && previewUrl) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setPreviewing({ name: template.name, url: previewUrl });
+                              }
+                            }}
+                            aria-disabled={!previewUrl}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-black ${previewUrl ? "bg-[#2557a7] text-white hover:bg-[#1e4a94]" : "cursor-wait bg-slate-100 text-slate-400"}`}
+                          >
+                            {previewUrl ? "Preview" : "Loading preview..."}
+                          </span>;
+                        })()}
+                        {defaultTemplateId === template.backendTemplateId ? (
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">Your default</span>
+                        ) : (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onSetDefaultTemplate(template.backendTemplateId);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void onSetDefaultTemplate(template.backendTemplateId);
+                              }
+                            }}
+                            className="rounded-full border border-[#cdd8ee] px-2.5 py-1 text-[11px] font-black text-[#2557a7] hover:bg-white"
+                          >
+                            {isSavingDefaultTemplate ? "Saving..." : "Make default"}
+                          </span>
+                        )}
+                      </span>
                     </span>
                     {selectedTemplateId === template.id && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-[#2557a7]" />}
                   </button>
@@ -783,6 +889,11 @@ function TemplateBrowseDrawer({
           ))}
         </div>
       </aside>
+      <CoverLetterTemplatePreviewModal
+        previewUrl={previewing?.url ?? null}
+        templateName={previewing?.name ?? "Template"}
+        onClose={() => setPreviewing(null)}
+      />
     </div>
   );
 }
@@ -839,7 +950,7 @@ function LetterPreviewPaper({
           </div>
           <div className="mt-8 space-y-2">
             <p className="text-sm font-black leading-5 text-white">{header.name}</p>
-            <p className="text-xs font-semibold leading-5 text-white/75">{header.contact}</p>
+            {header.contact && <p className="text-xs font-semibold leading-5 text-white/75">{header.contact}</p>}
             <p className="text-xs font-semibold leading-5 text-white/65">Cover letter</p>
           </div>
           <div className="mt-10 space-y-2">
@@ -860,7 +971,7 @@ function LetterPreviewPaper({
       <div className="mx-auto max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)]">
         <div className={["px-6 py-4 text-white 2xl:px-7 2xl:py-5", template.accent].join(" ")}>
           <p className="text-lg font-black leading-tight">{header.name}</p>
-          <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">{header.contact}</p>
+          {header.contact && <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">{header.contact}</p>}
         </div>
         <div className="px-6 py-7 2xl:px-8 2xl:py-9">{body}</div>
       </div>
@@ -873,7 +984,7 @@ function LetterPreviewPaper({
         <div className="mb-5 flex items-start justify-between gap-6 border-b border-blue-100 pb-4">
           <div>
             <p className="text-base font-black leading-tight text-slate-950">{header.name}</p>
-            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{header.contact}</p>
+            {header.contact && <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{header.contact}</p>}
           </div>
           <p className="text-right text-xs font-bold uppercase tracking-wide text-slate-400">Cover letter</p>
         </div>
@@ -898,7 +1009,7 @@ function LetterPreviewPaper({
         <div className="mb-7 flex items-start justify-between gap-4">
           <div>
             <p className="text-lg font-black leading-tight text-slate-950">{header.name}</p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>
+            {header.contact && <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>}
           </div>
           <div className={["flex h-14 w-14 items-center justify-center rounded-full text-sm font-black text-white", template.accent].join(" ")}>
             {header.initials}
@@ -918,7 +1029,7 @@ function LetterPreviewPaper({
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <p className="text-lg font-black leading-tight text-slate-950">{header.name}</p>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>
+          {header.contact && <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>}
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 text-xs font-black text-slate-700">
           {header.initials}
@@ -941,7 +1052,7 @@ function getLetterPreviewHeader(
     .filter(Boolean);
   const signature = coverLetter?.signature?.replace(/^(sincerely|regards|best regards),?\s*/i, "").trim();
   const firstPlainName = lines.find((line) => !/^dear\s+/i.test(line) && !line.includes("@") && line.length <= 80);
-  const contact = lines.find((line) => line.includes("@") || /\d{6,}/.test(line)) ?? "Cover letter ready for review";
+  const contact = lines.find((line) => line.includes("@") || /\d{6,}/.test(line)) ?? "";
   const name = signature || firstPlainName || "Candidate";
   const initials = name
     .split(/\s+/)
@@ -1002,11 +1113,13 @@ function LetterBody({
 function MiniDoc({
   template,
   compact = false,
+  previewUrl,
 }: {
   template: (typeof displayTemplates)[number];
   compact?: boolean;
+  previewUrl?: string;
 }) {
-  return <CoverLetterTemplatePreview template={template} size={compact ? "compact" : "picker"} />;
+  return <CoverLetterTemplatePreview template={template} previewUrl={previewUrl} size={compact ? "compact" : "picker"} />;
 }
 
 function getEvidenceScore(letter: CoverLetterResponse): number {

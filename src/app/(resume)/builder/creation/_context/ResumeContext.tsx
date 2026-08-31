@@ -2,8 +2,8 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
-import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
-import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
+import { getEnhancedResume, applyFix, deleteFix } from "@/api/enhancerApi";
+import type { ATSScore, ATSSectionScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
@@ -75,22 +75,38 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
   // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
   const PREDEFINED = new Set(['programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales']);
   const customCategories: CustomCategory[] = [];
-  Object.entries(s).forEach(([camelKey, items]) => {
-    if (PREDEFINED.has(camelKey) || !Array.isArray(items)) return;
-    const typedItems = items as BackendSkillItem[];
-    // Derive a human-readable display name: "databaseTools" → "Database Tools"
-    const displayName = camelKey
+
+  // Convert camelCase or snake_case key to "Human Readable Name"
+  const toDisplayName = (key: string) =>
+    key
+      .replace(/_/g, ' ')
       .replace(/([A-Z])/g, ' $1')
+      .replace(/\s+/g, ' ')
       .replace(/^./, c => c.toUpperCase())
       .trim();
-    // Store under both keys so whichever form custom.name takes, the lookup hits
-    buildIdMap(camelKey, typedItems);
-    buildIdMap(displayName, typedItems);
+
+  const addCustomCategory = (key: string, items: BackendSkillItem[]) => {
+    const displayName = toDisplayName(key);
+    buildIdMap(key, items);
+    buildIdMap(displayName, items);
     customCategories.push({
-      id: `custom_backend_${camelKey}`,
+      id: `custom_backend_${key}`,
       name: displayName,
-      skills: extractNames(typedItems),
+      skills: extractNames(items),
     });
+  };
+
+  Object.entries(s).forEach(([camelKey, items]) => {
+    if (PREDEFINED.has(camelKey)) return;
+    // Nested container: customSkills: { "dev_ops_tools": [{id, name}] }
+    if (!Array.isArray(items) && typeof items === 'object' && items !== null) {
+      Object.entries(items as Record<string, BackendSkillItem[]>).forEach(([subKey, subItems]) => {
+        if (Array.isArray(subItems)) addCustomCategory(subKey, subItems);
+      });
+      return;
+    }
+    if (!Array.isArray(items)) return;
+    addCustomCategory(camelKey, items as BackendSkillItem[]);
   });
 
   return {
@@ -135,6 +151,27 @@ export interface ResumeData {
     languages?: string;
     titlePrefix?: string;
     qualifications?: string;
+    // Government Standard — India-specific
+    fathersName?: string;
+    maritalStatus?: string;
+    gender?: string;
+    permanentAddress?: string;
+    // Healthcare
+    specialisation?: string;
+    medicalRegNo?: string;
+    // Legal
+    barEnrollmentNo?: string;
+    yearOfEnrollment?: string;
+    courtsOfPractise?: string;
+    // Marine
+    rank?: string;
+    cocNumber?: string;
+    stcwCertificates?: string;
+    vesselTypes?: string;
+    // Research Scholar
+    orcidId?: string;
+    googleScholarUrl?: string;
+    hIndex?: string;
   };
   professionalSummary: {
     summary: string;
@@ -178,7 +215,6 @@ export interface ResumeData {
     issueDate: string;
     expiryDate?: string;
     credentialId?: string;
-    credentialUrl?: string;
   }[];
   achievements: {
     id?: string;
@@ -241,7 +277,19 @@ export interface ResumeData {
     publicationName: string;
     date: string;
     url: string;
+    doi?: string;
   }[];
+  patents: {
+    id?: string;
+    title: string;
+    patentNumber?: string;
+    date?: string;
+    description?: string;
+    status?: string;
+  }[];
+  declaration?: string;
+  declarationDate?: string;
+  declarationPlace?: string;
   customSections?: CustomSection[];
 }
 
@@ -290,6 +338,7 @@ interface ResumeContextType {
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<void>;
   applyManualFix: (suggestionId: string, value: string) => Promise<void>;
+  undoFix: (suggestionId: string) => Promise<void>;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -387,6 +436,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       interests: [],
       languages: [],
       publications: [],
+      patents: [],
+      declaration: "",
+      declarationDate: "",
+      declarationPlace: "",
       customSections: [],
     };
   }
@@ -692,7 +745,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             }
           })(),
           (async () => {
-            if (data) return data; // Use cached data if available
+            // For enhanced resumes, always fetch from API — cached data is flat
+            // (no enhanced_data / ats_score) and would break the score tab on first load.
+            if (data && source !== "enhanced") return data;
             if (source === "enhanced") {
               return await getEnhancedResume(resumeId);
             } else {
@@ -705,8 +760,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         let processedData;
         if (source === "enhanced" && resumeData?.enhanced_data) {
           // Handle enhanced resume data
+          // enhanced_sections holds user-edited arrays (always 1 source of truth).
+          // enhanced_data top-level arrays are appended to by the backend on each
+          // PATCH, causing duplicates. Spreading enhanced_sections last ensures
+          // user-saved data wins over the stale parsed copies.
+          const enhancedSections = resumeData.enhanced_data.enhanced_sections || {};
           const enhancedDataWithFallback = {
             ...resumeData.enhanced_data,
+            ...enhancedSections,
             enhancer_state: resumeData.enhancer_state,
           };
           const mapped = mapParserOutputToBuilderData(enhancedDataWithFallback);
@@ -728,7 +789,17 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             return null;
           })();
           if (resolvedAtsScore) {
-            setEnhancedAtsScore(resolvedAtsScore);
+            // Prefer ats_display.score (the headline figure shown on the ATS report page)
+            // to avoid a 1-point rounding discrepancy between ats_breakdown.final_score
+            // and the ats_display score that the backend computes separately.
+            const atsDisplayScore: number | undefined =
+              (resumeData.ats_display as { score?: number } | undefined)?.score ??
+              (resumeData.enhancer_state as { ats_display?: { score?: number } } | undefined)?.ats_display?.score;
+            setEnhancedAtsScore(
+              atsDisplayScore != null
+                ? { ...resolvedAtsScore, final_score: atsDisplayScore, Percentage: atsDisplayScore }
+                : resolvedAtsScore
+            );
           }
           // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
           const derivedSuggestions: EnhancedSuggestion[] = [];
@@ -811,6 +882,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         // Split combined phone (e.g. "+911234567890") into countryCode and phone
         const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(data.personalInfo?.phone || "");
 
+        // Backend may return countryCode as ISO2 ("IN") or as a dialing code ("+91").
+        // Only trust the stored value when it's already a dialing code; otherwise use
+        // the dialing code extracted from the E.164 phone string by splitPhone.
+        const storedCodeInitial = data.personalInfo?.countryCode || "";
+        const resolvedCodeInitial = storedCodeInitial.startsWith("+") ? storedCodeInitial : (parsedCode || "+91");
+
         // Normalize MongoDB's _id to id for all section items
         const normalizeId = <T extends Record<string, unknown>>(items: T[]): T[] =>
           items.map(item => (!item.id && item._id) ? { ...item, id: item._id } : item);
@@ -820,7 +897,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           personalInfo: {
             fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || "",
             email: data.personalInfo?.email || "",
-            countryCode: data.personalInfo?.countryCode || parsedCode,
+            countryCode: resolvedCodeInitial,
             phone: parsedPhone || "",
             location: data.personalInfo?.location || "",
             linkedinUrl: data.personalInfo?.linkedinUrl || "",
@@ -842,6 +919,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
+          // patents is required on ResumeData and defaulted to [] for a new
+          // resume, but was omitted here -- so LOADING a saved resume produced
+          // patents: undefined, which the Patents editor then indexed into.
+          patents: normalizeId((data.patents || []) as Record<string, unknown>[]) as ResumeData["patents"],
           ...(() => {
             let categorizedSkills: CategorizedSkills;
             if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
@@ -870,7 +951,6 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             year: cert.year || cert.issueDate || "",
             expiryDate: cert.expiryDate || cert.expiry_date || "",
             credentialId: cert.credentialId || cert.credential_id || "",
-            credentialUrl: cert.credentialUrl || "",
           })),
           achievements: normalizeId((data.achievements || []) as Record<string, unknown>[]) as ResumeData["achievements"],
           volunteering: normalizeId((data.volunteering || []) as Record<string, unknown>[]) as ResumeData["volunteering"],
@@ -998,6 +1078,61 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }));
   };
 
+  // Converts a top-level ats_display block (returned by apply_fix when ats_breakdown is absent)
+  // into an ATSScore object compatible with enhancedAtsScore state.
+  const buildScoreFromAtsDisplay = (
+    atsDisplay: { score?: number; sections?: unknown[] } | undefined,
+    current: ATSScore | null,
+  ): ATSScore | null => {
+    if (!atsDisplay) return current;
+    type AtsSection = {
+      name: string; score_pct: number; weighted_pts: number; max_pts: number;
+      deductions?: Array<{ id: string; penalty_pts?: number; after_example?: string; before_example?: string }>;
+    };
+    const sections = (atsDisplay.sections ?? []) as AtsSection[];
+    const sectionBreakdown: Record<string, ATSSectionScore> = {};
+    for (const sec of sections) {
+      sectionBreakdown[sec.name] = {
+        raw_score: sec.weighted_pts,
+        max_raw_score: sec.max_pts,
+        percentage: sec.score_pct,
+        weight: sec.max_pts,
+        weighted_contribution: sec.weighted_pts,
+        deductions: (sec.deductions ?? []).map(d => ({
+          id: d.id,
+          penalty: d.penalty_pts ?? 0,
+          after_example: d.after_example,
+          before_example: d.before_example,
+        })),
+      };
+    }
+    return {
+      ...(current ?? {}),
+      final_score: atsDisplay.score,
+      Percentage: atsDisplay.score,
+      section_breakdown: Object.keys(sectionBreakdown).length > 0 ? sectionBreakdown : current?.section_breakdown,
+    };
+  };
+
+  // Rebuilds EnhancedSuggestion[] from the deductions in a fresh ats_display response.
+  const buildSuggestionsFromAtsDisplay = (
+    atsDisplay: { sections?: unknown[] } | undefined,
+  ): EnhancedSuggestion[] => {
+    if (!atsDisplay?.sections) return [];
+    type AtsSection = {
+      name: string;
+      deductions?: Array<{ id: string; after_example?: string; message?: string }>;
+    };
+    const result: EnhancedSuggestion[] = [];
+    for (const sec of (atsDisplay.sections as AtsSection[])) {
+      for (const d of (sec.deductions ?? [])) {
+        const text = d.after_example || d.message;
+        if (text) result.push({ id: d.id, section: sec.name, message: text, fix_type: "manual" });
+      }
+    }
+    return result;
+  };
+
   const applyAutoFix = async (suggestionId: string): Promise<void> => {
     if (!resumeIdProp) return;
     const requestId = ++latestFixRequestRef.current;
@@ -1017,6 +1152,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(
         (mapped.personalInfo?.phone as string) || ""
       );
+      const storedCodeAuto = (mapped.personalInfo?.countryCode as string) || "";
+      const resolvedCodeAuto = storedCodeAuto.startsWith("+") ? storedCodeAuto : (parsedCode || "+91");
       setResumeData(prev => ({
         ...prev,
         ...mapped,
@@ -1025,7 +1162,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           fullname: mapped.personalInfo?.fullname || prev.personalInfo.fullname,
           email: mapped.personalInfo?.email || prev.personalInfo.email || '',
           location: mapped.personalInfo?.location || prev.personalInfo.location || '',
-          countryCode: mapped.personalInfo?.countryCode || parsedCode,
+          countryCode: resolvedCodeAuto,
           phone: parsedPhone || mapped.personalInfo?.phone || prev.personalInfo.phone,
           linkedinUrl: mapped.personalInfo?.linkedinUrl || prev.personalInfo.linkedinUrl || '',
           githubUrl: mapped.personalInfo?.githubUrl || prev.personalInfo.githubUrl || '',
@@ -1038,12 +1175,27 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
         },
       }));
+      // Update ATS score: prefer ats_breakdown from enhancer_state;
+      // fall back to top-level ats_display (apply_fix responses omit ats_breakdown).
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
       if (response.enhancer_state.ats_breakdown) {
-        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
       }
-      // Delay removal so the "Applied!" button state is visible to the user before it disappears
+      // Rebuild suggestions from the fresh ats_display deductions so resolved items disappear
+      // and any still-failing ones (e.g. backend rejected the value) remain visible.
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
       setTimeout(() => {
-        setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        setEnhancedSuggestions(
+          freshSuggestions.length > 0
+            ? freshSuggestions
+            : prev => prev.filter(s => s.id !== suggestionId)
+        );
       }, 1200);
     }
   };
@@ -1059,12 +1211,81 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     });
     // Drop a response superseded by a newer apply-fix click (out-of-order guard).
     if (requestId !== latestFixRequestRef.current) return;
-    if (response.success && response.enhancer_state) {
-      if (response.enhancer_state.ats_breakdown) {
-        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+    if (response.success) {
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state?.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
       }
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
       setTimeout(() => {
-        setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        setEnhancedSuggestions(
+          freshSuggestions.length > 0
+            ? freshSuggestions
+            : prev => prev.filter(s => s.id !== suggestionId)
+        );
+      }, 1200);
+    }
+  };
+
+  const undoFix = async (suggestionId: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
+    const response = await deleteFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+    });
+    if (requestId !== latestFixRequestRef.current) return;
+    if (response.success && response.enhancer_state) {
+      const mapped = mapParserOutputToBuilderData({
+        ...response.enhancer_state.resume,
+        enhancer_state: response.enhancer_state,
+      });
+      const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(
+        (mapped.personalInfo?.phone as string) || ""
+      );
+      const storedCodeUndo = (mapped.personalInfo?.countryCode as string) || "";
+      const resolvedCodeUndo = storedCodeUndo.startsWith("+") ? storedCodeUndo : (parsedCode || "+91");
+      setResumeData(prev => ({
+        ...prev,
+        ...mapped,
+        resume_id: prev.resume_id,
+        personalInfo: {
+          fullname: mapped.personalInfo?.fullname || prev.personalInfo.fullname,
+          email: mapped.personalInfo?.email || prev.personalInfo.email || '',
+          location: mapped.personalInfo?.location || prev.personalInfo.location || '',
+          countryCode: resolvedCodeUndo,
+          phone: parsedPhone || mapped.personalInfo?.phone || prev.personalInfo.phone,
+          linkedinUrl: mapped.personalInfo?.linkedinUrl || prev.personalInfo.linkedinUrl || '',
+          githubUrl: mapped.personalInfo?.githubUrl || prev.personalInfo.githubUrl || '',
+          portfolioUrl: mapped.personalInfo?.portfolioUrl || prev.personalInfo.portfolioUrl || '',
+          dateOfBirth: mapped.personalInfo?.dateOfBirth || prev.personalInfo.dateOfBirth || '',
+          nationality: mapped.personalInfo?.nationality || prev.personalInfo.nationality || '',
+          category: mapped.personalInfo?.category || prev.personalInfo.category || '',
+          languages: mapped.personalInfo?.languages || prev.personalInfo.languages || '',
+          titlePrefix: mapped.personalInfo?.titlePrefix || prev.personalInfo.titlePrefix || '',
+          qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
+        },
+      }));
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
+      }
+      // Rebuild suggestions — the deleted fix's suggestion should reappear in the fresh list
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
+      setTimeout(() => {
+        setEnhancedSuggestions(freshSuggestions.length > 0 ? freshSuggestions : prev => prev);
       }, 1200);
     }
   };
@@ -1108,6 +1329,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         deleteCustomField,
         applyAutoFix,
         applyManualFix,
+        undoFix,
       }}
     >
       {children}

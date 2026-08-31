@@ -13,7 +13,6 @@ import {
   Languages,
   ArrowRight,
   ChevronRight,
-  ChevronLeft,
 } from "lucide-react";
 
 // ─── Static Data ───────────────────────────────────────────────────────────────
@@ -214,14 +213,6 @@ export default function EnglishPage() {
 
       {/* ── Page Header ── */}
       <div className="mb-7">
-        <button
-          onClick={() => router.push("/mock-interview/live")}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-5"
-        >
-          <ChevronLeft size={14} />
-          Back to Dashboard
-        </button>
-
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 bg-[#2557a7]/8 border border-[#2557a7]/15 rounded-xl flex items-center justify-center shrink-0">
             <BookOpen size={20} className="text-[#2557a7]" />
@@ -231,9 +222,9 @@ export default function EnglishPage() {
               <h1 className="text-xl font-bold text-gray-900 leading-tight">
                 Interview English Essentials
               </h1>
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-[#2557a7]/8 border border-[#2557a7]/15 text-[#2557a7] rounded-full uppercase tracking-wide shrink-0">
+              {/* <span className="text-[10px] font-bold px-2 py-0.5 bg-[#2557a7]/8 border border-[#2557a7]/15 text-[#2557a7] rounded-full uppercase tracking-wide shrink-0">
                 Stage 2
-              </span>
+              </span> */}
             </div>
             <p className="text-sm text-gray-500 leading-snug">
               The only English you need for interviews. 10 minutes to read.
@@ -550,7 +541,7 @@ export default function EnglishPage() {
           Reading done? Move to Stage 3.
         </p>
         <button
-          onClick={() => router.push("/notes/practice")}
+          onClick={() => router.push("/notes/managerial")}
           className="flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1e4a8f] text-white text-sm font-bold rounded-xl shadow-md shadow-[#2557a7]/20 transition-colors whitespace-nowrap"
         >
           Start Practice Mode

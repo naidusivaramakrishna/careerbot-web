@@ -12,6 +12,7 @@ import type {
   JdMatchMatrixEntry,
   JdMatchStatus,
 } from "@/types/coverLetter";
+import { getMatchAlignmentLabel, getMatchBarTone } from "../_utils/matchLabel";
 
 export interface JDMatchMatrixProps {
   entries: JdMatchMatrixEntry[];
@@ -37,12 +38,7 @@ export default function JDMatchMatrix({
   const missingCount = entries.length - metCount - partialCount;
   const usedCount = entries.filter((entry) => entry.used_in_letter).length;
   const matchPercent = Math.round((metCount / entries.length) * 100);
-  const summaryTone =
-    matchPercent >= 70
-      ? "Strong JD alignment"
-      : matchPercent >= 35
-        ? "Moderate JD alignment"
-        : "Low JD alignment";
+  const summaryTone = getMatchAlignmentLabel(matchPercent);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -64,14 +60,7 @@ export default function JDMatchMatrix({
           </span>
           <span className="mt-3 block h-2 overflow-hidden rounded-full bg-slate-100">
             <span
-              className={[
-                "block h-full rounded-full",
-                matchPercent >= 70
-                  ? "bg-emerald-500"
-                  : matchPercent >= 35
-                    ? "bg-amber-500"
-                    : "bg-red-400",
-              ].join(" ")}
+              className={["block h-full rounded-full", getMatchBarTone(matchPercent)].join(" ")}
               style={{ width: `${Math.max(matchPercent, 4)}%` }}
             />
           </span>

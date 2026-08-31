@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface PublicationEntry {
@@ -16,7 +18,8 @@ interface PublicationEntry {
   publicationName: string;
   date: string;
   url: string;
-  id?: string; // ✅ NEW: Add item ID for backend tracking
+  doi?: string;
+  id?: string;
 }
 
 const emptyPublication = (): PublicationEntry => ({
@@ -25,11 +28,14 @@ const emptyPublication = (): PublicationEntry => ({
   publicationName: "",
   date: "",
   url: "",
+  doi: "",
 });
 
 const Publications: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
-  const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors } = useValidation();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors, setFieldError } = useValidation();
 
   const [showTips] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
@@ -184,7 +190,11 @@ const Publications: React.FC = () => {
       // // console.log("🗑️ Deleting publication item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "publications", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "publications", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "publications", itemId);
+      }
 
       // // console.log("✅ Publication item deleted from backend successfully");
 
@@ -409,10 +419,37 @@ const Publications: React.FC = () => {
                           type="url"
                           value={publication.url}
                           placeholder="https://example.com"
-                          onChange={(e) => handleChange(editIndex, "url", e.target.value)}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                          onChange={(e) => {
+                            handleChange(editIndex, "url", e.target.value);
+                            clearError("publication", globalIndex, "url");
+                          }}
+                          onBlur={() => {
+                            const url = publication.url?.trim();
+                            if (!url) return;
+                            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                              setFieldError("publication", globalIndex, "url", "URL must start with http:// or https://");
+                            }
+                          }}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 focus:outline-none ${errors[`publication-${globalIndex}-url`] ? "border-red-500" : "border-transparent focus:border-blue-500"}`}
                         />
+                        {errors[`publication-${globalIndex}-url`] && (
+                          <span className="text-xs text-red-500">
+                            {errors[`publication-${globalIndex}-url`]}
+                          </span>
+                        )}
                       </div>
+                    </div>
+
+                    {/* DOI */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-sm font-semibold text-[#3b3b3b]">DOI <span className="text-gray-400 font-normal">(optional)</span></label>
+                      <input
+                        type="text"
+                        value={publication.doi || ""}
+                        placeholder="e.g., 10.1000/xyz123"
+                        onChange={(e) => handleChange(editIndex, "doi", e.target.value)}
+                        className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
+                      />
                     </div>
                   </div>
                 );

@@ -6,10 +6,14 @@ import { useRouter, useParams } from "next/navigation";
 import {
   buildWsUrl,
   getLiveSessionState,
+  evaluateLiveSessionVideo,
   WsServerMessage,
   WsClientMessage,
   LiveCreateResponse,
 } from "@/api/mockInterviewApi";
+import type { LipSyncPayload, LipSyncViseme, LipSyncWord } from "@/api/mockInterviewApi";
+import { MOCK_INTERVIEWERS, isValidInterviewerIndex, pickInterviewerIndex } from "../../_lib/interviewers";
+import type { MockInterviewer } from "../../_lib/interviewers";
 import { CodingTransition } from "@/components/interview/CodingTransition";
 import { CodingStep } from "@/components/interview/CodingStep";
 import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
@@ -56,45 +60,221 @@ interface Question {
   isFollowUp?: boolean;
 }
 
+interface MouthCue {
+  level: number;
+  visemeId: string;
+  intensity: number;
+  widthScale: number;
+  heightScale: number;
+  yOffset: number;
+  borderRadius: string;
+}
+
+const CLOSED_MOUTH_CUE: MouthCue = {
+  level: 0,
+  visemeId: "sil",
+  intensity: 0,
+  widthScale: 0.72,
+  heightScale: 0.12,
+  yOffset: 0,
+  borderRadius: "999px",
+};
+
+const VISEME_PROFILES: Record<string, Omit<MouthCue, "visemeId" | "intensity">> = {
+  sil: { level: 0, widthScale: 0.72, heightScale: 0.12, yOffset: 0, borderRadius: "999px" },
+  PP: { level: 0.16, widthScale: 0.58, heightScale: 0.14, yOffset: 0, borderRadius: "999px" },
+  FF: { level: 0.24, widthScale: 0.86, heightScale: 0.18, yOffset: 0, borderRadius: "999px" },
+  TH: { level: 0.34, widthScale: 0.95, heightScale: 0.28, yOffset: 0.5, borderRadius: "999px" },
+  DD: { level: 0.3, widthScale: 0.82, heightScale: 0.22, yOffset: -0.5, borderRadius: "999px" },
+  KK: { level: 0.42, widthScale: 0.78, heightScale: 0.36, yOffset: 0, borderRadius: "999px" },
+  CH: { level: 0.48, widthScale: 0.7, heightScale: 0.46, yOffset: 0.5, borderRadius: "999px" },
+  SS: { level: 0.22, widthScale: 1.05, heightScale: 0.16, yOffset: -0.5, borderRadius: "999px" },
+  NN: { level: 0.28, widthScale: 0.84, heightScale: 0.2, yOffset: -0.5, borderRadius: "999px" },
+  RR: { level: 0.46, widthScale: 0.74, heightScale: 0.42, yOffset: 0, borderRadius: "999px" },
+  AA: { level: 0.92, widthScale: 1.0, heightScale: 0.86, yOffset: 1, borderRadius: "45%" },
+  E: { level: 0.5, widthScale: 1.18, heightScale: 0.34, yOffset: -0.5, borderRadius: "999px" },
+  I: { level: 0.46, widthScale: 1.28, heightScale: 0.28, yOffset: -0.5, borderRadius: "999px" },
+  O: { level: 0.82, widthScale: 0.72, heightScale: 0.84, yOffset: 1, borderRadius: "50%" },
+  U: { level: 0.74, widthScale: 0.58, heightScale: 0.72, yOffset: 1, borderRadius: "50%" },
+};
+
+const AZURE_VISEME_TO_NORMALIZED: Record<string, string> = {
+  "0": "sil",
+  "1": "AA",
+  "2": "AA",
+  "3": "O",
+  "4": "E",
+  "5": "RR",
+  "6": "I",
+  "7": "U",
+  "8": "O",
+  "9": "AA",
+  "10": "O",
+  "11": "I",
+  "12": "KK",
+  "13": "RR",
+  "14": "NN",
+  "15": "SS",
+  "16": "CH",
+  "17": "TH",
+  "18": "FF",
+  "19": "DD",
+  "20": "KK",
+  "21": "PP",
+};
+
+const RHUBARB_VISEME_TO_NORMALIZED: Record<string, string> = {
+  A: "PP",
+  B: "SS",
+  C: "E",
+  D: "AA",
+  E: "O",
+  F: "U",
+  G: "FF",
+  H: "DD",
+  X: "sil",
+};
+
+const MOUTH_SPRITE_IDS = ["sil", "PP", "FF", "TH", "DD", "KK", "CH", "SS", "NN", "RR", "AA", "E", "I", "O", "U"] as const;
+const MOUTH_SPRITE_ID_SET = new Set<string>(MOUTH_SPRITE_IDS);
+const INTERVIEWER_IMAGE_WIDTH = 1672;
+const INTERVIEWER_IMAGE_HEIGHT = 941;
+const INTERVIEWER_IMAGE_ZOOM = 1.24;
+const INTERVIEWER_OBJECT_POSITION_X = 0.5;
+const INTERVIEWER_OBJECT_POSITION_Y = 0.44;
+
+interface RenderedMediaFrame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function clamp(value: number, min = 0, max = 1) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getInterviewerMediaFrame(containerWidth: number, containerHeight: number): RenderedMediaFrame {
+  const coverScale = Math.max(
+    containerWidth / INTERVIEWER_IMAGE_WIDTH,
+    containerHeight / INTERVIEWER_IMAGE_HEIGHT,
+  );
+  const coverWidth = INTERVIEWER_IMAGE_WIDTH * coverScale;
+  const coverHeight = INTERVIEWER_IMAGE_HEIGHT * coverScale;
+  const coverLeft = (containerWidth - coverWidth) * INTERVIEWER_OBJECT_POSITION_X;
+  const coverTop = (containerHeight - coverHeight) * INTERVIEWER_OBJECT_POSITION_Y;
+  const zoomedWidth = coverWidth * INTERVIEWER_IMAGE_ZOOM;
+  const zoomedHeight = coverHeight * INTERVIEWER_IMAGE_ZOOM;
+
+  return {
+    left: coverLeft + (coverWidth - zoomedWidth) / 2,
+    top: coverTop + (coverHeight - zoomedHeight) / 2,
+    width: zoomedWidth,
+    height: zoomedHeight,
+  };
+}
+
+function isRhubarbLipSync(lipSync: LipSyncPayload | null | undefined, visemeId: string) {
+  const provider = (lipSync?.provider ?? lipSync?.sync_provider ?? "").toLowerCase();
+  return provider.includes("rhubarb") || (lipSync?.sync_source === "forced_alignment" && /^[A-HX]$/i.test(visemeId));
+}
+
+function normalizeVisemeId(viseme: LipSyncViseme | undefined, lipSync?: LipSyncPayload | null): string {
+  const raw = viseme?.viseme_id ?? viseme?.provider_viseme_id ?? "sil";
+  const id = String(raw).trim();
+  if (!id) return "sil";
+  const upper = id.toUpperCase();
+
+  if (isRhubarbLipSync(lipSync, upper)) {
+    return RHUBARB_VISEME_TO_NORMALIZED[upper] ?? "sil";
+  }
+
+  const numeric = AZURE_VISEME_TO_NORMALIZED[id];
+  if (numeric) return numeric;
+  return VISEME_PROFILES[upper] ? upper : "sil";
+}
+
+function hasUsableWordTiming(lipSync: LipSyncPayload | null | undefined): lipSync is LipSyncPayload & { words: LipSyncWord[] } {
+  return lipSync?.sync_source !== "unavailable" && Array.isArray(lipSync?.words) && lipSync.words.some((word) => word.end_ms > word.start_ms);
+}
+
+function hasUsableVisemeTiming(lipSync: LipSyncPayload | null | undefined): lipSync is LipSyncPayload & { visemes: LipSyncViseme[] } {
+  return lipSync?.sync_source !== "unavailable" && Array.isArray(lipSync?.visemes) && lipSync.visemes.some((viseme) => viseme.end_ms > viseme.start_ms);
+}
+
+function mouthCueFromViseme(viseme: LipSyncViseme | undefined, lipSync?: LipSyncPayload | null): MouthCue {
+  if (!viseme) return CLOSED_MOUTH_CUE;
+
+  const visemeId = normalizeVisemeId(viseme, lipSync);
+  const profile = VISEME_PROFILES[visemeId] ?? VISEME_PROFILES.sil;
+  const intensity = clamp(typeof viseme.intensity === "number" ? viseme.intensity : 1);
+  return {
+    ...profile,
+    visemeId,
+    intensity,
+    level: clamp(profile.level * intensity),
+  };
+}
+
+function activeVisemeAt(lipSync: LipSyncPayload, currentMs: number) {
+  const visemes = lipSync.visemes ?? [];
+  return visemes.find((viseme) => currentMs >= viseme.start_ms && currentMs < viseme.end_ms);
+}
+
+function visibleQuestionAt(words: LipSyncWord[], fullText: string, currentMs: number) {
+  const visibleCount = words.filter((word) => currentMs >= word.start_ms).length;
+  if (visibleCount <= 0) return "";
+
+  const originalTokens = fullText.match(/\S+\s*/g) ?? [fullText];
+  if (originalTokens.length >= visibleCount) {
+    return originalTokens.slice(0, visibleCount).join("");
+  }
+
+  return words.slice(0, visibleCount).map((word) => word.word).join(" ");
+}
+
+function lipSyncTimelineMs(audio: HTMLAudioElement, lipSync: LipSyncPayload) {
+  const offset = typeof lipSync.audio_start_offset_ms === "number" ? lipSync.audio_start_offset_ms : 0;
+  return Math.max(0, audio.currentTime * 1000 - offset);
+}
+
+function mouthSpriteIdFromCue(cue: MouthCue) {
+  if (MOUTH_SPRITE_ID_SET.has(cue.visemeId)) return cue.visemeId;
+  return cue.level > 0.12 ? "AA" : "sil";
+}
+
+function mouthSpriteSrc(basePath: string, cue: MouthCue) {
+  return `${basePath}/mouth-${mouthSpriteIdFromCue(cue).toLowerCase()}.png`;
+}
 interface ScoreToast {
   questionNumber: number;
   score: number;
 }
 
-const INTERVIEWERS = [
-  {
-    name: "Arjun",
-    role: "Senior HR Interviewer",
-    src: "/images/ai-interviewer-room-male-01.png",
-  },
-  {
-    name: "Rahul",
-    role: "Technical Interview Panelist",
-    src: "/images/ai-interviewer-room-male-02.png",
-  },
-  {
-    name: "Meera",
-    role: "Senior HR Interviewer",
-    src: "/images/ai-interviewer-room-female-01.png",
-  },
-  {
-    name: "Nisha",
-    role: "Product Engineering Interviewer",
-    src: "/images/ai-interviewer-room-female-02.png",
-  },
-] as const;
-
-function pickInterviewerIndex(sessionId: string) {
-  if (!sessionId) return 0;
-
-  let hash = 0;
-  for (let i = 0; i < sessionId.length; i += 1) {
-    hash = (hash + sessionId.charCodeAt(i) * (i + 1)) % INTERVIEWERS.length;
-  }
-
-  return hash;
+interface StoredInterviewerSelection {
+  session_id?: string;
+  interviewer_index?: number;
+  interviewer_name?: string;
+  gender?: string;
+  voice?: string;
 }
 
+function readStoredInterviewerIndex(sessionId: string) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const rawSelection = sessionStorage.getItem("live_session_interviewer");
+    if (!rawSelection) return null;
+
+    const selection = JSON.parse(rawSelection) as StoredInterviewerSelection;
+    if (selection.session_id && selection.session_id !== sessionId) return null;
+    if (!isValidInterviewerIndex(selection.interviewer_index)) return null;
+
+    return selection.interviewer_index;
+  } catch {
+    return null;
+  }
+}
 // ─── Animated waveform for AI talking ────────────────────────────────────────
 
 const AI_WAVE_BARS = [18, 30, 24, 38, 22, 34, 28, 20, 36, 26, 32, 22];
@@ -216,13 +396,9 @@ function QuestionTimer({ secondsLeft, total }: { secondsLeft: number; total: num
 // ─── End Early modal ──────────────────────────────────────────────────────────
 
 function EndEarlyModal({
-  questionNumber,
-  totalQuestions,
   onConfirm,
   onCancel,
 }: {
-  questionNumber: number;
-  totalQuestions: number;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -240,9 +416,6 @@ function EndEarlyModal({
             <X size={18} />
           </button>
         </div>
-        <p className="text-sm text-gray-600 mb-2">
-          You have answered <span className="text-gray-900 font-semibold">{questionNumber - 1} of {totalQuestions}</span> questions.
-        </p>
         <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-6">
           Ending early will generate a partial report. Your scores for completed questions will still be saved.
         </p>
@@ -257,7 +430,7 @@ function EndEarlyModal({
             onClick={onConfirm}
             className="flex-1 py-2.5 bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
           >
-            End &amp; Get Report
+            End
           </button>
         </div>
       </div>
@@ -388,7 +561,10 @@ function playTtsAudio(
   mutedRef: React.RefObject<boolean>,
   audioRef: React.RefObject<HTMLAudioElement | null>,
   visualizerCleanupRef: React.MutableRefObject<(() => void) | null>,
-  onMouthLevel: (level: number) => void,
+  lipSync: LipSyncPayload | null | undefined,
+  questionText: string,
+  onMouthCue: (cue: MouthCue) => void,
+  onVisibleQuestionText: (text: string) => void,
   onEnd: () => void,
 ) {
   if (visualizerCleanupRef.current) {
@@ -400,7 +576,7 @@ function playTtsAudio(
     audioRef.current.pause();
     audioRef.current = null;
   }
-  onMouthLevel(0);
+  onMouthCue(CLOSED_MOUTH_CUE);
 
   if (!base64Audio || mutedRef.current) {
     setTimeout(onEnd, 1500);
@@ -431,39 +607,64 @@ function playTtsAudio(
 
     let audioContext: AudioContext | null = null;
     let rafId: number | null = null;
+    const useTimedWords = hasUsableWordTiming(lipSync);
+    const useTimedVisemes = hasUsableVisemeTiming(lipSync);
+
     const stopVisualizer = () => {
       if (rafId !== null) window.cancelAnimationFrame(rafId);
       rafId = null;
-      onMouthLevel(0);
+      onMouthCue(CLOSED_MOUTH_CUE);
       if (audioContext?.state !== "closed") {
         audioContext?.close().catch(() => {});
       }
     };
 
     try {
-      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AudioContextCtor) {
-        audioContext = new AudioContextCtor();
-        const source = audioContext.createMediaElementSource(audio);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.68;
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
-        const samples = new Uint8Array(analyser.frequencyBinCount);
-
+      if (useTimedWords || useTimedVisemes) {
         const tick = () => {
-          analyser.getByteFrequencyData(samples);
-          const speechEnergy = samples.slice(2, 32).reduce((sum, value) => sum + value, 0) / 30;
-          onMouthLevel(Math.min(1, speechEnergy / 105));
+          const currentMs = lipSyncTimelineMs(audio, lipSync);
+          if (useTimedVisemes) {
+            onMouthCue(mouthCueFromViseme(activeVisemeAt(lipSync, currentMs), lipSync));
+          }
+          if (useTimedWords) {
+            onVisibleQuestionText(visibleQuestionAt(lipSync.words, questionText, currentMs));
+          }
           rafId = window.requestAnimationFrame(tick);
         };
 
         visualizerCleanupRef.current = stopVisualizer;
-        if (audioContext.state === "suspended") {
-          audioContext.resume().catch(() => {});
-        }
         tick();
+      } else {
+        const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioContextCtor) {
+          audioContext = new AudioContextCtor();
+          const source = audioContext.createMediaElementSource(audio);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          analyser.smoothingTimeConstant = 0.68;
+          source.connect(analyser);
+          analyser.connect(audioContext.destination);
+          const samples = new Uint8Array(analyser.frequencyBinCount);
+
+          const tick = () => {
+            analyser.getByteFrequencyData(samples);
+            const speechEnergy = samples.slice(2, 32).reduce((sum, value) => sum + value, 0) / 30;
+            const level = Math.min(1, speechEnergy / 105);
+            onMouthCue({
+              ...VISEME_PROFILES.AA,
+              visemeId: "audio-energy",
+              intensity: level,
+              level,
+            });
+            rafId = window.requestAnimationFrame(tick);
+          };
+
+          visualizerCleanupRef.current = stopVisualizer;
+          if (audioContext.state === "suspended") {
+            audioContext.resume().catch(() => {});
+          }
+          tick();
+        }
       }
     } catch {
       visualizerCleanupRef.current = null;
@@ -477,6 +678,7 @@ function playTtsAudio(
     };
 
     audio.onended = () => {
+      if (useTimedWords) onVisibleQuestionText(questionText);
       cleanupAudio();
       onEnd();
     };
@@ -496,7 +698,12 @@ export default function LiveInterviewSessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
-  const interviewer = useMemo(() => INTERVIEWERS[pickInterviewerIndex(sessionId)], [sessionId]);
+  // Typed as MockInterviewer, not left to inference: indexing MOCK_INTERVIEWERS
+  // directly yields the `as const` literal shape, which omits the optional
+  // rotationDeg that InterviewerMouthAnchor declares — so reading it below is a
+  // type error even though the field is part of the intended contract and the
+  // read already guards with `?? 0`.
+  const interviewer = useMemo<MockInterviewer>(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
   const [sessionType, setSessionType] = useState("Live");
@@ -505,7 +712,7 @@ export default function LiveInterviewSessionPage() {
   const [questionNumber, setQuestionNumber] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120);
-  const [timeLimitTotal, setTimeLimitTotal] = useState(120);
+  const timeLimitTotalRef = useRef(120);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const isAudioMutedRef = useRef(false); // ref so WS handler sees latest value without stale closure
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null); // current TTS audio element
@@ -518,11 +725,44 @@ export default function LiveInterviewSessionPage() {
   const [micRetryKey, setMicRetryKey] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
   const [completedReportId, setCompletedReportId] = useState<string | null>(null);
-  const [interviewerMouthLevel, setInterviewerMouthLevel] = useState(0);
+  const [interviewerMouthCue, setInterviewerMouthCue] = useState<MouthCue>(CLOSED_MOUTH_CUE);
+  const [mouthSpriteFailed, setMouthSpriteFailed] = useState(false);
+  const [interviewerMediaFrame, setInterviewerMediaFrame] = useState<RenderedMediaFrame | null>(null);
+  const [useLipSyncQuestionReveal, setUseLipSyncQuestionReveal] = useState(false);
+  const interviewerStageRef = useRef<HTMLElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // Keep ref in sync with state so toggles mid-playback take effect
   useEffect(() => { isAudioMutedRef.current = isAudioMuted; }, [isAudioMuted]);
+
+  useEffect(() => {
+    setMouthSpriteFailed(false);
+    MOUTH_SPRITE_IDS.forEach((spriteId) => {
+      const image = new window.Image();
+      image.src = `${interviewer.mouthSpriteBasePath}/mouth-${spriteId.toLowerCase()}.png`;
+    });
+  }, [interviewer.mouthSpriteBasePath]);
+
+  useEffect(() => {
+    const stage = interviewerStageRef.current;
+    if (!stage) return;
+
+    const updateFrame = () => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      setInterviewerMediaFrame(getInterviewerMediaFrame(rect.width, rect.height));
+    };
+
+    updateFrame();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateFrame);
+    observer?.observe(stage);
+    window.addEventListener("resize", updateFrame);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateFrame);
+    };
+  }, []);
 
   useEffect(() => {
     const storedType = sessionStorage.getItem("live_session_type");
@@ -540,7 +780,8 @@ export default function LiveInterviewSessionPage() {
 
   useEffect(() => {
     if (phase !== "ai-talking" && phase !== "follow-up") {
-      setInterviewerMouthLevel(0);
+      setInterviewerMouthCue(CLOSED_MOUTH_CUE);
+      setUseLipSyncQuestionReveal(false);
     }
   }, [phase]);
 
@@ -558,6 +799,10 @@ export default function LiveInterviewSessionPage() {
       return;
     }
 
+    if (useLipSyncQuestionReveal) {
+      return;
+    }
+
     const words = questionText.match(/\S+\s*/g) ?? [questionText];
     let wordIndex = 0;
     setVisibleQuestionText("");
@@ -572,7 +817,7 @@ export default function LiveInterviewSessionPage() {
     }, 115);
 
     return () => window.clearInterval(revealTimer);
-  }, [currentQuestion?.text, phase]);
+  }, [currentQuestion?.text, phase, useLipSyncQuestionReveal]);
 
   // ─── Camera self-view + fullscreen ─────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -580,7 +825,11 @@ export default function LiveInterviewSessionPage() {
   const [cameraError, setCameraError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Turn the webcam on automatically when the live interview opens
+  // Proctoring video recording — captured throughout the session, submitted on completion
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+
+  // Turn the webcam on automatically when the live interview opens, and start proctoring recording
   useEffect(() => {
     let cancelled = false;
     let localStream: MediaStream | null = null;
@@ -594,12 +843,41 @@ export default function LiveInterviewSessionPage() {
         localStream = stream;
         setCameraStream(stream);
         setCameraError(false);
+
+        // Start proctoring recorder — prefer MP4 so the evaluator can decode it reliably
+        const mimeType = MediaRecorder.isTypeSupported("video/mp4")
+          ? "video/mp4"
+          : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+          ? "video/webm;codecs=vp9"
+          : "video/webm";
+        try {
+          const recorder = new MediaRecorder(stream, { mimeType });
+          videoChunksRef.current = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) videoChunksRef.current.push(e.data);
+          };
+          recorder.onstop = () => {
+            // Actual submission is triggered by the completion effect; nothing to do here
+          };
+          recorder.start(5000); // flush a chunk every 5 s so partial data survives tab crashes
+          videoRecorderRef.current = recorder;
+        } catch {
+          // Recording failed to start — non-fatal; the interview continues without proctoring
+        }
       })
       .catch(() => {
         if (!cancelled) setCameraError(true);
       });
     return () => {
       cancelled = true;
+      // Null out the onstop handler so cleanup stop doesn't race with completion submission
+      if (videoRecorderRef.current) {
+        videoRecorderRef.current.onstop = null;
+        if (videoRecorderRef.current.state !== "inactive") {
+          videoRecorderRef.current.stop();
+        }
+        videoRecorderRef.current = null;
+      }
       localStream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -636,12 +914,33 @@ export default function LiveInterviewSessionPage() {
     }
   }, []);
 
-  // Release camera + exit fullscreen when the interview finishes
+  // When the interview finishes: stop the proctoring recorder, submit the video, release camera
   useEffect(() => {
     if (phase !== "completed") return;
+
+    const recorder = videoRecorderRef.current;
+    if (recorder) {
+      const submit = () => {
+        const chunks = videoChunksRef.current;
+        if (chunks.length === 0) return;
+        const mt = (recorder.mimeType || "video/mp4").split(";")[0];
+        const blob = new Blob(chunks, { type: mt });
+        evaluateLiveSessionVideo(sessionId, blob).catch(() => {}); // fire-and-forget
+      };
+
+      if (recorder.state !== "inactive") {
+        recorder.onstop = submit;
+        recorder.stop();
+      } else {
+        // Recorder already stopped (e.g. stream was cut mid-session) but chunks are buffered
+        submit();
+      }
+      videoRecorderRef.current = null;
+    }
+
     cameraStream?.getTracks().forEach((t) => t.stop());
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  }, [phase, cameraStream]);
+  }, [phase, cameraStream, sessionId]);
 
   // Leave fullscreen if the user navigates away mid-interview
   useEffect(() => {
@@ -661,6 +960,12 @@ export default function LiveInterviewSessionPage() {
   const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const MAX_RECONNECT = 3;
+
+  // Reconnect state kept in refs to avoid stale-closure issues inside WS callbacks
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTokenRef = useRef<string | null>(null);   // token from session_paused
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastEventIdRef = useRef<number>(0);                // event dedup baseline
 
   const [scoreToast, setScoreToast] = useState<ScoreToast | null>(null);
   const scoreToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -683,6 +988,7 @@ export default function LiveInterviewSessionPage() {
   const startTimer = useCallback((duration: number) => {
     stopTimer();
     setTimeLeft(duration);
+    timeLimitTotalRef.current = duration;
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -723,10 +1029,17 @@ export default function LiveInterviewSessionPage() {
         const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!AudioContextCtor) return;
 
-        // Request 16 kHz — browser resamples internally from hardware rate
-        const ctx = new AudioContextCtor({ sampleRate: 16000 });
+        // Do NOT pass { sampleRate: 16000 } — browsers silently ignore it and stay at
+        // hardware rate (48 kHz on most devices). Capture at native rate and downsample.
+        const ctx = new AudioContextCtor();
         audioContextRef.current = ctx;
-        ctx.resume().catch(() => {}); // unblock if browser auto-suspended
+        ctx.resume().catch(() => {});
+
+        const NATIVE_RATE = ctx.sampleRate;   // actual rate: 48000, 44100, etc.
+        const TARGET_RATE = 16000;
+        const RATIO = NATIVE_RATE / TARGET_RATE; // 3.0 for 48 kHz, 2.75625 for 44.1 kHz
+
+        console.warn('[STT DEBUG] AudioContext sampleRate:', NATIVE_RATE, '| ratio:', RATIO.toFixed(4), '| target:', TARGET_RATE);
 
         const source = ctx.createMediaStreamSource(stream);
 
@@ -743,22 +1056,42 @@ export default function LiveInterviewSessionPage() {
         };
         tick();
 
-        // 4096 samples × 2 bytes = 8192 bytes per chunk (always even — required by backend PCM framing)
-        processor = ctx.createScriptProcessor(4096, 1, 1);
+        // Native buffer sized so each chunk yields ~256 ms at 16 kHz after downsampling.
+        // ScriptProcessorNode requires a power-of-2 buffer size.
+        const nativeBufSize = Math.pow(2, Math.round(Math.log2(RATIO * 4096))) as 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384;
+        processor = ctx.createScriptProcessor(nativeBufSize, 1, 1);
         processor.onaudioprocess = (event) => {
           const float32 = event.inputBuffer.getChannelData(0);
-          const int16 = new Int16Array(float32.length);
-          for (let i = 0; i < float32.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+
+          // Linear-interpolation downsample: native rate → 16 kHz.
+          // Handles integer ratios (48k→16k = 3×) and fractional ones (44.1k→16k = 2.75625×).
+          const outLen = Math.floor(float32.length / RATIO);
+          const resampled = new Float32Array(outLen);
+          for (let i = 0; i < outLen; i++) {
+            const pos = i * RATIO;
+            const lo  = Math.floor(pos);
+            const hi  = Math.min(lo + 1, float32.length - 1);
+            resampled[i] = float32[lo] + (float32[hi] - float32[lo]) * (pos - lo);
           }
-          // Encode to base64 without spread (safe for large buffers)
+
+          // Float32 → signed Int16 PCM (little-endian, as expected by backend)
+          const int16 = new Int16Array(resampled.length);
+          for (let i = 0; i < resampled.length; i++) {
+            int16[i] = Math.max(-32768, Math.min(32767, Math.round(resampled[i] * 32767)));
+          }
+
+          // Uint8Array view of the Int16 buffer → base64 (loop avoids spread stack overflow on large buffers)
           const bytes = new Uint8Array(int16.buffer);
           let binary = "";
           for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+
           if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(
-              JSON.stringify({ type: "audio_chunk", data: btoa(binary), sequence: audioSeqRef.current++ })
-            );
+            const seq = audioSeqRef.current++;
+            // Log first chunk and every 10th to confirm audio is flowing without console spam
+            if (seq === 0 || seq % 10 === 0) {
+              console.warn(`[STT DEBUG] audio_chunk seq=${seq} | samples=${resampled.length} | bytes=${bytes.byteLength} | nativeRate=${NATIVE_RATE}`);
+            }
+            wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(binary), sequence: seq }));
           }
         };
 
@@ -837,6 +1170,22 @@ export default function LiveInterviewSessionPage() {
     scoreToastTimerRef.current = setTimeout(() => setScoreToast(null), 4000);
   }, []);
 
+  // Stable ref so onclose/session_paused can call doReconnect without stale closures.
+  // The real implementation is assigned after doReconnect is defined below.
+  const doReconnectRef = useRef<() => void>(() => {});
+
+  // Tracks whether session_ready was ever received — used to distinguish
+  // an initial-connection failure (ticket expired) from a mid-session drop.
+  const sessionReadyRef = useRef(false);
+
+  // Stable router ref so the onclose callback never captures a stale router.
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
+
+  // Survives React StrictMode double-mount: stores the authenticated WS URL so
+  // the second mount uses the ticket even after sessionStorage was cleared.
+  const initialWsUrlRef = useRef<string | null>(null);
+
   const handleWsMessage = useCallback((msg: WsServerMessage) => {
     switch (msg.type) {
       case "coding_round_start":
@@ -849,42 +1198,68 @@ export default function LiveInterviewSessionPage() {
         setShowCodingTransition(true);
         return;
       case "session_ready":
+        sessionReadyRef.current = true;
         setTotalQuestions(msg.total_questions);
         setServerError(null);
         setWsConnected(true);
         break;
-      case "session_resumed":
+      case "session_resumed": {
+        // Reset reconnect tracking for future disconnects
+        reconnectAttemptRef.current = 0;
+        setReconnectAttempt(0);
+        // Establish dedup baseline so replayed events are ignored
+        lastEventIdRef.current = msg.resumed_from_event_id ?? 0;
+
         setTotalQuestions(msg.total_questions);
         setQuestionNumber(msg.questions_asked + 1);
+        // Restore the current question text (not just the number)
+        if (msg.current_question) {
+          setCurrentQuestion({ number: msg.questions_asked + 1, text: msg.current_question });
+        }
         setServerError(null);
         setWsConnected(true);
         setShowReconnectModal(false);
+        // If the candidate was mid-answer when the connection dropped, restore listening phase
+        if (msg.pending_answer) {
+          setPhase("listening");
+          startTimer(120); // fallback limit; server will send time_limit_s with next question if answer is finished
+        }
         break;
+      }
       case "question_audio": {
+        const lipSync = msg.lip_sync ?? null;
+        const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
         setCurrentQuestion({ number: msg.question_number, text: msg.text });
         setServerError(null);
         setQuestionNumber(msg.question_number);
         setTranscript("");
         setPartialTranscript("");
+        setUseLipSyncQuestionReveal(usesTimedReveal);
         setPhase(msg.is_follow_up ? "follow-up" : "ai-talking");
         // Use server's time_limit_s; fall back to 120 only when server sends 0 or omits it
         const limit = msg.time_limit_s || 120;
-        const afterAudio = () => { setPhase("listening"); setTimeLimitTotal(limit); startTimer(limit); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterAudio);
+        const afterAudio = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); startTimer(limit); };
+        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterAudio);
         break;
       }
       case "follow_up": {
+        const lipSync = msg.lip_sync ?? null;
+        const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
         setCurrentQuestion((q) => q ? { ...q, text: msg.text, isFollowUp: true } : null);
+        setUseLipSyncQuestionReveal(usesTimedReveal);
         setPhase("follow-up");
-        const afterFollowUp = () => { setPhase("listening"); startTimer(120); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterFollowUp);
+        const limit = msg.time_limit_s || 120;
+        const afterFollowUp = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); startTimer(limit); };
+        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterFollowUp);
         break;
       }
       case "transcript_partial":
+        console.warn('[STT DEBUG] transcript_partial received:', msg.text);
         setServerError(null);
         setPartialTranscript(msg.text);
         break;
       case "transcript_final":
+        console.warn('[STT DEBUG] transcript_final received:', msg.text);
         setServerError(null);
         setTranscript(msg.text);
         setPartialTranscript("");
@@ -905,6 +1280,15 @@ export default function LiveInterviewSessionPage() {
       case "session_paused":
         setWsConnected(false);
         setShowReconnectModal(true);
+        // Capture token so the reconnect path skips the HTTP /state round-trip
+        if (msg.reconnect_token) reconnectTokenRef.current = msg.reconnect_token;
+        // Auto-reconnect immediately — the server is about to close the WS;
+        // we want to fire before onclose so the timer is already set when it arrives.
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          doReconnectRef.current();
+        }, 500);
         break;
       case "error":
         setServerError(msg.message || "The interview service reported an issue. You can retry or end for a partial report.");
@@ -926,47 +1310,79 @@ export default function LiveInterviewSessionPage() {
 
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data) as WsServerMessage;
-        handleWsMessage(msg);
+        const raw = JSON.parse(event.data) as WsServerMessage & { event_id?: number };
+        // Skip replayed frames sent by the server after reconnect (dedup by event_id)
+        if (raw.event_id !== undefined) {
+          if (raw.event_id <= lastEventIdRef.current) return;
+          lastEventIdRef.current = raw.event_id;
+        }
+        handleWsMessage(raw);
       } catch { /* ignore malformed frames */ }
     };
 
     ws.onclose = (event) => {
       setWsConnected(false);
-      if (event.code !== 1000 && event.code !== 1001) {
+
+      // Clean close — interview ended normally; do not reconnect
+      if (event.code === 1000 || event.code === 1001) return;
+
+      // Terminal server codes — the token/session is gone; reconnecting would fail.
+      // If session_ready was never received this is an initial-connection failure
+      // (e.g. ticket expired during StrictMode remount or slow navigation): redirect
+      // back to the setup page so the user can get a fresh ticket.
+      const TERMINAL_CODES = [4001, 4002, 4003];
+      if (TERMINAL_CODES.includes(event.code)) {
+        if (!sessionReadyRef.current) {
+          routerRef.current.replace('/mock-interview/live');
+          return;
+        }
         setShowReconnectModal(true);
+        reconnectAttemptRef.current = MAX_RECONNECT + 1; // force "Connection Failed" state in modal
+        setReconnectAttempt(MAX_RECONNECT + 1);
+        return;
+      }
+
+      // Abnormal drop — auto-reconnect unless session_paused already scheduled it
+      setShowReconnectModal(true);
+      if (!reconnectTimerRef.current) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          doReconnectRef.current();
+        }, 1500); // brief delay to let the network stabilise
       }
     };
 
     ws.onerror = () => {
+      // onerror is always followed by onclose; rely on onclose to drive reconnect
       setWsConnected(false);
-      setShowReconnectModal(true);
     };
   }, [handleWsMessage]);
 
-  // On mount: read session data from sessionStorage and open WebSocket
+  // On mount: read session data from sessionStorage and open WebSocket.
+  // initialWsUrlRef survives StrictMode double-mount: the first mount reads and
+  // removes sessionStorage, saves the ticket URL to the ref, then opens the WS.
+  // The second mount (StrictMode remount) skips sessionStorage and reuses the ref.
   useEffect(() => {
     if (!sessionId) return;
 
-    try {
-      const raw = sessionStorage.getItem("live_session_data");
-      if (raw) {
-        const data = JSON.parse(raw) as LiveCreateResponse;
-        if (data.session_id === sessionId) {
-          sessionStorage.removeItem("live_session_data");
-          // Append one-time ticket for WS authentication if not already in the URL
-          const wsUrl = data.ticket_id && !data.ws_url.includes('ticket=')
-            ? `${data.ws_url}${data.ws_url.includes('?') ? '&' : '?'}ticket=${data.ticket_id}`
-            : data.ws_url;
-          openWebSocket(wsUrl);
-          return;
+    if (!initialWsUrlRef.current) {
+      try {
+        const raw = sessionStorage.getItem("live_session_data");
+        if (raw) {
+          const data = JSON.parse(raw) as LiveCreateResponse;
+          if (data.session_id === sessionId) {
+            sessionStorage.removeItem("live_session_data");
+            const wsUrl = data.ticket_id && !data.ws_url.includes('ticket=')
+              ? `${data.ws_url}${data.ws_url.includes('?') ? '&' : '?'}ticket=${data.ticket_id}`
+              : data.ws_url;
+            initialWsUrlRef.current = wsUrl;
+          }
         }
-      }
-    } catch { /* ignore parse error */ }
+      } catch { /* ignore parse error */ }
+    }
 
-    // Fallback: construct ws path directly
-    const wsPath = `/api/v1/mock-interview/live/${sessionId}`;
-    openWebSocket(wsPath);
+    const wsUrl = initialWsUrlRef.current ?? `/api/v1/mock-interview/live/${sessionId}`;
+    openWebSocket(wsUrl);
   }, [sessionId, openWebSocket]);
 
   useEffect(() => {
@@ -997,23 +1413,55 @@ export default function LiveInterviewSessionPage() {
     stopTimer();
     setShowEndModal(false);
     wsSend({ type: "end_interview" });
-    setPhase("completed");
-  }, [stopTimer, wsSend]);
+    router.push("/mock-interview/history");
+  }, [stopTimer, wsSend, router]);
 
-  const handleReconnect = useCallback(async () => {
-    const next = reconnectAttempt + 1;
-    setReconnectAttempt(next);
-    if (next > MAX_RECONNECT || !sessionId) return;
+  const doReconnect = useCallback(async () => {
+    if (!sessionId) return;
+
+    reconnectAttemptRef.current += 1;
+    const attempt = reconnectAttemptRef.current;
+    setReconnectAttempt(attempt);
+
+    if (attempt > MAX_RECONNECT) return; // all attempts exhausted — modal shows "Connection Failed"
 
     try {
-      const state = await getLiveSessionState(sessionId);
-      if (!state.can_reconnect || !state.reconnect_token) return;
+      // Prefer the token captured from session_paused (avoids an HTTP round-trip inside the narrow reconnect window)
+      let token = reconnectTokenRef.current;
+      reconnectTokenRef.current = null; // consume it
 
-      const wsPath = `/api/v1/mock-interview/live/${sessionId}?ticket=${state.reconnect_token}`;
+      if (!token) {
+        const state = await getLiveSessionState(sessionId);
+        if (!state.can_reconnect || !state.reconnect_token) {
+          // Session expired or ended — abandon to partial report
+          router.push(`/mock-interview/report/${sessionId}`);
+          return;
+        }
+        token = state.reconnect_token;
+      }
+
+      const wsPath = `/api/v1/mock-interview/live/${sessionId}?ticket=${token}`;
       openWebSocket(wsPath);
-      setShowReconnectModal(false);
-    } catch { /* leave modal open */ }
-  }, [reconnectAttempt, sessionId, openWebSocket]);
+      // Modal stays open until session_resumed confirms success
+    } catch {
+      // getLiveSessionState threw (network still down) or openWebSocket failed.
+      // No new WS was created, so no onclose will fire — schedule the next attempt manually.
+      if (attempt <= MAX_RECONNECT) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          doReconnectRef.current();
+        }, 2000);
+      }
+    }
+  }, [sessionId, openWebSocket, router]);
+
+  // Keep doReconnectRef current so onclose/setTimeout callbacks never hold stale closures
+  useEffect(() => { doReconnectRef.current = doReconnect; }, [doReconnect]);
+
+  // Manual retry button in ReconnectModal
+  const handleReconnect = useCallback(() => {
+    doReconnect();
+  }, [doReconnect]);
 
   const isQuestionBeingSpoken = phase === "ai-talking" || phase === "follow-up";
   const questionTextForDisplay = currentQuestion
@@ -1021,6 +1469,10 @@ export default function LiveInterviewSessionPage() {
       ? visibleQuestionText
       : currentQuestion.text
     : "Your interviewer is preparing the first question.";
+
+  const interviewerMouthLevel = interviewerMouthCue.level;
+  const mouthAnchor = interviewer.mouthAnchor;
+  const mouthSprite = mouthSpriteSrc(interviewer.mouthSpriteBasePath, interviewerMouthCue);
 
   const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
     wsSend({
@@ -1052,8 +1504,6 @@ export default function LiveInterviewSessionPage() {
     <>
       {showEndModal && (
         <EndEarlyModal
-          questionNumber={questionNumber}
-          totalQuestions={totalQuestions}
           onConfirm={handleEndInterview}
           onCancel={() => setShowEndModal(false)}
         />
@@ -1239,37 +1689,70 @@ export default function LiveInterviewSessionPage() {
 
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.14fr)_minmax(320px,0.78fr)_300px] gap-3 overflow-hidden">
               {/* Interviewer */}
-              <section className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]">
-                <Image
-                  src={interviewer.src}
-                  alt={`${interviewer.name}, AI interviewer seated in a professional interview room`}
-                  fill
-                  className="scale-[1.24] object-cover object-[center_44%]"
-                  priority
-                  sizes="48vw"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
+              <section
+                ref={interviewerStageRef}
+                className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]"
+              >
+                <div
+                  className="absolute"
+                  style={interviewerMediaFrame ? {
+                    left: `${interviewerMediaFrame.left}px`,
+                    top: `${interviewerMediaFrame.top}px`,
+                    width: `${interviewerMediaFrame.width}px`,
+                    height: `${interviewerMediaFrame.height}px`,
+                  } : { inset: 0 }}
+                >
+                  <Image
+                    src={interviewer.src}
+                    alt={`${interviewer.name}, AI interviewer seated in a professional interview room`}
+                    fill
+                    className="object-fill"
+                    priority
+                    sizes="48vw"
+                  />
 
-                {isQuestionBeingSpoken && (
-                  <div
-                    className="pointer-events-none absolute left-1/2 top-[43.5%] z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center mix-blend-multiply"
-                    style={{
-                      opacity: 0.14 + interviewerMouthLevel * 0.28,
-                      transform: `translate(-50%, -50%) scaleX(${0.82 + interviewerMouthLevel * 0.34})`,
-                    }}
-                    aria-hidden="true"
-                  >
-                    <span
-                      className="block rounded-full bg-black/70 shadow-[0_0_10px_rgba(0,0,0,0.22)]"
+                  {isQuestionBeingSpoken && (
+                    <div
+                      className="pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+                      data-testid="interviewer-mouth-cue"
+                      data-viseme={interviewerMouthCue.visemeId}
+                      data-mouth-sprite={mouthSpriteIdFromCue(interviewerMouthCue)}
                       style={{
-                        width: `${18 + interviewerMouthLevel * 18}px`,
-                        height: `${2 + interviewerMouthLevel * 9}px`,
-                        filter: `blur(${0.15 + interviewerMouthLevel * 0.35}px)`,
+                        left: `${mouthAnchor.xPercent}%`,
+                        top: `${mouthAnchor.yPercent}%`,
+                        width: `clamp(${mouthAnchor.minWidthPx}px, ${mouthAnchor.widthPercent}%, ${mouthAnchor.maxWidthPx}px)`,
+                        transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) rotate(${mouthAnchor.rotationDeg ?? 0}deg) scale(${0.96 + interviewerMouthLevel * 0.08})`,
                       }}
-                    />
-                  </div>
-                )}
-
+                      aria-hidden="true"
+                    >
+                      {!mouthSpriteFailed ? (
+                        <Image
+                          src={mouthSprite}
+                          alt=""
+                          width={120}
+                          height={64}
+                          unoptimized
+                          className="block h-auto w-full select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.22)] transition-[opacity,transform] duration-75 ease-linear motion-reduce:transition-none"
+                          style={{ opacity: 0.72 + interviewerMouthLevel * 0.28 }}
+                          onError={() => setMouthSpriteFailed(true)}
+                          draggable={false}
+                        />
+                      ) : (
+                        <span
+                          className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
+                          style={{
+                            width: `${28 + interviewerMouthLevel * 14}px`,
+                            height: `${14 + interviewerMouthLevel * 10}px`,
+                            borderRadius: interviewerMouthCue.borderRadius,
+                            filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
+                            opacity: 0.12 + interviewerMouthLevel * 0.32,
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
                 <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
                   <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
                   {wsConnected ? "Live interview room" : "Connecting room"}
@@ -1466,7 +1949,7 @@ export default function LiveInterviewSessionPage() {
               <div className="rounded-2xl border border-[#2557a7]/20 bg-white p-3 shadow-sm">
                 {phase === "listening" ? (
                   <div className="flex items-center gap-3 rounded-xl bg-[#2557a7]/5 p-2">
-                    <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotal} />
+                    <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotalRef.current} />
                     <button
                       onClick={handleEndAnswer}
                       className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#2557a7] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#1e4a8f]"

@@ -34,6 +34,17 @@ export interface DashboardSummary {
     resumes_enhanced: number;
     job_matches: number;
     job_applications: number;
+    /**
+     * english_assessment + mock_test COMBINED — not communication-only.
+     *
+     * The backend counts both under one key:
+     *   repository_impl.py count_assessments()
+     *   feature: { $in: ["english_assessment", "mock_test"] }
+     *
+     * Do NOT relabel this as one or the other on a dashboard tile. Splitting
+     * them needs a new counter on the backend's UsageCounts model first; that
+     * model has exactly six fields and none of them is per-feature.
+     */
     assessments_taken: number;
   };
   best_scores: {

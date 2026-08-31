@@ -8,8 +8,8 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import {
   EnterpriseApplicationTrackerIcon as IcoTracker,
   EnterpriseAtsScanIcon as IcoAtsScan,
-  EnterpriseBillingHistoryIcon as IcoHistory,
   EnterpriseChevronRightIcon as IcoChevronRight,
+  EnterpriseCommunicationIcon as IcoCommunication,
   EnterpriseCoverLetterIcon as IcoCoverLetter,
   EnterpriseDashboardIcon as IcoDashboard,
   EnterpriseInterviewPrepIcon as IcoInterview,
@@ -18,7 +18,6 @@ import {
   EnterpriseNotesIcon as IcoNotes,
   EnterpriseProfileIcon as IcoProfile,
   EnterpriseResumeIcon as IcoResume,
-  EnterpriseSubscriptionIcon as IcoGem,
   type EnterpriseNavIcon,
 } from "@/components/icons/EnterpriseNavIcons";
 /* NAV CONFIG */
@@ -107,29 +106,17 @@ const NAV_GROUPS: {
   {
     label: "GENERATE",
     items: [
-      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
+      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history" },
       { id: "interview_notes",        label: "Interview Notes",          icon: IcoNotes,       path: "/notes/generate" },
     ],
   },
   {
     label: "PREPARE",
     items: [
-      { id: "mock_interview", label: "Mock Interview", icon: IcoInterview, path: "/mock-interview/live" },
-      {
-        id: "mock_test", label: "Mock Test", icon: IcoMockTest, path: "",
-        subItems: [
-          { id: "comm_assess",    label: "Communication Assessment", path: "/communication/start" },
-          { id: "mock_test_sub",  label: "Mock Test",                path: "/mock-test" },
-        ],
-      },
-      { id: "coding_test", label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
-    ],
-  },
-  {
-    label: "BILLING",
-    items: [
-      { id: "subscription",    label: "Subscription",    icon: IcoGem,     path: "/account/subscriptions" },
-      { id: "billing_history", label: "Billing History", icon: IcoHistory, path: "/settings/billing" },
+      { id: "mock_interview", label: "Mock Interview",  icon: IcoInterview, path: "/mock-interview/live" },
+      { id: "comm_assess",   label: "Communication",   icon: IcoCommunication, path: "/communication/start" },
+      { id: "mock_test",     label: "Mock Test",       icon: IcoMockTest,  path: "/mock-test" },
+      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
     ],
   },
 ];
@@ -138,7 +125,7 @@ const NAV_GROUPS: {
 //
 // IMPORTANT (Codex WEB-1.1 P2): Next only statically inlines
 // `process.env.NEXT_PUBLIC_*` when the reference is a LITERAL property
-// access (e.g. `process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED`). A
+// access (e.g. `process.env.NEXT_PUBLIC_CODING_TEST_ENABLED`). A
 // dynamic lookup like `process.env[someVarName]` is NOT inlined into
 // the client bundle and evaluates to `undefined` at runtime in the
 // browser - which would silently hide every flagged item even when
@@ -149,8 +136,6 @@ const NAV_GROUPS: {
 // via a literal property access so Next can inline it. To add a new
 // flag, add a row here AND set `flag: "..."` on the nav item.
 const STATIC_FLAGS: Record<string, boolean> = {
-  NEXT_PUBLIC_COVER_LETTER_ENABLED:
-    process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true",
   NEXT_PUBLIC_CODING_TEST_ENABLED:
     process.env.NEXT_PUBLIC_CODING_TEST_ENABLED !== "false",
 };
@@ -173,7 +158,7 @@ const VISIBLE_NAV_GROUPS = NAV_GROUPS
   .map((group) => ({ ...group, items: group.items.filter(isItemEnabled) }))
   .filter((group) => group.items.length > 0);
 
-const EXPANDED_PATHS = ["/dashboard", "/profile"];
+const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/notes"];
 
 /* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
    cursor can cross the gap between icon and panel without it disappearing. */
@@ -214,6 +199,7 @@ function CollapsedSubItem({
       <button
         aria-label={item.label}
         className="group/icon"
+        onClick={() => popPos ? setPopPos(null) : open()}
       >
         <div
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
@@ -275,7 +261,7 @@ export default function Sidebar() {
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--sidebar-width",
-      isExpanded ? "240px" : "64px"
+      isExpanded ? "200px" : "64px"
     );
   }, [isExpanded]);
 
@@ -295,14 +281,15 @@ export default function Sidebar() {
         if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
           return item.id;
         }
-        if (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path))) {
+        if (item.path && (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path)))) {
           return item.id;
         }
       }
     }
-    if (pathname.startsWith("/notes"))                                          return "notes";
+    if (pathname.startsWith("/notes"))                                          return "interview_notes";
     if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
-    if (pathname.startsWith("/mock-test") || pathname.startsWith("/communication")) return "mock_test";
+    if (pathname.startsWith("/communication"))                                  return "comm_assess";
+    if (pathname.startsWith("/mock-test"))                                      return "mock_test";
     if (pathname.startsWith("/settings"))                                       return "settings";
     if (pathname.startsWith("/account/subscriptions"))  return "subscription";
     if (pathname.startsWith("/settings/billing"))       return "billing_history";
@@ -358,8 +345,11 @@ export default function Sidebar() {
     return (
       <>
       <button
-        onClick={handleToggle}
-        title="Expand sidebar"
+      onClick={handleToggle}
+      title="Expand sidebar"
+      aria-label="Expand sidebar navigation"
+      aria-expanded={isExpanded}
+      aria-controls="dashboard-sidebar"
         style={{ position: "fixed", top: 58, left: 50, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
       >
         {/* Expand icon: filled strip on the right */}
@@ -369,12 +359,13 @@ export default function Sidebar() {
         </svg>
       </button>
       <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
+        id="dashboard-sidebar"
         style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
-        <nav className="flex-1 min-h-0 overflow-visible py-1 px-2">
+        <nav className="flex-1 min-h-0 overflow-visible py-0.5 px-2" aria-label="Primary navigation collapsed" role="navigation">
           {VISIBLE_NAV_GROUPS.map((group, gi) => (
             <div key={group.label}>
-              {gi > 0 && <div className="mx-1 my-1.5 border-t border-gray-300" />}
-              <div className="space-y-px">
+              {gi > 0 && <div className="mx-1 my-1 border-t border-gray-300" />}
+              <div className="space-y-0">
                 {group.items.map((item) => {
                   const isActive = activeId === item.id;
                   const Icon = item.icon;
@@ -396,8 +387,8 @@ export default function Sidebar() {
                     <button
                       key={item.id}
                       onClick={() => handleNavigation(item)}
-                      title={item.label}
                       aria-label={item.label}
+                      title={item.label}
                       className="w-full flex items-center justify-center py-px group"
                     >
                       <div
@@ -439,7 +430,7 @@ export default function Sidebar() {
       if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
       if (!wrapperRef.current) return;
       const r = wrapperRef.current.getBoundingClientRect();
-      setDropPos({ top: r.top - 48, left: r.right + 4 });
+      setDropPos({ top: r.top - 20, left: r.right + 4 });
     }, []);
 
     const closeDrop = useCallback(() => {
@@ -449,7 +440,7 @@ export default function Sidebar() {
     const btn = (
       <button
         onClick={() => handleNavigation(item)}
-        className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-lg transition-all duration-200 group/btn relative ${
+        className={`w-full flex items-center gap-2 px-2.5 py-0.5 rounded-lg transition-all duration-200 group/btn relative ${
           isActive ? "" : "hover:bg-gray-50"
         }`}
         style={
@@ -516,7 +507,10 @@ export default function Sidebar() {
     <button
       onClick={handleToggle}
       title="Collapse sidebar"
-      style={{ position: "fixed", top: 58, left: 226, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+      aria-label="Collapse sidebar navigation"
+      aria-expanded={isExpanded}
+      aria-controls="dashboard-sidebar"
+      style={{ position: "fixed", top: 58, left: 186, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
     >
       {/* Collapse icon: filled strip on the left */}
       <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
@@ -524,10 +518,11 @@ export default function Sidebar() {
         <rect x="0.7" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
       </svg>
     </button>
-    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-60 bg-white flex flex-col z-30 overflow-hidden"
-      style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
+    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] bg-white flex flex-col z-30 overflow-hidden"
+      id="dashboard-sidebar"
+      style={{ width: 200, borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1.5 pb-1 space-y-1">
+      <nav className="min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1 pb-1 space-y-0.5" aria-label="Primary navigation" role="navigation">
         {VISIBLE_NAV_GROUPS.map((group) => (
           <div key={group.label}>
             {/* Section label with trailing line */}
@@ -549,7 +544,21 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+      <div className="flex-1" />
+      <div className="px-4 py-3 border-t border-gray-100">
+        <p className="text-[10px] text-gray-400 text-center tracking-wide">CareerBot AI</p>
+      </div>
     </div>
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+

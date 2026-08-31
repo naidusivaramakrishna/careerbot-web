@@ -1,12 +1,13 @@
 ﻿"use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MapPin, Sparkles, Briefcase, CircleDollarSign, Layers, MoreHorizontal, Home, Calendar, XCircle, CheckCircle, Share2, Flag, AlertTriangle } from "lucide-react";
+import { Heart, MapPin, Sparkles, Briefcase, CircleDollarSign, Layers, MoreHorizontal, Home, Calendar, XCircle, CheckCircle, Share2, Flag, AlertTriangle, Trash2 } from "lucide-react";
 import { GoLocation } from "react-icons/go";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { isJobSaved, toggleJobSaved, recordJobApplication } from "@/utils/jobTracking";
+import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
 import ApplicationModal, { ApplicationData } from "./ApplicationModal";
 import MatchAnalysisModal from "./MatchAnalysisModal";
 import JobPreviewModal from "./JobPreviewModal";
@@ -22,6 +23,67 @@ import { getSafeExternalUrl } from "@/utils/validators";
 import { getMatchBandConfig } from "../utils/matchBand";
 
 const SKIP_RESUME_PROMPT_KEY = "skipResumeCustomizePrompt";
+
+// Error codes the backend returns with no usable `message` field (the generic
+// exception handler falls back to "HTTP 404" etc. in that case) — map them to
+// text a user can act on.
+const FIX_RESUME_ERROR_MESSAGES: Record<string, string> = {
+  jd_not_found: "This job's listing could not be matched — it may have expired. Please try again.",
+  resume_not_found: "No resume found for matching. Please upload a resume to your profile first.",
+  no_resume_in_profile: "No resume found on your profile. Please upload a resume first.",
+  job_not_found: "This job listing could not be found. Please refresh the page and try again.",
+  job_has_no_description: "This job listing has no description to match against.",
+};
+
+/**
+ * handleFixResume's calls span two API modules with different error shapes:
+ * premiumApi.ts (parseResumeFromProfile/parseJdByJob) rethrows the raw Axios
+ * error with `.response` intact, while parserApi.ts's safePost
+ * (matchResumeAndJD, parseJDText, getMatchAnalytics) wraps failures into a
+ * plain Error whose `.message` is the JSON-stringified backend envelope and
+ * whose `__raw` carries the parsed envelope instead. Normalize both into one
+ * user-facing message so the raw envelope is never shown in a toast.
+ */
+function describeFixResumeError(err: unknown): string {
+  const fallback = "Could not prepare your match analysis. Please try again.";
+
+  const axiosData = (err as { response?: { data?: unknown } })?.response?.data;
+  const rawData = (err as { __raw?: unknown })?.__raw;
+  let envelope: unknown = axiosData ?? rawData;
+
+  if (envelope === undefined && err instanceof Error) {
+    try { envelope = JSON.parse(err.message); } catch { /* not JSON */ }
+  }
+  if (!envelope || typeof envelope !== "object") {
+    // Plain Errors thrown directly by handleFixResume (e.g. "no description
+    // text to match against") have no JSON envelope — their message IS the
+    // user-facing text, so surface it instead of the generic fallback.
+    if (err instanceof Error && err.message.trim() && !/^HTTP \d+$/i.test(err.message.trim())) {
+      return err.message;
+    }
+    return fallback;
+  }
+
+  const top = envelope as Record<string, unknown>;
+  const errorObj = (typeof top.error === "object" && top.error)
+    ? (top.error as Record<string, unknown>)
+    : undefined;
+  const details = (typeof errorObj?.details === "object" && errorObj?.details)
+    ? (errorObj.details as Record<string, unknown>)
+    : undefined;
+
+  const code = (details?.error as string | undefined) ?? (errorObj?.error_code as string | undefined);
+  if (typeof code === "string" && FIX_RESUME_ERROR_MESSAGES[code]) {
+    return FIX_RESUME_ERROR_MESSAGES[code];
+  }
+
+  const message = (errorObj?.message as string | undefined) ?? (top.message as string | undefined) ?? (top.detail as string | undefined);
+  if (typeof message === "string" && message.trim() && !/^HTTP \d+$/i.test(message.trim())) {
+    return message;
+  }
+
+  return fallback;
+}
 
 interface JobCardProps {
   id: string;
@@ -61,6 +123,9 @@ interface JobCardProps {
   onBotClick: () => void;
   onRemove?: () => void;
   onApplyClick?: () => void;
+  onSaveToggle?: (saved: boolean) => void;
+  onRemoveApplication?: () => void;
+  onAppliedToggle?: (jobId: string) => void;
 }
 
 // Assign a consistent color to each company based on first letter
@@ -253,6 +318,7 @@ export default function JobCard(props: JobCardProps) {
     const newState = toggleJobSaved(props.id, props.title, props.company, props.location, props.type, userId);
     setIsSaved(newState);
     toast[newState ? "success" : "info"](newState ? "Job saved!" : "Job removed from saved");
+    props.onSaveToggle?.(newState);
   };
 
   const level = deriveExperienceLevelFromYears(props.experience) || props.experience_level;
@@ -260,7 +326,6 @@ export default function JobCard(props: JobCardProps) {
   const skillChips = props.skills
     ? props.skills.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6)
     : [];
-  const hasMissingSkills = !!props.missing_skills?.length;
   const isNew = (() => {
     const d = props.created_at || props.posted_date;
     if (!d) return false;
@@ -269,17 +334,16 @@ export default function JobCard(props: JobCardProps) {
   const sourceLabel = props.source && props.source !== "portal" ? props.source : "";
   const hasMatchScore = !!props.matchScore && Math.round(props.matchScore) > 0;
 
-  // Smart Match jobs with a weak, fixable match get a "customize your resume
-  // first?" gate before applying — reuses the match/skill-gap data already on
-  // the card (no extra API call). Jobs without match data skip straight to
-  // the normal Apply Now flow.
+  // Smart Match jobs below an 80% match get a "customize your resume first?"
+  // gate before applying — reuses the match/skill-gap data already on the
+  // card (no extra API call). Jobs without match data, or a match already at
+  // 80%+, skip straight to the normal Apply Now flow.
   const missingSkillsForPrompt = props.missing_skills ?? [];
   const shouldPromptResumeCustomize =
     hasMatchScore &&
     !!externalUrl &&
     !skipResumePrompt &&
-    (props.match_band === "low" || props.match_band === "partial") &&
-    missingSkillsForPrompt.length > 0;
+    Math.round(props.matchScore ?? 0) < 80;
 
   const persistSkipIfChecked = () => {
     if (!dontRemindAgain) return;
@@ -289,15 +353,10 @@ export default function JobCard(props: JobCardProps) {
 
   // Runs the same free match pipeline the jobmatch page itself runs when a
   // resume_id + jd_id are already known, then seeds its sessionStorage in the
-  // exact shape Overview.tsx expects (see its analyzeMatch()) plus a one-shot
-  // jm_skipWizard flag so it renders results (with resume preview) directly
-  // instead of the upload wizard.
+  // exact shape Overview.tsx expects (see its analyzeMatch()) so it renders
+  // results (with resume preview) directly instead of the upload wizard.
   const handleFixResume = async () => {
     if (isPreparingResumeFix) return;
-    if (!isValidBackendJobId(props.id)) {
-      toast.error("This listing hasn't finished syncing yet, so resume matching isn't available for it right now.");
-      return;
-    }
     persistSkipIfChecked();
     // Keep the modal open (showing the "Preparing your match…" button state
     // below) for the whole async pipeline — closing it here would hide that
@@ -310,10 +369,15 @@ export default function JobCard(props: JobCardProps) {
       // common listings) — fall back to parsing the description text we
       // already have on the card, same as the manual "paste JD" wizard step.
       const resolveJdId = async (): Promise<string> => {
-        try {
-          const byJob = await parseJdByJob(props.id);
-          if (byJob.jd_id) return byJob.jd_id;
-        } catch { /* fall through to text-based parse */ }
+        // Aggregated listings often use a client-generated composite id that
+        // parseJdByJob cannot accept. Skip that endpoint for those listings
+        // and parse the JD text directly instead of rejecting the action.
+        if (isValidBackendJobId(props.id)) {
+          try {
+            const byJob = await parseJdByJob(props.id);
+            if (byJob.jd_id) return byJob.jd_id;
+          } catch { /* fall through to text-based parse */ }
+        }
         if (!props.description?.trim()) {
           throw new Error("This job has no description text to match against.");
         }
@@ -359,11 +423,15 @@ export default function JobCard(props: JobCardProps) {
         duplicate: matchResp?.duplicate,
       };
 
-      sessionStorage.setItem("jm_matchResults", JSON.stringify(newMatchResults));
-      sessionStorage.setItem("jm_parsedResumeData", JSON.stringify(fullResumeData));
-      sessionStorage.setItem("jm_parsedJDData", JSON.stringify(null));
-      sessionStorage.setItem("jm_jdText", props.description || `${props.title} at ${props.company}`);
-      sessionStorage.setItem("jm_skipWizard", "true");
+      const snapshotWritten = writeJobmatchSessionSnapshot({
+        matchResults: newMatchResults,
+        parsedResumeData: fullResumeData,
+        parsedJDData: null,
+        jdText: props.description || `${props.title} at ${props.company}`,
+      });
+      if (!snapshotWritten) {
+        throw new Error("Could not save your match results. Please try again.");
+      }
 
       // Hard navigation, not router.push(): if /jobmatch/app was already
       // visited earlier this session, Next's client-side route cache can
@@ -371,15 +439,7 @@ export default function JobCard(props: JobCardProps) {
       // re-reading the sessionStorage we just seeded.
       window.location.href = "/jobmatch/app";
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number; data?: { must_parse?: boolean } } })?.response?.status;
-      const body = (err as { response?: { data?: { must_parse?: boolean } } })?.response?.data;
-      if (status === 409 && body?.must_parse) {
-        toast.error("Your resume hasn't been parsed yet. Please run an ATS scan first, then try again.");
-      } else if (status === 404) {
-        toast.error("No resume found on your profile. Please upload a resume first.");
-      } else {
-        toast.error(err instanceof Error ? err.message : "Could not prepare your match analysis. Please try again.");
-      }
+      toast.error(describeFixResumeError(err));
       setShowResumePrompt(false);
     } finally {
       setIsPreparingResumeFix(false);
@@ -398,9 +458,11 @@ export default function JobCard(props: JobCardProps) {
   const whyYouMatch = (() => {
     const matchedCount = props.matched_skills?.length ?? 0;
     const missingCount = props.missing_skills?.length ?? 0;
-    if (!hasMatchScore || (matchedCount === 0 && missingCount === 0)) return null;
-    const parts: string[] = [];
-    if (matchedCount > 0) parts.push(`Matches ${matchedCount} required skill${matchedCount === 1 ? "" : "s"}`);
+    // Only lead with this line when there's a matched skill to point to —
+    // with 0 matches, "N to grow" alone is a bare negative right under the
+    // title, and the Missing Skills chips below already say the same thing.
+    if (!hasMatchScore || matchedCount === 0) return null;
+    const parts: string[] = [`Matches ${matchedCount} required skill${matchedCount === 1 ? "" : "s"}`];
     if (missingCount > 0) parts.push(`${missingCount} to grow`);
     return parts.join(" · ");
   })();
@@ -411,9 +473,6 @@ export default function JobCard(props: JobCardProps) {
   const bandCfg = getMatchBandConfig(props.match_band);
   const circleStroke = props.match_band ? bandCfg.color : "#14b8a6";
   const circleLabel = props.match_band ? bandCfg.label.toUpperCase() : "";
-  const contentMinHeight = hasMatchScore
-    ? (hasMissingSkills ? 282 : 214) + (whyYouMatch ? 26 : 0)
-    : 142;
 
   const skillsNode = (() => {
     const hasMatchData =
@@ -462,7 +521,7 @@ export default function JobCard(props: JobCardProps) {
     const missingChips   = visible.filter((c) => c.state === "missing");
 
     return (
-      <div className="mt-3 space-y-2">
+      <div className="mt-2 space-y-1.5">
         {/* Matched + neutral chips */}
         {matchedNeutral.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -483,8 +542,8 @@ export default function JobCard(props: JobCardProps) {
 
         {/* Missing skills section */}
         {missingChips.length > 0 && (
-          <div style={{ marginTop: 10, marginBottom: 8 }}>
-            <div className="flex items-center gap-1.5 mb-2">
+          <div style={{ marginTop: 6 }}>
+            <div className="flex items-center gap-1.5 mb-1.5">
               <AlertTriangle size={11} className="text-orange-400 shrink-0" />
               <span className="text-[10.5px] font-bold text-orange-600 shrink-0 leading-none">
                 Missing Skills
@@ -494,7 +553,7 @@ export default function JobCard(props: JobCardProps) {
               {missingChips.map(({ skill }) => (
                 <span
                   key={skill}
-                  className="px-3 py-1.5 text-[10.5px] font-medium rounded-full bg-orange-50 text-orange-700 border border-orange-200/70 hover:bg-orange-100 hover:border-orange-300/60 transition-colors duration-150 cursor-default"
+                  className="px-2.5 py-0.5 text-[10.5px] font-medium rounded-full bg-orange-50 text-orange-700 border border-orange-200/70 hover:bg-orange-100 hover:border-orange-300/60 transition-colors duration-150 cursor-default"
                 >
                   {skill}
                 </span>
@@ -513,13 +572,33 @@ export default function JobCard(props: JobCardProps) {
       className="w-48 bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.14)] border border-gray-100 py-1.5"
     >
       {[
-        {
+        props.onRemove && {
           icon: XCircle, label: "Remove From List",
           action: () => { setShowMenu(false); props.onRemove?.(); toast.success("Job removed from list"); },
         },
+        props.onRemoveApplication && {
+          icon: Trash2, label: "Remove Application",
+          action: () => {
+            setShowMenu(false);
+            if (window.confirm("Remove this job from your Applied list? This can't be undone.")) {
+              props.onRemoveApplication?.();
+              toast.success("Application removed");
+            }
+          },
+        },
         {
           icon: CheckCircle, label: "Already Applied",
-          action: () => { setIsApplied(true); setShowMenu(false); toast.success("Marked as applied"); },
+          action: () => {
+            setIsApplied(true);
+            setShowMenu(false);
+            recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId);
+            // Unlike the save path (handleSaveJob → onSaveToggle), this bypasses
+            // JobsContents' own recordJobApplication call sites — tell it directly
+            // so the Applied tab badge/list update without waiting for that tab
+            // to be (re)activated.
+            props.onAppliedToggle?.(props.id);
+            toast.success("Marked as applied");
+          },
         },
         {
           icon: Share2, label: "Share",
@@ -545,7 +624,7 @@ export default function JobCard(props: JobCardProps) {
           icon: Flag, label: "Report Issue",
           action: () => { setShowMenu(false); toast.info("Thanks for reporting. We'll look into it."); },
         },
-      ].map(({ icon: Icon, label, action }) => (
+      ].filter((item): item is NonNullable<typeof item> => !!item).map(({ icon: Icon, label, action }) => (
         <button
           key={label}
           type="button"
@@ -564,10 +643,10 @@ export default function JobCard(props: JobCardProps) {
     return (
       <>
         <motion.div
-          className="group relative overflow-hidden rounded-[18px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_8px_28px_rgba(15,23,42,0.055)] transition-colors"
+          className="jobs-premium-card group relative overflow-hidden rounded-[18px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_8px_28px_rgba(15,23,42,0.055),0_0_28px_rgba(79,70,229,0.12)] transition-colors"
           whileHover={{
             y: -2,
-            boxShadow: "0 16px 42px rgba(15,23,42,0.10), 0 0 0 1px rgba(79,70,229,0.10)",
+            boxShadow: "0 18px 46px rgba(15,23,42,0.10), 0 0 46px rgba(79,70,229,0.30), 0 0 0 1px rgba(79,70,229,0.18)",
           }}
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         >
@@ -808,19 +887,22 @@ export default function JobCard(props: JobCardProps) {
     <>
     {/* Card: outer flex row so dark panel can span full height as a sibling */}
     <motion.div
-      className="group relative flex overflow-hidden rounded-[22px] border border-slate-200/70 bg-white"
-      style={{ boxShadow: "0 14px 38px rgba(15,23,42,0.07), 0 1px 0 rgba(255,255,255,0.9)" }}
+      className="jobs-premium-card group relative flex overflow-hidden rounded-[22px] border border-slate-200/70 bg-white"
+      style={{ boxShadow: "0 14px 38px rgba(15,23,42,0.07), 0 0 34px rgba(79,70,229,0.14), 0 1px 0 rgba(255,255,255,0.9)" }}
       whileHover={{
         y: -4,
-        boxShadow: "0 22px 60px rgba(15,23,42,0.12), 0 8px 24px rgba(79,70,229,0.10), 0 0 0 1px rgba(79,70,229,0.14)",
+        boxShadow: "0 26px 64px rgba(15,23,42,0.14), 0 0 56px rgba(79,70,229,0.34), 0 0 0 1px rgba(79,70,229,0.24)",
       }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
     >
 {/* ── LEFT COLUMN ── */}
       <div className="flex-1 flex flex-col min-w-0">
 
-        {/* ── Swappable content zone: fixed height, both faces absolute-inset ── */}
-        <div className="relative flex-1 overflow-hidden" style={{ minHeight: contentMinHeight }}>
+        {/* ── Swappable content zone: both faces share one grid cell so the
+            container auto-sizes to whichever face is tallest — height must
+            stay dynamic since missing-skill chips can wrap onto more lines
+            as the card narrows; a fixed pixel height clipped them. ── */}
+        <div className="relative flex-1 grid">
           <AnimatePresence mode="wait" initial={false}>
 
             {/* ── FACE A: Normal card content ── */}
@@ -831,17 +913,17 @@ export default function JobCard(props: JobCardProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                className="absolute inset-0 flex flex-col"
+                className="col-start-1 row-start-1 flex flex-col"
               >
-                <div className="flex items-start gap-3.5 px-5 pt-[18px] pb-0">
+                <div className="flex items-start gap-3 px-5 pt-3.5 pb-0">
                   {/* Logo */}
-                  <div className={`flex h-[54px] w-[54px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
+                  <div className={`flex h-11.5 w-11.5 shrink-0 items-center justify-center overflow-hidden rounded-[14px] ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
                     {props.logo && props.logo.trim() && !logoError ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={props.logo} alt={props.company} width={56} height={56}
+                      <img src={props.logo} alt={props.company} width={48} height={48}
                         onError={() => setLogoError(true)} className="max-w-full max-h-full object-contain" />
                     ) : (
-                      <span className={`text-[17px] font-extrabold select-none ${logoColor.text}`}>
+                      <span className={`text-[15px] font-extrabold select-none ${logoColor.text}`}>
                         {(props.company || "J").charAt(0).toUpperCase()}
                       </span>
                     )}
@@ -850,7 +932,7 @@ export default function JobCard(props: JobCardProps) {
                   <div className="flex-1 min-w-0 pt-0.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
                           {(props.created_at || props.posted_date) && (
                             <span className="text-[11.5px] font-semibold text-slate-400">
                               {formatPostedTime(props.created_at || props.posted_date)}
@@ -884,47 +966,50 @@ export default function JobCard(props: JobCardProps) {
                     </div>
                   </div>
                 </div>
-                <div className="px-5 pt-3.5 pb-3">
+                <div className="px-5 pt-2.5 pb-2">
                   <div className="flex flex-wrap gap-1.5">
                     {props.location && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600"
+                        title={props.location}
+                      >
                         <MapPin size={11} className="text-gray-400 shrink-0" />
-                        <span className="truncate max-w-[110px]">{props.location}</span>
+                        <span className="truncate max-w-[110px]">{props.location.split(",")[0].trim()}</span>
                       </span>
                     )}
                     {props.type && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
                         <Briefcase size={11} className="text-gray-400 shrink-0" />
                         {props.type}
                       </span>
                     )}
                     {props.mode && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
                         <Home size={11} className="text-gray-400 shrink-0" />
                         {props.mode}
                       </span>
                     )}
                     {level && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
                         <Layers size={11} className="text-gray-400 shrink-0" />
                         {level}
                       </span>
                     )}
                     {props.experience && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
                         <Calendar size={11} className="text-gray-400 shrink-0" />
                         {props.experience}
                       </span>
                     )}
                     {props.salary && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold text-emerald-700">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-bold text-emerald-700">
                         <CircleDollarSign size={11} className="text-emerald-500 shrink-0" />
                         {props.salary}
                       </span>
                     )}
                   </div>
                   {whyYouMatch && (
-                    <p className="mt-2.5 flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: bandCfg.color }}>
+                    <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: bandCfg.color }}>
                       <CheckCircle size={12} className="shrink-0" />
                       {whyYouMatch}
                     </p>
@@ -942,7 +1027,7 @@ export default function JobCard(props: JobCardProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 6 }}
                 transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                className="absolute inset-0 flex flex-col"
+                className="col-start-1 row-start-1 flex flex-col"
                 style={{ background: "linear-gradient(155deg, #f6f8ff 0%, #edf1ff 100%)" }}
               >
                 {/* Compact header — single line */}
@@ -1048,7 +1133,7 @@ export default function JobCard(props: JobCardProps) {
         </div>
 
         {/* Action row */}
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-5 py-3">
+        <div className="jobs-card-actions flex items-center justify-between gap-3 border-t border-slate-200/70 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-5 py-2.5">
           {/* Left: applicant count + match analysis */}
           <div className="flex items-center gap-2.5 min-w-0">
             {props.applicant_count !== undefined && props.applicant_count !== null && (
@@ -1062,18 +1147,13 @@ export default function JobCard(props: JobCardProps) {
               <button
                 type="button"
                 onClick={() => setShowMatchModal(true)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all hover:scale-[1.03] active:scale-[0.97]"
-                style={{
-                  background: "linear-gradient(135deg, #5896d7, #4338CA)",
-                  color: "white",
-                  boxShadow: "0 2px 8px rgba(79,70,229,0.3)",
-                }}
-                title="View AI match analysis"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#4F46E5]/15 bg-white px-3 py-1.5 text-[11px] font-bold text-[#4F46E5] shadow-sm transition-all hover:border-[#4F46E5]/30 hover:bg-[#eef3ff] hover:shadow-md active:scale-[0.97]"
+                title="Open match report — free basic breakdown or premium deep-dive"
               >
                 <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                AI Analysis
+                Match Report
               </button>
             )}
           </div>
@@ -1161,7 +1241,7 @@ export default function JobCard(props: JobCardProps) {
           onClick={handleScoreHover}
         >
           <div
-            className="group/panel relative flex flex-1 flex-col items-center justify-center gap-2.5 overflow-hidden px-3 py-4 transition-all duration-300"
+            className="jobs-score-panel group/panel relative flex flex-1 flex-col items-center justify-center gap-2.5 overflow-hidden px-3 py-4 transition-all duration-300"
             style={{ background: "linear-gradient(160deg, #0f1d33 0%, #172b4a 46%, #214b86 100%)" }}
           >
             {/* Ambient glow behind ring */}
@@ -1211,7 +1291,7 @@ export default function JobCard(props: JobCardProps) {
                 {circleLabel}
               </span>
               <div className="text-[8px] text-white/70 font-semibold tracking-widest uppercase group-hover/panel:text-white transition-colors">
-                {showExplanation ? "CLOSE ✕" : "ANALYZE →"}
+                {showExplanation ? "CLOSE ✕" : "QUICK VIEW →"}
               </div>
             </div>
 
@@ -1275,59 +1355,7 @@ export default function JobCard(props: JobCardProps) {
       />
     )}
 
-    {showMenu && menuPos && createPortal(
-      <div
-        ref={menuPortalRef}
-        style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 9999 }}
-        className="w-48 bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.14)] border border-gray-100 py-1.5"
-      >
-        {[
-          {
-            icon: XCircle, label: "Remove From List",
-            action: () => { setShowMenu(false); props.onRemove?.(); toast.success("Job removed from list"); },
-          },
-          {
-            icon: CheckCircle, label: "Already Applied",
-            action: () => { setIsApplied(true); setShowMenu(false); toast.success("Marked as applied"); },
-          },
-          {
-            icon: Share2, label: "Share",
-            action: () => {
-              const link = props.url || props.application_url || window.location.href;
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(link)
-                  .then(() => toast.success("Link copied to clipboard!"))
-                  .catch(() => toast.error("Could not copy link"));
-              } else {
-                const el = document.createElement("textarea");
-                el.value = link;
-                document.body.appendChild(el);
-                el.select();
-                document.execCommand("copy");
-                document.body.removeChild(el);
-                toast.success("Link copied to clipboard!");
-              }
-              setShowMenu(false);
-            },
-          },
-          {
-            icon: Flag, label: "Report Issue",
-            action: () => { setShowMenu(false); toast.info("Thanks for reporting. We'll look into it."); },
-          },
-        ].map(({ icon: Icon, label, action }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={action}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-[#4F46E5] transition-colors text-left group/item"
-          >
-            <Icon size={15} className="text-gray-400 group-hover/item:text-[#4F46E5] shrink-0 transition-colors" />
-            {label}
-          </button>
-        ))}
-      </div>,
-      document.body
-    )}
+    {menuNode}
     {showResumePrompt && (
       <ResumeCustomizePrompt
         jobTitle={props.title}

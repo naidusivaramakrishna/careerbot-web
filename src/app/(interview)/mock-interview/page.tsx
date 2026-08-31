@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
+import SignUpModal from "@/components/SignUpModal";
+import { useAuth } from "@/hooks/useAuth";
 import {
   FileText, BookOpen, Mic, Video, Sparkles, History,
   ArrowRight, ChevronDown, ChevronRight, Zap, BarChart3,
@@ -310,13 +313,25 @@ function InterviewMockup() {
 
 export default function MockInterviewPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
+  const handleStartMockInterview = () => {
+    if (authLoading) return;
+    if (isAuthenticated) {
+      router.push("/mock-interview/live");
+      return;
+    }
+    setShowAuthModal(true);
+  };
+
   return (
     <>
+      <LandingNavbar />
       {/* ════════════════════════════════════════════════════════════════
           HERO
       ════════════════════════════════════════════════════════════════ */}
@@ -374,10 +389,11 @@ export default function MockInterviewPage() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <button
-                  onClick={() => router.push("/mock-interview/live")}
+                  onClick={handleStartMockInterview}
+                  disabled={authLoading}
                   className="inline-flex items-center gap-2 bg-[#2557a7] hover:bg-[#1a3a8f] text-white font-bold px-7 py-3.5 rounded-full text-sm shadow-[0_4px_20px_rgba(37,87,167,0.30)] hover:shadow-[0_8px_28px_rgba(37,87,167,0.42)] hover:scale-[1.03] active:scale-100 transition-all duration-300"
                 >
-                  Start Live Interview <ArrowRight size={14} />
+                  {authLoading ? "Checking Sign In..." : "Start Mock Interview"} <ArrowRight size={14} />
                 </button>
                 <button
                   onClick={() => router.push("/mock-interview/history")}
@@ -509,10 +525,11 @@ export default function MockInterviewPage() {
             viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.3 }}
           >
             <button
-              onClick={() => router.push("/mock-interview/live")}
+              onClick={handleStartMockInterview}
+              disabled={authLoading}
               className="inline-flex items-center gap-2 text-[#2557a7] font-bold text-sm px-6 py-3 rounded-full border-2 border-[#2557a7]/20 hover:border-[#2557a7] hover:bg-[#eef4ff] transition-all duration-200"
             >
-              Start Live Mock Interview <ChevronRight size={14} />
+              {authLoading ? "Checking Sign In..." : "Start Mock Interview"} <ChevronRight size={14} />
             </button>
           </motion.div>
         </div>
@@ -760,10 +777,11 @@ export default function MockInterviewPage() {
             viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.15 }}
           >
             <button
-              onClick={() => router.push("/mock-interview/live")}
+              onClick={handleStartMockInterview}
+              disabled={authLoading}
               className="inline-flex items-center gap-2 bg-[#2557a7] text-white hover:bg-[#1e4a94] font-bold px-9 py-4 rounded-xl text-sm shadow-[0_8px_32px_rgba(37,87,167,0.25)] hover:shadow-[0_12px_40px_rgba(37,87,167,0.35)] hover:scale-[1.03] active:scale-100 transition-all duration-300"
             >
-              Start Live Interview <ArrowRight className="w-4 h-4" />
+              {authLoading ? "Checking Sign In..." : "Start Mock Interview"} <ArrowRight className="w-4 h-4" />
             </button>
           </motion.div>
 
@@ -788,6 +806,12 @@ export default function MockInterviewPage() {
           </motion.div>
         </div>
       </section>
+      <SignUpModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialFormType="signin"
+        redirectTo="/mock-interview/live"
+      />
     </>
   );
 }

@@ -430,7 +430,7 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
       <div
         className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[75%] flex flex-col mx-4"
         onClick={e => e.stopPropagation()}

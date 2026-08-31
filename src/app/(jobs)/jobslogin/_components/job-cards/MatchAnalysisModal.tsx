@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { getMatchExplanation } from "@/api/insightsApi";
 import type { MatchExplanationResponse } from "@/api/insightsApi";
@@ -9,8 +9,26 @@ import {
   parseJdByJob,
   createPremiumAction,
   executePremiumAction,
+  setPremiumConsent,
 } from "@/api/premiumApi";
 import type { PendingActionResponse, ExecuteActionResponse } from "@/api/premiumApi";
+
+// Backend returns 428 with error_code CONSENT_REQUIRED when the user hasn't
+// granted consent for premium AI processing via POST /profile/consent/premium.
+function isConsentRequiredError(err: unknown): boolean {
+  const response = (
+    err as {
+      response?: {
+        status?: number;
+        data?: { error?: { details?: { error?: string } } };
+      };
+    }
+  )?.response;
+  return (
+    response?.status === 428 ||
+    response?.data?.error?.details?.error === "CONSENT_REQUIRED"
+  );
+}
 import { isValidBackendJobId } from "@/utils/jobIdHelper";
 import ScoreBreakdown from "@/app/(jobs)/jobmatch/_components/analysis/ScoreBreakdown";
 import MatchPenalties from "@/app/(jobs)/jobmatch/_components/analysis/MatchPenalties";
@@ -611,7 +629,7 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
 }
 
 /* ── Premium view ────────────────────────────────────────────────────────── */
-type PremiumPhase = "preparing" | "confirming" | "executing" | "success" | "error";
+type PremiumPhase = "preparing" | "confirming" | "executing" | "success" | "error" | "consent";
 
 function PremiumHeader({ jobTitle, company, onBack, onClose }: {
   jobTitle: string; company: string; onBack: () => void; onClose: () => void;
@@ -651,60 +669,92 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
   const [result, setResult]   = useState<ExecuteActionResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Step 1 — on mount: resolve resume_id + jd_id → create pending action
-  useEffect(() => {
-    let cancelled = false;
+  // Which step to resume once consent is granted
+  const [consentRetry, setConsentRetry] = useState<"prepare" | "execute">("prepare");
+  const [consentSubmitting, setConsentSubmitting] = useState(false);
+  const [consentError, setConsentError] = useState("");
 
-    async function prepare() {
-      if (!isValidBackendJobId(jobId)) {
-        setErrorMsg("This listing hasn't finished syncing yet, so premium analysis isn't available for it. Please refresh the job list and try again.");
-        setPhase("error");
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // prepare can be re-invoked while an earlier call is still in flight — its
+  // useCallback depends on jobId, so a jobId change recreates it and reruns
+  // the effect below, and handleGrantConsent can also call it directly.
+  // mountedRef only guards against unmount; it doesn't stop a superseded but
+  // still-running invocation from landing setPending/setPhase for the wrong
+  // job once it finally resolves. A monotonic run token catches that too.
+  const runRef = useRef(0);
+
+  // Set whenever a call routes back to the consent screen. prepare() and
+  // handleConfirm() both swallow their own errors and set phase internally,
+  // so handleGrantConsent's catch never fires for them — without this flag a
+  // retry that 428s again (e.g. the consent write succeeded but hasn't
+  // replicated yet) would silently re-render the identical consent screen and
+  // "I Agree — Continue" would read as a dead button.
+  const reenteredConsentRef = useRef(false);
+
+  // Step 1 — resolve resume_id + jd_id → create pending action
+  const prepare = useCallback(async () => {
+    const run = ++runRef.current;
+    if (!isValidBackendJobId(jobId)) {
+      setErrorMsg("This listing hasn't finished syncing yet, so premium analysis isn't available for it. Please refresh the job list and try again.");
+      setPhase("error");
+      return;
+    }
+    setPhase("preparing");
+    try {
+      // Parallel: get resume_id from profile + jd_id from job
+      const [profileRes, jdRes] = await Promise.all([
+        parseResumeFromProfile(),
+        parseJdByJob(jobId),
+      ]);
+
+      if (!mountedRef.current || runRef.current !== run) return;
+
+      const action = await createPremiumAction({
+        action_type: "resume_tailor",
+        job_id: jobId,
+        idempotency_key: crypto.randomUUID(),
+        options: { resume_id: profileRes.resume_id, jd_id: jdRes.jd_id },
+      });
+
+      if (!mountedRef.current || runRef.current !== run) return;
+      setPending(action);
+      setPhase("confirming");
+    } catch (err: unknown) {
+      if (!mountedRef.current || runRef.current !== run) return;
+
+      if (isConsentRequiredError(err)) {
+        setConsentRetry("prepare");
+        reenteredConsentRef.current = true;
+        setPhase("consent");
         return;
       }
-      try {
-        // Parallel: get resume_id from profile + jd_id from job
-        const [profileRes, jdRes] = await Promise.all([
-          parseResumeFromProfile(),
-          parseJdByJob(jobId),
-        ]);
 
-        if (cancelled) return;
+      // 409 from parse-from-profile means resume must be parsed first
+      const status = (err as { response?: { status?: number; data?: { must_parse?: boolean; detail?: string } } })?.response?.status;
+      const body   = (err as { response?: { data?: { must_parse?: boolean; detail?: string } } })?.response?.data;
 
-        const action = await createPremiumAction({
-          action_type: "resume_tailor",
-          job_id: jobId,
-          idempotency_key: crypto.randomUUID(),
-          options: { resume_id: profileRes.resume_id, jd_id: jdRes.jd_id },
-        });
-
-        if (cancelled) return;
-        setPending(action);
-        setPhase("confirming");
-      } catch (err: unknown) {
-        if (cancelled) return;
-        // 409 from parse-from-profile means resume must be parsed first
-        const status = (err as { response?: { status?: number; data?: { must_parse?: boolean; detail?: string } } })?.response?.status;
-        const body   = (err as { response?: { data?: { must_parse?: boolean; detail?: string } } })?.response?.data;
-
-        if (status === 409 && body?.must_parse) {
-          setErrorMsg("Your resume hasn't been parsed yet. Please run an ATS scan first, then try again.");
-        } else if (status === 402) {
-          setErrorMsg("Insufficient credits. Please upgrade your plan to use premium analysis.");
-        } else if (status === 404) {
-          setErrorMsg("No resume found on your profile. Please upload a resume first.");
-        } else {
-          setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-        }
-        setPhase("error");
+      if (status === 409 && body?.must_parse) {
+        setErrorMsg("Your resume hasn't been parsed yet. Please run an ATS scan first, then try again.");
+      } else if (status === 402) {
+        setErrorMsg("Insufficient credits. Please upgrade your plan to use premium analysis.");
+      } else if (status === 404) {
+        setErrorMsg("No resume found on your profile. Please upload a resume first.");
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
+      setPhase("error");
     }
-
-    prepare();
-    return () => { cancelled = true; };
   }, [jobId]);
 
+  useEffect(() => { prepare(); }, [prepare]);
+
   // Step 2 — user confirms
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
     if (!pending) return;
     setPhase("executing");
     try {
@@ -712,9 +762,39 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
       setResult(res);
       setPhase("success");
     } catch (err: unknown) {
+      if (isConsentRequiredError(err)) {
+        setConsentRetry("execute");
+        reenteredConsentRef.current = true;
+        setPhase("consent");
+        return;
+      }
       const body = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data;
       setErrorMsg(body?.error?.message ?? (err instanceof Error ? err.message : "Execution failed. Please try again."));
       setPhase("error");
+    }
+  }, [pending]);
+
+  // User agreed to AI consent — record it, then resume whichever step 428'd
+  const handleGrantConsent = async () => {
+    setConsentSubmitting(true);
+    setConsentError("");
+    reenteredConsentRef.current = false;
+    try {
+      await setPremiumConsent(true);
+      if (consentRetry === "execute") {
+        await handleConfirm();
+      } else {
+        await prepare();
+      }
+      // The retry landed back on this same screen (see reenteredConsentRef) —
+      // the consent write reported success but the retried call still 428'd.
+      if (reenteredConsentRef.current) {
+        setConsentError("Your consent was saved, but the request was still refused. Please try again in a moment.");
+      }
+    } catch (err: unknown) {
+      setConsentError(err instanceof Error ? err.message : "Could not save consent. Please try again.");
+    } finally {
+      setConsentSubmitting(false);
     }
   };
 
@@ -829,7 +909,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
             {matchResultData && (
               <>
                 <ScoreBreakdown matchResult={matchResultData} />
-                <MatchPenalties matchResult={matchResultData} onAddSkill={() => {}} readOnly />
+                <MatchPenalties matchResult={matchResultData} onAddSkill={() => false} readOnly />
               </>
             )}
 
@@ -837,6 +917,49 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
               style={{ background: "linear-gradient(135deg,#78350f,#b45309)" }}>
               Done
             </button>
+          </div>
+        )}
+
+        {/* CONSENT REQUIRED */}
+        {phase === "consent" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 rounded-2xl p-4 bg-amber-50 border border-amber-100">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: "#fef3c7" }}>
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[14px] font-extrabold text-gray-900">AI Consent Required</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">One-time, before we can use AI on your data</p>
+              </div>
+            </div>
+
+            <p className="text-[12px] text-gray-600 leading-relaxed">
+              Premium analysis sends your resume and this job&apos;s description to our AI provider to generate tailored suggestions. This only happens for premium actions you explicitly run, and you can withdraw consent anytime by contacting support.
+            </p>
+
+            {consentError && (
+              <p className="text-[11.5px] font-medium text-red-500">{consentError}</p>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={onBack}
+                disabled={consentSubmitting}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGrantConsent}
+                disabled={consentSubmitting}
+                className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#78350f,#b45309)" }}
+              >
+                {consentSubmitting ? "Saving…" : "I Agree — Continue"}
+              </button>
+            </div>
           </div>
         )}
 

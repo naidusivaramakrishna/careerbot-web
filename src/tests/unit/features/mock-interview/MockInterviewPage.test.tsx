@@ -1,14 +1,13 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
   pathname: "/mock-interview/live",
   params: { sessionId: "live-session-123" } as Record<string, string>,
-  consentGiven: true,
-  setConsentGiven: vi.fn(),
   stageState: {
     notes_generated: false,
     english_read: false,
@@ -23,10 +22,12 @@ const mocks = vi.hoisted(() => ({
   downloadReportPdf: vi.fn(),
   getLiveSessionState: vi.fn(),
   buildWsUrl: vi.fn((url: string) => `ws://test.local${url}`),
+  isAuthenticated: false,
+  authLoading: false,
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, replace: vi.fn(), prefetch: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace, prefetch: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
   usePathname: () => mocks.pathname,
   useParams: () => mocks.params,
   useSearchParams: () => new URLSearchParams(),
@@ -35,8 +36,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/(interview)/mock-interview/_context/MockInterviewContext", () => ({
   useMockInterview: () => ({
     stageState: mocks.stageState,
-    consentGiven: mocks.consentGiven,
-    setConsentGiven: mocks.setConsentGiven,
     activeSession: null,
     dismissActiveSession: vi.fn(),
     userProgress: null,
@@ -59,17 +58,68 @@ vi.mock("@/api/mockInterviewApi", () => ({
   buildWsUrl: mocks.buildWsUrl,
 }));
 
-vi.mock("framer-motion", () => ({
-  motion: new Proxy({}, { get: (_target, tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children) }),
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    isAuthenticated: mocks.isAuthenticated,
+    isLoading: mocks.authLoading,
+    logout: vi.fn(),
+  }),
 }));
 
+vi.mock("@/components/SignUpModal", () => ({
+  default: ({ open, initialFormType, redirectTo }: { open: boolean; initialFormType?: string; redirectTo?: string }) =>
+    open ? <div role="dialog" aria-label="Sign in required">Auth modal {initialFormType} {redirectTo}</div> : null,
+}));
+
+type MotionMockProps = React.HTMLAttributes<HTMLElement> & {
+  children?: React.ReactNode;
+  initial?: unknown;
+  animate?: unknown;
+  exit?: unknown;
+  transition?: unknown;
+  whileInView?: unknown;
+  viewport?: unknown;
+  whileHover?: unknown;
+  variants?: unknown;
+};
+
+type ImageMockProps = React.ImgHTMLAttributes<HTMLImageElement> & {
+  priority?: boolean;
+  fill?: boolean;
+  unoptimized?: boolean;
+};
+
+vi.mock("framer-motion", () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  motion: new Proxy({}, {
+    get: (_target, tag: string) => ({ children, ...props }: MotionMockProps) => {
+      const domProps = { ...props };
+      delete domProps.initial;
+      delete domProps.animate;
+      delete domProps.exit;
+      delete domProps.transition;
+      delete domProps.whileInView;
+      delete domProps.viewport;
+      delete domProps.whileHover;
+      delete domProps.variants;
+      return React.createElement(tag, domProps, children);
+    },
+  }),
+}));
 vi.mock("next/image", () => ({
-  default: ({ priority, fill, sizes, ...props }: any) => React.createElement("img", props),
+  default: (props: ImageMockProps) => {
+    const imgProps: React.ImgHTMLAttributes<HTMLImageElement> = { ...props };
+    delete (imgProps as ImageMockProps).priority;
+    delete (imgProps as ImageMockProps).fill;
+    delete (imgProps as ImageMockProps).unoptimized;
+    return React.createElement("img", imgProps);
+  },
 }));
 
 class MockAudio {
   static instances: MockAudio[] = [];
   volume = 1;
+  currentTime = 0;
   onended: null | (() => void) = null;
   onerror: null | (() => void) = null;
   play = vi.fn(() => Promise.resolve());
@@ -121,7 +171,9 @@ function report(overrides = {}) {
 
 const importMockSidebar = async () => (await import("@/app/(interview)/mock-interview/_components/MockSidebar")).default;
 const importReadinessGate = async () => (await import("@/app/(interview)/mock-interview/_components/ReadinessGate")).default;
+const importMockInterviewPage = async () => (await import("@/app/(interview)/mock-interview/page")).default;
 const importLiveSetupPage = async () => (await import("@/app/(interview)/mock-interview/live/page")).default;
+const importLiveStartingPage = async () => (await import("@/app/(interview)/mock-interview/live/starting/page")).default;
 const importLiveSessionPage = async () => (await import("@/app/(interview)/mock-interview/live/[sessionId]/page")).default;
 const importReportPage = async () => (await import("@/app/(interview)/mock-interview/report/[sessionId]/page")).default;
 
@@ -130,7 +182,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.pathname = "/mock-interview/live";
   mocks.params = { sessionId: "live-session-123" };
-  mocks.consentGiven = true;
+  mocks.isAuthenticated = false;
+  mocks.authLoading = false;
   mocks.stageState = { notes_generated: false, english_read: false, practice_answered: 0, practice_total: 0, readiness_passed: false, history_count: 0 };
   mocks.buildWsUrl.mockImplementation((url: string) => `ws://test.local${url}`);
   MockAudio.instances = [];
@@ -143,14 +196,57 @@ beforeEach(() => {
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: vi.fn().mockResolvedValue([{ kind: "audioinput", deviceId: "mic-1", label: "Studio Mic" }, { kind: "videoinput", deviceId: "cam-1", label: "Webcam" }]), getUserMedia: vi.fn().mockResolvedValue(mediaStream()) } });
   Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
   Object.defineProperty(document.documentElement, "requestFullscreen", { configurable: true, value: vi.fn(() => Promise.resolve()) });
-  Object.defineProperty(HTMLMediaElement.prototype, "srcObject", { configurable: true, get() { return (this as any).__srcObject ?? null; }, set(value) { (this as any).__srcObject = value; } });
+  Object.defineProperty(HTMLMediaElement.prototype, "srcObject", {
+    configurable: true,
+    get() { return (this as HTMLMediaElement & { __srcObject?: MediaStream | null }).__srcObject ?? null; },
+    set(value: MediaStream | null) { (this as HTMLMediaElement & { __srcObject?: MediaStream | null }).__srcObject = value; },
+  });
   Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:mock-audio") });
   Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
 });
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("MockInterviewPage", () => {
+  it("asks unauthenticated users to sign in before starting the live interview", async () => {
+    const MockInterviewPage = await importMockInterviewPage();
+    render(<MockInterviewPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /start mock interview/i })[0]);
+
+    expect(mocks.push).not.toHaveBeenCalledWith("/mock-interview/live");
+    expect(screen.getByRole("dialog", { name: /sign in required/i })).toHaveTextContent("signin /mock-interview/live");
+  });
+
+  it("navigates authenticated users directly to the live interview setup", async () => {
+    mocks.isAuthenticated = true;
+    const MockInterviewPage = await importMockInterviewPage();
+    render(<MockInterviewPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /start mock interview/i })[0]);
+
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
+    expect(screen.queryByRole("dialog", { name: /sign in required/i })).not.toBeInTheDocument();
+  });
+
+  it("does not open sign-in or navigate while auth status is still loading", async () => {
+    mocks.authLoading = true;
+    const MockInterviewPage = await importMockInterviewPage();
+    render(<MockInterviewPage />);
+
+    const startButtons = screen.getAllByRole("button", { name: /checking sign in/i });
+    expect(startButtons.length).toBeGreaterThan(0);
+    expect(startButtons[0]).toBeDisabled();
+
+    fireEvent.click(startButtons[0]);
+
+    expect(mocks.push).not.toHaveBeenCalledWith("/mock-interview/live");
+    expect(screen.queryByRole("dialog", { name: /sign in required/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("MockSidebar", () => {
@@ -205,7 +301,6 @@ describe("ReadinessGate", () => {
 
 describe("LiveSetupPage", () => {
   it("requires consent before preflight and returns to landing on decline", async () => {
-    mocks.consentGiven = false;
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
@@ -215,6 +310,8 @@ describe("LiveSetupPage", () => {
   it("runs device checks before setup", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
+    expect(screen.getByRole("heading", { name: /mock interview room information/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
     fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
     await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
@@ -226,10 +323,12 @@ describe("LiveSetupPage", () => {
     expect(screen.getByRole("button", { name: /start interview now/i })).toBeInTheDocument();
   });
 
-  it("starts direct live interview and stores session data", async () => {
-    mocks.createLiveSession.mockResolvedValue({ session_id: "created-session", ticket_id: "ticket-1", ticket_expires_at: "2026-07-17T10:00:00Z", ws_url: "/ws" });
+  it("stores the selected interviewer with a gender-matched voice before starting", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75);
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
+    expect(screen.getByRole("heading", { name: /mock interview room information/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
     fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
     await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
@@ -240,38 +339,94 @@ describe("LiveSetupPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
     fireEvent.click(screen.getByRole("button", { name: "Technical" }));
     fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
-    await waitFor(() => expect(mocks.createLiveSession).toHaveBeenCalledWith({ session_type: "technical", enable_streaming_stt: true }));
-    expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_type", "Technical");
-    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/created-session");
+
+    expect(mocks.createLiveSession).not.toHaveBeenCalled();
+    expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_params", JSON.stringify({
+      session_type: "technical",
+      resume_id: undefined,
+      enable_streaming_stt: true,
+      voice: "fable",
+      use_orchestrator: true,
+      interviewer_index: 3,
+      interviewer_slug: "nisha",
+      interviewer_name: "Nisha",
+      gender: "female",
+      session_type_label: "Technical",
+    }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/starting");
+    randomSpy.mockRestore();
+  }, 15_000);
+
+  it("creates the live session with the selected avatar voice and metadata", async () => {
+    mocks.createLiveSession.mockResolvedValue({ session_id: "created-session", ticket_id: "ticket-1", ticket_expires_at: "2026-07-17T10:00:00Z", ws_url: "/ws" });
+    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
+      session_type: "technical",
+      enable_streaming_stt: true,
+      voice: "alloy",
+      use_orchestrator: true,
+      interviewer_index: 3,
+      interviewer_slug: "nisha",
+      interviewer_name: "Nisha",
+      gender: "female",
+      session_type_label: "Technical",
+    }) : null);
+
+    const LiveStartingPage = await importLiveStartingPage();
+    render(<LiveStartingPage />);
+
+    await waitFor(() => expect(mocks.createLiveSession).toHaveBeenCalledWith({
+      session_type: "technical",
+      resume_id: undefined,
+      enable_streaming_stt: true,
+      voice: "fable",
+      interviewer_index: 3,
+      interviewer_name: "Nisha",
+      interviewer_gender: "female",
+      interviewer_slug: "nisha",
+      use_orchestrator: true,
+    }));
+    expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_interviewer", JSON.stringify({
+      session_id: "created-session",
+      interviewer_index: 3,
+      interviewer_name: "Nisha",
+      gender: "female",
+      voice: "fable",
+    }));
+    expect(mocks.replace).toHaveBeenCalledWith("/mock-interview/live/created-session");
   });
 
   it("surfaces create-session failure", async () => {
     mocks.createLiveSession.mockRejectedValue(new Error("network"));
-    const LiveSetupPage = await importLiveSetupPage();
-    render(<LiveSetupPage />);
-    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
-    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
-    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
-    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
-    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
-    fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
-    expect(await screen.findByText(/we could not create the live interview/i)).toBeInTheDocument();
+    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
+      session_type: "hr",
+      enable_streaming_stt: true,
+      voice: "nova",
+      use_orchestrator: true,
+      interviewer_index: 2,
+      interviewer_slug: "meera",
+      interviewer_name: "Meera",
+      gender: "female",
+      session_type_label: "HR",
+    }) : null);
+
+    const LiveStartingPage = await importLiveStartingPage();
+    render(<LiveStartingPage />);
+
+    expect(await screen.findByText(/could not create the live interview/i)).toBeInTheDocument();
   });
 });
 
 describe("LiveInterviewSessionPage", () => {
   it("opens websocket from stored setup data", async () => {
-    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_data" ? JSON.stringify({ session_id: "live-session-123", ticket_id: "ticket-1", ws_url: "/live/ws-ticket" }) : key === "live_session_type" ? "HR" : null);
+    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_data" ? JSON.stringify({ session_id: "live-session-123", ticket_id: "ticket-1", ws_url: "/live/ws-ticket" }) : key === "live_session_type" ? "HR" : key === "live_session_interviewer" ? JSON.stringify({ session_id: "live-session-123", interviewer_index: 2, interviewer_name: "Meera", gender: "female", voice: "nova" }) : null);
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     expect(MockWebSocket.instances[0].url).toBe("ws://test.local/live/ws-ticket?ticket=ticket-1");
     act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
     expect(screen.getByText(/connected/i)).toBeInTheDocument();
     expect(screen.getByText("1/6")).toBeInTheDocument();
-  });
+    expect(screen.getByText(/Meera, AI Interviewer/i)).toBeInTheDocument();
+  }, 15_000);
 
   it("reveals question word by word, then enters listening mode", async () => {
     vi.useFakeTimers();
@@ -287,12 +442,137 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByRole("button", { name: /done speaking/i })).toBeInTheDocument();
   });
 
+  it("uses backend lip sync timings to reveal words and select mouth visemes", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRaf = window.requestAnimationFrame;
+    const originalCancelRaf = window.cancelAnimationFrame;
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      value: vi.fn((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: vi.fn() });
+
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+
+    act(() => {
+      MockWebSocket.instances[0].open();
+      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      MockWebSocket.instances[0].emit({
+        type: "question_audio",
+        question_number: 1,
+        text: "Can you describe teamwork?",
+        audio: "AA==",
+        time_limit_s: 60,
+        lip_sync: {
+          schema_version: "1.0",
+          sync_source: "provider_viseme",
+          timebase: "audio_start_ms",
+          words: [
+            { word: "Can", start_ms: 0, end_ms: 120 },
+            { word: "you", start_ms: 240, end_ms: 360 },
+            { word: "describe", start_ms: 500, end_ms: 650 },
+            { word: "teamwork", start_ms: 680, end_ms: 900 },
+          ],
+          visemes: [
+            { viseme_id: "sil", start_ms: 0, end_ms: 100, intensity: 0 },
+            { viseme_id: "AA", start_ms: 100, end_ms: 500, intensity: 1 },
+            { viseme_id: "O", start_ms: 680, end_ms: 900, intensity: 0.8 },
+          ],
+        },
+      });
+    });
+
+    const audio = MockAudio.instances.at(-1)!;
+    audio.currentTime = 0.32;
+    act(() => { rafCallbacks.at(-1)?.(320); });
+
+    expect(screen.getByText(/^Can you\s*$/)).toBeInTheDocument();
+    expect(screen.getByTestId("interviewer-mouth-cue")).toHaveAttribute("data-viseme", "AA");
+
+    audio.currentTime = 0.72;
+    act(() => { rafCallbacks.at(-1)?.(720); });
+
+    expect(screen.getByText("Can you describe teamwork?")).toBeInTheDocument();
+    expect(screen.getByTestId("interviewer-mouth-cue")).toHaveAttribute("data-viseme", "O");
+
+    Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: originalRaf });
+    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: originalCancelRaf });
+  }, 15_000);
+
+  it("maps every Rhubarb A-H/X mouth cue without breaking audio synchronization", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRaf = window.requestAnimationFrame;
+    const originalCancelRaf = window.cancelAnimationFrame;
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      value: vi.fn((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: vi.fn() });
+
+    const rhubarbCues = [
+      ["A", "PP"],
+      ["B", "SS"],
+      ["C", "E"],
+      ["D", "AA"],
+      ["E", "O"],
+      ["F", "U"],
+      ["G", "FF"],
+      ["H", "DD"],
+      ["X", "sil"],
+    ] as const;
+
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+
+    act(() => {
+      MockWebSocket.instances[0].open();
+      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      MockWebSocket.instances[0].emit({
+        type: "question_audio",
+        question_number: 1,
+        text: "Walk me through your recent project.",
+        audio: "AA==",
+        time_limit_s: 60,
+        lip_sync: {
+          schema_version: "1.0",
+          sync_source: "forced_alignment",
+          provider: "rhubarb",
+          timebase: "audio_start_ms",
+          audio_start_offset_ms: 0,
+          visemes: rhubarbCues.map(([visemeId], index) => ({
+            viseme_id: visemeId,
+            provider_viseme_id: visemeId,
+            start_ms: index * 120,
+            end_ms: index * 120 + 120,
+            intensity: 1,
+          })),
+        },
+      });
+    });
+
+    const audio = MockAudio.instances.at(-1)!;
+    rhubarbCues.forEach(([, expectedViseme], index) => {
+      audio.currentTime = (index * 120 + 60) / 1000;
+      act(() => { rafCallbacks.at(-1)?.(index * 120 + 60); });
+      expect(screen.getByTestId("interviewer-mouth-cue")).toHaveAttribute("data-viseme", expectedViseme);
+    });
+
+    Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: originalRaf });
+    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: originalCancelRaf });
+  });
   it("shows transcript updates and sends end_answer", async () => {
     vi.useFakeTimers();
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
-    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); ws.emit({ type: "question_audio", question_number: 1, text: "Tell me about teamwork.", audio: null, time_limit_s: 60 }); vi.advanceTimersByTime(1_600); ws.emit({ type: "partial_transcript", text: "I worked with a cross functional team" }); });
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); ws.emit({ type: "question_audio", question_number: 1, text: "Tell me about teamwork.", audio: null, time_limit_s: 60 }); vi.advanceTimersByTime(1_600); ws.emit({ type: "transcript_partial", text: "I worked with a cross functional team" }); });
     expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /done speaking/i }));
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_answer" }));

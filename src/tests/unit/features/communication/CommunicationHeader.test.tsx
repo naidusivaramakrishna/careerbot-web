@@ -11,18 +11,16 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// Mock VideoRecordingContext
-vi.mock('@/contexts/VideoRecordingContext', () => ({
-  useVideoRecording: () => ({
-    isCameraLost: false,
-    isMicLost: false,
-    restartRecording: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
+const mockRestartRecording = vi.fn().mockResolvedValue(undefined);
+const mockVideoRecordingState = {
+  isCameraLost: false,
+  isMicLost: false,
+  restartRecording: mockRestartRecording,
+};
 
 // Test component
 const CommunicationHeader = () => {
-  const { isCameraLost, isMicLost, restartRecording } = require('@/contexts/VideoRecordingContext').useVideoRecording();
+  const { isCameraLost, isMicLost, restartRecording } = mockVideoRecordingState;
   const router = require('next/navigation').useRouter();
   const [restarting, setRestarting] = React.useState(false);
   const [restartError, setRestartError] = React.useState('');
@@ -191,6 +189,9 @@ const CommunicationHeader = () => {
 describe('CommunicationHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockVideoRecordingState.isCameraLost = false;
+    mockVideoRecordingState.isMicLost = false;
+    mockVideoRecordingState.restartRecording = mockRestartRecording;
     localStorage.clear();
     vi.useFakeTimers();
   });
@@ -331,13 +332,8 @@ describe('CommunicationHeader', () => {
   });
 
   it('shows device lost modal for camera disconnection', () => {
-    vi.doMock('@/contexts/VideoRecordingContext', () => ({
-      useVideoRecording: () => ({
-        isCameraLost: true,
-        isMicLost: false,
-        restartRecording: vi.fn().mockResolvedValue(undefined),
-      }),
-    }));
+    mockVideoRecordingState.isCameraLost = true;
+    mockVideoRecordingState.isMicLost = false;
 
     render(<CommunicationHeader />);
 
@@ -348,13 +344,8 @@ describe('CommunicationHeader', () => {
   });
 
   it('shows device lost modal for microphone disconnection', () => {
-    vi.doMock('@/contexts/VideoRecordingContext', () => ({
-      useVideoRecording: () => ({
-        isCameraLost: false,
-        isMicLost: true,
-        restartRecording: vi.fn().mockResolvedValue(undefined),
-      }),
-    }));
+    mockVideoRecordingState.isCameraLost = false;
+    mockVideoRecordingState.isMicLost = true;
 
     render(<CommunicationHeader />);
 
@@ -365,13 +356,8 @@ describe('CommunicationHeader', () => {
   });
 
   it('shows both devices lost message', () => {
-    vi.doMock('@/contexts/VideoRecordingContext', () => ({
-      useVideoRecording: () => ({
-        isCameraLost: true,
-        isMicLost: true,
-        restartRecording: vi.fn().mockResolvedValue(undefined),
-      }),
-    }));
+    mockVideoRecordingState.isCameraLost = true;
+    mockVideoRecordingState.isMicLost = true;
 
     render(<CommunicationHeader />);
 
@@ -381,13 +367,8 @@ describe('CommunicationHeader', () => {
   });
 
   it('displays re-enable button for device reconnection', () => {
-    vi.doMock('@/contexts/VideoRecordingContext', () => ({
-      useVideoRecording: () => ({
-        isCameraLost: true,
-        isMicLost: false,
-        restartRecording: vi.fn().mockResolvedValue(undefined),
-      }),
-    }));
+    mockVideoRecordingState.isCameraLost = true;
+    mockVideoRecordingState.isMicLost = false;
 
     render(<CommunicationHeader />);
 

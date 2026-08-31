@@ -1,18 +1,18 @@
 "use client";
 
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { FileText, BookOpen, Mic, Code2, Lock, CheckCircle2, ArrowRight } from "lucide-react";
+import { FileText, BookOpen, Mic, Code2, Users, Lock, Check, ArrowRight } from "lucide-react";
 import { useMockInterview, MockStageState } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 
 interface Stage {
   id: string;
   label: string;
-  sublabel: string;
+  shortLabel: string;
   href: string;
   icon: React.ElementType;
   locked: boolean;
   status: "completed" | "in_progress" | "available" | "locked";
+  badge?: string;
 }
 
 function buildStages(state: MockStageState): Stage[] {
@@ -20,7 +20,7 @@ function buildStages(state: MockStageState): Stage[] {
     {
       id: "generate",
       label: "Interview Notes",
-      sublabel: state.notes_generated ? "Completed" : "Generate scripts",
+      shortLabel: "Notes",
       href: "/notes/generate",
       icon: FileText,
       locked: false,
@@ -29,7 +29,7 @@ function buildStages(state: MockStageState): Stage[] {
     {
       id: "english",
       label: "English Essentials",
-      sublabel: state.english_read ? "Reviewed" : "Phrases & tone",
+      shortLabel: "English",
       href: "/notes/english",
       icon: BookOpen,
       locked: false,
@@ -37,13 +37,9 @@ function buildStages(state: MockStageState): Stage[] {
     },
     {
       id: "practice",
-      label: "Practice Mode",
-      sublabel: !state.notes_generated
-        ? "Locked"
-        : state.practice_answered > 0
-        ? `${state.practice_answered}/${state.practice_total} done`
-        : "Mock Q&A",
-      href: "/notes/practice",
+      label: "Managerial Practice",
+      shortLabel: "Managerial",
+      href: "/notes/managerial",
       icon: Mic,
       locked: !state.notes_generated,
       status: !state.notes_generated
@@ -53,13 +49,26 @@ function buildStages(state: MockStageState): Stage[] {
         : state.practice_answered > 0
         ? "in_progress"
         : "available",
+      badge:
+        state.notes_generated && state.practice_answered > 0
+          ? `${state.practice_answered}/${state.practice_total}`
+          : undefined,
     },
     {
       id: "technical",
       label: "Technical Practice",
-      sublabel: !state.notes_generated ? "Locked" : "Topic-based Q&A",
+      shortLabel: "Technical",
       href: "/notes/technical",
       icon: Code2,
+      locked: !state.notes_generated,
+      status: !state.notes_generated ? "locked" : "available",
+    },
+    {
+      id: "hr",
+      label: "HR Practice",
+      shortLabel: "HR",
+      href: "/notes/hr",
+      icon: Users,
       locked: !state.notes_generated,
       status: !state.notes_generated ? "locked" : "available",
     },
@@ -68,157 +77,147 @@ function buildStages(state: MockStageState): Stage[] {
 
 export default function NotesSidebar() {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
   const { stageState } = useMockInterview();
-  const stages   = buildStages(stageState);
+  const stages = buildStages(stageState);
   const completedCount = stages.filter((s) => s.status === "completed").length;
-  const progressPct    = (completedCount / stages.length) * 100;
+  const progressPct = (completedCount / stages.length) * 100;
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-[0_1px_6px_rgba(0,0,0,0.05)]">
-
-      {/* 3-px progress band */}
-      <div className="h-[3px] bg-gray-100">
+    <div className="sticky top-14 z-20 bg-white border-b border-gray-200"
+      style={{ boxShadow: "0 1px 0 0 #e5e7eb, 0 2px 8px rgba(0,0,0,0.04)" }}
+    >
+      {/* Progress bar */}
+      <div className="h-[2px] bg-gray-100">
         <div
           className="h-full rounded-r-full transition-all duration-700 ease-out"
-          style={{ width: `${progressPct}%`, background: "linear-gradient(90deg,#2557a7,#5b8fd6)" }}
+          style={{
+            width: `${progressPct}%`,
+            background: "linear-gradient(90deg, #2557a7 0%, #5b8fd6 100%)",
+          }}
         />
       </div>
 
-      <div className="flex items-center gap-4 px-5 py-2">
+      <div className="flex items-center justify-between px-3 py-1.5 gap-2">
 
-        {/* Brand */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-7 h-7 rounded-lg overflow-hidden ring-1 ring-gray-100 shadow-sm">
-            <Image src="/assets/icons/Logo.png" alt="CareerBot" width={28} height={28} className="w-full h-full object-contain" />
-          </div>
-          <div className="hidden sm:block leading-none">
-            <p className="text-[11px] font-black text-gray-900 tracking-tight">Interview Prep</p>
-            <p className="text-[8px] font-semibold text-gray-400 tracking-widest uppercase mt-0.5">Notes &amp; Practice</p>
-          </div>
+        {/* Left: context label */}
+        <div className="hidden lg:flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+            Interview Prep
+          </span>
         </div>
 
-        <div className="w-px h-6 bg-gray-100 shrink-0 hidden sm:block" />
+        <div className="hidden lg:block w-px h-4 bg-gray-150 shrink-0" />
 
-        {/* ── Stepper ──
-            Each step gets a fixed-width column (w-[80px]), centered.
-            Connector lines sit between columns with mt-[13px] = half of 28px circle,
-            which pins the line exactly to the circle's vertical midpoint.
-        */}
-        <div className="flex-1 flex items-start justify-center">
+        {/* Steps */}
+        <div className="flex-1 min-w-0 flex items-center justify-center gap-0">
           {stages.flatMap((stage, i) => {
-            const isActive     = pathname === stage.href || pathname.startsWith(stage.href + "/");
-            const isCompleted  = stage.status === "completed";
+            const isActive =
+              pathname === stage.href || pathname.startsWith(stage.href + "/");
+            const isCompleted = stage.status === "completed";
             const isInProgress = stage.status === "in_progress";
+            const isLocked = stage.locked;
             const Icon = stage.icon;
 
-            const sublabel = isCompleted && !isActive ? "✓ done" : stage.sublabel;
-
-            const stepEl = (
+            const pill = (
               <button
                 key={stage.id}
-                onClick={() => { if (!stage.locked) router.push(stage.href); }}
-                disabled={stage.locked}
-                className="flex flex-col items-center gap-1 group disabled:cursor-not-allowed"
-                style={{ width: 80 }}
+                onClick={() => !isLocked && router.push(stage.href)}
+                disabled={isLocked}
+                title={isLocked ? `Complete Interview Notes first` : stage.label}
+                className={[
+                  "relative flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all duration-200 select-none whitespace-nowrap",
+                  isActive
+                    ? "text-white shadow-sm"
+                    : isCompleted
+                    ? "text-[#2557a7] hover:bg-[#2557a7]/10"
+                    : isLocked
+                    ? "text-gray-300 cursor-not-allowed"
+                    : "text-gray-600 hover:text-[#2557a7] hover:bg-[#2557a7]/5",
+                ].join(" ")}
+                style={
+                  isActive
+                    ? { background: "#2557a7", boxShadow: "0 2px 8px rgba(37,87,167,0.28)" }
+                    : isCompleted
+                    ? { background: "rgba(37,87,167,0.07)" }
+                    : {}
+                }
               >
-                {/* Circle */}
-                <div
-                  className={[
-                    "relative w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
-                    isActive
-                      ? "bg-[#2557a7] shadow-md shadow-[#2557a7]/25 ring-[3px] ring-[#2557a7]/15"
-                      : isCompleted
-                      ? "bg-[#2557a7]"
-                      : stage.locked
-                      ? "bg-gray-50 border-2 border-gray-200"
-                      : "bg-white border-2 border-gray-300 group-hover:border-[#2557a7] group-hover:shadow-sm",
-                  ].join(" ")}
-                >
-                  {isInProgress && !isActive && (
-                    <span className="absolute -top-px -right-px w-2 h-2 bg-[#2557a7] rounded-full border border-white animate-pulse" />
-                  )}
-                  {isCompleted && !isActive ? (
-                    <CheckCircle2 size={13} className="text-white" />
-                  ) : stage.locked ? (
-                    <Lock size={10} className="text-gray-300" />
-                  ) : isActive ? (
-                    <Icon size={13} className="text-white" />
-                  ) : (
-                    <span className="text-[10px] font-bold text-gray-500 group-hover:text-[#2557a7]">
-                      {i + 1}
-                    </span>
-                  )}
-                </div>
+                {/* In-progress pulse dot */}
+                {isInProgress && !isActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white animate-pulse"
+                    style={{ background: "#2557a7" }}
+                  />
+                )}
 
-                {/* Labels — hidden on small screens */}
-                <div className="hidden md:flex flex-col items-center text-center w-full">
-                  <p
-                    className="text-[8.5px] font-bold leading-tight w-full truncate"
-                    style={{
-                      color: isActive
-                        ? "#2557a7"
-                        : isCompleted
-                        ? "#6b7280"
-                        : stage.locked
-                        ? "#d1d5db"
-                        : "#374151",
-                    }}
-                  >
-                    {stage.label}
-                  </p>
-                  <p
-                    className="text-[7.5px] font-medium mt-px w-full truncate"
-                    style={{
-                      color: isActive
-                        ? "rgba(37,87,167,0.6)"
-                        : isCompleted
-                        ? "#10b981"
-                        : stage.locked
-                        ? "#e5e7eb"
-                        : "#9ca3af",
-                    }}
-                  >
-                    {sublabel}
-                  </p>
-                </div>
+                {/* Icon */}
+                <span className="shrink-0">
+                  {isCompleted && !isActive ? (
+                    <Check size={11} strokeWidth={2.5} />
+                  ) : isLocked ? (
+                    <Lock size={11} strokeWidth={2} />
+                  ) : (
+                    <Icon size={11} strokeWidth={2} />
+                  )}
+                </span>
+
+                {/* Label — full on md+, short on sm */}
+                <span className="hidden sm:inline">{stage.label}</span>
+                <span className="sm:hidden">{stage.shortLabel}</span>
+
+                {/* Badge (e.g. "3/6") */}
+                {stage.badge && !isActive && (
+                  <span className={[
+                    "ml-0.5 px-1.5 py-px rounded-full text-[9px] font-bold leading-none",
+                    isCompleted
+                      ? "bg-[#2557a7]/15 text-[#2557a7]"
+                      : "bg-gray-100 text-gray-500",
+                  ].join(" ")}>
+                    {stage.badge}
+                  </span>
+                )}
               </button>
             );
 
             if (i < stages.length - 1) {
-              const connEl = (
+              const prevDone = stage.status === "completed";
+              const connector = (
                 <div
                   key={`conn-${i}`}
-                  /* mt-[13px] = half the 28px circle height, aligns line to circle center */
-                  className="mt-[13px] shrink-0 h-px rounded-full transition-colors duration-500"
+                  className="shrink-0 mx-0.5"
                   style={{
-                    width: 40,
-                    background: isCompleted ? "#2557a7" : "#e5e7eb",
+                    width: 12,
+                    height: 1,
+                    borderRadius: 1,
+                    background: prevDone ? "#2557a7" : "#e5e7eb",
+                    opacity: prevDone ? 0.6 : 1,
+                    transition: "background 0.4s",
                   }}
                 />
               );
-              return [stepEl, connEl];
+              return [pill, connector];
             }
-            return [stepEl];
+            return [pill];
           })}
         </div>
 
-        <div className="w-px h-6 bg-gray-100 shrink-0 hidden sm:block" />
+        <div className="hidden lg:block w-px h-4 bg-gray-150 shrink-0" />
 
-        {/* CTA */}
+        {/* Right: Live Interview CTA */}
         <button
           onClick={() => router.push("/mock-interview/live")}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white transition-all active:scale-[0.97] hover:opacity-90"
+          className="shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.97]"
           style={{
-            background: "linear-gradient(135deg,#2557a7 0%,#1e40af 100%)",
-            boxShadow: "0 2px 8px rgba(37,87,167,0.3)",
+            background: "linear-gradient(135deg, #2557a7 0%, #1e40af 100%)",
+            boxShadow: "0 2px 10px rgba(37,87,167,0.3)",
           }}
         >
           <span className="hidden sm:inline">Live Interview</span>
           <span className="sm:hidden">Live</span>
-          <ArrowRight size={11} />
+          <ArrowRight size={12} strokeWidth={2.5} />
         </button>
+
       </div>
-    </header>
+    </div>
   );
 }

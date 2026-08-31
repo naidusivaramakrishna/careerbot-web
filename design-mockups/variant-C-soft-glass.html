@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Builder v2 — Variant C · Soft Glass</title>
+<meta name="viewport" content="width=1440" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Montserrat', 'system-ui', 'sans-serif'] },
+        colors: {
+          brand:   { 50:'#f3f7fc',100:'#e3ecf7',200:'#c1d3ec',300:'#93b3dc',400:'#5896d7',500:'#2557a7',600:'#1f4e98',700:'#1a4180',800:'#163566',900:'#11294f' },
+          accent:  { 400:'#5aa3ec',500:'#0275dd',600:'#0261b8' },
+          surface: { DEFAULT:'#ffffff', muted:'#faf9f8', sunken:'#f3f2f1' },
+          ink:     { 400:'#9ca3af',500:'#6b7280',600:'#595959',700:'#3b3b3b',800:'#2d2d2d',900:'#1a1a1a' },
+          line:    { soft:'#f1f1f1', DEFAULT:'#e5e5e5', strong:'#d1d5db' },
+        },
+        boxShadow: {
+          soft:    '0 1px 2px rgba(37,87,167,.04), 0 8px 24px -8px rgba(37,87,167,.12)',
+          softer:  '0 2px 4px rgba(37,87,167,.05), 0 14px 40px -12px rgba(37,87,167,.20)',
+          paper:   '0 12px 40px -10px rgba(37,87,167,.18), 0 0 0 1px rgba(37,87,167,.04)',
+          glowBrand: '0 8px 24px -6px rgba(37,87,167,.45)',
+        },
+        borderRadius: { '4xl': '28px' },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { font-family:'Montserrat', system-ui, sans-serif; }
+  body {
+    background:
+      radial-gradient(80% 60% at 0% 0%, rgba(195,213,236,.55), transparent 60%),
+      radial-gradient(70% 60% at 100% 100%, rgba(218,231,247,.50), transparent 55%),
+      linear-gradient(180deg, #f7faff 0%, #fdfdfb 60%, #fff 100%);
+    min-height: 100vh;
+  }
+  .scrollbar-hide::-webkit-scrollbar{ display:none; } .scrollbar-hide{ scrollbar-width:none; }
+  @keyframes pulseDot { 0%,100%{ transform:scale(1);opacity:1 } 50%{ transform:scale(1.4);opacity:.55 } }
+  .animate-pulseDot { animation: pulseDot 1.8s ease-in-out infinite; }
+  .glass {
+    background: rgba(255,255,255,0.70);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.70);
+  }
+  .glass-strong {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.80);
+  }
+  .deco-blob1 { position:absolute; inset:0; pointer-events:none; }
+  .deco-blob1::before {
+    content:''; position:absolute; top:-160px; right:-120px; width:520px; height:520px; border-radius:50%;
+    background: radial-gradient(circle, rgba(88,150,215,.30), rgba(37,87,167,.05) 70%, transparent 75%);
+    filter: blur(10px);
+  }
+  .deco-blob1::after {
+    content:''; position:absolute; bottom:-200px; left:-160px; width:560px; height:560px; border-radius:50%;
+    background: radial-gradient(circle, rgba(195,213,236,.55), rgba(2,117,221,.06) 70%, transparent 75%);
+    filter: blur(10px);
+  }
+</style>
+</head>
+<body class="text-ink-800">
+
+<div class="relative flex h-[900px] w-[1440px] flex-col overflow-hidden">
+  <div class="deco-blob1"></div>
+
+  <!-- APP BAR (glass) -->
+  <header class="sticky top-0 z-30 glass-strong border-b border-white/60">
+    <div class="flex h-14 items-center gap-2 px-5">
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-600 hover:bg-white/70 hover:text-brand-600 transition-colors">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div class="h-6 w-px bg-brand-200/60"></div>
+      <div class="flex items-center gap-1.5">
+        <div class="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 text-white shadow-glowBrand">
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        </div>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-brand-700">Builder</span>
+      </div>
+      <button class="ml-1 inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-[15px] font-bold text-ink-900 hover:bg-white/70">Priya Sharma — Senior SDE</button>
+
+      <div class="mx-3 h-6 w-px bg-brand-200/60"></div>
+      <div class="inline-flex items-center gap-2 rounded-full bg-white/60 px-2.5 py-1 text-[12px] font-semibold text-ink-700 ring-1 ring-white/80">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulseDot"></span>
+        Saved 12s ago
+      </div>
+
+      <div class="flex-1"></div>
+
+      <!-- Score chip — gradient -->
+      <button class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 px-3.5 py-1.5 text-[12px] font-bold text-white shadow-[0_6px_20px_-6px_rgba(16,185,129,.55)] hover:scale-[1.03] transition-all">
+        <span class="h-2 w-2 rounded-full bg-white"></span>
+        ATS 82
+        <span class="text-[10px] font-bold opacity-90">▲ 4</span>
+      </button>
+
+      <div class="mx-1 h-6 w-px bg-brand-200/60"></div>
+
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-600 hover:bg-white/70 hover:text-brand-600"><svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-300 cursor-not-allowed"><svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg></button>
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-600 hover:bg-white/70 hover:text-brand-600"><svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM15 3v18"/></svg></button>
+
+      <button class="ml-1 inline-flex h-10 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-brand-500 via-brand-600 to-accent-600 px-4 text-[13px] font-bold text-white shadow-glowBrand hover:scale-[1.02] transition-all">
+        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 opacity-80" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-600 hover:bg-white/70 hover:text-brand-600"><svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg></button>
+    </div>
+  </header>
+
+  <div class="flex flex-1 overflow-hidden p-4 gap-4">
+
+    <!-- SECTION RAIL (floating glass card) -->
+    <aside class="flex w-[244px] shrink-0 flex-col rounded-3xl glass shadow-softer overflow-hidden">
+      <div class="px-4 pb-2 pt-4">
+        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-600">Sections</p>
+      </div>
+      <nav class="min-h-0 flex-1 overflow-y-auto scrollbar-hide px-2 pb-3">
+        <ul class="flex flex-col gap-1">
+          <li>
+            <button class="group relative flex w-full items-center gap-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-500 px-3 py-2.5 text-left text-[13px] font-bold text-white shadow-glowBrand">
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-white ring-4 ring-white/30"></span>
+              <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z"/></svg>
+              <span class="flex-1 truncate">Personal Info</span>
+              <span class="text-[11px] font-bold tabular-nums">95%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg>
+              <span class="flex-1 truncate">Professional Summary</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">80%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              <span class="flex-1 truncate">Work Experience</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">70%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-amber-400 ring-4 ring-amber-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span class="flex-1 truncate">Projects</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">40%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              <span class="flex-1 truncate">Education</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">60%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-red-400 ring-4 ring-red-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+              <span class="flex-1 truncate">Skills</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">30%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-line-strong ring-4 ring-line-soft"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M9 13.5L7 22l5-3 5 3-2-8.5"/></svg>
+              <span class="flex-1 truncate">Certifications</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">0%</span>
+            </button>
+          </li>
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink-700 hover:bg-white/60">
+              <span class="h-2.5 w-2.5 rounded-full bg-line-strong ring-4 ring-line-soft"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1"/></svg>
+              <span class="flex-1 truncate">Internships</span>
+              <span class="text-[11px] font-bold tabular-nums text-ink-400">0%</span>
+            </button>
+          </li>
+          <li class="mt-2 px-1">
+            <button class="group flex w-full items-center gap-2 rounded-2xl border border-dashed border-brand-300/70 bg-white/40 px-3 py-2.5 text-[12px] font-bold text-brand-600 hover:bg-white/70">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              Add section
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="m-3 mt-2 rounded-2xl bg-gradient-to-br from-brand-500 to-accent-600 p-4 text-white shadow-glowBrand">
+        <div class="mb-1.5 flex items-center justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider opacity-90">Profile complete</span>
+          <span class="text-[13px] font-black tabular-nums">62%</span>
+        </div>
+        <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/25">
+          <div class="h-full rounded-full bg-white" style="width:62%"></div>
+        </div>
+        <p class="mt-2 text-[10px] opacity-90">ATS score <span class="font-bold">82</span> · updates on save</p>
+      </div>
+    </aside>
+
+    <!-- EDITOR CANVAS (floating glass card) -->
+    <section class="flex flex-1 min-w-0 flex-col overflow-hidden rounded-3xl glass-strong shadow-softer">
+      <header class="border-b border-white/60 px-6 py-3.5">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-glowBrand">
+            <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-600">Section 1 of 8</p>
+            <h1 class="text-[17px] font-black text-ink-900">Personal Info</h1>
+          </div>
+          <div class="relative h-10 w-10 shrink-0">
+            <svg viewBox="0 0 36 36" class="h-full w-full -rotate-90">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#e3ecf7" stroke-width="3.5"/>
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#10b981" stroke-width="3.5" stroke-dasharray="88" stroke-dashoffset="4.4" stroke-linecap="round"/>
+            </svg>
+            <span class="absolute inset-0 flex items-center justify-center text-[10px] font-black tabular-nums text-ink-800">95%</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-y-auto scrollbar-hide">
+        <div class="mx-auto h-full w-full max-w-[720px] px-6 py-6">
+
+          <div class="mb-6 flex items-start gap-3 rounded-3xl bg-gradient-to-br from-brand-50 via-white to-accent-50 p-4 ring-1 ring-brand-100 shadow-soft">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-glowBrand">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L9 9H2l5.5 5L5 22l7-5 7 5-2.5-8L22 9h-7z"/></svg>
+            </div>
+            <div class="flex-1">
+              <p class="text-[13px] font-bold text-brand-800">Your contact info is what recruiters see first</p>
+              <p class="mt-0.5 text-[12px] text-ink-600">Keep email and phone visible. Adding a portfolio URL boosts ATS score by 4 points on average.</p>
+            </div>
+            <button class="text-ink-400 hover:text-ink-600">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="mb-4">
+            <label class="mb-1.5 flex items-center justify-between">
+              <span class="text-[12px] font-bold text-ink-700">Full name</span>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Looks great</span>
+            </label>
+            <input value="Priya Sharma" class="block h-12 w-full rounded-2xl border border-white bg-white/80 px-4 text-[14px] font-semibold text-ink-900 outline-none ring-1 ring-brand-100 hover:ring-brand-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-200" />
+          </div>
+
+          <div class="mb-4 grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1.5 block text-[12px] font-bold text-ink-700">Email</label>
+              <input value="priya.sharma@gmail.com" class="block h-12 w-full rounded-2xl border border-white bg-white/80 px-4 text-[14px] text-ink-900 outline-none ring-1 ring-brand-100 focus:ring-2 focus:ring-brand-200" />
+            </div>
+            <div>
+              <label class="mb-1.5 block text-[12px] font-bold text-ink-700">Phone</label>
+              <div class="flex h-12 w-full overflow-hidden rounded-2xl border border-white bg-white/80 ring-1 ring-brand-100">
+                <div class="flex items-center gap-1 border-r border-brand-100 bg-brand-50/60 px-3 text-[13px] font-bold text-brand-700">🇮🇳 +91</div>
+                <input value="98765 43210" class="block flex-1 px-3 text-[14px] text-ink-900 outline-none bg-transparent" />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="mb-1.5 block text-[12px] font-bold text-ink-700">Location</label>
+            <input value="Bengaluru, IN" class="block h-12 w-full rounded-2xl border border-white bg-white/80 px-4 text-[14px] text-ink-900 outline-none ring-1 ring-brand-100 focus:ring-2 focus:ring-brand-200" />
+          </div>
+
+          <div class="mb-4">
+            <label class="mb-1.5 flex items-center justify-between">
+              <span class="text-[12px] font-bold text-ink-700">Headline</span>
+              <button class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500 to-accent-500 px-2.5 py-1 text-[11px] font-bold text-white shadow-glowBrand">
+                <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                AI suggest
+              </button>
+            </label>
+            <input value="Senior Software Engineer · TypeScript · Distributed Systems" class="block h-12 w-full rounded-2xl border border-white bg-white/80 px-4 text-[14px] text-ink-900 outline-none ring-1 ring-brand-100 focus:ring-2 focus:ring-brand-200" />
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="mb-1.5 flex items-center gap-1 text-[12px] font-bold text-ink-700"><span class="h-2 w-2 rounded-sm bg-gradient-to-br from-brand-500 to-accent-500"></span>LinkedIn</label>
+              <input value="linkedin.com/in/priyasharma" class="block h-11 w-full rounded-2xl border border-white bg-white/80 px-3 text-[12px] text-ink-700 outline-none ring-1 ring-brand-100 focus:ring-2 focus:ring-brand-200" />
+            </div>
+            <div>
+              <label class="mb-1.5 flex items-center gap-1 text-[12px] font-bold text-ink-700"><span class="h-2 w-2 rounded-sm bg-ink-800"></span>GitHub</label>
+              <input value="github.com/priyasharma" class="block h-11 w-full rounded-2xl border border-white bg-white/80 px-3 text-[12px] text-ink-700 outline-none ring-1 ring-brand-100 focus:ring-2 focus:ring-brand-200" />
+            </div>
+            <div>
+              <label class="mb-1.5 flex items-center gap-1 text-[12px] font-bold text-ink-700"><span class="h-2 w-2 rounded-sm bg-accent-500"></span>Portfolio</label>
+              <input value="priya.dev" class="block h-11 w-full rounded-2xl border border-white bg-white/80 px-3 text-[12px] text-ink-700 outline-none ring-1 ring-brand-100 focus:ring-2 focus:ring-brand-200" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="border-t border-white/60 px-6 py-3 glass">
+        <div class="mx-auto flex max-w-[720px] items-center justify-between">
+          <button class="inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-[12px] font-bold text-ink-300 cursor-not-allowed">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+            <span class="flex flex-col items-start text-left">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-ink-400">Previous</span>
+              <span class="-mt-0.5">—</span>
+            </span>
+          </button>
+          <p class="text-[11px] font-semibold text-brand-600">Changes save automatically</p>
+          <button class="inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-600 px-4 py-2 text-[12px] font-bold text-white shadow-glowBrand hover:scale-[1.02]">
+            <span class="flex flex-col items-end text-right">
+              <span class="text-[10px] font-bold uppercase tracking-wider opacity-80">Next</span>
+              <span class="-mt-0.5">Professional Summary</span>
+            </span>
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </footer>
+    </section>
+
+    <!-- PREVIEW SHELL (floating glass card) -->
+    <section class="flex w-[520px] shrink-0 flex-col overflow-hidden rounded-3xl glass shadow-softer">
+      <div class="flex h-12 items-center justify-between border-b border-white/60 px-4">
+        <div class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulseDot"></span>
+          Live preview
+        </div>
+        <div class="inline-flex items-center gap-1 rounded-2xl bg-white/70 p-0.5 ring-1 ring-white/80 shadow-soft">
+          <button class="inline-flex h-7 w-7 items-center justify-center rounded-xl text-ink-600 hover:bg-white"><svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+          <span class="min-w-[44px] text-center text-[11px] font-bold tabular-nums text-ink-700">100%</span>
+          <button class="inline-flex h-7 w-7 items-center justify-center rounded-xl text-ink-600 hover:bg-white"><svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+          <span class="mx-0.5 h-4 w-px bg-brand-100"></span>
+          <button class="inline-flex h-7 w-7 items-center justify-center rounded-xl text-ink-600 hover:bg-white"><svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
+        </div>
+        <button class="inline-flex h-8 items-center gap-1.5 rounded-2xl bg-white/70 px-3 text-[12px] font-bold text-brand-700 ring-1 ring-white/80 hover:bg-white">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M14 10l7-7M9 21H3v-6M10 14l-7 7"/></svg>
+          Templates
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto scrollbar-hide p-6">
+        <div class="mx-auto w-full max-w-[420px] rounded-2xl bg-white shadow-paper">
+          <div class="p-7">
+            <h2 class="text-[20px] font-black text-ink-900">Priya Sharma</h2>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-brand-600">Senior Software Engineer</p>
+            <p class="mt-1 text-[10px] text-ink-500">priya.sharma@gmail.com · +91 98765 43210 · Bengaluru, IN</p>
+            <p class="text-[10px] text-ink-500">linkedin.com/in/priyasharma · github.com/priyasharma · priya.dev</p>
+
+            <div class="mt-4 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Summary</h3>
+              <p class="mt-1 text-[10px] leading-relaxed text-ink-700">Senior full-stack engineer with 6+ years building distributed payment systems at Razorpay and Flipkart. Specialise in TypeScript, Go, and event-driven architecture.</p>
+            </div>
+
+            <div class="mt-3 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Experience</h3>
+              <div class="mt-1.5">
+                <div class="flex items-baseline justify-between">
+                  <p class="text-[11px] font-bold text-ink-900">Senior SDE · Razorpay</p>
+                  <p class="text-[9px] text-ink-500">2022 — Now</p>
+                </div>
+                <ul class="ml-3 mt-1 space-y-0.5 text-[10px] text-ink-700">
+                  <li>• Led migration of checkout from monolith to 4 services; cut p99 latency 38%.</li>
+                  <li>• Designed idempotency layer handling 8k TPS, $40M daily.</li>
+                </ul>
+              </div>
+              <div class="mt-2">
+                <div class="flex items-baseline justify-between">
+                  <p class="text-[11px] font-bold text-ink-900">SDE II · Flipkart</p>
+                  <p class="text-[9px] text-ink-500">2019 — 2022</p>
+                </div>
+                <ul class="ml-3 mt-1 space-y-0.5 text-[10px] text-ink-700">
+                  <li>• Built fraud detection ML pipeline; reduced false-positives 22%.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-3 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Skills</h3>
+              <p class="mt-1 text-[10px] text-ink-700">TypeScript · Go · React · Next.js · PostgreSQL · Kafka · AWS · Docker</p>
+            </div>
+
+            <div class="mt-3 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Education</h3>
+              <div class="mt-1 flex items-baseline justify-between">
+                <p class="text-[11px] font-bold text-ink-900">B.Tech, Computer Science · IIT Bombay</p>
+                <p class="text-[9px] text-ink-500">2015 — 2019</p>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-brand-100 px-7 py-2 text-right text-[9px] text-ink-400">Page 1 of 2</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+</body>
+</html>

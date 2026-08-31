@@ -277,7 +277,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
               </div>
               {data.categorizedSkills ? (
                 <div className="space-y-1" style={baseTextStyle}>
-                  {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+                  {(["programming_languages","frameworks","soft_skills","project_management","marketing_sales"] as const).map((key) => {
                     const categorySkills = data.categorizedSkills![key];
                     if (!categorySkills || categorySkills.length === 0) return null;
                     const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -354,10 +354,10 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      {cert.issuer && <span style={baseTextStyle}> - {cert.issuer}</span>}
+                      {(cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      {cert.issueDate && <span>Issued: {cert.issueDate}</span>}
+                      {(cert.year || cert.issueDate) && <span>Issued: {cert.year || cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}

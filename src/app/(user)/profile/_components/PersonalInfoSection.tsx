@@ -74,6 +74,11 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
             await updateProfile(mapFrontendToBackend(tempProfile));
             setProfile(tempProfile);
             setProfileData((prev) => ({ ...prev, personalInformation: tempProfile.personalInformation }));
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('profileUpdated', {
+                    detail: { full_name: tempProfile.personalInformation?.fullName || '' },
+                }));
+            }
             toast.success('Profile updated successfully!');
             setTimeout(() => { refreshDashboard(); }, 300);
         } catch (err: unknown) {

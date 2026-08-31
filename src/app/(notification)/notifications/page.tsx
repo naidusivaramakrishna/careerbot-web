@@ -5,6 +5,8 @@ import {
   AlertCircle,
   ArrowUpRight,
   CheckCheck,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   Inbox,
   Loader2,
@@ -113,6 +115,19 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: "system", label: "System" },
 ];
 
+// Backend category field → filter tab (primary signal)
+const CATEGORY_TO_FILTER: Record<string, FilterTab> = {
+  credit: "credit",
+  profile: "profile",
+  resume: "resume",
+  job: "job",
+  interview: "interview",
+  interview_prep: "interview",
+  assessment: "interview",
+  system: "system",
+};
+
+// Notification type field → filter tab (secondary signal)
 const TYPE_TO_FILTER: Record<string, FilterTab> = {
   job: "job",
   jobmatch: "job",
@@ -127,6 +142,7 @@ const TYPE_TO_FILTER: Record<string, FilterTab> = {
   enhancer: "resume",
   resume_parse: "resume",
   resume_enhance: "resume",
+  resume_parsed: "resume",
   resume_created: "resume",
   resume_updated: "resume",
   resume_builder: "resume",
@@ -135,37 +151,51 @@ const TYPE_TO_FILTER: Record<string, FilterTab> = {
   pricing: "credit",
   payment: "credit",
   interview: "interview",
+  mock_interview_live_started: "interview",
+  session_abandoned: "interview",
   communication: "interview",
   "mock-test": "interview",
   prep: "interview",
+  assessment_started: "interview",
+  english_assessment_started: "interview",
   ats: "system",
   atslogin: "system",
   scheduler: "system",
   system: "system",
+  info: "system",
 };
 
-const resolveFilterCategory = (notification: Pick<NotificationItem, "type" | "title" | "body" | "action_url"> | string | undefined): FilterTab => {
+const resolveFilterCategory = (notification: Pick<NotificationItem, "type" | "title" | "body" | "action_url" | "category"> | string | undefined): FilterTab => {
   if (typeof notification === "string" || notification === undefined) {
     return TYPE_TO_FILTER[(notification ?? "").toLowerCase()] ?? "system";
   }
 
-  const text = [notification.type, notification.title, notification.body, notification.action_url]
+  // Use backend category as the primary signal — it is the authoritative source
+  if (notification.category) {
+    const fromCategory = CATEGORY_TO_FILTER[notification.category.toLowerCase()];
+    if (fromCategory) return fromCategory;
+  }
+
+  // Fall back to type lookup, then keyword matching
+  const fromType = TYPE_TO_FILTER[(notification.type ?? "").toLowerCase()];
+  if (fromType) return fromType;
+
+  const text = [notification.title, notification.body, notification.action_url]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
-  const hasAny = (keywords: string[]) => keywords.some((keyword) => text.includes(keyword));
+  const hasAny = (keywords: string[]) => keywords.some((kw) => text.includes(kw));
 
   if (hasAny(["credit", "pricing", "payment", "subscription", "plan", "balance"])) return "credit";
-  if (hasAny(["/profile", "profile", "user profile", "complete your profile", "completeness", "personal detail", "personal info", "personal information", "avatar"])) return "profile";
+  if (hasAny(["/profile", "profile", "complete your profile", "personal info", "personal information", "avatar"])) return "profile";
   if (hasAny(["resume", "parser", "parsed", "parse", "enhance", "enhanced", "builder", " cv"])) return "resume";
-  if (hasAny(["interview", "communication", "assessment", "english", "mock-test", "mock test", "prep", "score"])) return "interview";
+  if (hasAny(["interview", "communication", "assessment", "english", "mock-test", "mock test", "prep"])) return "interview";
   if (hasAny(["job", "jobmatch", "match", "application", "tracker", "apply"])) return "job";
-  if (hasAny(["ats", "scan", "scheduler", "system", "security", "verification", "verified"])) return "system";
 
-  return TYPE_TO_FILTER[(notification.type ?? "").toLowerCase()] ?? "system";
+  return "system";
 };
 
-const getNotifMeta = (notification: Pick<NotificationItem, "type" | "title" | "body" | "action_url"> | string | undefined): NotifMeta =>
+const getNotifMeta = (notification: Pick<NotificationItem, "type" | "title" | "body" | "action_url" | "category"> | string | undefined): NotifMeta =>
   NOTIF_META[resolveFilterCategory(notification) as Exclude<FilterTab, "all" | "unread">] ?? NOTIF_META.system;
 
 const getDateKey = (timestamp: string): string => {
@@ -192,12 +222,9 @@ const isToday = (timestamp: string): boolean => new Date(timestamp).toDateString
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { notifications, unreadCount, loading, error, refetch } = useNotificationsList(1, 50);
+  const { notifications, totalCount, readCount, unreadCount, pagination, currentPage, loading, error, refetch, goToPage, nextPage, prevPage } = useNotificationsList(1, 50);
   const [activeTab, setActiveTab] = React.useState<FilterTab>("all");
   const [query, setQuery] = React.useState("");
-
-  const totalCount = notifications.length;
-  const readCount = Math.max(0, totalCount - unreadCount);
 
   const categoryCounts = useMemo(() => {
     return notifications.reduce<Record<FilterTab, number>>(
@@ -246,6 +273,21 @@ export default function NotificationsPage() {
     ],
     [totalCount, unreadCount, readCount, notifications]
   );
+
+  const visiblePageNumbers = useMemo(() => {
+    const totalPages = pagination.total_pages;
+    if (totalPages <= 1) return [];
+
+    const maxButtons = 5;
+    let start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, start + maxButtons - 1);
+    start = Math.max(1, end - maxButtons + 1);
+
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [pagination.total_pages, currentPage]);
+
+  const paginationStart = notifications.length > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0;
+  const paginationEnd = notifications.length > 0 ? paginationStart + notifications.length - 1 : 0;
 
   const handleMarkAsRead = async (id: string) => {
     try {
@@ -523,6 +565,60 @@ export default function NotificationsPage() {
                 </div>
               );
             })}
+          </section>
+        )}
+
+        {pagination.total_pages > 1 && (
+          <section className="rounded-3xl border border-gray-200 bg-white px-4 py-3 shadow-sm md:px-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs font-semibold text-gray-500">
+                Showing{" "}
+                <span className="font-black text-gray-900">
+                  {paginationStart}-{paginationEnd}
+                </span>{" "}
+                on page <span className="font-black text-gray-900">{pagination.page}</span>
+                <span className="mx-1 text-gray-300">/</span>
+                <span className="font-black text-gray-900">{pagination.total_pages}</span>
+              </p>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={prevPage}
+                  disabled={!pagination.has_prev}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 transition hover:border-[#2557a7]/30 hover:bg-[#2557a7]/5 hover:text-[#2557a7] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft size={14} />
+                  Prev
+                </button>
+
+                {visiblePageNumbers.map((page) => {
+                  const isActive = page === currentPage;
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      disabled={isActive}
+                      className={`flex h-9 min-w-9 items-center justify-center rounded-xl border px-3 text-xs font-black transition ${
+                        isActive
+                          ? "border-transparent bg-[#2557a7] text-white shadow-sm"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-[#2557a7]/30 hover:bg-[#2557a7]/5 hover:text-[#2557a7]"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={nextPage}
+                  disabled={!pagination.has_next}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 transition hover:border-[#2557a7]/30 hover:bg-[#2557a7]/5 hover:text-[#2557a7] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
           </section>
         )}
       </div>

@@ -2,10 +2,10 @@ import { IconType } from "react-icons";
 import {
   FaUserCircle, FaFileAlt, FaUserGraduate, FaBriefcase,
   FaFolderOpen, FaStar, FaAward, FaMedal, FaUsers,
-  FaBuilding, FaTrophy, FaHandHoldingHeart
+  FaBuilding, FaTrophy, FaHandHoldingHeart, FaFileSignature
 } from "react-icons/fa";
 import { MdLanguage } from 'react-icons/md';
-import { LuFileBadge } from 'react-icons/lu';
+import { LuFileBadge, LuFileSearch } from 'react-icons/lu';
 import { RiAlignRight } from 'react-icons/ri';
 
 export interface Section {
@@ -39,9 +39,10 @@ export const sectionIcons: Record<string, IconType> = {
   "Awards": FaTrophy,
   "Languages": MdLanguage,
   "Publications": LuFileBadge,
+  "Patents": LuFileSearch,
   "Hobbies": RiAlignRight,
   "Interests": RiAlignRight,
-
+  "Declaration": FaFileSignature,
 };
 
 // ✅ Required fields for completion check

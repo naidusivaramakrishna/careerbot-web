@@ -17,6 +17,7 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 
 // Reusable Toolbar Button Component
@@ -175,9 +176,9 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -190,19 +191,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
 
@@ -250,7 +239,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             <div ref={summaryRef} className="flex flex-col gap-1 relative">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-semibold text-gray-700">
-                  Professional Summary
+                  Professional Summary <span className="text-red-500">*</span>
                 </label>
                 <button
                   type="button"

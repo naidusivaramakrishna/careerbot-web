@@ -13,6 +13,7 @@ export interface NotificationMetadata {
 export interface Notification {
   id: string;
   type: 'job' | 'credit' | 'system' | 'interview' | 'resume' | string;
+  category?: string;
   title: string;
   body: string;
   action_url: string;
@@ -110,11 +111,14 @@ export async function getUnreadNotificationCount(
  * Notification list response
  */
 export interface NotificationListResponse {
+  total: number;
+  read_count: number;
   unread_count: number;
   items: Notification[];
   pagination: {
     page: number;
     limit: number;
+    total_items: number;
     total_pages: number;
     has_next: boolean;
     has_prev: boolean;
