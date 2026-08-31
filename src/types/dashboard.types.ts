@@ -34,24 +34,8 @@ export interface DashboardSummary {
     resumes_enhanced: number;
     job_matches: number;
     job_applications: number;
-<<<<<<< HEAD
-    /** Communication/English Assessment sessions — shown on Interview Prep block */
-=======
-    /**
-     * english_assessment + mock_test COMBINED — not communication-only.
-     *
-     * The backend counts both under one key:
-     *   repository_impl.py count_assessments()
-     *   feature: { $in: ["english_assessment", "mock_test"] }
-     *
-     * Do NOT relabel this as one or the other on a dashboard tile. Splitting
-     * them needs a new counter on the backend's UsageCounts model first; that
-     * model has exactly six fields and none of them is per-feature.
-     */
->>>>>>> 29a525a32bed3cc9d1832fd636a1d8e741050b76
+    /** english_assessment + mock_test COMBINED — backend counts both under one key */
     assessments_taken: number;
-    /** Aptitude/screening mock tests — shown on Mock Test block */
-    mock_tests_taken?: number;
   };
   best_scores: {
     ats_score?: number; // 0-100

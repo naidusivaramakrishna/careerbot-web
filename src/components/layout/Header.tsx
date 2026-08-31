@@ -215,49 +215,9 @@ export default function Header() {
           ? summaryResult.value?.user
           : null;
 
-<<<<<<< HEAD
-      // Dashboard summary wins for name and email — always overwrite.
-      if (summaryUser?.name || summaryUser?.email) {
-        profile = {
-          ...(profile ?? {}),
-          full_name: summaryUser.name || profile?.full_name,
-          email: summaryUser.email || profile?.email,
-        };
-=======
-      // The summary decides WHICH ACCOUNT we are looking at, so it also decides
-      // whether the profile response can be merged at all.
-      //
-      // Overwriting only full_name and email was not enough. getProfile() can
-      // resolve the PREVIOUS account after an OAuth account switch — that is the
-      // bug this parallel fetch exists to work around — and when it does, every
-      // other field it returned belongs to that account too. Merging it kept the
-      // old user's `username`, which the dropdown now renders as `@username`
-      // right next to the new user's name and email.
-      //
-      // So the profile is kept only on a POSITIVE email match. `UserProfile.email`
-      // is optional, and a response with no email cannot be shown to belong to
-      // this account — "unverified" is treated as "not this user", not as
-      // "probably fine". When the summary itself carries no email there is no
-      // authoritative identity to check against, and the profile is left alone.
       const summaryEmail = summaryUser?.email?.trim().toLowerCase();
       const profileEmail = profile?.email?.trim().toLowerCase();
 
-      // Identity is asserted, never assumed. If the authoritative record did
-      // not answer with an email there is nothing to check getProfile()
-      // against, so the profile is NOT shown -- unverifiable is treated as
-      // "not this user", the same rule the mismatch case applies.
-      //
-      // That distinction matters because Promise.allSettled never throws: a
-      // rejected summary yields summaryUser = null, and the old
-      // `if (summaryEmail && ...)` guard then short-circuited and did NOT
-      // discard. So whenever /dashboard/summary was slow, rate-limited or
-      // 500ing, the raw getProfile() result was published -- the previous
-      // account's name, email and @username -- which is the exact bug this
-      // block exists to prevent, silently reinstated on the error path.
-      //
-      // An email-less profile is legitimate (getProfile admits id-only and
-      // username-only responses), so fall back to the account id before
-      // giving up, otherwise those users never see the @username line at all.
       const identityVerified =
         !!summaryEmail &&
         (profileEmail === summaryEmail ||
@@ -271,7 +231,6 @@ export default function Header() {
           );
         }
         profile = null;
->>>>>>> 29a525a32bed3cc9d1832fd636a1d8e741050b76
       }
 
       // Dashboard summary wins for name and email. The `||` fallbacks are safe
