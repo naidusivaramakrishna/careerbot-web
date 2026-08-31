@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import {
   ArrowLeft, ChevronDown, ChevronUp, Loader2, Play, RotateCw, Terminal,
 } from 'lucide-react';
-import { executeCode, RunApiError } from '../_lib/runApi';
+import { executeCode, pollExecuteResult, RunApiError } from '../_lib/runApi';
 import { streamSse } from '../_lib/streamSse';
 import type { CodingTestLanguage } from '../_lib/types';
 import { LANGUAGES } from '../_lib/ui';
@@ -103,6 +103,38 @@ export default function PlaygroundPage() {
     setRunState('running');
     setStatusLabel('Running…');
 
+    const applyPollFallback = async () => {
+      try {
+        const record = await pollExecuteResult(queued.poll_url, controller.signal);
+        if (controller.signal.aborted) return;
+        if (record.stdout) {
+          setOutputLines((prev) => [
+            ...prev,
+            ...record.stdout!.split('\n').map((text) => ({ type: 'stdout' as const, text })),
+          ]);
+        }
+        if (record.stderr) {
+          setOutputLines((prev) => [
+            ...prev,
+            ...record.stderr!.split('\n').map((text) => ({ type: 'stderr' as const, text })),
+          ]);
+        }
+        if (record.status === 'done') {
+          setExitCode(record.exit_code ?? null);
+          setWallTimeMs(record.wall_time_ms ?? null);
+          setRunState('done');
+        } else {
+          setErrorMessage(record.error ?? 'Execution failed.');
+          setRunState('error');
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setErrorMessage('Stream disconnected unexpectedly.');
+          setRunState('error');
+        }
+      }
+    };
+
     let receivedTerminal = false;
     try {
       for await (const event of streamSse(queued.stream_url, controller.signal)) {
@@ -131,13 +163,11 @@ export default function PlaygroundPage() {
         }
       }
       if (!controller.signal.aborted && !receivedTerminal) {
-        setErrorMessage('Execution stream ended unexpectedly.');
-        setRunState('error');
+        await applyPollFallback();
       }
     } catch {
       if (!controller.signal.aborted) {
-        setErrorMessage('Stream disconnected unexpectedly.');
-        setRunState('error');
+        await applyPollFallback();
       }
     }
   }, [language, code, stdin]);

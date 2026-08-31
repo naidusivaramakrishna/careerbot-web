@@ -28,6 +28,9 @@ const VERDICT_CFG = {
   time_limit_exceeded:    { Icon: Clock,       label: 'Time Limit Exceeded',    border: 'border-orange-700',  bg: 'bg-orange-950/30',  text: 'text-orange-400'  },
   memory_limit_exceeded:  { Icon: Zap,         label: 'Memory Limit Exceeded',  border: 'border-red-700',     bg: 'bg-red-950/30',     text: 'text-red-400'     },
   no_test_cases:          { Icon: AlertCircle, label: 'No Test Cases',          border: 'border-slate-700',   bg: 'bg-slate-950/30',   text: 'text-slate-400'   },
+  compile_error:          { Icon: AlertCircle, label: 'Compile Error',          border: 'border-amber-700',   bg: 'bg-amber-950/30',   text: 'text-amber-400'   },
+  time_limit_compile:     { Icon: Clock,       label: 'Compile Timeout',        border: 'border-orange-700',  bg: 'bg-orange-950/30',  text: 'text-orange-400'  },
+  execution_unavailable:  { Icon: AlertCircle, label: 'Execution Unavailable',  border: 'border-slate-700',   bg: 'bg-slate-950/30',   text: 'text-slate-400'   },
 };
 
 /* ── individual test case row ── */
@@ -130,9 +133,15 @@ export default function JudgePanel({ result, mode }: JudgePanelProps) {
         />
       </div>
 
-      {/* Per-test rows */}
+      {/* Per-test rows — or summary banner when backend returns no per-case details */}
       {result.results.length === 0 ? (
-        <p className="font-mono text-[13px] italic text-slate-500">No test case details available.</p>
+        <div className="rounded-lg border border-slate-700/60 bg-slate-800/30 px-3 py-2.5">
+          <p className="font-mono text-[11px] text-slate-400">
+            {mode === 'submit'
+              ? `${result.passed} of ${result.total} hidden test cases passed — per-case details not returned.`
+              : 'No test case details available.'}
+          </p>
+        </div>
       ) : (
         result.results.map((tc, i) => (
           <JudgeTestCaseRow key={tc.index} tc={tc} num={i + 1} />

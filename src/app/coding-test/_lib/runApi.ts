@@ -1,7 +1,10 @@
 import { isAxiosError } from 'axios';
 
 import { httpClient } from '@/lib/http';
-import type { CodingTestLanguage, ExecuteJobQueued, JudgeResponse } from './types';
+import type {
+  CodingTestLanguage, ExecuteJobQueued, ExecuteJobRecord,
+  JudgeJobRecord, JudgeResponse, JudgeVerdict, SubmitAsyncQueued,
+} from './types';
 
 const BASE = '/coding-test';
 
@@ -67,6 +70,99 @@ export async function executeCode(
     return data;
   } catch (err) {
     throw toRunError(err, 'Failed to start code execution.');
+  }
+}
+
+/** Enqueue an async submit job — returns immediately with a poll URL. */
+export async function submitAsync(
+  problemSlug: string,
+  language: CodingTestLanguage,
+  code: string,
+  timeoutMs = 5000,
+): Promise<SubmitAsyncQueued> {
+  try {
+    const { data } = await httpClient.post<{ job_id: string; attempt_id: string; poll_url: string }>(
+      `${BASE}/submit-async`,
+      { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
+      { ...INLINE_AUTH_CONFIG, timeout: 30000 },
+    );
+    return {
+      job_id: data.job_id,
+      attempt_id: data.attempt_id,
+      // Construct poll URL using the same base path as other API calls so that
+      // httpClient's baseURL prefix is applied correctly (avoids double /api/v1).
+      poll_url: `${BASE}/submit-result/${data.job_id}`,
+    };
+  } catch (err) {
+    throw toRunError(err, 'Failed to queue submission.');
+  }
+}
+
+/**
+ * Poll GET /submit-result/{job_id} until status is 'completed' or 'failed'.
+ * Calls onProgress on every tick. Resolves with a JudgeResponse built from the
+ * flat verdict/passed/total fields returned by the backend.
+ */
+export async function pollJudgeResult(
+  pollUrl: string,
+  onProgress?: (record: JudgeJobRecord) => void,
+  signal?: AbortSignal,
+  intervalMs = 2000,
+  maxAttempts = 45, // 45 × 2s = 90 seconds max wait
+): Promise<JudgeResponse> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (signal?.aborted) throw new RunApiError('Submission cancelled.', 0);
+    try {
+      const { data } = await httpClient.get<JudgeJobRecord>(pollUrl, {
+        ...INLINE_AUTH_CONFIG,
+        signal,
+        timeout: 15000, // 15s per-request — don't let a single poll hang for 2 minutes
+      });
+      onProgress?.(data);
+      if (data.status === 'completed') {
+        return {
+          verdict: (data.verdict ?? 'no_test_cases') as JudgeVerdict,
+          passed:  data.passed ?? 0,
+          total:   data.total  ?? 0,
+          results: [], // async submit returns summary only — no per-case details
+        };
+      }
+      if (data.status === 'failed') {
+        throw new RunApiError(data.error ?? 'Judge job failed.');
+      }
+    } catch (err) {
+      // Re-throw RunApiError (failed status or cancelled) immediately.
+      if (err instanceof RunApiError) throw err;
+      // A single poll request timed out or had a transient network error — retry.
+      if (signal?.aborted) throw new RunApiError('Submission cancelled.', 0);
+      // If it's the last attempt, surface the error; otherwise swallow and retry.
+      if (attempt === maxAttempts - 1) throw toRunError(err, 'Judge result unavailable — please try again.');
+    }
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, intervalMs);
+      signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+    });
+  }
+  throw new RunApiError('Submission timed out — the judge is taking longer than expected. Please try again.');
+}
+
+/** Poll a free-form execute job until done or error. */
+export async function pollExecuteResult(
+  pollUrl: string,
+  signal?: AbortSignal,
+  intervalMs = 1500,
+): Promise<ExecuteJobRecord> {
+  for (;;) {
+    if (signal?.aborted) throw new RunApiError('Execution cancelled.', 0);
+    const { data } = await httpClient.get<ExecuteJobRecord>(pollUrl, {
+      ...INLINE_AUTH_CONFIG,
+      signal,
+    });
+    if (data.status === 'done' || data.status === 'error') return data;
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, intervalMs);
+      signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+    });
   }
 }
 
