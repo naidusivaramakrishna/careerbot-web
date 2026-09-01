@@ -1341,10 +1341,10 @@ export default function MockTestPage() {
     const isFlagged = !!q?.markedForReview;
     const isCurrent = i === currentQ;
     return {
-      background: isCurrent ? '#1e3a8a' : isFlagged ? '#fef3c7' : isAns ? '#dbeafe' : '#f9fafb',
-      color:      isCurrent ? '#ffffff' : isFlagged ? '#92400e' : isAns ? '#1e3a8a' : '#9ca3af',
-      border:     isCurrent ? '2px solid #1e3a8a' : isFlagged ? '1px solid #fde68a' : isAns ? '1px solid #bfdbfe' : '1px solid #f3f4f6',
-      boxShadow:  isCurrent ? '0 0 0 3px #dbeafe' : 'none',
+      background: isCurrent ? '#22c55e' : isFlagged ? '#fbbf24' : isAns ? '#1e3a8a' : '#e0f2fe',
+      color:      isCurrent ? '#ffffff' : isFlagged ? '#78350f' : isAns ? '#ffffff' : '#0369a1',
+      border:     isCurrent ? '2px solid #16a34a' : isFlagged ? '1px solid #f59e0b' : isAns ? '1px solid #1e3a8a' : '1px solid #06b6d4',
+      boxShadow:  isCurrent ? '0 0 0 2px #dcfce7' : 'none',
     };
   };
 
@@ -1361,6 +1361,17 @@ export default function MockTestPage() {
   // it once keeps them identical.
   const feedbackBody = answerFeedback ? (
     <div className="flex-1 flex flex-col">
+      {phase === 'results_summary' && (
+        <div className="px-4 py-3 border-b" style={{ borderColor: '#e5e7eb' }}>
+          <button
+            onClick={() => setCurrentQ(-1)}
+            className="text-xs font-semibold tracking-wider uppercase text-blue-600 hover:text-blue-700 transition"
+            style={{ color: '#1e3a8a' }}
+          >
+            ← Back to Questions
+          </button>
+        </div>
+      )}
       <div
         className="flex items-center gap-2 px-4 py-3"
         style={{ background: answerFeedback.is_correct ? '#dcfce7' : '#fee2e2', borderBottom: `1px solid ${answerFeedback.is_correct ? '#bbf7d0' : '#fecaca'}` }}
@@ -1377,35 +1388,69 @@ export default function MockTestPage() {
         )}
       </div>
 
-      <div className="p-4 space-y-4 flex-1">
-        {answerFeedback.solution_steps && answerFeedback.solution_steps.length > 0 && (
-          <div>
-            <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>SOLUTION PATH</p>
-            <ol className="space-y-2">
-              {answerFeedback.solution_steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#1f2937' }}>
-                  <span
-                    className="w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
-                    style={{ background: '#dbeafe', color: '#1e3a8a' }}
-                  >{i + 1}</span>
-                  {step}
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-        {answerFeedback.explanation && (
-          <div>
-            <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#9ca3af' }}>EXPLANATION</p>
-            <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: '#1f2937' }}>
+      <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+        {/* EXPLANATION */}
+        {answerFeedback.explanation && phase === 'results_summary' && (
+          <div className="pb-2 border-b" style={{ borderColor: '#e5e7eb' }}>
+            <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>EXPLANATION</p>
+            <p className="text-xs leading-relaxed" style={{ color: '#2d2d2d', lineHeight: '1.6' }}>
               {answerFeedback.explanation}
             </p>
           </div>
         )}
-        {answerFeedback.feedback && (
-          <div className="p-3 rounded-xl" style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
-            <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#1e3a8a' }}>AI PATTERN</p>
-            <p className="text-xs leading-relaxed" style={{ color: '#1f2937' }}>{answerFeedback.feedback}</p>
+
+        {/* SOLUTION STEPS */}
+        {answerFeedback.solution_steps && answerFeedback.solution_steps.length > 0 && phase === 'results_summary' && (
+          <div className="pb-2 border-b" style={{ borderColor: '#e5e7eb' }}>
+            <p className="text-[10px] font-bold tracking-widest mb-3" style={{ color: '#9ca3af' }}>SOLUTION STEPS</p>
+            <div className="space-y-2.5">
+              {answerFeedback.solution_steps.map((step, i) => (
+                <div key={i} className="flex gap-3">
+                  <div
+                    className="flex items-center justify-center font-bold text-white text-[11px] flex-shrink-0"
+                    style={{ background: '#1e3a8a', width: '22px', height: '22px', borderRadius: '50%' }}
+                  >
+                    {i + 1}
+                  </div>
+                  <p className="text-xs leading-relaxed" style={{ color: '#2d2d2d', paddingTop: '1px' }}>
+                    {step}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* COMMON MISTAKES */}
+        {answerFeedback.common_mistakes && answerFeedback.common_mistakes.length > 0 && phase === 'results_summary' && (
+          <div className="pb-2 border-b" style={{ borderColor: '#e5e7eb' }}>
+            <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#dc2626' }}>❌ COMMON MISTAKES</p>
+            <ul className="space-y-2">
+              {answerFeedback.common_mistakes.map((mistake, i) => (
+                <li key={i} className="flex gap-2 text-xs" style={{ color: '#7f1d1d' }}>
+                  <span className="font-bold flex-shrink-0" style={{ color: '#dc2626' }}>•</span>
+                  <span className="leading-relaxed">{mistake}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* AI INSIGHTS */}
+        {answerFeedback.feedback && phase === 'results_summary' && (
+          <div className="pb-2 border-b" style={{ borderColor: '#e5e7eb' }}>
+            <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#1e3a8a' }}>💡 AI INSIGHTS</p>
+            <p className="text-xs leading-relaxed" style={{ color: '#2d2d2d' }}>{answerFeedback.feedback}</p>
+          </div>
+        )}
+
+        {/* MODEL ANSWER */}
+        {answerFeedback.model_answer && phase === 'results_summary' && (
+          <div>
+            <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>✓ MODEL ANSWER</p>
+            <p className="text-xs leading-relaxed" style={{ color: '#2d2d2d' }}>
+              {answerFeedback.model_answer}
+            </p>
           </div>
         )}
       </div>
@@ -1623,34 +1668,8 @@ export default function MockTestPage() {
         </div>
       </div>
 
-      {/* Three-column body */}
+      {/* Two-column body */}
       <div className="flex flex-1 overflow-hidden">
-
-        {/* Left: question palette rail (desktop). A two-up auto-fill grid so a
-            30+ question section stays usable instead of running off the bottom
-            of a single fixed column. */}
-        <nav
-          className="hidden md:grid content-start w-16 lg:w-20 shrink-0 p-3 gap-2 overflow-y-auto border-r"
-          style={{
-            background: '#ffffff',
-            borderColor: '#f3f4f6',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))',
-          }}
-          aria-label="Question navigation"
-        >
-          {questions.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentQ(i)}
-              aria-label={paletteLabel(i)}
-              aria-current={i === currentQ ? 'true' : undefined}
-              className="aspect-square min-h-[36px] rounded-lg text-xs font-bold flex items-center justify-center transition"
-              style={paletteStyle(i)}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </nav>
 
         {/* Center: question area — NXT Wave style (centered, minimal) */}
         <motion.div
@@ -1847,9 +1866,72 @@ export default function MockTestPage() {
           </div>
         </motion.div>
 
-        {/* Right: feedback panel — light, purple accents — hidden until lg */}
+        {/* Right: question grid panel (3 columns) - replaces feedback panel */}
+        <nav
+          className="hidden lg:flex lg:w-96 shrink-0 flex-col border-l overflow-y-auto p-6 ml-auto"
+          style={{ background: '#ffffff', borderColor: '#f3f4f6' }}
+          aria-label="Question grid navigation"
+        >
+          <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>QUESTIONS</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 60px)', gap: '3px' }}>
+            {questions.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentQ(i)}
+                aria-label={paletteLabel(i)}
+                aria-current={i === currentQ ? 'true' : undefined}
+                className="text-[11px] font-bold flex items-center justify-center transition hover:shadow-sm"
+                title={paletteLabel(i)}
+                style={{
+                  ...paletteStyle(i),
+                  width: '60px',
+                  height: '60px',
+                  padding: '0px',
+                  lineHeight: '1',
+                  borderRadius: '3px',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+
+          {/* Below question panel - Flagged stats */}
+          <div className="mt-4 pt-3 border-t" style={{ borderColor: '#f3f4f6' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold" style={{ color: '#9ca3af' }}>Flagged</span>
+              <span className="text-sm font-bold px-2 py-1 rounded" style={{ background: '#fef3c7', color: '#78350f' }}>{flagged}</span>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: '#f3f4f6' }}>
+            <p className="text-[10px] font-bold tracking-widest" style={{ color: '#9ca3af' }}>STATUS</p>
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ background: '#22c55e' }}></div>
+                <span style={{ color: '#6b7280' }}>Current</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ background: '#1e3a8a' }}></div>
+                <span style={{ color: '#6b7280' }}>Answered</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ background: '#e0f2fe' }}></div>
+                <span style={{ color: '#6b7280' }}>Unanswered</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ background: '#fbbf24' }}></div>
+                <span style={{ color: '#6b7280' }}>Flagged</span>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* Feedback panel removed - replaced with question grid */}
         <div
-          className="hidden lg:flex w-72 shrink-0 flex-col overflow-y-auto border-l"
+          className="hidden"
           style={{ background: '#fafafa', borderColor: '#f3f4f6' }}
         >
           <AnimatePresence mode="wait">

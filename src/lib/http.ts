@@ -170,6 +170,28 @@ client.interceptors.request.use(
       }
     }
 
+    // DO NOT attach a service credential here.
+    //
+    // A hardcoded `Authorization: Bearer <AI_LAYER_API_KEY>` was added at this
+    // point in 8277690 ("add Bearer token authentication to AI service
+    // requests"). It was removed because:
+    //
+    //   1. This is client code. Anything here ships in the JS bundle and is
+    //      readable by every visitor in DevTools. A key in the browser is not
+    //      a key.
+    //   2. This client does not talk to the AI layer. BASE_URL is
+    //      NEXT_PUBLIC_BASE_URL || '/api/v1' — i.e. careerbot-api. The only
+    //      code that reaches the AI layer directly is
+    //      src/app/api/backend/ai-health/route.ts, which is a Next.js SERVER
+    //      route and can hold secrets safely.
+    //   3. It sat in the GLOBAL request interceptor, so every request without
+    //      an Authorization header received it — including calls to
+    //      careerbot-api, which authenticates with httpOnly cookies and did
+    //      not expect a bearer token.
+    //
+    // If the browser ever needs AI-layer data, proxy it through the backend or
+    // a Next.js route handler so the credential stays server-side.
+
     if (config.method?.toLowerCase() === 'get') {
       const sep = config.url?.includes('?') ? '&' : '?';
       config.url = `${config.url}${sep}_t=${Date.now()}`;
