@@ -83,6 +83,10 @@ function redirectToLogin(request: NextRequest): NextResponse {
 
 const ADMIN_ROLES = new Set(['admin', 'super_admin', 'moderator', 'support']);
 
+// Logged at most once per process — this is a deployment fault, not a
+// per-request event, and it would otherwise repeat on every navigation.
+let warnedMissingJwtSecret = false;
+
 function roleAllows(pathname: string, actor: string | undefined): boolean {
     const a = actor?.toLowerCase();
     if (pathname.startsWith(ADMIN_PREFIX)) {
@@ -231,6 +235,26 @@ export async function middleware(request: NextRequest) {
         } catch {
             // refresh failed — fall through to the login redirect
         }
+    }
+
+    // We are about to bounce a role-gated request back to login. If JWT_SECRET
+    // is simply ABSENT, both verification branches above were skipped -- not
+    // because the session was bad, but because there was no key to check it
+    // with. The result is an unbreakable loop: signing in succeeds and sets
+    // valid cookies, then the very next navigation lands here and redirects to
+    // /admin/login, with nothing logged anywhere to say why.
+    //
+    // Staying closed is the correct call -- an unverified token must never
+    // reach an admin page, so this deliberately does NOT fall open. What it
+    // fixes is the silence.
+    if (isAdminOrRecruiter && !process.env.JWT_SECRET && !warnedMissingJwtSecret) {
+        warnedMissingJwtSecret = true;
+        logger.error(
+            '[middleware] JWT_SECRET is not set, so no session can be verified: ' +
+            'every /admin and /recruiter route will redirect to login even with ' +
+            'valid credentials. Set JWT_SECRET to the same value as the backend ' +
+            'JWT_SECRET_KEY.'
+        );
     }
 
     return redirectToLogin(request);
