@@ -7,6 +7,18 @@ import { logger } from '@/lib/logger';
 const publicRoutes = [
     '/',
     '/admin/login',
+    // The college front door at {college}.careerbot.com. It is reached by
+    // someone who is NOT signed in -- that is its whole job -- and it reads
+    // only the public branding endpoint (id and name). Gating it sent a
+    // student who typed their college's address to the CONSUMER marketing
+    // page, with no way to tell they were in the right place, which is the
+    // exact failure its own page comment warns about.
+    //
+    // Only this one path. /institution/join stays gated: claiming a code
+    // needs a user account, and the redirect already preserves `next`, so a
+    // student lands back on it after signing in. Every other /institution
+    // screen must stay behind the gate.
+    '/institution/login',
     '/recruiter/auth',
     '/auth/google/success',
     '/auth/linkedin/success',
@@ -128,7 +140,11 @@ export async function middleware(request: NextRequest) {
     const isPublicRoute =
         publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'));
     if (isPublicRoute) {
-        return NextResponse.next();
+        // nextWithPathname, not a bare next(): a public page nested under a
+        // guarded layout still needs x-pathname to identify itself. Without
+        // it /institution/login fell back to the layout's default of
+        // '/institution' and was redirected as though it were the gated area.
+        return nextWithPathname(request, pathname);
     }
 
     // Landing pages accessible without auth (exact path only — sub-paths remain protected).
