@@ -13,7 +13,8 @@ on:
     branches: ['**']
   # Direct pushes to the long-lived branches only. Feature branches are covered
   # by the pull_request trigger above; keeping `feature/**` here as well would
-  # run every check TWICE per PR, and this repo has ONE self-hosted runner.
+  # run every check TWICE per PR. Two runners are registered but only one is
+  # normally online, so effective capacity is ONE.
   push:
     branches: [master, develop2]
 
