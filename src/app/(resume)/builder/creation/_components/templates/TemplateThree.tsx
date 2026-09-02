@@ -3,6 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle, useResume } from "../../_context/ResumeContext";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
+import SafeHTML from "@/components/common/SafeHTML";
 
 interface Props {
   data: ResumeData;
@@ -29,6 +30,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
     interests,
     languages,
     publications,
+    customSections,
   } = data;
 
   const formatDate = (dateString?: string): string => {
@@ -114,60 +116,27 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
     switch (section) {
       case "Personal Info":
         return (
-          <header className="mb-6 page-break-inside-avoid" data-section="personal-info">
-            <div className="mb-2">
-              <h1 className="uppercase font-bold" style={nameStyle}>
-                {personalInfo.fullname || "FULL NAME"}
-              </h1>
-            </div>
-
-            <div className="flex items-center text-sm mb-4 flex-wrap" style={baseTextStyle}>
-              {personalInfo.email && (
-                <>
-                  <span>{personalInfo.email}</span>
-                </>
-              )}
-              {personalInfo.phone && (
-                <>
-                  {personalInfo.email && <span className="mx-2">|</span>}
-                  <span>{personalInfo.phone}</span>
-                </>
-              )}
-              {personalInfo.location && (
-                <>
-                  {(personalInfo.email || personalInfo.phone) && <span className="mx-2">|</span>}
-                  <span>{personalInfo.location}</span>
-                </>
-              )}
-              {personalInfo.linkedinUrl && (
-                <>
-                  {(personalInfo.email || personalInfo.phone || personalInfo.location) && <span className="mx-2">|</span>}
-                  {/* <span>in</span> */}
-                  <a
-                    href={personalInfo.linkedinUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={linkStyle}
-                    className="hover:underline ml-1"
-                  >
-                    {personalInfo.linkedinUrl.replace('https://', '').replace('http://', '')}
-                  </a>
-                </>
-              )}
-              {personalInfo.portfolioUrl && (
-                <>
-                  {(personalInfo.email || personalInfo.phone || personalInfo.location || personalInfo.linkedinUrl) && <span className="mx-2">|</span>}
-                  <a
-                    href={personalInfo.portfolioUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={linkStyle}
-                    className="hover:underline"
-                  >
-                    {personalInfo.portfolioUrl.replace('https://', '').replace('http://', '')}
-                  </a>
-                </>
-              )}
+          // centered_header: name and contact both centered (matches backend minimalist_classic)
+          <header className="mb-6 page-break-inside-avoid text-center" data-section="personal-info">
+            <h1 className="uppercase font-bold mb-2" style={nameStyle}>
+              {personalInfo.fullname || "FULL NAME"}
+            </h1>
+            <div className="flex items-center justify-center flex-wrap gap-x-1 text-sm" style={baseTextStyle}>
+              {[
+                personalInfo.email,
+                personalInfo.phone && `${personalInfo.countryCode}${personalInfo.phone}`,
+                personalInfo.location,
+                personalInfo.linkedinUrl,
+                personalInfo.githubUrl,
+                personalInfo.portfolioUrl,
+              ]
+                .filter(Boolean)
+                .map((item, index, array) => (
+                  <React.Fragment key={index}>
+                    <span>{item}</span>
+                    {index < array.length - 1 && <span className="mx-1">|</span>}
+                  </React.Fragment>
+                ))}
             </div>
           </header>
         );
@@ -181,11 +150,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div style={headingLineStyle}></div>
               </div>
               {/* ✅ Changed to support HTML formatting */}
-              <div
-                className="text-justify resume-description"
-                style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: professionalSummary.summary }}
-              />
+              <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" />
             </section>
           )
         );
@@ -213,11 +178,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {exp.description && (
-                    <div 
-                      className="resume-description"
-                      style={descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: exp.description }}
-                    />
+                    <SafeHTML content={exp.description} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -236,16 +197,21 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
               {education.map((edu, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline">
-                    <div>
+                    <div className="flex-1">
                       <div className="font-bold" style={titleStyle}>
                         {edu.degree}
                       </div>
                       <div className="text-sm" style={baseTextStyle}>
                         {edu.school}
                       </div>
+                      {edu.scoreType && edu.scoreValue && (
+                        <div className="text-xs mt-1" style={baseTextStyle}>
+                          {edu.scoreType}: {edu.scoreValue}{edu.scoreType === "Percentage" ? "%" : ""}
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
-                      {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
+                      {edu.startDate ? `${formatDate(edu.startDate)} – ${formatDate(edu.endDate)}` : formatDate(edu.endDate)}
                     </div>
                   </div>
                 </div>
@@ -288,11 +254,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {proj.description && (
-                    <div 
-                      className="mb-2 resume-description"
-                      style={descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: proj.description }}
-                    />
+                    <SafeHTML content={proj.description} className="mb-2 resume-description" />
                   )}
                   {proj.technologies && proj.technologies.length > 0 && (
                     <div className="text-sm" style={baseTextStyle}>
@@ -307,17 +269,42 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
 
       case "Skills":
         return (
-          skills.length > 0 && (
+          (skills.length > 0 || !!data.categorizedSkills) && (
             <section className="mb-6 page-break-inside-avoid" data-section="skills">
               <div style={headingContainerStyle}>
                 <h2 style={headingStyle}>SKILLS</h2>
                 <div style={headingLineStyle}></div>
               </div>
-              <ul className="list-disc pl-5 grid grid-cols-2 gap-x-6 gap-y-1" style={baseTextStyle}>
-                {skills.map((skill, idx) => (
-                  <li key={idx}>{skill}</li>
-                ))}
-              </ul>
+              {data.categorizedSkills ? (
+                <div className="space-y-1" style={baseTextStyle}>
+                  {(["programming_languages","frameworks","soft_skills","project_management","marketing_sales"] as const).map((key) => {
+                    const categorySkills = data.categorizedSkills![key];
+                    if (!categorySkills || categorySkills.length === 0) return null;
+                    const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                    return (
+                      <div key={key}>
+                        <span className="font-semibold">{label}: </span>
+                        <span>{categorySkills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                  {(data.categorizedSkills.custom_categories || []).map((custom) => {
+                    if (!custom.skills || custom.skills.length === 0) return null;
+                    return (
+                      <div key={custom.id}>
+                        <span className="font-semibold">{custom.name || "Other"}: </span>
+                        <span>{custom.skills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="list-disc pl-5 grid grid-cols-2 gap-x-6 gap-y-1" style={baseTextStyle}>
+                  {skills.map((skill, idx) => (
+                    <li key={idx}>{skill}</li>
+                  ))}
+                </ul>
+              )}
             </section>
           )
         );
@@ -345,11 +332,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {intern.description && (
-                    <div 
-                      className="resume-description"
-                      style={descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: intern.description }}
-                    />
+                    <SafeHTML content={intern.description} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -371,10 +354,10 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      <span style={baseTextStyle}> - {cert.issuedBy}</span>
+                      {(cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      <span>Issued: {cert.year}</span>
+                      {(cert.year || cert.issueDate) && <span>Issued: {cert.year || cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}
@@ -415,11 +398,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {achievement.description && (
-                    <div 
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: achievement.description }}
-                    />
+                    <SafeHTML content={achievement.description} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -493,11 +472,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
                   {/* ✅ Changed to support HTML formatting */}
                   {hobby.description && (
-                    <span 
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: ` — ${hobby.description}` }}
-                    />
+                    <SafeHTML as="span" content={` — ${hobby.description}`} className="resume-description" />
                   )}
                   {hobby.proficiencyLevel && <span className="text-sm" style={baseTextStyle}> ({hobby.proficiencyLevel})</span>}
                 </div>
@@ -520,11 +495,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   {interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
                   {/* ✅ Changed to support HTML formatting */}
                   {interest.description && (
-                    <span 
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: ` — ${interest.description}` }}
-                    />
+                    <SafeHTML as="span" content={` — ${interest.description}`} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -545,7 +516,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <div key={idx} className="flex items-start" style={baseTextStyle}>
                     <span className="mr-2">•</span>
                     <div>
-                      <span className="font-semibold" style={titleStyle}>{lang.language}</span>
+                      <span className="font-semibold" style={titleStyle}>{lang.name}</span>
                       {lang.proficiency && <span style={baseTextStyle}> — {lang.proficiency}</span>}
                     </div>
                   </div>
@@ -615,6 +586,55 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
         );
 
       default:
+        // Check if it's a custom section
+        const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
+        if (customSection && customSection.fields.length > 0) {
+          return (
+            <section className="mb-6">
+              <div style={headingContainerStyle}>
+                <h2 style={headingStyle}>{customSection.sectionName.toUpperCase()}</h2>
+                <div style={headingLineStyle}></div>
+              </div>
+              <div className="space-y-3">
+                {customSection.fields.map((field) => {
+                  const hasValue = field.fieldType === "list"
+                    ? (field.value as string[]).some(v => v.trim() !== "")
+                    : field.value && field.value.toString().trim() !== "";
+
+                  if (!hasValue) return null;
+
+                  return (
+                    <div key={field.id} className="mb-2">
+                      {field.fieldType === "list" ? (
+                        <ul className="list-disc pl-5" style={baseTextStyle}>
+                          {(field.value as string[])
+                            .filter(v => v.trim() !== "")
+                            .map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                        </ul>
+                      ) : field.fieldType === "url" ? (
+                        <a
+                          href={field.value as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={linkStyle}
+                          className="hover:underline"
+                        >
+                          {field.value as string}
+                        </a>
+                      ) : field.fieldType === "textarea" ? (
+                        <SafeHTML content={field.value as string} className="resume-description" />
+                      ) : (
+                        <div style={baseTextStyle}>{field.value as string}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        }
         return null;
     }
   };

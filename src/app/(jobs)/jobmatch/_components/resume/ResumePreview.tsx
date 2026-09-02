@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import JobMatchTemplate from "./JobMatchTemplate";
-import httpClient from "@/lib/http";
+import React, { useEffect, useRef, useState } from "react";
+import DOMPurify from "dompurify";
+import JobMatchTemplateThree from "./JobMatchTemplateThree";
 
 interface ResumePreviewProps {
   pdfBlobUrl: string | null;
@@ -9,9 +9,23 @@ interface ResumePreviewProps {
   isUpdating: boolean;
   isDocx: boolean;
   docxBlob: Blob | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parsedData: any;
   onRegenerate?: () => void;
   resumeId?: string | null;
+  activeSection?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  editOverrides?: Record<string, any>;
+  addedFields?: Record<string, string[]>;
+  /** Missing-skill suggestions not yet added — rendered as red "ghost" chips until added. */
+  pendingSkills?: string[];
+  pendingSoftSkills?: string[];
+  /** Same shape as addedFields, for suggestions (title/summary/bullets) not yet applied — red instead of green. */
+  pendingFields?: Record<string, string[]>;
+  onEditSection?: (key: string) => void;
+  onDeleteSection?: (key: string) => void;
+  deletedSections?: string[];
+  fontFamily?: string;
 }
 
 // Add a reload counter to force iframe refresh
@@ -26,12 +40,23 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   docxBlob,
   parsedData,
   onRegenerate,
-  resumeId,
+  resumeId: _resumeId,
+  activeSection,
+  editOverrides,
+  addedFields,
+  pendingSkills,
+  pendingSoftSkills,
+  pendingFields,
+  onEditSection,
+  onDeleteSection,
+  deletedSections,
+  fontFamily,
 }) => {
   const [docxPreview, setDocxPreview] = useState<string | null>(null);
   const [docxError, setDocxError] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Convert DOCX to PDF for preview (only if we're not using the template)
   useEffect(() => {
@@ -43,6 +68,10 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         // Use mammoth to convert DOCX to HTML
         const mammoth = await import("mammoth");
         const result = await mammoth.convertToHtml({ arrayBuffer: await docxBlob.arrayBuffer() });
+        const safeBody = DOMPurify.sanitize(result.value, {
+          FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
+          FORBID_ATTR: ["style", "onerror", "onload", "onclick", "srcdoc"],
+        });
 
         // Create a simple HTML document for preview
         const htmlContent = `
@@ -54,7 +83,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 .section { margin-bottom: 20px; }
               </style>
             </head>
-            <body>${result.value}</body>
+            <body>${safeBody}</body>
           </html>
         `;
 
@@ -79,7 +108,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Force cleanup and reload when pdfBlobUrl changes
   useEffect(() => {
     if (pdfBlobUrl) {
-      // // console.log("🔄 PDF blob URL changed, forcing iframe reload");
+      console.log("🔄 PDF blob URL changed, forcing iframe reload");
       reloadCounter++;
       setIframeKey(reloadCounter);
 
@@ -93,15 +122,45 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     }
     return () => {
       if (pdfBlobUrl) {
-        // // console.log("🧹 Cleaning up old PDF blob URL:", pdfBlobUrl);
+        console.log("🧹 Cleaning up old PDF blob URL:", pdfBlobUrl);
         URL.revokeObjectURL(pdfBlobUrl);
       }
     };
   }, [pdfBlobUrl]);
 
+  // Scroll to active section within the HTML template
+  useEffect(() => {
+    if (!activeSection || !parsedData) return;
+    const container = scrollContainerRef.current;
+    const el = document.getElementById(`resume-section-${activeSection}`);
+    if (container && el) {
+      const top = el.offsetTop - container.offsetTop - 8;
+      container.scrollTo({ top, behavior: "smooth" });
+    }
+  }, [activeSection, parsedData]);
+
+  // When parsedData is available, render the HTML template for section navigation
+  if (parsedData) {
+    return (
+      <div className="relative" style={{ backgroundColor: "#F8FAFD" }}>
+        {isUpdating && (
+          <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#2557a7] border-t-transparent" />
+              <p className="text-sm font-semibold text-slate-600">Updating resume…</p>
+            </div>
+          </div>
+        )}
+        <div ref={scrollContainerRef}>
+          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} pendingSkills={pendingSkills} pendingSoftSkills={pendingSoftSkills} pendingFields={pendingFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
+        </div>
+      </div>
+    );
+  }
+
   if (pdfError) {
     return (
-      <div className="h-[600px] bg-red-50 border border-red-200 rounded-lg p-6 flex flex-col items-center justify-center">
+      <div className="h-full bg-red-50 border border-red-200 rounded-lg p-6 flex flex-col items-center justify-center">
         <div className="text-center">
           <svg className="w-12 h-12 text-red-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -115,7 +174,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
   if (docxError && isDocx && !pdfBlobUrl && !parsedData) {
     return (
-      <div className="h-[600px] bg-white border border-amber-200 rounded-lg p-6 flex flex-col items-center justify-center">
+      <div className="h-full bg-white border border-amber-200 rounded-lg p-6 flex flex-col items-center justify-center">
         <div className="text-center">
           <svg className="w-12 h-12 text-amber-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -139,7 +198,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Priority 2: Show DOCX preview if available
   // Priority 3: Show "No preview available" message
   return (
-    <div className="relative h-[600px] bg-white rounded-lg overflow-hidden border border-gray-200">
+    <div className="relative h-full bg-linear-to-br from-white to-[#f9fbff] rounded-lg overflow-hidden border border-[#e0eaf5]">
       {isUpdating && (
         <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-3">
@@ -165,8 +224,8 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         // Priority 1: Show backend PDF (ALWAYS prefer backend)
         <iframe
           key={`pdf-preview-${iframeKey}`}
-          // Enable PDF toolbar so the browser's download button is available (toolbar=1)
-          src={`${displayUrl}#toolbar=1&navpanes=0&scrollbar=0&view=FitH`}
+          // Disable PDF toolbar to show only custom download button (toolbar=0)
+          src={`${displayUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
           className="w-full h-full border-none"
           title="Resume PDF Preview"
         />
@@ -175,6 +234,13 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         <iframe
           key={docxPreview}
           src={docxPreview}
+          // blob: URLs are scoped to the origin that created them — a fully
+          // opaque sandbox (no allow-same-origin) can fail to load them at
+          // all in some browsers. allow-scripts is deliberately still
+          // excluded, so no script execution is possible either way; the
+          // content itself is already DOMPurify-sanitized before being
+          // wrapped into this blob.
+          sandbox="allow-same-origin"
           className="w-full h-full border-none"
           title="Resume DOCX Preview"
         />

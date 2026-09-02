@@ -1,20 +1,17 @@
 "use client";
 
-import React, { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Upload,
-  RefreshCcw,
-  Lightbulb,
-  MessageSquare,
-  X,
-  FileText,
-  CheckCircle,
-} from "lucide-react";
-import Card from "./ui/Card";
-import Tab from "./ui/Tab";
+import React, { useState, useRef, useEffect } from "react";
 import AnalysisContent from "./analysis/AnalysisContent";
 import LoadingAnimation from "./ui/LoadingAnimation";
+import ErrorPopupModal from "@/components/ErrorPopupModal";
+import JobMatchStartCard from "./wizard/JobMatchStartCard";
+import WizardModalShell from "./wizard/WizardModalShell";
+import WizardStepResume from "./wizard/WizardStepResume";
+import WizardStepJobDescription from "./wizard/WizardStepJobDescription";
+import WizardStepConfirm from "./wizard/WizardStepConfirm";
+import { WIZARD_OVERVIEW_STYLES } from "./wizard/wizardOverviewStyles";
+import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
+import { toast } from "sonner";
 
 import {
   parseResume,
@@ -25,153 +22,255 @@ import {
   getResume,
   getMatchAnalytics,
 } from "@/api/parserApi";
+import { getExtensionSession } from "@/api/extensionApi";
+import { hasAllowedDocumentExtension, hasAllowedResumeExtension } from "@/utils/validators";
 
-// Add this function if it's missing in your parserApi
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+
 async function getMatchByIds(resume_id: string, jd_id: string) {
-  // This should call your API endpoint that fetches match by IDs
-  const response = await fetch(`/api/v1/matcher/match?resume_id=${resume_id}&jd_id=${jd_id}`);
+  const params = new URLSearchParams({ resume_id, jd_id });
+  const response = await fetch(`/api/v1/matcher/match?${params.toString()}`);
   if (!response.ok) throw new Error("Failed to fetch match");
   return response.json();
 }
 
-const Overview = () => {
-  const router = useRouter();
-  const [leaving, setLeaving] = useState(false);
-
+// ── Main Component ─────────────────────────────────────────────────────────────
+const Overview = ({ sessionId }: { sessionId?: string }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [jdText, setJdText] = useState("");
+  const [sessionResumeId, setSessionResumeId] = useState<string | null>(null);
+  const [sessionResumeName, setSessionResumeName] = useState<string | null>(null);
   const [jdFile, setJdFile] = useState<File | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [jdFileParsed, setJdFileParsed] = useState<any>(null);
+  const [isExtractingJd, setIsExtractingJd] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{
+    error_code?: string;
+    credits_required?: number;
+    credits_remaining?: number;
+  }>({});
 
   const [processingStage, setProcessingStage] = useState<
     "parsing" | "extracting" | "matching" | "scoring" | "generating"
   >("parsing");
 
-  const [activeTab, setActiveTab] = useState<
-    "upload" | "analysis" | "chat"
-  >("upload");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [matchResults, setMatchResults] = useState<any>(() => {
+    try {
+      const mr = sessionStorage.getItem("jm_matchResults");
+      return mr ? JSON.parse(mr) : null;
+    } catch { return null; }
+  });
 
-  const [parsedResumeData, setParsedResumeData] = useState<any>(null);
-  const [parsedJDData, setParsedJDData] = useState<any>(null);
-  const [matchResults, setMatchResults] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [parsedResumeData, setParsedResumeData] = useState<any>(() => {
+    try {
+      const prd = sessionStorage.getItem("jm_parsedResumeData");
+      return prd ? JSON.parse(prd) : null;
+    } catch { return null; }
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [parsedJDData, setParsedJDData] = useState<any>(() => {
+    try {
+      const d = sessionStorage.getItem("jm_parsedJDData");
+      return d ? JSON.parse(d) : null;
+    } catch { return null; }
+  });
+
+  const [jdText, setJdText] = useState<string>(() => {
+    if (sessionId) return "";
+    try { return sessionStorage.getItem("jm_jdText") || ""; } catch { return ""; }
+  });
+
+  const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
+    // Restore an existing analysis for the lifetime of this browser tab. The
+    // previous implementation deleted these values on every route remount,
+    // which made ordinary in-app navigation destroy the user's work.
+    try {
+      if (!sessionId && sessionStorage.getItem("jm_matchResults")) {
+        return "analysis";
+      }
+    } catch {}
+    return "upload";
+  });
+
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  // 0 = landing overview, 1 = upload resume, 2 = job description, 3 = confirm & analyze
+  const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
 
-  const resumeInputRef = useRef<HTMLInputElement>(null);
-  const jdUploadRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const autoAnalyzedRef = useRef(false);
+  const jdUploadTokenRef = useRef(0);
+  const [sessionJdId, setSessionJdId] = useState<string | null>(null);
 
-  const handleNavigate = (href: string) => {
-    if (href === "/ats") {
-      setLeaving(true);
-      setTimeout(() => router.push(href), 220);
-    } else {
-      router.push(href);
-    }
-  };
+  useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    getExtensionSession(sessionId)
+      .then((session) => {
+        if (session.job_description) setJdText(session.job_description);
+        if (session.jd_id) setSessionJdId(session.jd_id);
+        if (session.resume_id) {
+          setSessionResumeId(session.resume_id);
+          setSessionResumeName("Resume from extension");
+          getResume(session.resume_id)
+            .then((resumeData) => {
+              if (resumeData?.file_name) setSessionResumeName(resumeData.file_name);
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    if (autoAnalyzedRef.current) return;
+    if (!sessionResumeId) return;
+    if (!sessionJdId && !jdText.trim()) return;
+    autoAnalyzedRef.current = true;
+    analyzeMatch();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, sessionResumeId, jdText, sessionJdId]);
 
   const handleResumeUpload = (file: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Resume must be under 10MB.");
-      return;
-    }
+    if (!hasAllowedResumeExtension(file.name)) { setError("Please upload a PDF, DOC, or DOCX file."); return; }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Resume must be under 10MB."); return; }
     setUploadedFile(file);
     setError(null);
   };
 
-  const handleJDFileUpload = (file: File) => {
+  const handleJDFileUpload = async (file: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setJdText(e.target?.result as string);
-      setJdFile(file);
-      setError(null);
-    };
-    reader.onerror = () => {
-      setError("Failed to read job description file");
-    };
-    reader.readAsText(file);
+    if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Job description file must be under 10MB."); return; }
+    const token = ++jdUploadTokenRef.current;
+    setJdFile(file);
+    setJdFileParsed(null);
+    setJdText("");
+    setError(null);
+
+    const isPlainText = /\.txt$/i.test(file.name) || file.type === "text/plain";
+    if (isPlainText) {
+      const reader = new FileReader();
+      reader.onload = (e) => { if (jdUploadTokenRef.current === token) setJdText(e.target?.result as string); };
+      reader.onerror = () => { if (jdUploadTokenRef.current === token) setError("Failed to read job description file"); };
+      reader.readAsText(file);
+      return;
+    }
+
+    // PDF/DOC/DOCX are binary formats — reading them as text produces corrupted
+    // output, so extract the text server-side and preview the clean result.
+    setIsExtractingJd(true);
+    try {
+      const parsed = await parseJDFile(file);
+      if (jdUploadTokenRef.current !== token) return; // superseded by a newer upload
+      setJdFileParsed(parsed);
+      // No jd_text is expected when the JD was already parsed before (duplicate) or
+      // the backend response just doesn't carry a recognized text field — not an error,
+      // the file/jd_id is still valid and will be used as-is during analysis.
+      if (parsed?.jd_text) setJdText(parsed.jd_text);
+    } catch {
+      if (jdUploadTokenRef.current === token) {
+        setError("Failed to extract text from this file. You can still continue — it will be parsed during analysis.");
+      }
+    } finally {
+      if (jdUploadTokenRef.current === token) setIsExtractingJd(false);
+    }
+  };
+
+  const handleJdTextChange = (value: string) => {
+    setJdText(value);
+    setJdFile(null);
+    setJdFileParsed(null);
+    setIsExtractingJd(false);
+    jdUploadTokenRef.current++;
+  };
+
+  const handleJdClear = () => {
+    setJdText("");
+    setJdFile(null);
+    setJdFileParsed(null);
+    setIsExtractingJd(false);
+    jdUploadTokenRef.current++;
   };
 
   const analyzeMatch = async () => {
     setError(null);
-
-    if (!uploadedFile) return setError("Please upload a resume.");
-    if (!jdFile && !jdText.trim())
-      return setError("Please upload a JD file or paste JD text.");
+    if (!uploadedFile && !sessionResumeId) return setError("Please upload a resume.");
+    if (!sessionJdId && !jdFile && !jdText.trim()) return setError("Please upload a JD file or paste JD text.");
 
     setIsProcessing(true);
     setProcessingStage("parsing");
 
     try {
-      // Step 1: Parse Resume
-      const resumeParsed = await parseResume(uploadedFile);
-      const resume_id =
-        resumeParsed?.resume_id ??
-        resumeParsed?.id ??
-        resumeParsed?._id ??
-        null;
+      let resume_id = sessionResumeId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let fullResumeData: any = null;
 
-      if (!resume_id)
-        throw new Error("Resume parsing failed — no resume_id returned.");
-
-      setProcessingStage("extracting");
-
-      let fullResumeData;
-      try {
-        fullResumeData = await getResume(resume_id);
-      } catch {
-        fullResumeData = resumeParsed;
+      if (!resume_id) {
+        const resumeParsed = await parseResume(uploadedFile!);
+        resume_id =
+          resumeParsed?.resume_id ??
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (resumeParsed as any)?.id ??
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (resumeParsed as any)?._id ??
+          null;
+        if (!resume_id) throw new Error("Resume parsing failed — no resume_id returned.");
+        setProcessingStage("extracting");
+        try { fullResumeData = await getResume(resume_id); } catch { fullResumeData = resumeParsed; }
+      } else {
+        setProcessingStage("extracting");
+        try { fullResumeData = await getResume(resume_id); } catch { fullResumeData = null; }
       }
 
       setProcessingStage("matching");
 
-      // Step 2: Parse JD (detect URL, text, or file)
-      let jdParsed;
-      if (jdText.trim()) {
-        const trimmedText = jdText.trim();
-        // Check if input is a URL
-        const isUrl = /^https?:\/\/.+/i.test(trimmedText);
+      let jd_id: string | null = sessionJdId ?? null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let jdParsed: any = null;
+      let resolvedJdText = jdText;
 
-        if (isUrl) {
-          // Parse as URL
-          jdParsed = await parseJDUrl(trimmedText);
+      if (!jd_id) {
+        if (jdFile) {
+          // Reuse the extraction already triggered on file selection instead of
+          // re-parsing the same file a second time.
+          jdParsed = jdFileParsed?.jd_id ? jdFileParsed : await parseJDFile(jdFile);
+          if (jdParsed?.jd_text) { resolvedJdText = jdParsed.jd_text; setJdText(jdParsed.jd_text); }
+        } else if (jdText.trim()) {
+          const trimmedText = jdText.trim();
+          const isUrl = /^https?:\/\/.+/i.test(trimmedText);
+          jdParsed = isUrl ? await parseJDUrl(trimmedText) : await parseJDText(trimmedText);
         } else {
-          // Parse as text
-          jdParsed = await parseJDText(trimmedText);
+          throw new Error("No job description provided");
         }
-      } else if (jdFile) {
-        // Only use file parsing if no text is available
-        jdParsed = await parseJDFile(jdFile);
-      } else {
-        throw new Error("No job description provided");
+        jd_id = jdParsed?.jd_id ?? null;
       }
 
-      const jd_id = jdParsed?.jd_id ?? null;
-      if (!jd_id)
-        return setError("JD parsing failed — no JD ID returned.");
+      if (!jd_id) return setError("JD parsing failed — no JD ID returned.");
 
       setProcessingStage("scoring");
 
-      // Step 3: Match Resume and JD (with retry for backend errors)
-      let matchResp;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let matchResp: any;
       let retryCount = 0;
       const maxRetries = 2;
 
       while (retryCount <= maxRetries) {
         try {
           matchResp = await matchResumeAndJD(resume_id, jd_id);
-          break; // Success
+          break;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
           retryCount++;
           if (retryCount <= maxRetries) {
-            // Wait before retrying (exponential backoff)
-            await new Promise((resolve) =>
-              setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1))
-            );
-          } else {
-            throw err; // Max retries exceeded
-          }
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
+          } else { throw err; }
         }
       }
 
@@ -181,17 +280,11 @@ const Overview = () => {
         try {
           const existing = await getMatchByIds(resume_id, jd_id);
           if (Array.isArray(existing)) {
-            const matched = existing.find(
-              (m: any) =>
-                m.jd_id === jd_id || m.job_description_id === jd_id
-            );
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const matched = existing.find((m: any) => m.jd_id === jd_id || m.job_description_id === jd_id);
             finalMatchData = matched || existing[0];
-          } else {
-            finalMatchData = existing;
-          }
-        } catch {
-          finalMatchData = matchResp.data;
-        }
+          } else { finalMatchData = existing; }
+        } catch { finalMatchData = matchResp.data; }
       }
 
       if (!finalMatchData?.match_id && matchResp.match_id) {
@@ -200,257 +293,213 @@ const Overview = () => {
 
       setProcessingStage("generating");
 
-      // Step 4: Get Analytics
       try {
         const analytics = await getMatchAnalytics(resume_id, jd_id);
-        if (analytics)
-          finalMatchData = { ...finalMatchData, analytics };
+        if (analytics) finalMatchData = { ...finalMatchData, analytics };
       } catch {}
 
-      setMatchResults({ 
+      const newMatchResults = {
         data: finalMatchData,
         match_id: matchResp.match_id || finalMatchData?.match_id,
-        jd_id: jd_id,
-        duplicate: matchResp.duplicate
-      });
+        jd_id,
+        duplicate: matchResp.duplicate,
+      };
 
+      setMatchResults(newMatchResults);
       setParsedResumeData(fullResumeData);
       setParsedJDData(jdParsed);
+
+      try {
+        const snapshotWritten = writeJobmatchSessionSnapshot({
+          matchResults: newMatchResults,
+          parsedResumeData: fullResumeData,
+          parsedJDData: jdParsed,
+          jdText: resolvedJdText,
+        });
+        // The in-memory state set above is still correct for THIS render — a
+        // failed write only matters the next time this component mounts
+        // (e.g. navigating away and back), since writeJobmatchSessionSnapshot
+        // rolls back to the previous run's session data on failure rather
+        // than this one. Warn now, while there's still context, instead of
+        // letting that remount silently show stale results with no explanation.
+        if (!snapshotWritten) {
+          toast.warning("Your results are shown below, but couldn't be saved for this browser tab — they may not survive a page refresh.");
+        }
+      } catch {}
 
       setTimeout(() => {
         setIsProcessing(false);
         setActiveTab("analysis");
-
         if (containerRef.current) {
-          const top =
-            containerRef.current.getBoundingClientRect().top +
-            window.scrollY -
-            80;
-
+          const top = containerRef.current.getBoundingClientRect().top + window.scrollY - 80;
           window.scrollTo({ top, behavior: "smooth" });
         }
       }, 1500);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      // Parse error message from API response
       let errorMessage = "Something went wrong.";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const details: any = {};
 
       if (err?.__raw) {
-        // Handle error from safePost/safeGet helpers
         const raw = err.__raw;
-        if (typeof raw === 'object') {
-          const msg = raw.message || raw.error || raw.detail;
-          // Ensure we have a string, not an object
-          errorMessage = typeof msg === 'string' ? msg : JSON.stringify(raw);
-        } else if (typeof raw === 'string') {
+        if (typeof raw === "object") {
+          const msg = raw.message || raw.error?.message || raw.error || raw.detail;
+          errorMessage = typeof msg === "string" ? msg : JSON.stringify(raw);
+          details.error_code = raw.error_code || raw.error?.error_code;
+          if (raw.details) { details.credits_required = raw.details.credits_required; details.credits_remaining = raw.details.credits_remaining; }
+          else if (raw.error?.details) { details.credits_required = raw.error.details.credits_required; details.credits_remaining = raw.error.details.credits_remaining; }
+        } else if (typeof raw === "string") {
           try {
             const parsed = JSON.parse(raw);
-            const msg = parsed.message || parsed.error || parsed.detail;
-            errorMessage = typeof msg === 'string' ? msg : raw;
-          } catch {
-            errorMessage = raw;
-          }
+            const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
+            errorMessage = typeof msg === "string" ? msg : raw;
+            details.error_code = parsed.error_code || parsed.error?.error_code;
+            if (parsed.details) { details.credits_required = parsed.details.credits_required; details.credits_remaining = parsed.details.credits_remaining; }
+            else if (parsed.error?.details) { details.credits_required = parsed.error.details.credits_required; details.credits_remaining = parsed.error.details.credits_remaining; }
+          } catch { errorMessage = raw; }
         }
       } else if (err?.message) {
-        // Try to parse JSON from error message
         try {
           const parsed = JSON.parse(err.message);
-          const msg = parsed.message || parsed.error || parsed.detail;
-          errorMessage = typeof msg === 'string' ? msg : err.message;
-        } catch {
-          errorMessage = err.message;
-        }
+          const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
+          errorMessage = typeof msg === "string" ? msg : err.message;
+          details.error_code = parsed.error_code || parsed.error?.error_code;
+          if (parsed.details) { details.credits_required = parsed.details.credits_required; details.credits_remaining = parsed.details.credits_remaining; }
+          else if (parsed.error?.details) { details.credits_required = parsed.error.details.credits_required; details.credits_remaining = parsed.error.details.credits_remaining; }
+        } catch { errorMessage = err.message; }
       }
 
       setError(errorMessage);
+      setErrorDetails(details);
       setIsProcessing(false);
     }
   };
 
+  // ── Analysis mode ──────────────────────────────────────────────────────────
+  if (!isProcessing && activeTab === "analysis" && matchResults) {
+    return (
+      <>
+        <AnalysisContent
+          jdText={jdText}
+          parsedResumeData={parsedResumeData}
+          parsedJDData={parsedJDData}
+          matchResults={matchResults}
+          onBackToUpload={() => { setActiveTab("upload"); setWizardStep(0); }}
+        />
+        <ErrorPopupModal
+          error={error}
+          onRetry={() => { setError(null); setErrorDetails({}); }}
+          onClose={() => { setError(null); setErrorDetails({}); }}
+          details={errorDetails}
+        />
+      </>
+    );
+  }
+
+  // ── Loading mode ───────────────────────────────────────────────────────────
+  if (isProcessing) {
+    return <LoadingAnimation stage={processingStage} />;
+  }
+
+  const stepContinueDisabled = () => {
+    if (wizardStep === 1) return !uploadedFile && !sessionResumeId;
+    if (wizardStep === 2) return isExtractingJd || (jdText.trim().length < 20 && !jdFile);
+    return false;
+  };
+
+  // ── Main UI ────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Clean header without bottom border */}
-      <header className="fixed top-0 left-20 right-0 h-16 bg-white z-40">
-        <div className="flex items-center h-full px-8">
-          <h2 className="text-3xl pt-5.5 -translate-x-6 font-bold text-gray-800">CareerBot</h2>
-        </div>
-      </header>
+      <style>{WIZARD_OVERVIEW_STYLES}</style>
 
-      <main
-        className={` min-h-1/2 pt-27 bg-white transition-all duration-200  ${
-          leaving ? "opacity-0 translate-x-2" : "opacity-100 translate-x-0"
-        }`}
+      {/* ── Outer wrapper: scopes overlay to the content area only ── */}
+      {/* minHeight subtracts the fixed Header's height (h-14 = 3.5rem) — this
+          renders inside <main className="mt-14">, so a plain 100vh here would
+          stack on top of that offset and overflow the viewport by 3.5rem,
+          producing an empty scrollbar (see AnalysisContent.tsx, which uses
+          the same calc for the same reason). */}
+      <div style={{ position: "relative", minHeight: "calc(100vh - 3.5rem)" }}>
+
+      {/* ── Page shell — blurs only this area when modal is open ── */}
+      <div ref={containerRef} className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden" style={{
+        background: "#EEF4FF",
+        filter: wizardStep > 0 ? "blur(4px)" : "none",
+        transition: "filter 0.25s ease",
+        pointerEvents: wizardStep > 0 ? "none" : "auto",
+      }}>
+
+        <div className="absolute inset-0 pointer-events-none" style={{
+          backgroundImage: "radial-gradient(circle, rgba(37,87,167,0.07) 1.5px, transparent 1.5px)",
+          backgroundSize: "28px 28px",
+        }} />
+        <div className="absolute top-0 left-1/4 w-150 h-100 pointer-events-none" style={{
+          background: "radial-gradient(ellipse, rgba(37,87,167,0.06) 0%, transparent 70%)",
+        }} />
+        <div className="jm-container">
+          <JobMatchStartCard mounted={mounted} onStart={() => setWizardStep(1)} />
+        </div>
+      </div>
+
+      {/* ── WIZARD MODAL (absolute overlay — scoped to content area) ── */}
+      <WizardModalShell
+        open={wizardStep > 0}
+        wizardStep={wizardStep}
+        onClose={() => { setError(null); setWizardStep(0); }}
+        onBack={() => { setError(null); setWizardStep(prev => (prev - 1) as 0 | 1 | 2 | 3); }}
+        onContinueClick={() => {
+          if (stepContinueDisabled()) {
+            setError(wizardStep === 1
+              ? "Please upload a resume first."
+              : "Please add a job description (at least 20 characters)."
+            );
+            return;
+          }
+          setError(null);
+          setWizardStep(prev => (prev + 1) as 1 | 2 | 3);
+        }}
+        continueDisabled={stepContinueDisabled()}
+        onAnalyzeClick={analyzeMatch}
       >
-        <div className="pl-6 pr-8 pb-8">
-          {isProcessing ? (
-            <LoadingAnimation stage={processingStage} />
-          ) : (
-            <>
-              {/* Gray-100 rounded container - moved down and left */}
-              <div className="bg-gray-100 rounded-3xl p-8">
-                <div
-                  ref={containerRef}
-                  className="bg-white rounded-2xl px-8 pt-6 pb-14"
-                >
-                  <div className="mb-8">
-                    <h2 className="text-[26px] font-bold flex items-center gap-2">
-                      Resume <span className="text-[#BDBDBD]">↔</span> Job Match
-                    </h2>
-                    <p className="text-[15px] text-gray-600">
-                      Upload your resume and provide a job description (text, URL, or file) to get a full match analysis.
-                    </p>
-                  </div>
+        {wizardStep === 1 && (
+          <WizardStepResume
+            uploadedFile={uploadedFile}
+            sessionResumeName={sessionResumeName}
+            error={error}
+            onFileSelected={handleResumeUpload}
+          />
+        )}
+        {wizardStep === 2 && (
+          <WizardStepJobDescription
+            jdText={jdText}
+            jdFile={jdFile}
+            isExtractingJd={isExtractingJd}
+            error={error}
+            onTextChange={handleJdTextChange}
+            onFileSelected={handleJDFileUpload}
+            onClear={handleJdClear}
+          />
+        )}
+        {wizardStep === 3 && (
+          <WizardStepConfirm
+            uploadedFile={uploadedFile}
+            sessionResumeName={sessionResumeName}
+            jdFile={jdFile}
+            jdText={jdText}
+            error={error}
+          />
+        )}
+      </WizardModalShell>
 
-                  {error && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3">
-                      <X className="text-red-500" />
-                      <p className="text-sm text-red-800">{error}</p>
-                      <button onClick={() => setError(null)} className="ml-auto text-red-500">
-                        <X />
-                      </button>
-                    </div>
-                  )}
+      </div>{/* ── end outer wrapper ── */}
 
-                  <div className="flex justify-center mb-8">
-                    <div className="flex gap-2 px-2 py-1.5 border rounded-xl bg-gray-50 shadow-sm">
-                      <Tab label="Upload" icon={<Upload className="w-4 h-4" />} active={activeTab === "upload"} onClick={() => setActiveTab("upload")} />
-                      <Tab label="Analysis" icon={<RefreshCcw className="w-4 h-4" />} active={activeTab === "analysis"} onClick={() => setActiveTab("analysis")} />
-                      <Tab label="AI Chat" icon={<MessageSquare className="w-4 h-4" />} active={activeTab === "chat"} onClick={() => setActiveTab("chat")} />
-                    </div>
-                  </div>
-
-                  {activeTab === "upload" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <Card
-                        title="Upload your resume"
-                        action={
-                          <button
-                            onClick={() => resumeInputRef.current?.click()}
-                            className="h-10 px-4 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                          >
-                            <Upload className="w-4 h-4 inline-block mr-1" />
-                            Upload Resume
-                          </button>
-                        }
-                      >
-                        <input
-                          ref={resumeInputRef}
-                          type="file"
-                          accept=".pdf,.doc,.docx,.txt"
-                          className="hidden"
-                          onChange={(e) =>
-                            e.target.files?.[0] && handleResumeUpload(e.target.files[0])
-                          }
-                        />
-
-                        {uploadedFile ? (
-                          <div className="h-[320px] bg-[#ecfdf5] border-2 border-dashed border-green-300 rounded-xl flex flex-col items-center justify-center gap-6">
-                            <div className="flex gap-2 items-center">
-                              <CheckCircle className="text-green-600 w-6 h-6" />
-                              <p className="font-medium text-gray-900">Resume uploaded successfully</p>
-                            </div>
-
-                            <div className="bg-white border p-4 rounded-xl shadow flex items-center gap-4">
-                              <FileText className="w-6 h-6 text-gray-600" />
-                              <div>
-                                <p className="font-bold truncate">{uploadedFile.name}</p>
-                                <p className="text-sm text-gray-600">
-                                  {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                              <button onClick={() => setUploadedFile(null)} className="text-gray-500 hover:text-red-600">
-                                <X className="w-6 h-6" />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            onClick={() => resumeInputRef.current?.click()}
-                            className="h-[320px] border-2 border-dashed border-gray-300 rounded-xl bg-[#f9fafb] flex flex-col items-center justify-center cursor-pointer hover:border-[#2557a7]"
-                          >
-                            <Upload className="w-10 h-10 text-gray-400" />
-                            <p className="text-sm text-gray-700 mt-3">
-                              <span className="text-[#2557a7] font-medium">Click to upload</span> or drag and drop
-                            </p>
-                            <p className="text-xs text-gray-500">PDF / DOC / TXT (Max 10MB)</p>
-                          </div>
-                        )}
-                      </Card>
-
-                      <Card
-                        title="Job Description"
-                        action={
-                          <>
-                            <input
-                              ref={jdUploadRef}
-                              type="file"
-                              accept=".txt,.pdf,.doc,.docx"
-                              className="hidden"
-                              onChange={(e) =>
-                                e.target.files?.[0] && handleJDFileUpload(e.target.files[0])
-                              }
-                            />
-                            <button
-                              onClick={() => jdUploadRef.current?.click()}
-                              className="h-10 px-4 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                            >
-                              <Upload className="w-4 h-4 inline-block mr-1" />
-                              Upload JD File
-                            </button>
-                          </>
-                        }
-                      >
-                        <textarea
-                          value={jdText}
-                          onChange={(e) => {
-                            setJdText(e.target.value);
-                            setJdFile(null);
-                          }}
-                          placeholder="Paste job description text or URL here..."
-                          className="w-full h-[200px] border border-gray-300 rounded-xl p-3 bg-[#f9fafb] text-sm focus:ring-2 focus:ring-[#2557a7] focus:border-transparent"
-                        />
-
-                        <div className="bg-[#F3E8FF] p-3 rounded-lg mt-4 flex gap-3">
-                          <Lightbulb className="text-[#A78BFA] w-4 h-4 mt-0.5" />
-                          <p className="text-xs text-gray-700">Paste job description text, URL, or upload a file</p>
-                        </div>
-
-                        <div className="flex justify-end mt-4">
-                          <button
-                            onClick={analyzeMatch}
-                            disabled={!uploadedFile || (!jdFile && !jdText.trim())}
-                            className={`px-6 py-2 rounded-xl text-white font-medium ${
-                              !uploadedFile || (!jdFile && !jdText.trim())
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-[#8B5CF6] hover:bg-[#7C3AED]"
-                            }`}
-                          >
-                            Analyze Match
-                          </button>
-                        </div>
-                      </Card>
-                    </div>
-                  )}
-
-                  {activeTab === "analysis" && (
-                    <AnalysisContent
-                      jdText={jdText}
-                      parsedResumeData={parsedResumeData}
-                      matchResults={matchResults}
-                    />
-                  )}
-
-                  {activeTab === "chat" && (
-                    <div className="text-center py-12">
-                      <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-600">AI Chat coming soon…</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </main>
+      <ErrorPopupModal
+        error={error}
+        onRetry={() => { setError(null); setErrorDetails({}); }}
+        onClose={() => { setError(null); setErrorDetails({}); }}
+        details={errorDetails}
+      />
     </>
   );
 };

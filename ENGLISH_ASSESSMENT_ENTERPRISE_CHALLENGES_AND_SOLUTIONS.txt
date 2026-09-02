@@ -1,0 +1,2684 @@
+================================================================================
+ENGLISH ASSESSMENT - ENTERPRISE CHALLENGES & SOLUTIONS
+================================================================================
+Date: 2026-02-10 (V1.1 - ChatGPT Risk Review Integrated)
+Product: CareerBot English Assessment (/generate-test endpoint)
+Target Market: Engineering Colleges, Universities, Individual Job Seekers
+Author: Claude Opus 4.6 (Analysis) + ChatGPT (Risk Review + Patch Review)
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Business Scenario
+2. Current Architecture (What Exists Today)
+3. Current Architecture Flow Diagram
+4. Current Code - Key Files & Problems
+5. Challenge 1: Cache Fix Creates Cheating Disaster
+6. Challenge 2: Concurrent Load Destroys Azure Limits
+7. Challenge 3: Cost Explosion at Scale
+8. Challenge 4: Question Pool Exhaustion
+9. Challenge 5: No Question Quality Control
+10. Challenge 6: Single Point of Failure (Azure OpenAI)
+11. Challenge 7: In-Memory Cache Lost on Restart
+12. Challenge 8: No Multi-Tenancy
+13. Solution 1: Pre-Generated Question Pool
+14. Solution 2: Test Variant System (Anti-Cheating)
+15. Solution 3: Hybrid Mode (Pool + LLM Fallback)
+16. Solution 4: Tenant-Aware Architecture
+17. Solution 5: Background Pool Refresh
+18. Solution 6: Difficulty Calibration Per Tenant
+19. Proposed Architecture Flow Diagram
+20. Implementation Priority
+21. Before vs After Comparison
+22. FIX B Code Review (Cache Key Normalization)
+23. ChatGPT Risk Review of FIX B (8 Risks Verified Against Code)
+24. CRITICAL DISCOVERY: Data Leakage Bug in Cached Response
+25. ChatGPT's Recommended Strategy: Two-Tier Cache
+26. 3-Phase Action Plan (Immediate + Short-Term + Enterprise)
+
+
+================================================================================
+1. BUSINESS SCENARIO
+================================================================================
+
+You're selling to:
+- Engineering colleges (500-3000 students each, placement season)
+- Universities (5,000-50,000 students across departments)
+- Individual job seekers (B2C, pay-per-use)
+
+Key user profile:
+- 20-25 year old Indian student
+- B.Tech / BCA / MCA background
+- Can read English but struggles to speak fluently
+- Taking test during placement season (Aug-Oct, Jan-Mar)
+- In a college computer lab with 30-60 students simultaneously
+
+
+================================================================================
+2. CURRENT ARCHITECTURE (WHAT EXISTS TODAY)
+================================================================================
+
+The endpoint POST /api/v1/english-assessment/generate-test generates a complete
+English assessment test with 7 sections and 44 total questions.
+
+Sections Generated:
++-----------------------------+--------+------------------------------------------+
+| Section                     | Type   | What Student Does                        |
++-----------------------------+--------+------------------------------------------+
+| see_and_repeat              | List/8 | Read aloud sentences shown on screen     |
+| listen_and_repeat           | List/8 | Repeat what they hear                    |
+| jumbled_sentence            | List/8 | Arrange shuffled words into sentences    |
+| sentence_completion         | List/8 | Fill in the blank (____) in a sentence   |
+| listen_and_correct          | List/8 | Find and fix grammar errors              |
+| story_listen_facts          | Object | Listen to story, answer 3 fact questions |
+| describe_situation          | Object | Describe a given scenario out loud       |
++-----------------------------+--------+------------------------------------------+
+Total: 44 questions (8 x 5 list sections + 3 story questions + 1 describe)
+
+All 7 sections are generated IN PARALLEL via asyncio.gather(), each making
+1 LLM call to Azure OpenAI. In theory, total time = slowest section (2-5s).
+In practice: 12-90 seconds due to 7 compounding problems.
+
+Current Performance:
+  Easy:   12-15s
+  Medium: 25-30s
+  Hard:   70-90s (frequently FAILS)
+
+Target Performance:
+  Easy:   2-4s
+  Medium: 3-5s
+  Hard:   4-6s
+
+
+================================================================================
+3. CURRENT ARCHITECTURE FLOW DIAGRAM
+================================================================================
+
+CURRENT FLOW (Real-Time LLM Generation):
+=========================================
+
+  Student clicks "Start Test"
+       |
+       v
+  +------------------+
+  | Frontend         |
+  | (Next.js :3000)  |
+  +------------------+
+       |
+       | POST /api/v1/english-assessment/generate-test
+       | Body: { email_id, difficulty, do_not_repeat_list }
+       v
+  +------------------+
+  | Backend          |
+  | (FastAPI :8000)  |
+  +------------------+
+       |
+       | POST /api/v1/assessment/generate (internal)
+       | Timeout: 20s (was 90s)
+       v
+  +--------------------------------------------------------------+
+  | AI Layer (FastAPI :8001)                                     |
+  |                                                              |
+  | main.py: generate_tests_with_cache()                         |
+  |   |                                                          |
+  |   |-- Build cache key: json.dumps(input_list)                |
+  |   |   ^^^ PROBLEM: includes email_id = useless cache        |
+  |   |                                                          |
+  |   |-- Check llm_cache.get(cache_key)                         |
+  |   |     |-- HIT: return cached result (0 tokens, 0 cost)    |
+  |   |     |-- MISS: continue to generation                     |
+  |   |                                                          |
+  |   v                                                          |
+  | batch_processor.py: batch_generate_tests()                   |
+  |   |                                                          |
+  |   |-- For each request in batch:                             |
+  |   |     process_single_request() via asyncio.gather()        |
+  |   |                                                          |
+  |   v                                                          |
+  | test_generator.py: generate_full_course()                    |
+  |   |                                                          |
+  |   |-- Build do_not_repeat_set from previous questions        |
+  |   |                                                          |
+  |   |-- Create 7 PARALLEL tasks:                               |
+  |   |     asyncio.wait_for(                                    |
+  |   |         generate_single_section(section_type, dedup),    |
+  |   |         timeout=12.0                                     |
+  |   |     )                                                    |
+  |   |                                                          |
+  |   |-- asyncio.gather(*tasks, return_exceptions=False)        |
+  |   |     ^^^ PROBLEM: 1 failure kills all 7 sections         |
+  |   |                                                          |
+  |   v (INSIDE EACH PARALLEL TASK)                              |
+  | generate_single_section():                                   |
+  |   |                                                          |
+  |   |-- Check _section_cache (in-memory Python dict)           |
+  |   |     Key: "section_type:difficulty" (correct, no email)   |
+  |   |     ^^^ PROBLEM: lost on server restart                  |
+  |   |                                                          |
+  |   |-- for attempt in range(3):  [max 3 retries]             |
+  |   |     |                                                    |
+  |   |     v                                                    |
+  |   |   SectionFactory.create_validated()                      |
+  |   |     |                                                    |
+  |   |     |-- generate_section_content()                       |
+  |   |     |     |                                              |
+  |   |     |     |-- get_prompt() --> PROMPT_V1[section_name]   |
+  |   |     |     |     (200-400 tokens of instructions)         |
+  |   |     |     |                                              |
+  |   |     |     |-- temperature = 0.3 if hard else None        |
+  |   |     |     |     ^^^ PROBLEM: None = 0.7-1.0 for easy    |
+  |   |     |     |                                              |
+  |   |     |     v                                              |
+  |   |     |   generate_from_prompt()                           |
+  |   |     |     |                                              |
+  |   |     |     |-- httpx.AsyncClient.post(azure_url, payload) |
+  |   |     |     |     NO per-call timeout!                     |
+  |   |     |     |     Inherits pool 30s timeout                |
+  |   |     |     |     ^^^ CRITICAL PROBLEM                    |
+  |   |     |     |                                              |
+  |   |     |     v                                              |
+  |   |     |   Parse JSON response from Azure OpenAI            |
+  |   |     |                                                    |
+  |   |     |-- validate_section(section_type, data)             |
+  |   |     |     REQUIRES exactly 8 items                       |
+  |   |     |     ^^^ PROBLEM: LLM returns 7 or 9 ~15% of time  |
+  |   |     |     Validation fail = retry = another 2-5s         |
+  |   |     |                                                    |
+  |   |     v                                                    |
+  |   |   Dedup check: any question in shared_dedup_set?         |
+  |   |     |-- NO collision --> return success                  |
+  |   |     |-- YES collision --> backoff --> retry               |
+  |   |                                                          |
+  |   |-- _store_cached_section() on success                     |
+  |   |                                                          |
+  |   v                                                          |
+  | Process results, add unique IDs                              |
+  |                                                              |
+  | Cache full response: llm_cache.set(cache_key, results)       |
+  |                                                              |
+  | Return test JSON to Backend                                  |
+  +--------------------------------------------------------------+
+       |
+       v
+  +------------------+
+  | Backend          |
+  | Returns to       |
+  | Frontend         |
+  +------------------+
+       |
+       v
+  +------------------+
+  | Frontend         |
+  | Displays test    |
+  | Student begins   |
+  +------------------+
+
+
+CURRENT FLOW - WHAT HAPPENS WITH 60 STUDENTS IN A LAB:
+=======================================================
+
+  Student 1 clicks "Start Test" (Easy)
+       |
+       v
+  Cache key = json.dumps({"email_id":"student1@college.edu","difficulty":"easy",...})
+  Cache MISS (unique email_id in key)
+       |
+       v
+  7 LLM calls to Azure OpenAI --> 5-15 seconds
+       |
+       v
+  Cached with key containing student1@college.edu
+       |
+  Student 2 clicks "Start Test" (Easy)
+       |
+       v
+  Cache key = json.dumps({"email_id":"student2@college.edu","difficulty":"easy",...})
+  Cache MISS (different email_id!)
+       |
+       v
+  7 MORE LLM calls --> 5-15 seconds
+       |
+  ... Students 3-60 all trigger separate LLM calls ...
+       |
+  Result: 60 students x 7 calls = 420 LLM calls
+  Azure rate limit: 100-300 RPM
+  OUTCOME: Students 15+ get 429 errors, tests fail
+
+
+CURRENT FLOW - WITH FIX B (CACHE KEY WITHOUT EMAIL_ID):
+========================================================
+
+  Student 1 clicks "Start Test" (Easy)
+       |
+       v
+  Cache key = json.dumps({"difficulty":"easy","do_not_repeat_list":[]})
+  Cache MISS (first request)
+       |
+       v
+  7 LLM calls --> generates Test #1 --> cached
+       |
+  Student 2 clicks "Start Test" (Easy)
+       |
+       v
+  Cache key = json.dumps({"difficulty":"easy","do_not_repeat_list":[]})
+  Cache HIT! Returns Test #1 instantly
+       |
+  Students 3-60 ALL get cache HIT --> ALL get Test #1
+       |
+  OUTCOME: All 60 students get THE EXACT SAME 44 questions
+  PROBLEM: Student 1 WhatsApps answers --> everyone cheats
+
+
+================================================================================
+4. CURRENT CODE - KEY FILES & PROBLEMS
+================================================================================
+
+FILE 1: src/core/singletons/llm_client.py (line 612)
+-----------------------------------------------------
+CURRENT CODE:
+```python
+resp = await client.post(
+    url,
+    headers={
+        "Content-Type": "application/json",
+        "api-key": settings.API_KEY,
+    },
+    json=payload,
+)
+# ^^^ NO timeout parameter!
+# Inherits HTTPClientPool timeout of 30 seconds
+# If Azure is slow, this hangs for 30s
+```
+
+PROBLEM:
+  - No per-call timeout on the httpx POST to Azure OpenAI
+  - Falls back to global pool timeout of 30 seconds
+  - One slow call can block an entire section for 30s
+  - Combined with return_exceptions=False, one 30s hang kills ALL 7 sections
+
+
+FILE 2: src/services/english_assessment/generators/test_generator.py (line 447)
+--------------------------------------------------------------------------------
+CURRENT CODE:
+```python
+# S6: Temperature 0.3 for hard difficulty to reduce retry probability
+temperature = 0.3 if difficulty.lower() == "hard" else None
+```
+
+PROBLEM:
+  - Easy and Medium get temperature=None
+  - None means Azure default (0.7-1.0)
+  - High temperature = more creative = more likely to produce INVALID JSON
+  - Invalid JSON = validation fail = retry = 2-3x slower
+
+
+FILE 3: src/services/english_assessment/generators/test_generator.py (line 334-342)
+------------------------------------------------------------------------------------
+CURRENT CODE:
+```python
+SECTION_MAX_TOKENS = {
+    "see_and_repeat": 1200,      # Only needs ~600
+    "listen_and_repeat": 1200,   # Only needs ~600
+    "jumbled_sentence": 1200,    # Only needs ~800
+    "sentence_completion": 1500, # Only needs ~900
+    "listen_and_correct": 1200,  # Only needs ~800
+    "story_listen_facts": 800,   # OK
+    "describe_situation": 300,   # OK
+}
+# Total: 7,600 tokens (only ~4,650 needed)
+```
+
+PROBLEM:
+  - Requesting 63% more tokens than needed
+  - Higher max_tokens = Azure allocates more compute = slower inference
+  - More tokens = higher cost per call
+  - Total waste: ~2,950 tokens per test generation
+
+
+FILE 4: src/services/english_assessment/generators/test_generator.py (line 723)
+--------------------------------------------------------------------------------
+CURRENT CODE:
+```python
+# Wait for all sections to complete
+try:
+    section_results = await asyncio.gather(*section_tasks, return_exceptions=False)
+except asyncio.TimeoutError:
+    logger.error("One or more sections timed out after 12s")
+    raise RuntimeError("Test generation timed out")
+```
+
+PROBLEM:
+  - return_exceptions=False means if 1 out of 7 sections fails, asyncio.gather
+    raises an exception and DISCARDS the other 6 successful results
+  - Example: 6 sections complete in 3s, 1 section times out at 12s
+    Result: ALL 7 are thrown away, entire generation must restart
+  - With return_exceptions=True, the 6 successful results would be kept,
+    and only the 1 failed section would need retry
+
+
+FILE 5: src/services/english_assessment/generators/validators.py (line 15-16, 35-36, 50-51)
+---------------------------------------------------------------------------------------------
+CURRENT CODE (ALL 5 list-type validators have this pattern):
+```python
+def validate_see_and_repeat(data):
+    if len(data) != 8:
+        return False, f"see_and_repeat: expected 8 items, got {len(data)}"
+
+def validate_listen_and_repeat(data):
+    if len(data) != 8:
+        return False, f"listen_and_repeat: expected 8 items, got {len(data)}"
+
+def validate_jumbled_sentence(data):
+    if len(data) != 8:
+        return False, f"jumbled_sentence: expected 8 items, got {len(data)}"
+
+def validate_sentence_completion(data):
+    if len(data) != 8:
+        return False, f"sentence_completion: expected 8 items, got {len(data)}"
+
+def validate_listen_and_correct(data):
+    if len(data) != 8:
+        return False, f"listen_and_correct: expected 8 items, got {len(data)}"
+```
+
+PROBLEM:
+  - Validators require EXACTLY 8 items
+  - LLMs frequently return 7 or 9 items (~10-20% of the time)
+  - Every validation failure triggers a retry (another LLM call = 2-5s)
+  - This is the #1 cause of retries and slowness
+
+
+FILE 6: src/services/english_assessment/main.py (line 427-430)
+--------------------------------------------------------------
+CURRENT CODE:
+```python
+# Create cache key from input (normalize to handle whitespace variations)
+import json
+cache_input = json.dumps(input_list, sort_keys=True)
+cache_key_text = normalize_for_cache(cache_input)
+```
+
+PROBLEM:
+  - input_list contains the FULL request including email_id
+  - input_list = [{"email_id": "user@x.com", "difficulty": "easy", ...}]
+  - Since email_id differs per user, every user gets a unique cache key
+  - The full-response cache is effectively USELESS for cross-user sharing
+  - This is FIX B from the V2.2 patch
+
+
+FILE 7: src/services/english_assessment/main.py (line 308-312)
+--------------------------------------------------------------
+CURRENT CODE (BatchTestRequest schema):
+```python
+class BatchTestRequest(BaseModel):
+    email_id: str = Field(..., min_length=1)
+    difficulty: str = Field(..., min_length=1)
+    do_not_repeat_list: Optional[Union[str, list[Union[str, Dict[str, Any]]], Dict[str, Any]]] = None
+```
+
+This is the schema that includes email_id. When serialized to JSON for cache key,
+email_id is included, making cache unique per user.
+
+
+FILE 8: src/services/english_assessment/generators/test_generator.py (line 349)
+--------------------------------------------------------------------------------
+CURRENT CODE:
+```python
+_section_cache: Dict[str, list] = {}  # In-memory Python dict
+MAX_CACHE_PER_KEY = 10
+```
+
+PROBLEM:
+  - Per-section cache is a Python dict in memory
+  - If server restarts (deploy, crash, scaling): cache is EMPTY
+  - First N users after restart all trigger LLM calls simultaneously
+  - During a placement drive, server restart = instant Azure overload
+
+
+FILE 9: src/services/english_assessment/generators/test_generator.py (generate_full_course)
+--------------------------------------------------------------------------------------------
+CURRENT CODE:
+  - No global deadline / time budget for the entire generation process
+  - If retries keep happening, request can hang for 70-90 seconds
+  - No check: "is there enough time left to retry?"
+  - Results in timeout at Backend level (20s) or complete failure for Hard difficulty
+
+
+FILE 10: src/services/english_assessment/generators/batch_processor.py (line 226-227)
+--------------------------------------------------------------------------------------
+CURRENT CODE:
+```python
+tasks = [process_single_request(idx, req) for idx, req in enumerate(requests)]
+results = await asyncio.gather(*tasks, return_exceptions=False)
+```
+
+PROBLEM:
+  - Each request in the batch is processed in parallel
+  - Each request triggers 7 LLM calls
+  - No concurrency limit across requests
+  - 10 batch requests = 70 simultaneous LLM calls = Azure overload
+
+
+================================================================================
+5. CHALLENGE 1: CACHE FIX CREATES A CHEATING DISASTER
+================================================================================
+
+The FIX B code (from V2.2 patch):
+
+```python
+def _build_cache_key(input_list: list) -> str:
+    cache_parts = []
+    for req in input_list:
+        dnr = req.get("do_not_repeat_list") or []
+        if isinstance(dnr, list) and len(dnr) > 50:
+            dnr = sorted(dnr)[-50:]
+        cache_parts.append({
+            "difficulty": req.get("difficulty", "").lower(),
+            "do_not_repeat_list": dnr,
+        })
+    return json.dumps(cache_parts, sort_keys=True)
+```
+
+PROBLEM: By removing email_id from the cache key, EVERY student requesting "easy"
+with empty do_not_repeat_list gets THE EXACT SAME 44 questions.
+
+In a college computer lab with 60 students starting the test together:
+  - Student 1 starts --> cache MISS --> LLM generates test --> cached
+  - Students 2-60 start within next 30 seconds --> cache HIT --> same 44 questions
+  - Student 1 WhatsApps answers to the group --> everyone copies
+
+In a university with 2,000 students during placement week:
+  - All "easy" tests are identical
+  - All "medium" tests are identical
+  - Screenshots spread across hostels in minutes
+
+This is not a bug -- it's a PRODUCT KILLER for colleges.
+
+SCENARIO WALKTHROUGH:
+
+  Time 00:00 - Professor starts placement drive
+  Time 00:01 - Student 1 clicks "Start Test" (Easy)
+                Cache key: {"difficulty":"easy","do_not_repeat_list":[]}
+                Cache MISS --> 7 LLM calls --> Test generated in 5s
+                Test cached with key above
+
+  Time 00:02 - Students 2-60 click "Start Test" (Easy)
+                Cache key: {"difficulty":"easy","do_not_repeat_list":[]}
+                Cache HIT --> All 59 students get IDENTICAL test
+
+  Time 00:03 - Student 1 screenshots Question 1 answers
+                Sends to WhatsApp group "CSE 2026 Placements"
+
+  Time 00:05 - 59 students copy answers
+                All score 95%+
+
+  Time 00:10 - Professor sees 60 students with identical scores
+                Realizes tests were identical
+                Cancels CareerBot contract
+
+IMPACT: This is a CONTRACT CANCELLATION scenario. No college will buy an
+assessment product where students can cheat by sharing answers.
+
+
+================================================================================
+6. CHALLENGE 2: CONCURRENT LOAD DESTROYS AZURE LIMITS
+================================================================================
+
+Current code (batch_processor.py:226-227):
+```python
+tasks = [process_single_request(idx, req) for idx, req in enumerate(requests)]
+results = await asyncio.gather(*tasks, return_exceptions=False)
+```
+
+Each request triggers 7 parallel LLM calls. In a college scenario:
+
++-------------------+-----------+-----------------------+------------------+------------------+
+| Scenario          | Students  | Concurrent LLM Calls  | Azure RPM Limit  | Result           |
++-------------------+-----------+-----------------------+------------------+------------------+
+| Single class      | 60        | 60 x 7 = 420          | 100-300 RPM      | 429 errors       |
+| Placement drive   | 500       | 500 x 7 = 3,500       | 100-300 RPM      | MELTDOWN         |
+| University exam   | 2,000     | 2,000 x 7 = 14,000    | 100-300 RPM      | IMPOSSIBLE       |
++-------------------+-----------+-----------------------+------------------+------------------+
+
+Even with Semaphore(3) per request, 500 concurrent users = 500 requests x 3 =
+1,500 concurrent LLM calls. Still way over Azure limits.
+
+WHAT HAPPENS IN PRACTICE:
+  - First 15-40 students: Tests generated successfully (within RPM limit)
+  - Students 41+: Azure returns 429 (Too Many Requests)
+  - 429 triggers retry logic --> more LLM calls --> MORE 429s --> retry storm
+  - Eventually: mass timeout, half the class gets "Test generation failed"
+  - Professor's reaction: "This product doesn't work"
+
+AZURE OPENAI RATE LIMITS (typical deployment):
+  - Tokens per minute (TPM): 60,000-240,000
+  - Requests per minute (RPM): 100-360
+  - Each section call: ~500-1500 tokens
+  - 7 sections x 500 tokens = 3,500 tokens per student
+  - 60 students = 210,000 tokens --> may exceed TPM limit too
+
+
+================================================================================
+7. CHALLENGE 3: COST EXPLOSION AT SCALE
+================================================================================
+
+Current cost per test generation (7 LLM calls):
+  Easy:   ~$0.03-0.05
+  Medium: ~$0.05-0.07
+  Hard:   ~$0.07-0.10
+
+Scale projection:
+
++---------------------+-----------+---------------+-------------------+
+| Customer            | Students  | Tests/Year    | LLM Cost/Year     |
++---------------------+-----------+---------------+-------------------+
+| 1 college (small)   | 500       | 1,500 (3 ea.) | $75-150            |
+| 1 college (large)   | 3,000     | 9,000         | $450-900           |
+| 10 colleges         | 15,000    | 45,000        | $2,250-4,500       |
+| 50 colleges         | 75,000    | 225,000       | $11,250-22,500     |
+| B2C job seekers     | 100,000   | 300,000       | $15,000-30,000     |
++---------------------+-----------+---------------+-------------------+
+
+And this is ONLY test generation. Audio evaluation, video evaluation, and
+scoring are additional LLM costs on top.
+
+PRICING PROBLEM:
+  - If you charge colleges INR 50-100 per student/year
+  - LLM cost alone is INR 5-8 per test
+  - At 3 tests/student, that's INR 15-24 cost against INR 50-100 revenue
+  - Margin is dangerously thin (50-75%)
+  - Add server costs, audio processing, support --> margin shrinks further
+  - At 50 colleges: $22,500 LLM cost = INR 18,75,000/year JUST for LLM
+
+COST BREAKDOWN PER TEST:
+  - 7 LLM calls x ~500 input tokens x ~300 output tokens
+  - GPT-4: $0.03/1K input + $0.06/1K output
+  - Per section: (500 x $0.03 + 300 x $0.06) / 1000 = $0.033
+  - 7 sections: $0.033 x 7 = $0.231 per test (worst case with GPT-4)
+  - With GPT-3.5-turbo: ~$0.01-0.03 per test (much cheaper)
+  - With retries: multiply by 1.3x average
+
+
+================================================================================
+8. CHALLENGE 4: QUESTION POOL EXHAUSTION
+================================================================================
+
+Current code (test_generator.py:654-660):
+```python
+if not shared_dedup_set:
+    cached = _get_cached_section(section_type, difficulty)
+```
+
+The do_not_repeat_list grows with every test a student takes.
+
+EXHAUSTION TIMELINE:
+  - Test 1: do_not_repeat_list = [] (empty) --> LLM generates freely
+  - Test 2: do_not_repeat_list = [44 questions] --> LLM avoids 44
+  - Test 3: do_not_repeat_list = [88 questions] --> LLM avoids 88
+  - Test 4: do_not_repeat_list = [132 questions] --> LLM struggles
+  - Test 5: do_not_repeat_list = [176 questions] --> LLM starts repeating
+
+WHAT HAPPENS:
+  - By test 3-4: LLM has seen 132+ questions to avoid
+  - The dedup list is INJECTED INTO THE PROMPT (more tokens = slower + costly)
+  - Prompt grows: 200 base + 132 x ~10 words = 1,520 extra tokens
+  - LLM struggles to generate truly unique questions
+  - Quality degrades: trivial variations like:
+    "The cat sat on the mat" vs "The dog sat on the rug"
+  - Eventually the LLM can't avoid all previous questions
+  - Dedup check fails --> retry --> more LLM calls --> timeout
+
+FOR COLLEGES (5 mock tests per semester per student):
+  - 5 tests x 44 questions = 220 questions to avoid
+  - 220 x ~10 words = 2,200 extra tokens in every prompt
+  - Prompt cost doubles, generation quality drops significantly
+  - Some sections may fail entirely after test 4-5
+
+
+================================================================================
+9. CHALLENGE 5: NO QUESTION QUALITY CONTROL
+================================================================================
+
+Current validators (validators.py) check STRUCTURE only:
+
+```python
+def validate_see_and_repeat(data):
+    if not isinstance(data, list):
+        return False, "expected list"
+    if len(data) != 8:
+        return False, f"expected 8 items, got {len(data)}"
+    for idx, item in enumerate(data, 1):
+        if not _has_keys(item, ["question_text", "expected_text", "difficulty"]):
+            return False, f"item {idx}: missing required keys"
+        # Checks: is it a string? is it non-empty?
+    return True, "OK"
+```
+
+WHAT IS VALIDATED:
+  [x] Is it a list?
+  [x] Does it have 8 items?
+  [x] Does each item have required keys?
+  [x] Are strings non-empty?
+
+WHAT IS NOT VALIDATED:
+  [ ] Is the question at the right difficulty level for Indian students?
+  [ ] Is the sentence grammatically correct?
+  [ ] Is the vocabulary appropriate for B.Tech freshers?
+  [ ] Are jumbled sentences actually solvable?
+  [ ] Is the story culturally relevant?
+  [ ] Does sentence_completion have a meaningful blank?
+  [ ] Is the expected_text actually the correct answer?
+  [ ] Are there offensive or inappropriate words?
+  [ ] Is the question too similar to other questions in the same test?
+  [ ] Does difficulty match CEFR level? (Easy=A2-B1, Medium=B1-B2, Hard=B2-C1)
+
+REAL-WORLD IMPACT:
+  - LLM generates "The synergistic paradigm facilitated the optimization"
+    for an "easy" test --> too hard for tier-3 college student
+  - LLM generates "The cat is big" for a "hard" test --> too easy for IIT student
+  - LLM generates grammatically incorrect sentence as "expected_text"
+    --> student gives correct answer but system marks it wrong
+  - Professor reviews questions, finds quality issues, loses confidence in product
+
+ENTERPRISE REQUIREMENT:
+  Colleges expect assessment questions to be at a specific difficulty level,
+  culturally appropriate, and grammatically perfect. Random LLM output
+  without quality control is NOT acceptable for an enterprise product.
+
+
+================================================================================
+10. CHALLENGE 6: SINGLE POINT OF FAILURE (AZURE OPENAI)
+================================================================================
+
+Current code (llm_client.py:612):
+```python
+resp = await client.post(url, headers={...}, json=payload)
+```
+
+One Azure endpoint. One deployment. One region.
+
+FAILURE SCENARIOS:
+  1. Azure OpenAI outage (happens 2-3 times/year, 30-60 min each)
+     --> ALL students get "Test generation failed"
+
+  2. Azure region outage (rare but catastrophic)
+     --> No tests can be generated for hours
+
+  3. Azure deployment quota exceeded
+     --> 429 errors for all users
+
+  4. Network connectivity issue (common in Indian colleges)
+     --> Timeout, tests fail
+
+DURING A PLACEMENT DRIVE:
+  - Companies are watching, HR is present
+  - 500 students ready to take the test
+  - Azure has a 30-minute outage at 10:00 AM
+  - All 500 students see "Test generation failed"
+  - College calls you: "Fix it NOW"
+  - You can't fix Azure
+  - College reputation damaged, CareerBot reputation destroyed
+  - Contract cancelled
+
+NO FALLBACK EXISTS:
+  - No secondary LLM provider
+  - No pre-generated backup tests
+  - No offline mode
+  - No degraded mode (e.g., rule-based questions)
+
+
+================================================================================
+11. CHALLENGE 7: IN-MEMORY CACHE LOST ON RESTART
+================================================================================
+
+Current code (test_generator.py:349):
+```python
+_section_cache: Dict[str, list] = {}  # In-memory Python dict
+MAX_CACHE_PER_KEY = 10
+
+def _cache_key(section_type: str, difficulty: str) -> str:
+    return f"{section_type}:{difficulty}"
+
+def _get_cached_section(section_type: str, difficulty: str) -> Optional[Any]:
+    key = _cache_key(section_type, difficulty)
+    items = _section_cache.get(key, [])
+    if items:
+        return random.choice(items)
+    return None
+```
+
+THE TWO CACHES:
+  1. Per-section cache (test_generator.py)
+     - Type: Python dict (in-memory)
+     - Key: "section_type:difficulty" (e.g., "see_and_repeat:easy")
+     - Max: 10 entries per key
+     - Persistence: NONE (lost on restart)
+     - Scope: Single process only
+
+  2. Full-response cache (main.py via llm_cache)
+     - Type: LLM cache (may be Redis-backed)
+     - Key: json.dumps(input_list) <-- includes email_id (BUG)
+     - Persistence: Depends on implementation
+     - Scope: Shared if Redis, process-only if in-memory
+
+WHAT HAPPENS ON SERVER RESTART:
+  Time 00:00 - Server restarts (deploy, crash, or scaling event)
+  Time 00:01 - _section_cache = {} (empty)
+  Time 00:02 - 60 students hit "Start Test" simultaneously
+  Time 00:03 - All 60 trigger LLM calls (no cache to serve from)
+  Time 00:04 - 60 x 7 = 420 LLM calls hit Azure at once
+  Time 00:05 - Azure returns 429 for most requests
+  Time 00:10 - Retries compound, server under heavy load
+  Time 00:30 - Most students have received errors
+
+SCALING PROBLEM:
+  If you run multiple AI Layer instances (for load balancing):
+  - Each instance has its OWN _section_cache
+  - No sharing between instances
+  - Cache effectiveness drops proportionally to instance count
+  - 4 instances = each cache has 1/4 the entries
+
+
+================================================================================
+12. CHALLENGE 8: NO MULTI-TENANCY
+================================================================================
+
+Current code (main.py:429):
+```python
+cache_input = json.dumps(input_list, sort_keys=True)
+```
+
+There is NO concept of:
+
+  1. COLLEGE ID (tenant_id)
+     - All colleges share the same cache, same question pool
+     - College A students and College B students may get identical tests
+     - If two colleges in the same city find this out --> contract cancellation
+
+  2. EXAM SESSION
+     - No way to say "this is placement drive batch 1 vs batch 2"
+     - No way to ensure different batches get different questions
+     - Morning batch and afternoon batch could get same test
+
+  3. QUESTION SET ISOLATION
+     - No per-college question pools
+     - No way for a college to exclude certain topics
+     - No customization per institution
+
+  4. DIFFICULTY CALIBRATION
+     - "Easy" for IIT Bombay student (B2 English) is NOT the same as
+       "Easy" for tier-3 college student (A2 English)
+     - One-size-fits-all difficulty is inappropriate for enterprise
+
+  5. USAGE TRACKING
+     - No per-tenant usage metrics
+     - Can't bill based on actual usage
+     - Can't show college admin: "500 students completed, avg score 67%"
+
+  6. DATA ISOLATION
+     - Student data from College A accessible in same DB as College B
+     - India's DPDP Act may require data isolation
+     - Some colleges may require on-premise deployment
+
+
+================================================================================
+13. SOLUTION 1: PRE-GENERATED QUESTION POOL
+          (Solves Challenges 1, 2, 3, 4, 6)
+================================================================================
+
+INSTEAD of generating questions in real-time via LLM, pre-generate question
+pools offline and serve from database at runtime.
+
+ARCHITECTURE CHANGE:
+
+  CURRENT (Real-Time LLM):
+  ========================
+  Student starts test
+       |
+       v
+  LLM generates 44 questions in real-time
+       |
+       v
+  5-15 seconds wait (or failure)
+
+  PROPOSED (Question Pool):
+  =========================
+  Nightly batch job
+       |
+       v
+  LLM generates 1000+ questions per section
+       |
+       v
+  Stored in MongoDB (question_pool collection)
+       |
+  ... later ...
+       |
+  Student starts test
+       |
+       v
+  Randomly pick 8 questions per section from pool
+       |
+       v
+  50-200ms response (database read only, no LLM)
+
+
+HOW IT WORKS:
+
+MongoDB Collection: question_pool
+```json
+{
+  "_id": ObjectId("..."),
+  "section_type": "see_and_repeat",
+  "difficulty": "easy",
+  "question_text": "Please read this sentence aloud: The morning sun brightened the quiet village.",
+  "expected_text": "The morning sun brightened the quiet village.",
+  "quality_score": 0.95,
+  "times_used": 42,
+  "created_at": "2026-02-09T00:00:00Z",
+  "tenant_id": "college_xyz",
+  "active": true,
+  "cefr_level": "B1",
+  "tags": ["nature", "village", "morning"]
+}
+```
+
+RUNTIME CODE (replaces LLM call):
+```python
+async def generate_test_from_pool(
+    difficulty: str,
+    tenant_id: str,
+    do_not_repeat_ids: set
+) -> dict:
+    """Pick 8 random questions per section from pre-generated pool."""
+    sections = {}
+
+    for section_type in SECTION_TYPES:
+        # Query: same section + difficulty + not used before + active
+        questions = await db.question_pool.aggregate([
+            {"$match": {
+                "section_type": section_type,
+                "difficulty": difficulty,
+                "tenant_id": tenant_id,
+                "active": True,
+                "_id": {"$nin": list(do_not_repeat_ids)}
+            }},
+            {"$sample": {"size": 8}}  # Random 8 from pool
+        ]).to_list(8)
+
+        if len(questions) < 8:
+            # Pool running low - log warning, trigger background refill
+            logger.warning(f"Pool low for {section_type}:{difficulty} - only {len(questions)}")
+            # Pad with any available questions (relaxed uniqueness)
+            remaining = await db.question_pool.aggregate([
+                {"$match": {
+                    "section_type": section_type,
+                    "difficulty": difficulty,
+                    "active": True
+                }},
+                {"$sample": {"size": 8 - len(questions)}}
+            ]).to_list(8 - len(questions))
+            questions.extend(remaining)
+
+        sections[section_type] = questions
+
+    return {"sections": sections}
+```
+
+BENEFITS:
++---------------------+---------------------------+---------------------------+
+| Metric              | Current (Real-time LLM)   | Pool-Based                |
++---------------------+---------------------------+---------------------------+
+| Response time       | 5-15s                     | 50-200ms                  |
+| Cost per test       | $0.03-0.10                | $0.00                     |
+| Cheating risk       | Cache = same test         | Random pick = unique test |
+| Azure dependency    | 100% (fails if Azure down)| 0% at runtime             |
+| Concurrent capacity | ~50 users max             | 10,000+ users             |
+| Quality control     | None (raw LLM output)     | Pre-scored & reviewed     |
++---------------------+---------------------------+---------------------------+
+
+COST MATH FOR 50 COLLEGES:
+  - Pool generation: $100/month (nightly refresh of 500 new questions)
+  - Runtime cost: $0 per test
+  - Savings vs current: $11,000-22,000/year
+  - Break-even: Day 1
+
+
+================================================================================
+14. SOLUTION 2: TEST VARIANT SYSTEM (Anti-Cheating)
+          (Solves Challenge 1)
+================================================================================
+
+Pre-generate 50-100 test VARIANTS per difficulty. Each variant has different
+questions but same structure. Assign variants randomly to students.
+
+MongoDB Collection: variant_pool
+```json
+{
+  "_id": ObjectId("..."),
+  "variant_id": "easy_v042",
+  "difficulty": "easy",
+  "sections": {
+    "see_and_repeat": [ ... 8 questions ... ],
+    "listen_and_repeat": [ ... 8 questions ... ],
+    "jumbled_sentence": [ ... 8 questions ... ],
+    "sentence_completion": [ ... 8 questions ... ],
+    "listen_and_correct": [ ... 8 questions ... ],
+    "story_listen_facts": { ... story + 3 questions ... },
+    "describe_situation": { ... situation ... }
+  },
+  "created_at": "2026-02-09T00:00:00Z",
+  "usage_count": 0,
+  "tenant_id": "college_xyz"
+}
+```
+
+VARIANT ASSIGNMENT CODE:
+```python
+async def assign_test_variant(
+    student_id: str,
+    difficulty: str,
+    tenant_id: str
+) -> dict:
+    """Assign a random variant, ensuring no two adjacent students get same one."""
+
+    # Get recently used variants in this session (last 30 min)
+    thirty_min_ago = datetime.utcnow() - timedelta(minutes=30)
+    recent = await db.test_assignments.distinct("variant_id", {
+        "tenant_id": tenant_id,
+        "assigned_at": {"$gte": thirty_min_ago}
+    })
+
+    # Pick variant NOT recently used (if possible)
+    variant = await db.variant_pool.aggregate([
+        {"$match": {
+            "difficulty": difficulty,
+            "tenant_id": tenant_id,
+            "variant_id": {"$nin": recent[-10:]}  # Avoid last 10 used
+        }},
+        {"$sample": {"size": 1}}
+    ]).to_list(1)
+
+    if not variant:
+        # All variants recently used, pick any
+        variant = await db.variant_pool.aggregate([
+            {"$match": {"difficulty": difficulty, "tenant_id": tenant_id}},
+            {"$sample": {"size": 1}}
+        ]).to_list(1)
+
+    # Record assignment
+    await db.test_assignments.insert_one({
+        "student_id": student_id,
+        "variant_id": variant[0]["variant_id"],
+        "tenant_id": tenant_id,
+        "assigned_at": datetime.utcnow()
+    })
+
+    # Increment usage counter
+    await db.variant_pool.update_one(
+        {"variant_id": variant[0]["variant_id"]},
+        {"$inc": {"usage_count": 1}}
+    )
+
+    return variant[0]["sections"]
+```
+
+ANTI-CHEATING MATH:
+  - 50 variants per difficulty
+  - Class of 60 students
+  - Maximum students with same variant: 60/50 = 1-2 (statistically)
+  - With recent-avoidance logic: most students get unique variants
+  - Even if 2 students get same variant, they're sitting far apart
+  - WhatsApp sharing is useless (each student has different questions)
+
+
+================================================================================
+15. SOLUTION 3: HYBRID MODE (Pool + LLM Fallback)
+          (Solves Challenges 3, 6)
+================================================================================
+
+Use pre-generated pool as PRIMARY, fall back to LLM only when pool is empty.
+
+DECISION FLOW:
+```
+Student requests test
+       |
+       v
+  Pool has enough questions for this section+difficulty?
+       |
+       +-- YES (pool_count >= 8)
+       |    |
+       |    v
+       |   Pick 8 random from pool (instant, free)
+       |    |
+       |    +-- Pool running low? (pool_count < 20)
+       |         |
+       |         v
+       |        Background task: refill pool via LLM
+       |
+       +-- NO (pool empty or insufficient)
+            |
+            v
+           Azure OpenAI available?
+            |
+            +-- YES: Generate via LLM (real-time, paid)
+            |         Add generated questions to pool for future
+            |
+            +-- NO (Azure down):
+                 |
+                 v
+                Return error: "Test generation temporarily unavailable"
+                (This should NEVER happen if pool is maintained)
+```
+
+HYBRID CODE:
+```python
+POOL_MINIMUM = 20  # Refill when pool drops below this
+
+async def get_section_questions(
+    section_type: str,
+    difficulty: str,
+    exclude_ids: set,
+    tenant_id: str
+) -> list:
+    """Get questions from pool first, LLM fallback if pool empty."""
+
+    # Try pool first
+    pool_count = await db.question_pool.count_documents({
+        "section_type": section_type,
+        "difficulty": difficulty,
+        "tenant_id": tenant_id,
+        "active": True,
+        "_id": {"$nin": list(exclude_ids)}
+    })
+
+    if pool_count >= 8:
+        # POOL MODE: instant, free
+        questions = await db.question_pool.aggregate([
+            {"$match": {
+                "section_type": section_type,
+                "difficulty": difficulty,
+                "tenant_id": tenant_id,
+                "active": True,
+                "_id": {"$nin": list(exclude_ids)}
+            }},
+            {"$sample": {"size": 8}}
+        ]).to_list(8)
+
+        # Background: refill if running low
+        if pool_count < POOL_MINIMUM:
+            asyncio.create_task(
+                _refill_pool(section_type, difficulty, tenant_id)
+            )
+
+        return questions
+
+    # FALLBACK: LLM generation (only when pool empty)
+    logger.warning(f"Pool empty for {section_type}:{difficulty}, falling back to LLM")
+    questions = await generate_section_content(section_type, difficulty)
+
+    # Add generated questions to pool for future use
+    for q in questions:
+        await db.question_pool.insert_one({
+            "section_type": section_type,
+            "difficulty": difficulty,
+            "tenant_id": tenant_id,
+            "active": True,
+            "quality_score": 0.0,  # Not yet scored
+            **q
+        })
+
+    return questions
+```
+
+BENEFITS:
+  - 99% of requests served from pool (instant, free)
+  - 1% of requests fall back to LLM (when pool depleted)
+  - New questions added to pool automatically
+  - Azure outage has zero impact (pool always available)
+  - Gradual, automatic pool growth
+
+
+================================================================================
+16. SOLUTION 4: TENANT-AWARE ARCHITECTURE
+          (Solves Challenge 8)
+================================================================================
+
+Add tenant_id to every layer of the system.
+
+UPDATED REQUEST SCHEMA:
+```python
+class TestRequest(BaseModel):
+    email_id: str
+    difficulty: str
+    tenant_id: str = "default"              # College/university ID
+    exam_session_id: Optional[str] = None   # Placement drive batch
+    do_not_repeat_list: Optional[list] = None
+```
+
+TENANT-AWARE CACHE KEY:
+```python
+def _build_cache_key(input_list: list) -> str:
+    cache_parts = []
+    for req in input_list:
+        cache_parts.append({
+            "tenant_id": req.get("tenant_id", "default"),
+            "difficulty": req.get("difficulty", "").lower(),
+            # do_not_repeat_list hash (not full list)
+        })
+    return json.dumps(cache_parts, sort_keys=True)
+```
+
+TENANT-AWARE POOL QUERIES:
+```python
+# All pool queries include tenant_id filter
+questions = await db.question_pool.find({
+    "section_type": section_type,
+    "difficulty": difficulty,
+    "tenant_id": tenant_id,   # <-- College-specific
+    "active": True
+})
+```
+
+WHAT TENANT-AWARENESS ENABLES:
+
+  1. QUESTION ISOLATION
+     - College A and College B have separate question pools
+     - Even with same difficulty, different colleges get different questions
+
+  2. EXAM SESSION TRACKING
+     - "Placement Drive Jan 2026 - Morning Batch"
+     - "Placement Drive Jan 2026 - Afternoon Batch"
+     - Different batches guaranteed different questions
+
+  3. DIFFICULTY CALIBRATION (see Solution 6)
+     - IIT "easy" = CEFR B1-B2
+     - Tier-3 "easy" = CEFR A2-B1
+
+  4. USAGE TRACKING & BILLING
+     - Per-college: "500 students, 1,500 tests, avg score 67%"
+     - Per-session: "Batch 1: 60 students, Batch 2: 45 students"
+     - Billing: charge per student or per test based on usage
+
+  5. DATA ISOLATION (DPDP Compliance)
+     - Student data scoped to tenant
+     - College admin sees only their students
+     - DPDP Act: data processor obligations per tenant
+
+
+================================================================================
+17. SOLUTION 5: BACKGROUND POOL REFRESH
+          (Solves Challenges 3, 4)
+================================================================================
+
+A background job (Celery or asyncio task) runs nightly or on-demand to
+maintain question pool size.
+
+POOL REFRESH CODE:
+```python
+async def refresh_question_pool(tenant_id: str):
+    """Generate new questions to maintain pool size per tenant."""
+
+    TARGET_POOL_SIZE = 200  # Per section_type per difficulty
+
+    for section_type in SECTION_TYPES:
+        for difficulty in ["easy", "medium", "hard"]:
+            # Check current pool size
+            current_count = await db.question_pool.count_documents({
+                "section_type": section_type,
+                "difficulty": difficulty,
+                "tenant_id": tenant_id,
+                "active": True
+            })
+
+            needed = max(0, TARGET_POOL_SIZE - current_count)
+
+            if needed > 0:
+                logger.info(
+                    f"Refilling pool: {section_type}:{difficulty} for {tenant_id} "
+                    f"(current: {current_count}, target: {TARGET_POOL_SIZE}, needed: {needed})"
+                )
+
+                # Generate in batches of 8 (one LLM call = 8 questions)
+                for batch_num in range(needed // 8 + 1):
+                    try:
+                        questions = await generate_section_content(
+                            section_type, difficulty
+                        )
+
+                        # Quality check before adding to pool
+                        for q in questions:
+                            quality = await _score_question_quality(q, section_type)
+                            if quality >= 0.8:  # Only keep good questions
+                                await db.question_pool.insert_one({
+                                    "section_type": section_type,
+                                    "difficulty": difficulty,
+                                    "tenant_id": tenant_id,
+                                    "quality_score": quality,
+                                    "times_used": 0,
+                                    "active": True,
+                                    "created_at": datetime.utcnow(),
+                                    **q
+                                })
+
+                        # Rate limit: don't overwhelm Azure
+                        await asyncio.sleep(1.0)
+
+                    except Exception as e:
+                        logger.error(f"Pool refresh failed for {section_type}:{difficulty}: {e}")
+                        continue
+
+
+async def _score_question_quality(question: dict, section_type: str) -> float:
+    """Score question quality (0.0-1.0) using rule-based checks."""
+    score = 1.0
+
+    text = question.get("question_text", "")
+    expected = question.get("expected_text", "")
+
+    # Check minimum length
+    if isinstance(text, str) and len(text.split()) < 3:
+        score -= 0.3
+
+    # Check for repeated words
+    if isinstance(text, str):
+        words = text.lower().split()
+        if len(set(words)) < len(words) * 0.5:
+            score -= 0.2
+
+    # Check expected_text exists and is meaningful
+    if not expected or (isinstance(expected, str) and len(expected.strip()) < 2):
+        score -= 0.5
+
+    # Section-specific checks
+    if section_type == "sentence_completion":
+        if isinstance(text, str) and "____" not in text:
+            score -= 0.5
+
+    if section_type == "jumbled_sentence":
+        if isinstance(text, list) and len(text) < 3:
+            score -= 0.5
+
+    return max(0.0, score)
+```
+
+POOL SIZE MATH:
+  - 7 sections x 3 difficulties x 200 questions = 4,200 questions per tenant
+  - Generation cost: ~$20-30 one-time per tenant
+  - Refresh cost: ~$5-10/month per tenant (replace used/expired questions)
+  - Supports: 4,200 / 8 = 525 unique tests per difficulty before any repeat
+  - For 3 tests/student: supports 175 students with zero repeats per difficulty
+  - For a college of 500 students: increase pool to 500 per section
+    - 7 x 3 x 500 = 10,500 questions per tenant
+    - Generation cost: ~$50-75 one-time
+    - Supports: 10,500 / 8 = 1,312 unique tests per difficulty
+
+SCHEDULING:
+```python
+# Run nightly at 2:00 AM IST (off-peak)
+# Celery beat schedule:
+CELERY_BEAT_SCHEDULE = {
+    'refresh-question-pool': {
+        'task': 'tasks.refresh_all_tenant_pools',
+        'schedule': crontab(hour=2, minute=0),  # 2:00 AM IST daily
+    }
+}
+
+async def refresh_all_tenant_pools():
+    """Refresh pools for ALL active tenants."""
+    tenants = await db.tenants.find({"active": True}).to_list(None)
+    for tenant in tenants:
+        await refresh_question_pool(tenant["tenant_id"])
+```
+
+
+================================================================================
+18. SOLUTION 6: DIFFICULTY CALIBRATION PER TENANT
+================================================================================
+
+Each tenant (college/university) can have custom difficulty mapping based on
+their students' English proficiency level.
+
+TENANT CONFIGURATION:
+```json
+// MongoDB: tenant_config collection
+
+// For IIT Bombay (high English proficiency):
+{
+  "tenant_id": "iit_bombay",
+  "name": "IIT Bombay",
+  "difficulty_mapping": {
+    "easy": {
+      "cefr_level": "B1-B2",
+      "vocabulary": "intermediate",
+      "sentence_length": "10-15 words",
+      "topics": ["technology", "business", "science"]
+    },
+    "medium": {
+      "cefr_level": "B2-C1",
+      "vocabulary": "advanced",
+      "sentence_length": "12-20 words",
+      "topics": ["research", "engineering", "global affairs"]
+    },
+    "hard": {
+      "cefr_level": "C1-C2",
+      "vocabulary": "academic",
+      "sentence_length": "15-25 words",
+      "topics": ["complex systems", "philosophy", "advanced research"]
+    }
+  }
+}
+
+// For Tier-3 Engineering College (lower English proficiency):
+{
+  "tenant_id": "abc_engineering",
+  "name": "ABC College of Engineering",
+  "difficulty_mapping": {
+    "easy": {
+      "cefr_level": "A2-B1",
+      "vocabulary": "basic",
+      "sentence_length": "5-8 words",
+      "topics": ["daily life", "family", "food", "weather"]
+    },
+    "medium": {
+      "cefr_level": "B1",
+      "vocabulary": "intermediate",
+      "sentence_length": "8-12 words",
+      "topics": ["workplace", "technology basics", "travel"]
+    },
+    "hard": {
+      "cefr_level": "B1-B2",
+      "vocabulary": "intermediate-advanced",
+      "sentence_length": "10-15 words",
+      "topics": ["business", "current affairs", "technology"]
+    }
+  }
+}
+```
+
+CALIBRATION IN POOL GENERATION:
+```python
+async def generate_calibrated_questions(
+    section_type: str,
+    difficulty: str,
+    tenant_id: str
+) -> list:
+    """Generate questions calibrated to tenant's difficulty mapping."""
+
+    # Get tenant config
+    config = await db.tenant_config.find_one({"tenant_id": tenant_id})
+    if not config:
+        config = DEFAULT_CONFIG
+
+    mapping = config["difficulty_mapping"].get(difficulty, {})
+    cefr = mapping.get("cefr_level", "B1")
+    vocab = mapping.get("vocabulary", "intermediate")
+    length = mapping.get("sentence_length", "8-12 words")
+    topics = mapping.get("topics", ["general"])
+
+    # Inject calibration into prompt
+    prompt = get_prompt(
+        section_name=section_type,
+        difficulty=difficulty,
+        cefr_level=cefr,
+        vocabulary_level=vocab,
+        sentence_length=length,
+        preferred_topics=topics
+    )
+
+    return await generate_from_prompt(prompt, ...)
+```
+
+WHY THIS MATTERS:
+  - IIT Bombay professor expects "hard" to challenge their best students
+  - Tier-3 college professor expects "easy" to be achievable for their weakest
+  - Same difficulty label, different actual difficulty = product satisfaction
+  - Without calibration: IIT says "too easy", Tier-3 says "too hard"
+  - With calibration: both colleges are satisfied
+
+
+================================================================================
+19. PROPOSED ARCHITECTURE FLOW DIAGRAM
+================================================================================
+
+PROPOSED FLOW (Pool-Based with LLM Fallback):
+===============================================
+
+  +-----------------------------------------------------------------+
+  |                    QUESTION POOL SYSTEM                         |
+  +-----------------------------------------------------------------+
+  |                                                                 |
+  |  BACKGROUND (Nightly at 2 AM IST):                             |
+  |  ==================================                             |
+  |                                                                 |
+  |  Celery Beat Scheduler                                          |
+  |       |                                                         |
+  |       v                                                         |
+  |  refresh_all_tenant_pools()                                     |
+  |       |                                                         |
+  |       |-- For each active tenant:                               |
+  |       |     |                                                   |
+  |       |     |-- For each section_type (7):                      |
+  |       |     |     |                                             |
+  |       |     |     |-- For each difficulty (3):                  |
+  |       |     |     |     |                                       |
+  |       |     |     |     |-- Check pool count                    |
+  |       |     |     |     |-- If count < TARGET (200):            |
+  |       |     |     |     |     |                                 |
+  |       |     |     |     |     v                                 |
+  |       |     |     |     |   LLM generates 8 questions           |
+  |       |     |     |     |     |                                 |
+  |       |     |     |     |     v                                 |
+  |       |     |     |     |   Quality score each question         |
+  |       |     |     |     |     |                                 |
+  |       |     |     |     |     v                                 |
+  |       |     |     |     |   Store in MongoDB (if score >= 0.8)  |
+  |       |     |     |     |                                       |
+  |       |     |     |     |-- Sleep 1s (rate limit Azure)         |
+  |                                                                 |
+  |  Result: 7 x 3 x 200 = 4,200 questions per tenant              |
+  |  Cost: ~$20-30 one-time, ~$5-10/month refresh                   |
+  |                                                                 |
+  +-----------------------------------------------------------------+
+
+
+  RUNTIME (Student Takes Test):
+  ==============================
+
+  Student clicks "Start Test"
+       |
+       v
+  +------------------+
+  | Frontend         |
+  | (Next.js :3000)  |
+  +------------------+
+       |
+       | POST /api/v1/english-assessment/generate-test
+       | Body: { email_id, difficulty, tenant_id, exam_session_id }
+       v
+  +------------------+
+  | Backend          |
+  | (FastAPI :8000)  |
+  +------------------+
+       |
+       | POST /api/v1/assessment/generate
+       v
+  +--------------------------------------------------------------+
+  | AI Layer (FastAPI :8001)                                     |
+  |                                                              |
+  | Step 1: VARIANT ASSIGNMENT                                   |
+  | ===========================                                  |
+  |   |                                                          |
+  |   |-- Check recently assigned variants (last 30 min)         |
+  |   |-- Pick variant NOT recently used for this tenant         |
+  |   |-- Record assignment in test_assignments collection       |
+  |   |                                                          |
+  |   |   IF variant_pool has variants:                          |
+  |   |     --> Return pre-built variant (50-100ms)              |
+  |   |     --> DONE (no LLM call needed)                        |
+  |   |                                                          |
+  |   |   ELSE (no variants, use pool-based assembly):           |
+  |   |                                                          |
+  | Step 2: POOL-BASED ASSEMBLY                                  |
+  | ============================                                 |
+  |   |                                                          |
+  |   |-- For each section_type (7):                             |
+  |   |     |                                                    |
+  |   |     |-- Query MongoDB question_pool:                     |
+  |   |     |     { section_type, difficulty, tenant_id,         |
+  |   |     |       active: true, _id: not in exclude_ids }     |
+  |   |     |                                                    |
+  |   |     |-- $sample: 8 random questions                      |
+  |   |     |                                                    |
+  |   |     |-- Pool count >= 8?                                 |
+  |   |     |     |                                              |
+  |   |     |     +-- YES: Use pool questions (FREE, instant)    |
+  |   |     |     |     |                                        |
+  |   |     |     |     +-- Pool < 20? Trigger background refill |
+  |   |     |     |                                              |
+  |   |     |     +-- NO: FALLBACK to LLM (see Step 3)          |
+  |   |                                                          |
+  |   |-- Assemble test from 7 sections                          |
+  |   |-- Add unique IDs                                         |
+  |   |-- Return to Backend                                      |
+  |   |                                                          |
+  |   |   TOTAL TIME: 50-200ms (MongoDB reads only)              |
+  |   |   COST: $0.00                                            |
+  |                                                              |
+  | Step 3: LLM FALLBACK (only if pool empty)                    |
+  | ==========================================                   |
+  |   |                                                          |
+  |   |-- Azure OpenAI available?                                |
+  |   |     |                                                    |
+  |   |     +-- YES:                                             |
+  |   |     |     Generate via LLM (2-5s)                        |
+  |   |     |     Add to pool for future use                     |
+  |   |     |     Return to student                              |
+  |   |     |                                                    |
+  |   |     +-- NO (Azure down):                                 |
+  |   |           Return error (should NEVER happen if pool      |
+  |   |           is maintained by nightly job)                  |
+  |                                                              |
+  +--------------------------------------------------------------+
+       |
+       v
+  +------------------+          +------------------+
+  | Backend          |          | MongoDB          |
+  | Returns 200 OK   |          |                  |
+  | with test JSON   |          | Collections:     |
+  +------------------+          | - question_pool  |
+       |                        | - variant_pool   |
+       v                        | - test_assigns   |
+  +------------------+          | - tenant_config  |
+  | Frontend         |          +------------------+
+  | Displays test    |
+  | 50-200ms total   |
+  +------------------+
+
+
+COMPARISON: 60 STUDENTS IN A LAB
+==================================
+
+CURRENT (Real-Time LLM):
+  Student 1:  7 LLM calls --> 5-15s wait
+  Student 2:  7 LLM calls --> 5-15s wait (cache miss: different email_id)
+  Student 3:  7 LLM calls --> 5-15s wait
+  ...
+  Student 15: 7 LLM calls --> TIMEOUT (Azure 429, rate limited)
+  Student 40: "Test generation failed" (retry storm)
+  Student 60: "Test generation failed"
+
+  Total LLM calls: 60 x 7 = 420
+  Success rate: ~25% (15 out of 60)
+  Time: 5-90s per student
+  Cost: 420 x $0.033 = $13.86
+
+PROPOSED (Pool-Based):
+  Student 1:  MongoDB read --> 50ms (variant #37)
+  Student 2:  MongoDB read --> 50ms (variant #12)
+  Student 3:  MongoDB read --> 50ms (variant #45)
+  ...
+  Student 30: MongoDB read --> 50ms (variant #8)
+  Student 60: MongoDB read --> 50ms (variant #23)
+
+  Total LLM calls: 0
+  Success rate: 100%
+  Time: 50-200ms per student
+  Cost: $0.00
+
+PROPOSED (Pool-Based) WITH FIX B CACHE:
+  Not needed! Pool + Variant system replaces cache entirely.
+  Cache is only useful during LLM fallback mode (pool empty).
+
+
+PROPOSED FLOW - WITH CONCURRENT LOAD (500 STUDENTS):
+=====================================================
+
+  Time 00:00 - Placement drive starts
+  Time 00:01 - 500 students click "Start Test"
+                |
+                v
+  Backend receives 500 POST requests
+                |
+                v
+  AI Layer: assign_test_variant() for each request
+    - 50 variants available
+    - ~10 students per variant (500/50)
+    - No two ADJACENT students get same variant
+    - No LLM calls needed
+                |
+                v
+  MongoDB handles 500 reads easily (10,000+ QPS capacity)
+                |
+                v
+  All 500 students get unique-ish tests in <200ms
+
+  Total LLM calls: 0
+  Total cost: $0
+  Success rate: 100%
+  Time per student: 50-200ms
+
+
+================================================================================
+20. IMPLEMENTATION PRIORITY (Effort vs Impact)
+================================================================================
+
++---+-------------------------------+----------+----------+-------------------------+
+| # | Solution                      | Effort   | Impact   | When To Do              |
++---+-------------------------------+----------+----------+-------------------------+
+| 1 | Question Pool (MongoDB)       | 3-4 days | MASSIVE  | BEFORE selling to       |
+|   |                               |          |          | colleges (blocks all)   |
++---+-------------------------------+----------+----------+-------------------------+
+| 2 | Test Variants (random pick)   | 1-2 days | HIGH     | Before first college    |
+|   |                               |          |          | deployment              |
++---+-------------------------------+----------+----------+-------------------------+
+| 3 | Tenant-aware cache/pool key   | 1 day    | HIGH     | Before second college   |
+|   |                               |          |          | sale                    |
++---+-------------------------------+----------+----------+-------------------------+
+| 4 | Background pool refresh       | 2 days   | HIGH     | Week 2 after pool       |
+|   | (nightly Celery job)          |          |          | system deployed         |
++---+-------------------------------+----------+----------+-------------------------+
+| 5 | Hybrid LLM fallback           | 1 day    | MEDIUM   | Week 2 (safety net)     |
++---+-------------------------------+----------+----------+-------------------------+
+| 6 | Difficulty calibration per    | 2-3 days | MEDIUM   | Before university sale  |
+|   | tenant                        |          |          | (product value add)     |
++---+-------------------------------+----------+----------+-------------------------+
+
+CRITICAL PATH:
+  Solutions 1 + 2 + 3 = 5-7 days of development = product is enterprise-ready.
+
+IMPLEMENTATION ORDER:
+  Week 1, Day 1-2: Build question_pool MongoDB collection + schema
+  Week 1, Day 2-3: Build pool-based test assembly (replace LLM runtime calls)
+  Week 1, Day 3-4: Build variant system + assignment logic
+  Week 1, Day 4-5: Build tenant_id support across all queries
+  Week 2, Day 1-2: Build nightly pool refresh job (Celery)
+  Week 2, Day 2:   Build hybrid LLM fallback mode
+  Week 2, Day 3-5: Testing, load testing with 500 concurrent users
+
+WHAT TO BUILD FIRST (MVP for first college):
+  1. question_pool collection in MongoDB
+  2. Pool generation script (one-time, run manually)
+  3. generate_test_from_pool() function
+  4. Variant assignment logic
+  5. tenant_id in request schema
+
+  Total: 5 days to have enterprise-ready test generation
+
+
+================================================================================
+21. BEFORE vs AFTER COMPARISON
+================================================================================
+
++---------------------------+-------------------------------+-------------------------------+
+| Metric                    | CURRENT (Real-time LLM)       | AFTER (Pool Architecture)     |
++---------------------------+-------------------------------+-------------------------------+
+| Response time             | 5-15s (Easy)                  | 50-200ms                      |
+|                           | 25-30s (Medium)               | 50-200ms                      |
+|                           | 70-90s (Hard, often fails)    | 50-200ms                      |
++---------------------------+-------------------------------+-------------------------------+
+| Cost per test             | $0.03-0.10                    | $0.00 (pool pre-paid)         |
++---------------------------+-------------------------------+-------------------------------+
+| Monthly LLM cost          | $900-1,875                    | $50-100                       |
+| (50 colleges)             |                               | (pool refresh only)           |
++---------------------------+-------------------------------+-------------------------------+
+| Annual LLM cost           | $11,250-22,500                | $600-1,200                    |
+| (50 colleges)             |                               | (95-97% savings)              |
++---------------------------+-------------------------------+-------------------------------+
+| Concurrent users          | ~50 max (then 429 errors)     | 10,000+ (MongoDB limit)       |
++---------------------------+-------------------------------+-------------------------------+
+| Cheating risk             | HIGH                          | LOW                           |
+|                           | (cache = same test)           | (random from 200+ pool)       |
++---------------------------+-------------------------------+-------------------------------+
+| Azure outage impact       | 100% DOWN                     | 0% impact                     |
+|                           | (all tests fail)              | (pool in MongoDB)             |
++---------------------------+-------------------------------+-------------------------------+
+| Question quality control  | NONE                          | Pre-scored & reviewable       |
+|                           | (raw LLM output)              | (quality_score >= 0.8)        |
++---------------------------+-------------------------------+-------------------------------+
+| Multi-tenancy             | NONE                          | Per-college isolation          |
+|                           | (all share same cache)        | (tenant_id on everything)     |
++---------------------------+-------------------------------+-------------------------------+
+| Difficulty calibration    | NONE                          | Per-college CEFR mapping      |
+|                           | (one size fits all)           | (IIT vs Tier-3 appropriate)   |
++---------------------------+-------------------------------+-------------------------------+
+| Server restart impact     | Cache lost, LLM storm         | Zero impact                   |
+|                           | (in-memory cache gone)        | (pool in persistent DB)       |
++---------------------------+-------------------------------+-------------------------------+
+| Scalability               | Linear cost per student       | Fixed cost (pool maintenance) |
+|                           | (more students = more LLM)    | + near-zero marginal cost     |
++---------------------------+-------------------------------+-------------------------------+
+| Placement drive ready     | NO (fails at 50+ concurrent)  | YES (handles 10,000+)         |
++---------------------------+-------------------------------+-------------------------------+
+| Offline/degraded mode     | NO (Azure required)           | YES (pool always available)   |
++---------------------------+-------------------------------+-------------------------------+
+
+
+================================================================================
+22. FIX B CODE REVIEW (Cache Key Normalization)
+================================================================================
+
+This is the original FIX B from the V2.2 performance patch. While FIX B correctly
+identifies the cache key bug, the Pool Architecture (Solutions 1-6 above) makes
+this fix LESS critical because cache is only used during LLM fallback mode.
+
+However, FIX B should STILL be implemented as a quick win until the Pool
+Architecture is built.
+
+FILE: src/services/english_assessment/main.py
+FUNCTION: generate_tests_with_cache() (line 410)
+
+PROBLEM:
+  There are TWO cache layers. The per-section cache (test_generator.py) correctly
+  uses key = section_type:difficulty (no email_id). BUT the full-response cache in
+  main.py serializes the ENTIRE input_list as the cache key:
+
+  input_list = [{"email_id": "user@x.com", "difficulty": "easy", "do_not_repeat_list": [...]}]
+  cache_key = json.dumps(input_list, sort_keys=True)
+
+  Since email_id differs per user, the cache key is unique per user. Two users
+  requesting "easy" difficulty with empty dedup lists get DIFFERENT cache keys.
+  The full-response cache is effectively USELESS for cross-user sharing.
+
+  This was incorrectly marked as "ChatGPT was wrong" in V2.1. ChatGPT was
+  pointing at THIS cache (main.py), not the per-section cache (test_generator.py).
+  Both caches exist; only this one has the bug.
+
+CURRENT CODE (main.py, line 427-430):
+```python
+# Create cache key from input (normalize to handle whitespace variations)
+import json
+cache_input = json.dumps(input_list, sort_keys=True)
+# ^^^ input_list includes email_id --> cache key is user-specific --> useless
+cache_key_text = normalize_for_cache(cache_input)
+```
+
+SOLUTION:
+  Strip email_id from cache key. Only use difficulty + hash of do_not_repeat_list.
+  This allows cache sharing across users requesting the same difficulty.
+
+FIXED CODE (main.py, line 427-430):
+```python
+def _build_cache_key(input_list: list) -> str:
+    """Build cache key from difficulty + do_not_repeat_list only (ignore email_id)."""
+    import json
+    cache_parts = []
+    for req in input_list:
+        dnr = req.get("do_not_repeat_list") or []
+        # Truncate large dedup lists for stable cache keys
+        if isinstance(dnr, list) and len(dnr) > 50:
+            dnr = sorted(dnr)[-50:]  # Keep last 50 for consistency
+        cache_parts.append({
+            "difficulty": req.get("difficulty", "").lower(),
+            "do_not_repeat_list": dnr,
+        })
+    return json.dumps(cache_parts, sort_keys=True)
+
+cache_input = _build_cache_key(input_list)
+cache_key_text = normalize_for_cache(cache_input)
+```
+
+BENEFIT: User A requests "easy" --> cached. User B requests "easy" with same dedup
+list --> cache HIT (0s, 0 tokens). Previously: always cache MISS for different users.
+
+IMPORTANT NOTE:
+  FIX B alone creates the CHEATING problem described in Challenge 1.
+  FIX B should be implemented WITH the Pool Architecture (Solutions 1-6) to get
+  the cache benefit WITHOUT the cheating risk. The Pool + Variant system
+  ensures different students get different questions, while FIX B ensures the
+  LLM fallback cache works across users.
+
+
+================================================================================
+23. CHATGPT RISK REVIEW OF FIX B (8 Risks Verified Against Code)
+================================================================================
+
+Source: CACHE_KEY_NORMALIZATION_RISKS_FOR_CLAUDE.txt (ChatGPT, 2026-02-09)
+Verification: Claude verified each risk against actual codebase files.
+
+ChatGPT reviewed our FIX B (cache key normalization - remove email_id from key)
+and identified 8 risks. Claude verified ALL 8 against the actual code.
+
+SCORECARD: ChatGPT was RIGHT on all 8 risks.
+
++------+-------------------------------------------+-----------+---------------+-------------------+
+| Risk | Description                               | ChatGPT   | Claude Verify | Severity          |
+|      |                                           | Right?    |               |                   |
++------+-------------------------------------------+-----------+---------------+-------------------+
+| 1    | Cross-user test reuse (fairness)          | YES       | CONFIRMED     | HIGH              |
+| 2    | Dedup accuracy degrades with truncation   | YES       | CONFIRMED     | LOW (rare)        |
+| 3    | Dedup collisions between users            | YES       | CONFIRMED     | MEDIUM            |
+| 4    | Data leakage (PII in cached response)     | YES       | CRITICAL BUG  | CRITICAL (!)      |
+| 5    | Cache fragmentation by dedup list         | YES       | CONFIRMED     | MEDIUM            |
+| 6    | sorted() breaks recency in cache key      | YES       | BUG CONFIRMED | MEDIUM            |
+| 7    | Large cache key payloads                  | YES       | CONFIRMED     | LOW               |
+| 8    | Cache poisoning by malformed input        | YES       | CONFIRMED     | MEDIUM            |
++------+-------------------------------------------+-----------+---------------+-------------------+
+
+
+RISK 1: Cross-user test reuse (fairness + perception)
+------------------------------------------------------
+ChatGPT says: Different users may receive identical tests.
+ChatGPT mitigation: Shuffle question order or swap 1-2 items; reduce cache TTL.
+
+Claude verification:
+  CONFIRMED. With email_id removed from cache key, all users requesting same
+  difficulty with same/empty dedup_list get THE EXACT SAME 44 questions.
+
+  In a college lab with 60 students starting simultaneously:
+  - Student 1 generates test --> cached
+  - Students 2-60 get cache HIT --> identical test
+  - Answers shared via WhatsApp --> mass cheating
+
+Claude verdict on ChatGPT's mitigation:
+  WEAK. Shuffling question ORDER doesn't help -- answers are still the same.
+  Our Solution 1 (Question Pool) + Solution 2 (Test Variants) is much stronger.
+  ChatGPT identified the problem correctly but proposed insufficient mitigation.
+
+
+RISK 2: Dedup accuracy degrades with truncation
+-------------------------------------------------
+ChatGPT says: Truncating do_not_repeat_list (last 50) can allow repeats.
+ChatGPT mitigation: Keep per-user dedup state separately or use bloom/hash.
+
+Claude verification:
+  CONFIRMED but LOW probability. Our FIX B code truncates dedup list to 50 items
+  for the cache key. If User A has 220 items (5 tests), cache key only uses last 50.
+
+  Scenario where it fails:
+  - User A: dedup=[items 1..220], cache key uses [items 171..220]
+  - User B: dedup=[items 11..60], cache key uses [items 11..60]
+  - Different cache keys, different entries -- this is correct behavior
+
+  Real risk: User A (dedup=[11..60]) generates test, cached.
+  User B (dedup=[1..60]) has cache key with [11..60] = SAME key as User A.
+  Cache HIT. But User B should also avoid items [1..10].
+  Cached result might contain items from [1..10] --> User B gets repeated questions.
+
+  In practice: dedup lists grow linearly (each user takes tests in order),
+  so this scenario is rare. But it IS a real edge case.
+
+
+RISK 3: Dedup collisions between users
+----------------------------------------
+ChatGPT says: Cache may store tests filtered using another user's dedup list.
+ChatGPT mitigation: Cache RAW tests (no user dedup), apply dedup after retrieval.
+
+Claude verification:
+  CONFIRMED. The cached result was generated with User A's dedup list injected
+  INTO the LLM prompt. The LLM was told "don't generate questions matching these."
+  If User B gets this cached result, the avoidance was done for User A's list,
+  not User B's list.
+
+  The deeper issue: dedup is currently baked INTO the LLM call. It cannot be
+  separated from the cached result.
+
+Claude verdict on ChatGPT's mitigation:
+  EXCELLENT. "Cache RAW tests (no dedup), apply dedup AFTER retrieval" is the
+  correct architecture. This is the key insight that drives our Phase 2 plan.
+  Generate generic tests, cache by difficulty only, then post-process to remove
+  any matches from the user's specific dedup list.
+
+
+RISK 4: Data leakage (PII in cached response)
+-----------------------------------------------
+*** CRITICAL STOP-SHIP BUG -- VERIFIED IN CODE ***
+
+ChatGPT says: If any user data is embedded in cached content, it can leak cross-user.
+ChatGPT mitigation: Ensure prompts never include email_id; scrub content before caching.
+
+Claude verification:
+  CRITICAL -- CONFIRMED IN 3 PLACES IN CODE.
+
+  What gets cached (main.py line 524):
+    await llm_cache.set(cache_key_text, results, tokens_used=total_tokens)
+
+  'results' is the output of batch_generate_tests(). Each result item contains:
+
+  LOCATION 1 -- batch_processor.py line 212:
+  ```python
+  return {
+      "index": idx,
+      "input": req,           # <-- Contains User A's email_id!
+      "result": test_with_ids  # <-- Also contains User A's email_id!
+  }
+  ```
+
+  LOCATION 2 -- test_generator.py line 735-736:
+  ```python
+  return {
+      "email_id": email_id,   # <-- User A's email_id inside the test result
+      "meta": {"difficulty": difficulty, ...},
+      "sections": sections
+  }
+  ```
+
+  LOCATION 3 -- batch_processor.py line 203:
+  ```python
+  test_id = f"test_{email_id}_{timestamp}"
+  # test_id = "test_student1@college.edu_20260209_143022_123456"
+  # User A's full email address is embedded in the test_id string
+  ```
+
+  WHAT HAPPENS IF FIX B IS DEPLOYED AS-IS:
+  1. User A (student1@college.edu) requests "easy" --> cache MISS
+  2. Test generated with email_id="student1@college.edu" --> CACHED
+  3. User B (student2@college.edu) requests "easy" --> cache HIT
+  4. User B receives response containing:
+     - result.email_id = "student1@college.edu"     <-- LEAKED
+     - result.test_id = "test_student1@college.edu_..."  <-- LEAKED
+     - input.email_id = "student1@college.edu"      <-- LEAKED
+
+  This is PII leakage. Under India's DPDP Act, leaking one student's email
+  to another student is a compliance violation.
+
+  FIX B AS WRITTEN IN V2.2 IS UNSAFE TO DEPLOY.
+
+ChatGPT verdict: Prompts are safe (verified: mock.py has zero email_id references).
+  The problem is in the RESPONSE, not the prompt. ChatGPT correctly identified
+  this risk category.
+
+
+RISK 5: Cache fragmentation by dedup list
+-------------------------------------------
+ChatGPT says: If dedup list varies a lot, cache still misses frequently.
+ChatGPT mitigation: Two-tier cache: difficulty-only global pool + optional dedup cache.
+
+Claude verification:
+  CONFIRMED. Even without email_id in key, the dedup list makes keys unique:
+
+  - User A (first test): dedup=[] --> key = {"difficulty":"easy","do_not_repeat_list":[]}
+  - User B (first test): dedup=[] --> SAME key --> cache HIT (works!)
+  - User C (second test): dedup=[44 questions] --> DIFFERENT key --> cache MISS
+  - User D (second test): dedup=[44 different questions] --> DIFFERENT key --> cache MISS
+
+  So FIX B only helps users on their FIRST test (empty dedup list).
+  Every subsequent test has a unique dedup list = unique cache key = cache MISS
+  = full LLM generation = the cache improvement is much less than expected.
+
+  ChatGPT's two-tier suggestion is correct and aligns with our Phase 2 plan.
+
+
+RISK 6: Incorrect "last 50" semantics if sorted
+-------------------------------------------------
+*** BUG IN OUR FIX B CODE -- CONFIRMED ***
+
+ChatGPT says: Sorting breaks recency; use dnr[-50:] (preserve order), not sorted.
+
+Claude verification:
+  CONFIRMED BUG. Our FIX B code (from V2.2 guide):
+
+  BUGGY CODE:
+    dnr = sorted(dnr)[-50:]
+    # sorted() reorders ALPHABETICALLY
+    # [-50:] picks last 50 ALPHABETICALLY, not most recent
+
+  EXAMPLE:
+    Original (chronological): ["zebra ran fast", "apple is red", "banana yellow", ...]
+    After sorted():           ["apple is red", "banana yellow", ..., "zebra ran fast"]
+    [-50:]:                   Last 50 alphabetically
+                              MISSES recent questions starting with A-M
+
+  CORRECT CODE:
+    dnr = dnr[-50:]
+    # Keep last 50 in original chronological order (most recent)
+
+  This is a straightforward bug. Remove sorted().
+
+
+RISK 7: Large cache key payloads
+----------------------------------
+ChatGPT says: Serializing large dedup lists is expensive.
+ChatGPT mitigation: Hash the dedup list (SHA256 of concatenated IDs).
+
+Claude verification:
+  CONFIRMED but LOW priority for normal usage.
+
+  50 items x ~80 chars = ~4KB JSON for cache key.
+  Cache is PersistentCache (pickle on disk, 1000 max entries, portalocker).
+  4KB keys are fine for this implementation.
+
+  BUT if we DON'T cap the input and someone sends 10,000 items:
+  - Cache key becomes 800KB
+  - 1000 entries x 800KB = 800MB just for keys
+  - Pickle file becomes huge, slow to load
+
+  SHA256 hashing would help but adds complexity. Low priority if we add
+  input validation cap (Risk 8).
+
+
+RISK 8: Cache poisoning by malformed input
+--------------------------------------------
+ChatGPT says: Huge or malformed dedup list can create useless cache keys.
+ChatGPT mitigation: Validate + cap list length and item size.
+
+Claude verification:
+  CONFIRMED. Current BatchTestRequest schema (main.py line 312):
+
+  ```python
+  do_not_repeat_list: Optional[Union[str, list[Union[str, Dict[str, Any]]], Dict[str, Any]]] = None
+  ```
+
+  NO length limit. An attacker or buggy client could send:
+  - 100,000 items --> massive cache key, bloats pickle file
+  - 100,000 items each with 10KB text --> 1GB payload in memory
+  - Repeated garbage items --> fills cache with useless entries
+
+  FIX: Add field_validator to cap at 500 items.
+  ```python
+  @field_validator('do_not_repeat_list')
+  def cap_dedup_list_length(cls, v):
+      if isinstance(v, list) and len(v) > 500:
+          v = v[-500:]
+      return v
+  ```
+
+
+================================================================================
+24. CRITICAL DISCOVERY: DATA LEAKAGE BUG IN CACHED RESPONSE
+================================================================================
+
+*** THIS SECTION DOCUMENTS A STOP-SHIP BUG FOUND BY CHATGPT ***
+
+PROBLEM:
+  FIX B (from V2.2 guide) removes email_id from the cache KEY but does NOT
+  remove email_id from the cache VALUE. The cached response contains User A's
+  PII in 3 locations. When User B gets a cache hit, they receive User A's data.
+
+DATA FLOW SHOWING THE LEAK:
+
+  Step 1: User A (student1@college.edu) requests "easy" test
+  ============================================================
+
+  Request: {"email_id": "student1@college.edu", "difficulty": "easy"}
+
+  generate_full_course() returns (test_generator.py:735-742):
+  {
+    "email_id": "student1@college.edu",          <-- PII #1
+    "meta": {"difficulty": "easy", "created_at": "2026-02-09T10:00:00"},
+    "sections": { ... 7 sections with 44 questions ... }
+  }
+
+  batch_processor.py wraps this (line 203-213):
+  {
+    "index": 0,
+    "input": {
+      "email_id": "student1@college.edu",        <-- PII #2
+      "difficulty": "easy",
+      "do_not_repeat_list": null
+    },
+    "result": {
+      "email_id": "student1@college.edu",        <-- PII #1 (inside result)
+      "test_id": "test_student1@college.edu_20260209_100000_123456",  <-- PII #3
+      "meta": {"difficulty": "easy", ...},
+      "sections": { ... }
+    }
+  }
+
+  main.py caches this entire object (line 524):
+  await llm_cache.set(cache_key_text, results)
+  ^^^ results = [{ "input": {email_id: student1}, "result": {email_id: student1} }]
+
+
+  Step 2: User B (student2@college.edu) requests "easy" test
+  ============================================================
+
+  FIX B cache key (difficulty only, no email_id):
+  cache_key = '{"difficulty": "easy", "do_not_repeat_list": []}'
+
+  SAME key as User A --> cache HIT
+
+  User B receives (from cache):
+  {
+    "index": 0,
+    "input": {
+      "email_id": "student1@college.edu",       <-- STUDENT A'S EMAIL LEAKED
+      "difficulty": "easy"
+    },
+    "result": {
+      "email_id": "student1@college.edu",       <-- STUDENT A'S EMAIL LEAKED
+      "test_id": "test_student1@college.edu_...",<-- STUDENT A'S EMAIL LEAKED
+      "sections": { ... same questions ... }
+    }
+  }
+
+
+  Step 3: What User B sees in their browser
+  ============================================================
+
+  User B's frontend may display:
+  - "Test for: student1@college.edu" (wrong identity)
+  - Test results saved under student1's account (data corruption)
+  - Student1's email visible in network tab / API response
+
+  COMPLIANCE IMPACT:
+  - India DPDP Act: Unauthorized disclosure of personal data
+  - If colleges discover this: contract cancellation + legal risk
+
+
+SOLUTION (3 options, pick one):
+
+  OPTION A: Strip PII before caching (RECOMMENDED)
+  ==================================================
+  Before llm_cache.set(), remove all user-specific data.
+  On cache hit, re-inject the CURRENT user's data.
+
+  BEFORE CACHING (main.py, add before line 524):
+  ```python
+  import copy
+
+  def _strip_pii_for_cache(results: list) -> list:
+      """Remove user-specific data before caching for cross-user reuse."""
+      stripped = copy.deepcopy(results)
+      for item in stripped:
+          # Remove user's original request
+          if "input" in item:
+              item["input"] = {
+                  "difficulty": item["input"].get("difficulty"),
+              }
+          # Remove email_id from test result
+          if "result" in item and isinstance(item["result"], dict):
+              item["result"].pop("email_id", None)
+              item["result"].pop("test_id", None)  # Contains email_id
+      return stripped
+
+  # Replace line 524:
+  # OLD: await llm_cache.set(cache_key_text, results, tokens_used=total_tokens)
+  # NEW:
+  cache_safe_results = _strip_pii_for_cache(results)
+  await llm_cache.set(cache_key_text, cache_safe_results, tokens_used=total_tokens)
+  ```
+
+  ON CACHE HIT (main.py, add after line 437):
+  ```python
+  if cached:
+      local_result, cached_meta, timestamp = cached
+      import copy, datetime as dt
+
+      # Deep copy to avoid mutating cache
+      local_result = copy.deepcopy(local_result)
+
+      # Re-inject CURRENT user's identity into cached result
+      for i, item in enumerate(local_result):
+          current_req = input_list[i] if i < len(input_list) else {}
+          current_email = current_req.get("email_id", "anonymous")
+
+          # Stamp current user's email into result
+          if "result" in item and isinstance(item["result"], dict):
+              item["result"]["email_id"] = current_email
+              item["result"]["test_id"] = (
+                  f"test_{current_email}_"
+                  f"{dt.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+              )
+
+          # Stamp current user's input
+          if "input" in item:
+              item["input"] = current_req
+
+          # Store test for CURRENT user (not cached user)
+          if "result" in item:
+              from generators.storage import test_storage
+              test_storage.store_test(
+                  item["result"]["test_id"],
+                  current_email,
+                  item["result"]
+              )
+
+      # Continue with existing cache hit logic...
+  ```
+
+  OPTION B: Don't cache the "input" field at all
+  =================================================
+  Simpler but loses the ability to debug what generated the cached test.
+  Cache only the "result" part of each item.
+
+  OPTION C: Skip FIX B entirely, go straight to Question Pool
+  ==============================================================
+  If Question Pool (Solution 1) is built first, the full-response cache
+  becomes unnecessary. Pool-based generation has no PII in the question data.
+
+
+================================================================================
+25. CHATGPT'S RECOMMENDED STRATEGY: TWO-TIER CACHE
+================================================================================
+
+Source: CACHE_KEY_NORMALIZATION_RISKS_FOR_CLAUDE.txt (Recommended Safer Strategy)
+
+ChatGPT recommended:
+  "Cache raw tests by difficulty only. Apply per-user dedup after retrieval.
+   Maintain a small spare pool to replace duplicates. Keep a user-specific
+   cache only for immediate repeat calls."
+
+Claude verdict: THIS IS THE CORRECT ARCHITECTURE. Adopting fully.
+
+HOW THE TWO-TIER CACHE WORKS:
+
+  Tier 1: GLOBAL CACHE (by difficulty only)
+  ==========================================
+  - Cache key = difficulty ONLY (e.g., "english_test:easy")
+  - Stores GENERIC test with NO user PII
+  - Maximum cache sharing (all "easy" requests hit same cache)
+  - Dedup list is NOT part of the cache key
+  - Result has no email_id, no test_id, no user input
+
+  Tier 2: POST-RETRIEVAL DEDUP (per-user)
+  ==========================================
+  - After cache hit, check each question against user's dedup list
+  - If question was seen before: swap it from the per-section cache pool
+  - If no replacement available: keep the question (1 duplicate better than failure)
+  - Stamp current user's email_id and generate fresh test_id
+  - Store test under current user's account
+
+
+FLOW DIAGRAM:
+
+  User B requests "easy" test
+       |
+       v
+  Tier 1: Check global cache
+  Key: "english_test:easy"
+       |
+       +-- CACHE HIT (generic test, no PII)
+       |    |
+       |    v
+       |   Tier 2: Post-retrieval processing
+       |    |
+       |    |-- Deep copy cached result
+       |    |
+       |    |-- For each section, for each question:
+       |    |     Is question_text in User B's dedup set?
+       |    |       |
+       |    |       +-- NO: Keep question
+       |    |       |
+       |    |       +-- YES: Try swap from per-section cache pool
+       |    |             |
+       |    |             +-- Replacement found: Swap in
+       |    |             +-- No replacement: Keep (1 dup ok)
+       |    |
+       |    |-- Stamp User B's email_id into result
+       |    |-- Generate fresh test_id for User B
+       |    |-- Store test under User B's account
+       |    |
+       |    v
+       |   Return personalized result to User B
+       |
+       +-- CACHE MISS
+            |
+            v
+           Generate via LLM (existing flow)
+            |
+            v
+           Strip PII from result
+            |
+            v
+           Store in global cache (Tier 1)
+            |
+            v
+           Return result to user (with their PII stamped)
+
+
+IMPLEMENTATION CODE:
+
+File: src/services/english_assessment/main.py
+Replace generate_tests_with_cache() internals:
+
+```python
+# ============================================================
+# TWO-TIER CACHE (ChatGPT recommended strategy)
+# ============================================================
+
+def _difficulty_only_cache_key(input_list: list) -> str:
+    """Tier 1 key: ONLY difficulty, maximum cache sharing."""
+    difficulties = []
+    for req in input_list:
+        difficulties.append(req.get("difficulty", "").lower())
+    return f"english_test:{'_'.join(sorted(difficulties))}"
+
+
+def _strip_pii_for_cache(results: list) -> list:
+    """Strip all user-specific data before storing in global cache."""
+    import copy
+    stripped = copy.deepcopy(results)
+    for item in stripped:
+        if "input" in item:
+            item["input"] = {"difficulty": item["input"].get("difficulty")}
+        if "result" in item and isinstance(item["result"], dict):
+            item["result"].pop("email_id", None)
+            item["result"].pop("test_id", None)
+    return stripped
+
+
+def _stamp_user_identity(cached_results: list, input_list: list) -> list:
+    """Re-inject current user's PII into cached result."""
+    import copy, datetime as dt
+    results = copy.deepcopy(cached_results)
+    for i, item in enumerate(results):
+        current_req = input_list[i] if i < len(input_list) else {}
+        current_email = current_req.get("email_id", "anonymous")
+        if "result" in item and isinstance(item["result"], dict):
+            item["result"]["email_id"] = current_email
+            item["result"]["test_id"] = (
+                f"test_{current_email}_"
+                f"{dt.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+            )
+        if "input" in item:
+            item["input"] = current_req
+    return results
+
+
+def _apply_user_dedup(results: list, input_list: list) -> list:
+    """Tier 2: Swap out questions user has seen before."""
+    from generators.test_generator import _get_cached_section
+
+    for i, item in enumerate(results):
+        if "result" not in item or "error" in item:
+            continue
+
+        current_req = input_list[i] if i < len(input_list) else {}
+        dnr_raw = current_req.get("do_not_repeat_list") or []
+
+        # Build dedup set
+        dedup_set = set()
+        for q in dnr_raw:
+            if isinstance(q, str):
+                dedup_set.add(q.strip().lower())
+            elif isinstance(q, dict):
+                text = q.get("question_text", "")
+                if isinstance(text, str) and text.strip():
+                    dedup_set.add(text.strip().lower())
+
+        if not dedup_set:
+            continue  # First test, no dedup needed
+
+        # Check each section for repeated questions
+        sections = item["result"].get("sections", {})
+        difficulty = item["result"].get("meta", {}).get("difficulty", "easy")
+
+        for section_type, section_data in sections.items():
+            if not isinstance(section_data, list):
+                continue  # story_listen_facts and describe_situation are dicts
+
+            for j, question in enumerate(section_data):
+                q_text = question.get("question_text", "")
+                if isinstance(q_text, list):
+                    # jumbled_sentence: question_text is a list of words
+                    q_normalized = " ".join(q_text).strip().lower()
+                elif isinstance(q_text, str):
+                    q_normalized = q_text.strip().lower()
+                else:
+                    continue
+
+                if q_normalized in dedup_set:
+                    # Try swap from per-section cache pool
+                    cached_section = _get_cached_section(section_type, difficulty)
+                    if cached_section and isinstance(cached_section, list):
+                        for replacement in cached_section:
+                            r_text = replacement.get("question_text", "")
+                            r_norm = ""
+                            if isinstance(r_text, str):
+                                r_norm = r_text.strip().lower()
+                            elif isinstance(r_text, list):
+                                r_norm = " ".join(r_text).strip().lower()
+                            if r_norm and r_norm not in dedup_set:
+                                section_data[j] = replacement
+                                break
+                    # If no replacement found, keep the duplicate
+                    # (1 duplicate is better than a failed test)
+
+    return results
+```
+
+UPDATED generate_tests_with_cache() FLOW:
+```python
+async def generate_tests_with_cache(input_list):
+    # ...existing context setup (user_id, correlation_id)...
+
+    # TIER 1: Check global cache (difficulty only)
+    cache_key = _difficulty_only_cache_key(input_list)
+    cache_key_text = normalize_for_cache(cache_key)
+    cached = await llm_cache.get(cache_key_text)
+
+    if cached:
+        local_result, cached_meta, timestamp = cached
+
+        # TIER 2: Post-retrieval processing
+        # 1. Stamp current user's identity (replaces cached user's PII)
+        personalized = _stamp_user_identity(local_result, input_list)
+        # 2. Swap out questions user has seen before
+        personalized = _apply_user_dedup(personalized, input_list)
+
+        # Store test for current user
+        for i, item in enumerate(personalized):
+            if "result" in item and isinstance(item["result"], dict):
+                from generators.storage import test_storage
+                email = input_list[i].get("email_id", "anon") if i < len(input_list) else "anon"
+                test_storage.store_test(
+                    item["result"].get("test_id", ""), email, item["result"]
+                )
+
+        tokens_info = {
+            "total": 0, "prompt": 0, "completion": 0,
+            "cost_usd": 0.0, "cost_inr": 0.0, "from_cache": True
+        }
+        return (personalized, tokens_info)
+
+    # CACHE MISS: Generate via LLM (existing flow)
+    results = await batch_generate_tests(input_list)
+
+    # ...existing cost calculation...
+
+    # Strip PII before caching
+    cache_safe = _strip_pii_for_cache(results)
+    await llm_cache.set(cache_key_text, cache_safe, tokens_used=total_tokens)
+
+    tokens_info = {
+        "total": total_tokens, "prompt": prompt_tokens,
+        "completion": completion_tokens,
+        "cost_usd": round(total_cost_usd, 6),
+        "cost_inr": round(total_cost_inr, 4),
+        "from_cache": False
+    }
+    return (results, tokens_info)
+```
+
+BENEFITS OF TWO-TIER APPROACH:
+
++------------------------------------+--------------------+----------------------+
+| Metric                             | FIX B (V2.2)       | Two-Tier (ChatGPT)   |
++------------------------------------+--------------------+----------------------+
+| Cache key                          | difficulty + dedup  | difficulty ONLY      |
+| First-test users                   | Cache HIT          | Cache HIT            |
+| Repeat users (different dedup)     | Cache MISS         | Cache HIT + swap     |
+| PII in cached data                 | YES (bug!)         | NO (stripped)         |
+| User identity in response          | WRONG user's email | CORRECT user's email |
+| Dedup accuracy                     | Pre-baked in LLM   | Post-retrieval swap  |
+| Cache hit rate                     | ~30-50%            | ~80-95%              |
+| Cross-user test reuse (cheating)   | YES (identical)    | YES (still same base)|
++------------------------------------+--------------------+----------------------+
+
+REMAINING LIMITATION:
+  Two-Tier cache still has the cheating problem (Risk 1). All users get the
+  same BASE test from cache. Dedup only swaps out previously-seen questions.
+  For college deployment, you STILL need the Question Pool + Variant system
+  (Solutions 1-2 from earlier in this document) for true anti-cheating.
+
+
+================================================================================
+26. 3-PHASE ACTION PLAN (Immediate + Short-Term + Enterprise)
+================================================================================
+
+Based on all findings (our 8 challenges + ChatGPT's 8 risks), here is the
+complete action plan organized in 3 phases.
+
+
+PHASE 1: IMMEDIATE BUG FIXES (Day 1) -- Must do BEFORE deploying any cache changes
+=====================================================================================
+
+These fix the bugs ChatGPT found in our FIX B code.
+
++-------+----------------------------------------------+----------+-----------+
+| Fix   | What                                         | File     | Time      |
++-------+----------------------------------------------+----------+-----------+
+| 1A    | Remove sorted() from cache key               | main.py  | 5 min     |
+|       | BUGGY:  dnr = sorted(dnr)[-50:]              |          |           |
+|       | FIXED:  dnr = dnr[-50:]                      |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 1B    | Cap do_not_repeat_list at 500 items           | main.py  | 15 min    |
+|       | Add @field_validator to BatchTestRequest      |          |           |
+|       | Prevents cache poisoning (Risk 8)            |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 1C    | Strip PII from cached response               | main.py  | 2 hours   |
+|       | Add _strip_pii_for_cache() before llm_cache.set |       |           |
+|       | Add _stamp_user_identity() after cache hit    |          |           |
+|       | CRITICAL: Prevents data leakage (Risk 4)     |          |           |
++-------+----------------------------------------------+----------+-----------+
+
+CODE FOR FIX 1A (main.py -- in the planned _build_cache_key function):
+```python
+# CHANGE THIS:
+  if isinstance(dnr, list) and len(dnr) > 50:
+      dnr = sorted(dnr)[-50:]  # BUG: sorts alphabetically, loses recency
+
+# TO THIS:
+  if isinstance(dnr, list) and len(dnr) > 50:
+      dnr = dnr[-50:]  # Keep last 50 in original chronological order
+```
+
+CODE FOR FIX 1B (main.py -- add to BatchTestRequest class after line 349):
+```python
+@field_validator('do_not_repeat_list')
+def cap_dedup_list_length(cls, v):
+    """Cap dedup list at 500 items to prevent cache poisoning."""
+    if isinstance(v, list) and len(v) > 500:
+        v = v[-500:]  # Keep most recent 500
+    return v
+```
+
+CODE FOR FIX 1C: See Section 24 above (Option A: _strip_pii_for_cache).
+
+
+PHASE 2: TWO-TIER CACHE (Day 2-3) -- ChatGPT's recommended strategy
+=====================================================================
+
+Replace current cache logic with the two-tier approach.
+
++-------+----------------------------------------------+----------+-----------+
+| Fix   | What                                         | File     | Time      |
++-------+----------------------------------------------+----------+-----------+
+| 2A    | Cache by difficulty ONLY (global Tier 1)     | main.py  | 4 hours   |
+|       | Replace _build_cache_key with                |          |           |
+|       | _difficulty_only_cache_key                   |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 2B    | Post-retrieval dedup (per-user Tier 2)       | main.py  | 4 hours   |
+|       | Add _apply_user_dedup() function             |          |           |
+|       | Swap repeated questions from section cache   |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 2C    | Replacement from section cache pool          | main.py  | 2 hours   |
+|       | When dedup finds a match, pull replacement   |          |           |
+|       | from _get_cached_section() pool              |          |           |
++-------+----------------------------------------------+----------+-----------+
+
+See Section 25 above for complete code.
+
+AFTER PHASE 2:
+  - Cache hit rate: ~80-95% (vs current ~0%)
+  - No PII leakage (stripped before caching)
+  - Per-user dedup works even on cache hits
+  - Cost savings: significant for repeat users
+  - REMAINING GAP: Cheating still possible (same base test from cache)
+
+
+PHASE 3: QUESTION POOL + VARIANTS (Week 2-3) -- Enterprise architecture
+=========================================================================
+
+Full enterprise solution. Required BEFORE selling to colleges.
+
++-------+----------------------------------------------+----------+-----------+
+| Fix   | What                                         | File(s)  | Time      |
++-------+----------------------------------------------+----------+-----------+
+| 3A    | Create question_pool MongoDB collection       | MongoDB  | 1 day     |
+|       | Schema: section_type, difficulty, question,  | + models |           |
+|       | quality_score, tenant_id, active, times_used |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 3B    | Build pool generation script                 | new file | 1 day     |
+|       | Batch-generate 4,200+ questions per tenant   |          |           |
+|       | Quality-score each question (>= 0.8 to keep)|          |           |
++-------+----------------------------------------------+----------+-----------+
+| 3C    | Build generate_test_from_pool()              | new file | 1 day     |
+|       | Replace LLM calls with MongoDB $sample       |          |           |
+|       | 50ms response instead of 5-15s              |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 3D    | Build variant system + assignment logic       | new file | 1 day     |
+|       | Pre-generate 50-100 test variants per diff  |          |           |
+|       | Random assignment prevents cheating          |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 3E    | Build background pool refresh (Celery)       | new file | 1 day     |
+|       | Nightly job: refill pool, quality check      |          |           |
+|       | Maintain 200+ questions per section/diff     |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 3F    | Add tenant_id to request schema              | main.py  | 0.5 day   |
+|       | All queries filtered by tenant_id            |          |           |
++-------+----------------------------------------------+----------+-----------+
+| 3G    | Difficulty calibration per tenant             | config   | 1 day     |
+|       | IIT "easy" != tier-3 "easy"                  |          |           |
+|       | CEFR level mapping per college               |          |           |
++-------+----------------------------------------------+----------+-----------+
+
+AFTER PHASE 3:
+  - Response time: 50-200ms (vs 5-15s)
+  - Cost per test: $0 at runtime (vs $0.03-0.10)
+  - Concurrent capacity: 10,000+ users (vs ~50)
+  - Cheating: prevented (random variant assignment)
+  - Azure dependency: 0% at runtime (vs 100%)
+  - Multi-tenancy: per-college isolation
+  - Quality control: pre-scored questions, reviewable
+
+
+COMPLETE TIMELINE:
+==================
+
+  Day 1:        PHASE 1 -- Bug fixes (sorted, input cap, PII strip)
+                DEPLOY-SAFE after this
+
+  Day 2-3:      PHASE 2 -- Two-tier cache (ChatGPT strategy)
+                WORKS FOR B2C (individual job seekers)
+
+  Week 2, Day 1-2:  PHASE 3A-3B -- MongoDB pool + generation script
+  Week 2, Day 3:    PHASE 3C -- Pool-based test assembly
+  Week 2, Day 4:    PHASE 3D -- Variant system
+  Week 2, Day 5:    PHASE 3E -- Background refresh
+  Week 3, Day 1:    PHASE 3F-3G -- Tenant support + calibration
+  Week 3, Day 2-3:  Load testing (500 concurrent users)
+  Week 3, Day 4-5:  Integration testing + bug fixes
+
+                ENTERPRISE-READY after this
+
+
+FILES TO MODIFY/CREATE (All Phases):
+======================================
+
+Phase 1 (modify existing):
+  - src/services/english_assessment/main.py
+    -- Fix _build_cache_key(): remove sorted()
+    -- Add BatchTestRequest.cap_dedup_list_length validator
+    -- Add _strip_pii_for_cache() function
+    -- Add _stamp_user_identity() on cache hit
+
+Phase 2 (modify existing):
+  - src/services/english_assessment/main.py
+    -- Replace cache logic with two-tier approach
+    -- Add _difficulty_only_cache_key()
+    -- Add _apply_user_dedup()
+    -- Update generate_tests_with_cache() flow
+
+Phase 3 (new files):
+  - src/services/english_assessment/pool/
+    -- question_pool.py    (MongoDB CRUD for question_pool collection)
+    -- variant_manager.py  (variant assignment + anti-cheating logic)
+    -- pool_generator.py   (batch LLM generation + quality scoring)
+    -- pool_refresh.py     (Celery task for nightly refresh)
+  - src/services/english_assessment/main.py
+    -- Add tenant_id to BatchTestRequest
+    -- Add generate_test_from_pool() endpoint
+  - Celery task configuration (pool refresh schedule)
+  - MongoDB indexes (section_type + difficulty + tenant_id + active)
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+Summary (V1.1 - Updated with ChatGPT Risk Review):
+  - 8 Challenges identified for enterprise deployment
+  - 6 Solutions proposed (all achievable with $0 premium infrastructure cost)
+  - 8 ChatGPT risks verified against code (all 8 valid)
+  - 1 CRITICAL data leakage bug discovered (email_id in cached response)
+  - 1 Code bug discovered (sorted() breaks recency in cache key)
+  - ChatGPT's two-tier cache strategy adopted as Phase 2
+  - 3-phase action plan: Day 1 bug fixes + Day 2-3 two-tier cache + Week 2-3 pool
+  - Critical path to enterprise-ready: 3 weeks
+  - Annual savings at 50 colleges: $10,000-21,000 in LLM costs
+  - Concurrent capacity: 50 users --> 10,000+ users
+  - Cheating prevention: Built-in via variant system (Phase 3)
+  - Azure dependency: 100% --> 0% at runtime (Phase 3)
+
+================================================================================

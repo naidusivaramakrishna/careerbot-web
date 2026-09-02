@@ -1,15 +1,139 @@
 "use client";
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById } from "@/api/resumeApi";
+import { httpClient } from "@/lib/http";
+import { getEnhancedResume, applyFix, deleteFix } from "@/api/enhancerApi";
+import type { ATSScore, ATSSectionScore, EnhancedSuggestion } from "@/types/api.types";
+import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
+import { countryCodes } from "../_utils/sectionsConfig";
+import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
+import logger from "@/lib/logger";
+
+// Extract country code from a combined phone string like "+911234567890"
+function splitPhone(phone: string): { countryCode: string; phoneNumber: string } {
+  if (!phone || !phone.startsWith("+")) return { countryCode: "+91", phoneNumber: phone };
+  // Sort by code length descending so longer codes match first (e.g., "+1-647" before "+1")
+  const sorted = [...countryCodes].sort((a, b) => b.code.length - a.code.length);
+  for (const cc of sorted) {
+    if (phone.startsWith(cc.code)) {
+      return { countryCode: cc.code, phoneNumber: phone.slice(cc.code.length) };
+    }
+  }
+  return { countryCode: "+91", phoneNumber: phone };
+}
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  skills: string[];
+}
 
 export interface CategorizedSkills {
   programming_languages: string[];
   frameworks: string[];
-  databases: string[];
-  tools: string[];
-  cloud_platforms: string[];
   soft_skills: string[];
+  project_management: string[];
+  marketing_sales: string[];
+  custom_categories?: CustomCategory[];
+  hidden_predefined_categories?: string[];
+  // Maps "CategoryKey:SkillName" → backend skill ID for delete calls
+  skill_id_map?: Record<string, string>;
+}
+
+type BackendSkillItem = { id?: string; name?: string };
+type BackendSkills = Record<string, BackendSkillItem[]>;
+
+const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
+  programming_languages: [],
+  frameworks: [],
+  soft_skills: [],
+  project_management: [],
+  marketing_sales: [],
+};
+
+export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
+  if (!backendSkills || typeof backendSkills !== 'object' || Array.isArray(backendSkills)) {
+    return { ...EMPTY_CATEGORIZED_SKILLS };
+  }
+  const s = backendSkills as BackendSkills;
+  const extractNames = (arr?: BackendSkillItem[]) =>
+    (arr || []).map(i => i.name ?? '').filter(Boolean);
+
+  const idMap: Record<string, string> = {};
+  const buildIdMap = (key: string, arr?: BackendSkillItem[]) => {
+    (arr || []).forEach(i => { if (i.id && i.name) idMap[`${key}:${i.name}`] = i.id; });
+  };
+
+  buildIdMap('programming_languages', s.programmingLanguages);
+  buildIdMap('frameworks', s.frameworks);
+  buildIdMap('soft_skills', s.softSkills);
+  buildIdMap('project_management', s.projectManagement);
+  buildIdMap('marketing_sales', s.marketingSales);
+
+  // For custom/unknown category keys, populate skill_id_map using both the raw
+  // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
+  const PREDEFINED = new Set([
+    'programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales',
+    'deletedCategories', 'deleted_categories', 'hiddenCategories', 'hidden_categories',
+  ]);
+  const customCategories: CustomCategory[] = [];
+
+  // Convert camelCase or snake_case key to "Human Readable Name"
+  const toDisplayName = (key: string) =>
+    key
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/\s+/g, ' ')
+      .replace(/^./, c => c.toUpperCase())
+      .trim();
+
+  const addCustomCategory = (key: string, items: BackendSkillItem[]) => {
+    const displayName = toDisplayName(key);
+    buildIdMap(key, items);
+    buildIdMap(displayName, items);
+    customCategories.push({
+      id: `custom_backend_${key}`,
+      name: displayName,
+      skills: extractNames(items),
+    });
+  };
+
+  Object.entries(s).forEach(([camelKey, items]) => {
+    if (PREDEFINED.has(camelKey)) return;
+    // Nested container: customSkills: { "dev_ops_tools": [{id, name}] }
+    if (!Array.isArray(items) && typeof items === 'object' && items !== null) {
+      Object.entries(items as Record<string, BackendSkillItem[]>).forEach(([subKey, subItems]) => {
+        if (Array.isArray(subItems)) addCustomCategory(subKey, subItems);
+      });
+      return;
+    }
+    if (!Array.isArray(items)) return;
+    addCustomCategory(camelKey, items as BackendSkillItem[]);
+  });
+
+  return {
+    programming_languages: extractNames(s.programmingLanguages),
+    frameworks: extractNames(s.frameworks),
+    soft_skills: extractNames(s.softSkills),
+    project_management: extractNames(s.projectManagement),
+    marketing_sales: extractNames(s.marketingSales),
+    ...(customCategories.length > 0 && { custom_categories: customCategories }),
+    skill_id_map: idMap,
+  };
+}
+
+export interface CustomField {
+  id: string;
+  fieldName: string;
+  fieldType: "text" | "textarea" | "date" | "url" | "list";
+  value: string | string[];
+}
+
+export interface CustomSection {
+  id: string;
+  sectionName: string;
+  fields: CustomField[];
 }
 
 // Resume data structure
@@ -18,99 +142,158 @@ export interface ResumeData {
   personalInfo: {
     fullname: string;
     email: string;
+    countryCode: string;
     phone: string;
     location: string;
     linkedinUrl: string;
+    githubUrl: string;
     portfolioUrl: string;
+    dateOfBirth?: string;
+    nationality?: string;
+    category?: string;
+    languages?: string;
+    titlePrefix?: string;
+    qualifications?: string;
+    // Government Standard — India-specific
+    fathersName?: string;
+    maritalStatus?: string;
+    gender?: string;
+    permanentAddress?: string;
+    // Healthcare
+    specialisation?: string;
+    medicalRegNo?: string;
+    // Legal
+    barEnrollmentNo?: string;
+    yearOfEnrollment?: string;
+    courtsOfPractise?: string;
+    // Marine
+    rank?: string;
+    cocNumber?: string;
+    stcwCertificates?: string;
+    vesselTypes?: string;
+    // Research Scholar
+    orcidId?: string;
+    googleScholarUrl?: string;
+    hIndex?: string;
   };
   professionalSummary: {
     summary: string;
     targetRole: string;
   };
-  education: { 
-    school: string; 
-    degree: string; 
-    startDate: string; 
-    endDate: string; 
+  education: {
+    id?: string;
+    school: string;
+    degree: string;
+    startDate: string;
+    endDate: string;
+    scoreType?: "CGPA" | "Marks" | "GPA" | "Percentage";
+    scoreValue?: string;
   }[];
-  workExperience: { 
-    company: string; 
-    role: string; 
-    startDate: string; 
-    endDate: string; 
-    currentlyWorking: boolean; 
-    description: string; 
-    location: string; 
+  workExperience: {
+    id?: string;
+    company: string;
+    role: string;
+    startDate: string;
+    endDate: string;
+    currentlyWorking: boolean;
+    description: string;
+    location: string;
+    technologies: string[];
   }[];
-  projects: { 
-    title: string; 
-    description: string; 
-    technologies: string[]; 
-    startDate: string; 
-    endDate: string; 
-    link: string; 
+  projects: {
+    id?: string;
+    title: string;
+    description: string;
+    technologies: string[];
+    startDate: string;
+    endDate: string;
+    link: string;
   }[];
   skills: string[];
   categorizedSkills?: CategorizedSkills;
-  certifications: { 
-    name: string; 
-    issuedBy: string; 
-    year: string; 
+  certifications: {
+    id?: string;
+    name: string;
+    issuer: string;
+    issueDate: string;
     expiryDate?: string;
     credentialId?: string;
   }[];
-  achievements: { 
-    title: string; 
-    date: string; 
-    description: string; 
+  achievements: {
+    id?: string;
+    title: string;
+    date: string;
+    description: string;
   }[];
-  volunteering: { 
-    organization: string; 
-    role: string; 
-    startDate: string; 
-    endDate: string; 
+  volunteering: {
+    id?: string;
+    organization: string;
+    role: string;
+    startDate: string;
+    endDate: string;
   }[];
-  references: { 
-    name: string; 
-    relation: string; 
-    contact: string; 
+  references: {
+    id?: string;
+    name: string;
+    relation: string;
+    contact: string;
   }[];
-  internships: { 
-    company: string; 
-    role: string; 
-    startDate: string; 
-    endDate: string; 
-    currentlyWorking: boolean; 
-    description: string; 
-    location: string; 
+  internships: {
+    id?: string;
+    company: string;
+    role: string;
+    startDate: string;
+    endDate: string;
+    currentlyWorking: boolean;
+    description: string;
+    location: string;
+    technologies: string[];
   }[];
-  awards: { 
-    title: string; 
-    issuedBy: string; 
-    year: string; 
+  awards: {
+    id?: string;
+    title: string;
+    issuedBy: string;
+    year: string;
   }[];
-  hobbies: { 
-    name: string; 
-    description: string; 
-    proficiencyLevel?: string; 
-    achievement?: string; 
+  hobbies: {
+    id?: string;
+    name: string;
+    description: string;
+    proficiencyLevel?: string;
+    achievement?: string;
   }[];
-  interests: { 
-    name: string; 
-    description: string; 
-    category?: string;  
+  interests: {
+    id?: string;
+    name: string;
+    description: string;
+    category?: string;
   }[];
-  languages: { 
-    language: string; 
-    proficiency: string; 
+  languages: {
+    id?: string;
+    name: string;
+    proficiency: string;
   }[];
-  publications: { 
-    title: string; 
-    authors: string; 
-    publicationName: string; 
-    date: string; 
-    url: string; 
+  publications: {
+    id?: string;
+    title: string;
+    authors: string;
+    publicationName: string;
+    date: string;
+    url: string;
+    doi?: string;
   }[];
+  patents: {
+    id?: string;
+    title: string;
+    patentNumber?: string;
+    date?: string;
+    description?: string;
+    status?: string;
+  }[];
+  declaration?: string;
+  declarationDate?: string;
+  declarationPlace?: string;
+  customSections?: CustomSection[];
 }
 
 // Style settings
@@ -124,7 +307,11 @@ export interface ResumeStyle {
   lineSpacing: string;
   headingColor: string;
   bodyColor: string;
+  sectionHeaderBg?: string;
+  accentColor?: string;
 }
+
+export type EnhancedAtsScore = ATSScore | null;
 
 interface ResumeContextType {
   resumeData: ResumeData;
@@ -135,13 +322,26 @@ interface ResumeContextType {
   setResumeStyle: React.Dispatch<React.SetStateAction<ResumeStyle>>;
   lastUpdated: Date | null;
   resumeId: string | null;
+  resumeSource: string | null;
+  enhancedAtsScore: EnhancedAtsScore;
+  enhancedSuggestions: EnhancedSuggestion[];
   sectionOrder: string[];
   setSectionOrder: React.Dispatch<React.SetStateAction<string[]>>;
+  previewCatalogueKey: string | null;
+  setPreviewCatalogueKey: React.Dispatch<React.SetStateAction<string | null>>;
   createResume: () => Promise<void>;
   completionStatus: Record<string, boolean>;
   setCompletionStatus: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   getCompletionPercentage: () => number;
   isLoadingResume: boolean;
+  addCustomSection: (section: CustomSection) => void;
+  removeCustomSection: (id: string) => void;
+  addCustomField: (sectionId: string, fieldName: string, fieldType: CustomField["fieldType"]) => void;
+  updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
+  deleteCustomField: (sectionId: string, fieldId: string) => void;
+  applyAutoFix: (suggestionId: string) => Promise<void>;
+  applyManualFix: (suggestionId: string, value: string) => Promise<void>;
+  undoFix: (suggestionId: string) => Promise<void>;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -150,16 +350,26 @@ const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
 interface ResumeProviderProps {
   children: ReactNode;
   resumeId?: string;
+  source?: string;
 }
 
-export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProviderProps) => {
+export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: ResumeProviderProps) => {
   const [selectedTemplate, setSelectedTemplateState] = useState<string | number | null>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem("selected_template");
-      return saved || "2"; // Default to template 2
+      const userEmail = localStorage.getItem('userEmail');
+      const key = userEmail ? `selected_template_${userEmail}` : 'selected_template';
+      const saved = localStorage.getItem(key);
+      return saved || "2";
     }
-    return "2"; // Default to template 2
+    return "2";
   });
+
+  const [enhancedAtsScore, setEnhancedAtsScore] = useState<EnhancedAtsScore>(null);
+  const [enhancedSuggestions, setEnhancedSuggestions] = useState<EnhancedSuggestion[]>([]);
+  // Guards against out-of-order apply-fix responses: each call bumps this ref;
+  // a response whose id no longer matches the latest is dropped, so a slower,
+  // older fix can't stomp the resume state written by a newer one.
+  const latestFixRequestRef = useRef(0);
 
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
     // ✅ If resumeId is provided, don't use localStorage (we'll load from backend)
@@ -191,10 +401,18 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       personalInfo: {
         fullname: "",
         email: "",
+        countryCode: "",
         phone: "",
         location: "",
         linkedinUrl: "",
-        portfolioUrl: ""
+        githubUrl: "",
+        portfolioUrl: "",
+        dateOfBirth: "",
+        nationality: "",
+        category: "",
+        languages: "",
+        titlePrefix: "",
+        qualifications: ""
       },
       professionalSummary: {
         summary: "",
@@ -207,10 +425,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       categorizedSkills: {
         programming_languages: [],
         frameworks: [],
-        databases: [],
-        tools: [],
-        cloud_platforms: [],
-        soft_skills: []
+        soft_skills: [],
+        project_management: [],
+        marketing_sales: [],
       },
       certifications: [],
       achievements: [],
@@ -222,10 +439,33 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       interests: [],
       languages: [],
       publications: [],
+      patents: [],
+      declaration: "",
+      declarationDate: "",
+      declarationPlace: "",
+      customSections: [],
     };
   }
 
-  const [resumeStyle, setResumeStyle] = useState<ResumeStyle>({
+  // Reads user-saved font prefs from localStorage and applies them on top of current style.
+  // Called after template/catalogue defaults so the user's choice always wins.
+  const _reapplySavedFontPrefs = (setter: React.Dispatch<React.SetStateAction<ResumeStyle>>) => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `resumeStyle_${userEmail}` : 'resumeStyle';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      if (!stored) return;
+      const saved = JSON.parse(stored) as Partial<ResumeStyle>;
+      const overrides: Partial<ResumeStyle> = {};
+      if (saved.fontFamily) overrides.fontFamily = saved.fontFamily;
+      if (saved.lineSpacing) overrides.lineSpacing = saved.lineSpacing;
+      if (Object.keys(overrides).length > 0) {
+        setter(prev => ({ ...prev, ...overrides }));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const DEFAULT_RESUME_STYLE: ResumeStyle = {
     fontFamily: "arial",
     nameFontSize: "20px",
     headingFontSize: "14px",
@@ -235,12 +475,22 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
     lineSpacing: "1.0",
     headingColor: "#1A1A1A",
     bodyColor: "#4b5563",
+  };
+
+  const [resumeStyle, setResumeStyle] = useState<ResumeStyle>(() => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `resumeStyle_${userEmail}` : 'resumeStyle';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      if (stored) return { ...DEFAULT_RESUME_STYLE, ...JSON.parse(stored) };
+    } catch { /* ignore */ }
+    return DEFAULT_RESUME_STYLE;
   });
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [isLoadingResume, setIsLoadingResume] = useState(true);
-  
+
   // ✅ NEW: Track if initial load is complete
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
 
@@ -263,24 +513,145 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
     "References": false,
   });
 
-  const [sectionOrder, setSectionOrder] = useState<string[]>([
-    "Personal Info",
-    "Professional Summary",
-    "Skills",
-    "Education",
-    "Work Experience",
-    "Projects",
-    "Certifications",
-    "Achievements",
-    "Volunteering",
-    "Internships",
-    "Awards",
-    "Hobbies",
-    "Interests",
-    "Languages",
-    "Publications",
-    "References",
-  ]);
+  // ✅ Get career level from localStorage to set initial section order
+  const getCareerLevelFromStorage = (): string | undefined => {
+    try {
+      if (typeof window === 'undefined') return undefined;
+      const userEmail = localStorage.getItem('userEmail');
+      const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+
+      const careerLevelStorage = localStorage.getItem(careerLevelKey);
+      const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
+
+      console.warn("🔍 Getting career level - email:", userEmail, "templateId:", appliedTemplateId);
+      console.warn("🔍 careerLevelStorage:", careerLevelStorage);
+
+      if (careerLevelStorage && appliedTemplateId) {
+        const careerLevels = JSON.parse(careerLevelStorage) as Array<{ id: string; name: string }>;
+        const applied = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
+        console.warn("🔍 Applied template found:", applied);
+        if (applied?.name) {
+          const templateName = applied.name.toLowerCase().trim();
+          // Extract career level from template name like "Core Engineering - Fresher"
+          let extractedLevel: string | undefined;
+
+          // Canonical precedence: early career → fresher → architect → manager → lead → senior → mid
+          if (templateName.includes('early') && templateName.includes('career')) {
+            extractedLevel = 'early career';
+          } else if (templateName.includes('fresher')) {
+            extractedLevel = 'fresher';
+          } else if (templateName.includes('architect')) {
+            extractedLevel = 'architect';
+          } else if (templateName.includes('manager')) {
+            extractedLevel = 'manager';
+          } else if (templateName.includes('lead')) {
+            extractedLevel = 'lead';
+          } else if (templateName.includes('senior')) {
+            extractedLevel = 'senior-level';
+          } else if (templateName.includes('mid')) {
+            extractedLevel = 'mid-level';
+          }
+
+          console.warn("🔍 Extracted career level:", extractedLevel, "from template name:", applied.name);
+          return extractedLevel;
+        }
+      }
+    } catch (err) {
+      console.warn("🔍 Error in getCareerLevelFromStorage:", err);
+    }
+    console.warn("🔍 No career level found, returning undefined");
+    return undefined;
+  };
+
+  const [previewCatalogueKey, setPreviewCatalogueKey] = useState<string | null>(null);
+
+  const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
+    try {
+      // Try to load sectionOrder directly from localStorage first (set by DomainTemplatesModal)
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(sectionOrderKey) : null;
+
+      if (stored) {
+        const parsed = JSON.parse(stored) as string[];
+        console.warn("🎯 Loaded sectionOrder from localStorage:", parsed);
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("🎯 Error loading sectionOrder from localStorage:", err);
+    }
+
+    // Fallback: compute from career level
+    const careerLevel = getCareerLevelFromStorage();
+    const order = getSectionOrder(careerLevel);
+    return order;
+  });
+
+  // Persist resumeStyle to localStorage so font/spacing survive page refresh
+  useEffect(() => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `resumeStyle_${userEmail}` : 'resumeStyle';
+      localStorage.setItem(key, JSON.stringify(resumeStyle));
+    } catch { /* ignore */ }
+  }, [resumeStyle]);
+
+  // ✅ Update section order when career level changes or template is switched
+  useEffect(() => {
+    // If user has a saved order in localStorage (e.g. after deleting a section), respect it
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(sectionOrderKey) : null;
+      if (stored) {
+        const parsed = JSON.parse(stored) as string[];
+        setSectionOrder(parsed);
+        return;
+      }
+    } catch { /* ignore */ }
+    // No saved order — compute from career level (first visit or after clearing storage)
+    const careerLevel = getCareerLevelFromStorage();
+    const newOrder = getSectionOrder(careerLevel);
+    setSectionOrder(newOrder);
+  }, [resumeIdProp, selectedTemplate]); // Re-check when resumeId or selectedTemplate changes
+
+  // ✅ Monitor localStorage changes for template switches (from other components)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let lastCheckTime = 0;
+    const handleStorageChange = () => {
+      const now = Date.now();
+      if (now - lastCheckTime < 1000) return; // Only check once per second
+      lastCheckTime = now;
+
+      try {
+        // Try to load sectionOrder from localStorage first
+        const userEmail = localStorage.getItem('userEmail');
+        const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+        const stored = localStorage.getItem(sectionOrderKey);
+
+        if (stored) {
+          const parsed = JSON.parse(stored) as string[];
+          console.warn("📋 Storage check - loaded sectionOrder from localStorage:", parsed);
+          setSectionOrder(parsed);
+          return;
+        }
+      } catch (err) {
+        console.warn("📋 Error loading sectionOrder from localStorage:", err);
+      }
+
+      // Fallback: compute from career level
+      const careerLevel = getCareerLevelFromStorage();
+      const newOrder = getSectionOrder(careerLevel);
+      console.warn("📋 Storage check - careerLevel:", careerLevel, "newOrder:", newOrder);
+      setSectionOrder(newOrder);
+    };
+
+    const interval = setInterval(handleStorageChange, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   // ✅ FIXED: Only save to localStorage AFTER initial load is complete
   useEffect(() => {
@@ -313,63 +684,26 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
   // Template persistence
   useEffect(() => {
     if (selectedTemplate !== null) {
-      localStorage.setItem("selected_template", String(selectedTemplate));
-      // // console.log("💾 Template saved to localStorage:", selectedTemplate);
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `selected_template_${userEmail}` : 'selected_template';
+      localStorage.setItem(key, String(selectedTemplate));
     }
   }, [selectedTemplate]);
 
   const setSelectedTemplate = async (id: string | number | null) => {
     setSelectedTemplateState(id);
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const key = userEmail ? `selected_template_${userEmail}` : 'selected_template';
     if (id !== null) {
-      localStorage.setItem("selected_template", String(id));
-      // // console.log("💾 Template saved to localStorage:", id);
-
-      // Note: set-default API requires MongoDB ID (like "6971cbe74c0df89e108ce5b0")
-      // This is handled separately in TemplatesTab when applying a template
+      localStorage.setItem(key, String(id));
     } else {
-      localStorage.removeItem("selected_template");
+      localStorage.removeItem(key);
     }
   };
 
-  // ✅ Always fetch and use default template from backend
+  // ✅ Parallelize template initialization and resume loading for better performance
   useEffect(() => {
-    const initializeDefaultTemplate = async () => {
-      try {
-        const { getDefaultTemplate, setDefaultTemplate } = await import("@/api/resumeApi");
-
-        try {
-          // First, try to set clean_simple as default (in case it's not already)
-          try {
-            await setDefaultTemplate("6971cbe74c0df89e108ce5b0"); // MongoDB ID for clean_simple
-            console.log("✅ Set clean_simple as default template");
-          } catch (setError) {
-            console.warn("⚠️ Could not set default template (might already be set):", setError);
-          }
-
-          // Then fetch the default template
-          const defaultTemplateData = await getDefaultTemplate();
-          const defaultTemplateId = String((defaultTemplateData as unknown as Record<string, unknown>)?.template_id || (defaultTemplateData as unknown as Record<string, unknown>)?.id || "clean_simple");
-
-          console.log("🎨 Fetched default template from backend:", defaultTemplateId);
-          await setSelectedTemplate(defaultTemplateId);
-        } catch (fetchError) {
-          // If fetching fails, use clean_simple as fallback
-          console.warn("⚠️ Failed to fetch default template, using clean_simple:", fetchError);
-          await setSelectedTemplate("clean_simple");
-        }
-      } catch (error) {
-        console.error("⚠️ Failed to initialize default template:", error);
-        // Last resort fallback
-        await setSelectedTemplate("clean_simple");
-      }
-    };
-
-    initializeDefaultTemplate();
-  }, []); // Empty dependency array - runs once on mount
-
-  // ✅ Load resume from backend (runs once on mount)
-  useEffect(() => {
-    const loadResumeData = async () => {
+    const initializeBuilder = async () => {
       // ✅ Use resumeId from prop (URL param) instead of localStorage
       const resumeId = resumeIdProp;
 
@@ -383,72 +717,292 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
         setIsLoadingResume(true);
 
         // ✅ Check for cached resume data first (for instant loading after creation)
-        const cachedData = typeof window !== 'undefined' ? localStorage.getItem("cached_resume_data") : null;
+        const cachedRaw = typeof window !== 'undefined' ? localStorage.getItem("cached_resume_data") : null;
         let data;
 
-        if (cachedData) {
+        if (cachedRaw) {
           try {
-            data = JSON.parse(cachedData);
-            console.log("⚡ Using cached resume data for instant load");
-            // Clear cache after use to ensure fresh data on subsequent loads
-            localStorage.removeItem("cached_resume_data");
+            const cached = JSON.parse(cachedRaw);
+            // Only use cache if it belongs to this exact resumeId
+            if (cached?.resumeId === resumeId) {
+              data = cached.data;
+              localStorage.removeItem("cached_resume_data");
+            } else {
+              // Stale cache for a different resume — discard and fetch fresh
+              localStorage.removeItem("cached_resume_data");
+            }
           } catch {
-            console.warn("Failed to parse cached data, fetching from backend");
-            data = await getResumeById(resumeId);
+            localStorage.removeItem("cached_resume_data");
+          }
+        }
+
+        // ✅ Parallelize API calls: fetch template and resume data simultaneously
+        const [defaultTemplateData, resumeData] = await Promise.all([
+          (async () => {
+            try {
+              const { getDefaultTemplate } = await import("@/api/resumeApi");
+              return await getDefaultTemplate();
+            } catch (error) {
+              console.warn("Failed to fetch default template, will use fallback", error);
+              return null;
+            }
+          })(),
+          (async () => {
+            // For enhanced resumes, always fetch from API — cached data is flat
+            // (no enhanced_data / ats_score) and would break the score tab on first load.
+            if (data && source !== "enhanced") return data;
+            if (source === "enhanced") {
+              return await getEnhancedResume(resumeId);
+            } else {
+              return await getResumeById(resumeId);
+            }
+          })(),
+        ]);
+
+        // Process resume data
+        let processedData;
+        if (source === "enhanced" && resumeData?.enhanced_data) {
+          // Handle enhanced resume data
+          // enhanced_sections holds user-edited arrays (always 1 source of truth).
+          // enhanced_data top-level arrays are appended to by the backend on each
+          // PATCH, causing duplicates. Spreading enhanced_sections last ensures
+          // user-saved data wins over the stale parsed copies.
+          const enhancedSections = resumeData.enhanced_data.enhanced_sections || {};
+          const enhancedDataWithFallback = {
+            ...resumeData.enhanced_data,
+            ...enhancedSections,
+            enhancer_state: resumeData.enhancer_state,
+          };
+          const mapped = mapParserOutputToBuilderData(enhancedDataWithFallback);
+          processedData = {
+            ...mapped,
+            id: resumeData.id,
+            personalInfo: {
+              ...mapped.personalInfo,
+              fullname: mapped.personalInfo?.fullname || resumeData.display_name || "",
+            },
+          };
+          // Store ATS score — prefer API response; if missing, read from atsAnalysisData
+          // which is already written by the ATS analysis flow (no new storage needed)
+          const resolvedAtsScore = resumeData.ats_score ?? (() => {
+            try {
+              const cached = localStorage.getItem("atsAnalysisData");
+              if (cached) return JSON.parse(cached)?.ats_score ?? null;
+            } catch { /* ignore */ }
+            return null;
+          })();
+          if (resolvedAtsScore) {
+            // Prefer ats_display.score (the headline figure shown on the ATS report page)
+            // to avoid a 1-point rounding discrepancy between ats_breakdown.final_score
+            // and the ats_display score that the backend computes separately.
+            const atsDisplayScore: number | undefined =
+              (resumeData.ats_display as { score?: number } | undefined)?.score ??
+              (resumeData.enhancer_state as { ats_display?: { score?: number } } | undefined)?.ats_display?.score;
+            setEnhancedAtsScore(
+              atsDisplayScore != null
+                ? { ...resolvedAtsScore, final_score: atsDisplayScore, Percentage: atsDisplayScore }
+                : resolvedAtsScore
+            );
+          }
+          // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
+          const derivedSuggestions: EnhancedSuggestion[] = [];
+          const sectionBreakdown = (resolvedAtsScore?.section_breakdown ?? {}) as Record<string, {
+            deductions?: { id: string; penalty: number; after_example?: string; message?: string }[];
+          }>;
+          for (const [sectionName, sec] of Object.entries(sectionBreakdown)) {
+            for (const d of (sec.deductions ?? [])) {
+              const text = d.after_example || d.message;
+              if (text) {
+                derivedSuggestions.push({ id: d.id, section: sectionName, message: text, fix_type: "manual" });
+              }
+            }
+          }
+          if (derivedSuggestions.length > 0) {
+            setEnhancedSuggestions(derivedSuggestions);
           }
         } else {
-          data = await getResumeById(resumeId);
+          processedData = resumeData || data;
         }
+
+        // ✅ Set default template (with fallback to clean_simple)
+        const { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } = await import("../_utils/templateStyles");
+        try {
+          // Use domain template ID
+          const templateId = String(defaultTemplateData?.template_id || defaultTemplateData?.id || "clean_simple");
+          await setSelectedTemplate(templateId);
+
+          // Apply template defaults for styling
+          const defaults = TEMPLATE_DEFAULT_STYLES[templateId];
+          if (defaults) setResumeStyle(prev => ({ ...prev, ...defaults }));
+
+          // Apply catalogue color/font overrides on top
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
+          }
+          // Apply user-picked custom colour (from browse-templates colour picker).
+          // Eclipse → sectionHeaderBg; all others → accentColor (section names use accentColor ?? headingColor,
+          // so headingColor stays #000000 and role/degree titles remain black).
+          if (typeof window !== 'undefined' && selectedCatalogue) {
+            if (selectedCatalogue === 'eclipse') {
+              const sectionBg = localStorage.getItem('selected_section_bg');
+              // Clear accentColor so Eclipse-specific sectionHeaderBg doesn't coexist with a stale accent
+              setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg ?? undefined, accentColor: undefined }));
+            } else {
+              const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
+              // Clear sectionHeaderBg so a previous Eclipse session's value doesn't bleed into other catalogues
+              setResumeStyle(prev => ({ ...prev, accentColor: accent ?? undefined, sectionHeaderBg: undefined }));
+            }
+          }
+          // Re-apply user's saved font/spacing — must come last so template defaults don't overwrite them
+          _reapplySavedFontPrefs(setResumeStyle);
+        } catch {
+          await setSelectedTemplate("clean_simple");
+          const defaults = TEMPLATE_DEFAULT_STYLES["clean_simple"];
+          if (defaults) setResumeStyle(prev => ({ ...prev, ...defaults }));
+
+          // Apply catalogue if selected
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
+          }
+          if (typeof window !== 'undefined' && selectedCatalogue) {
+            if (selectedCatalogue === 'eclipse') {
+              const sectionBg = localStorage.getItem('selected_section_bg');
+              setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg ?? undefined, accentColor: undefined }));
+            } else {
+              const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
+              setResumeStyle(prev => ({ ...prev, accentColor: accent ?? undefined, sectionHeaderBg: undefined }));
+            }
+          }
+          // Re-apply user's saved font/spacing — must come last so template defaults don't overwrite them
+          _reapplySavedFontPrefs(setResumeStyle);
+        }
+
+        // Continue with resume data processing...
+        data = processedData;
+
+        // Split combined phone (e.g. "+911234567890") into countryCode and phone
+        const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(data.personalInfo?.phone || "");
+
+        // Backend may return countryCode as ISO2 ("IN") or as a dialing code ("+91").
+        // Only trust the stored value when it's already a dialing code; otherwise use
+        // the dialing code extracted from the E.164 phone string by splitPhone.
+        const storedCodeInitial = data.personalInfo?.countryCode || "";
+        const resolvedCodeInitial = storedCodeInitial.startsWith("+") ? storedCodeInitial : (parsedCode || "+91");
+
+        // Normalize MongoDB's _id to id for all section items
+        const normalizeId = <T extends Record<string, unknown>>(items: T[]): T[] =>
+          items.map(item => (!item.id && item._id) ? { ...item, id: item._id } : item);
 
         const loadedData: ResumeData = {
           resume_id: data.id,
           personalInfo: {
-            fullname: data.personalInfo?.fullname || "",
+            fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || "",
             email: data.personalInfo?.email || "",
-            phone: data.personalInfo?.phone || "",
+            countryCode: resolvedCodeInitial,
+            phone: parsedPhone || "",
             location: data.personalInfo?.location || "",
             linkedinUrl: data.personalInfo?.linkedinUrl || "",
+            githubUrl: data.personalInfo?.githubUrl || "",
             portfolioUrl: (data.personalInfo as Record<string, string>)?.portfolioUrl || data.personalInfo?.portifolioUrl || "",
+            dateOfBirth: data.personalInfo?.dateOfBirth || null,
+            nationality: data.personalInfo?.nationality || null,
+            category: data.personalInfo?.category || null,
+            languages: data.personalInfo?.languages || null,
+            titlePrefix: data.personalInfo?.titlePrefix || null,
+            qualifications: data.personalInfo?.qualifications || null,
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
-            : (data.professionalSummary || { summary: "", targetRole: "" }),
-          education: data.education || [],
-          workExperience: data.workExperience || [],
-          projects: data.projects || [],
-          skills: data.skills || [],
-          categorizedSkills: data.categorizedSkills || {
-            programming_languages: [],
-            frameworks: [],
-            databases: [],
-            tools: [],
-            cloud_platforms: [],
-            soft_skills: []
-          },
-          certifications: (data.certifications || []).map((cert: any) => ({
+            : {
+              summary: data.professionalSummary?.summary || "",
+              targetRole: data.professionalSummary?.targetRole || (data.professionalSummary as Record<string, string>)?.target_role || "",
+            },
+          education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
+          workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
+          projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
+          // patents is required on ResumeData and defaulted to [] for a new
+          // resume, but was omitted here -- so LOADING a saved resume produced
+          // patents: undefined, which the Patents editor then indexed into.
+          patents: normalizeId((data.patents || []) as Record<string, unknown>[]) as ResumeData["patents"],
+          ...(() => {
+            let categorizedSkills: CategorizedSkills;
+            if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
+              // New backend format: skills is an object with camelCase keys and {id,name} arrays
+              categorizedSkills = mapBackendSkillsToCategorized(data.skills);
+            } else {
+              // Legacy format: categorizedSkills with snake_case string arrays
+              categorizedSkills = (data.categorizedSkills as CategorizedSkills) || { ...EMPTY_CATEGORIZED_SKILLS };
+            }
+            const skills = [
+              ...categorizedSkills.programming_languages,
+              ...categorizedSkills.frameworks,
+              ...categorizedSkills.soft_skills,
+              ...(categorizedSkills.project_management || []),
+              ...(categorizedSkills.marketing_sales || []),
+              ...(categorizedSkills.custom_categories || []).flatMap(c => c.skills),
+            ];
+            return { skills, categorizedSkills };
+          })(),
+          certifications: (data.certifications || []).map((cert: Record<string, string | undefined>) => ({
+            id: cert.id || cert._id,
             name: cert.name || "",
-            issuedBy: cert.issuedBy || cert.issued_by || "",
-            year: cert.year || "",
+            issuer: cert.issuer || cert.issuedBy || cert.issued_by || "",
+            issuedBy: cert.issuedBy || cert.issuer || cert.issued_by || "",
+            issueDate: cert.issueDate || cert.year || "",
+            year: cert.year || cert.issueDate || "",
             expiryDate: cert.expiryDate || cert.expiry_date || "",
             credentialId: cert.credentialId || cert.credential_id || "",
           })),
-          achievements: data.achievements || [],
-          volunteering: data.volunteering || [],
-          references: data.references || [],
-          internships: data.internships || [],
-          awards: data.awards || [],
-          hobbies: data.hobbies || [],
-          interests: data.interests || [],
-          languages: data.languages || [],
-          publications: data.publications || [],
+          achievements: normalizeId((data.achievements || []) as Record<string, unknown>[]) as ResumeData["achievements"],
+          volunteering: normalizeId((data.volunteering || []) as Record<string, unknown>[]) as ResumeData["volunteering"],
+          references: normalizeId((data.references || []) as Record<string, unknown>[]) as ResumeData["references"],
+          internships: normalizeId((data.internships || []) as Record<string, unknown>[]) as ResumeData["internships"],
+          awards: normalizeId((data.awards || []) as Record<string, unknown>[]) as ResumeData["awards"],
+          hobbies: normalizeId((data.hobbies || []) as Record<string, unknown>[]) as ResumeData["hobbies"],
+          interests: normalizeId((data.interests || []) as Record<string, unknown>[]) as ResumeData["interests"],
+          languages: normalizeId((data.languages || []) as Record<string, unknown>[]).map(l => ({
+            ...l,
+            name: (l.name as string) || (l.language as string) || "",
+          })) as ResumeData["languages"],
+          publications: normalizeId((data.publications || []) as Record<string, unknown>[]) as ResumeData["publications"],
+          customSections: data.customSections || [],
         };
 
         // ✅ Replace data completely (don't merge with previous state)
         // This ensures new resumes start fresh without old data
         setResumeData(loadedData);
 
+        // Restore custom section names into sectionOrder so templates render them
+        // Also restore completionStatus entries so the progress ring counts them
+        if (loadedData.customSections && loadedData.customSections.length > 0) {
+          setSectionOrder(prev => {
+            const existing = new Set(prev);
+            const toAdd = loadedData.customSections!
+              .map(cs => cs.sectionName)
+              .filter(name => !existing.has(name));
+            return toAdd.length ? [...prev, ...toAdd] : prev;
+          });
+
+          setCompletionStatus(prev => {
+            const updated = { ...prev };
+            loadedData.customSections!.forEach(cs => {
+              if (!(cs.sectionName in updated)) {
+                // Mark complete only if section has fields and all are filled
+                const isComplete = cs.fields.length > 0 && cs.fields.every(field => {
+                  if (field.fieldType === 'list') return (field.value as string[]).some(v => v.trim() !== '');
+                  return String(field.value).trim() !== '';
+                });
+                updated[cs.sectionName] = isComplete;
+              }
+            });
+            return updated;
+          });
+        }
+
         toast.success("Resume loaded successfully!");
-        
+
       } catch (error) {
         // // console.error("❌ Failed to load resume:", error);
         toast.error("Failed to load resume data");
@@ -458,8 +1012,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       }
     };
 
-    loadResumeData();
-  }, [resumeIdProp]); // Re-run when resumeId prop changes
+    initializeBuilder();
+  }, [resumeIdProp, source]); // Re-run when resumeId or source changes
 
   useEffect(() => {
     setLastUpdated(new Date());
@@ -471,19 +1025,283 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
     return totalSections > 0 ? Math.round((completedSections / totalSections) * 100) : 0;
   };
 
+  const addCustomSection = (section: CustomSection) => {
+    setResumeData(prev => ({
+      ...prev,
+      customSections: [...(prev.customSections || []), section],
+    }));
+    // Add to completionStatus so it counts in the progress ring
+    setCompletionStatus(prev => ({ ...prev, [section.sectionName]: false }));
+  };
+
+  const removeCustomSection = (id: string) => {
+    const sectionToRemove = resumeData.customSections?.find(s => s.id === id);
+    if (sectionToRemove) {
+      setCompletionStatus(prev => {
+        const next = { ...prev };
+        delete next[sectionToRemove.sectionName];
+        return next;
+      });
+    }
+    setResumeData(prev => ({
+      ...prev,
+      customSections: (prev.customSections || []).filter(s => s.id !== id),
+    }));
+  };
+
+  const addCustomField = (sectionId: string, fieldName: string, fieldType: CustomField["fieldType"]) => {
+    const newField: CustomField = {
+      id: `field_${Date.now()}`,
+      fieldName,
+      fieldType,
+      value: fieldType === "list" ? [] : "",
+    };
+    setResumeData(prev => ({
+      ...prev,
+      customSections: (prev.customSections || []).map(s =>
+        s.id === sectionId ? { ...s, fields: [...s.fields, newField] } : s
+      ),
+    }));
+  };
+
+  const updateCustomFieldValue = (sectionId: string, fieldId: string, value: string | string[]) => {
+    setResumeData(prev => ({
+      ...prev,
+      customSections: (prev.customSections || []).map(s =>
+        s.id === sectionId
+          ? { ...s, fields: s.fields.map(f => f.id === fieldId ? { ...f, value } : f) }
+          : s
+      ),
+    }));
+  };
+
+  const deleteCustomField = (sectionId: string, fieldId: string) => {
+    setResumeData(prev => ({
+      ...prev,
+      customSections: (prev.customSections || []).map(s =>
+        s.id === sectionId ? { ...s, fields: s.fields.filter(f => f.id !== fieldId) } : s
+      ),
+    }));
+  };
+
+  // Converts a top-level ats_display block (returned by apply_fix when ats_breakdown is absent)
+  // into an ATSScore object compatible with enhancedAtsScore state.
+  const buildScoreFromAtsDisplay = (
+    atsDisplay: { score?: number; sections?: unknown[] } | undefined,
+    current: ATSScore | null,
+  ): ATSScore | null => {
+    if (!atsDisplay) return current;
+    type AtsSection = {
+      name: string; score_pct: number; weighted_pts: number; max_pts: number;
+      deductions?: Array<{ id: string; penalty_pts?: number; after_example?: string; before_example?: string }>;
+    };
+    const sections = (atsDisplay.sections ?? []) as AtsSection[];
+    const sectionBreakdown: Record<string, ATSSectionScore> = {};
+    for (const sec of sections) {
+      sectionBreakdown[sec.name] = {
+        raw_score: sec.weighted_pts,
+        max_raw_score: sec.max_pts,
+        percentage: sec.score_pct,
+        weight: sec.max_pts,
+        weighted_contribution: sec.weighted_pts,
+        deductions: (sec.deductions ?? []).map(d => ({
+          id: d.id,
+          penalty: d.penalty_pts ?? 0,
+          after_example: d.after_example,
+          before_example: d.before_example,
+        })),
+      };
+    }
+    return {
+      ...(current ?? {}),
+      final_score: atsDisplay.score,
+      Percentage: atsDisplay.score,
+      section_breakdown: Object.keys(sectionBreakdown).length > 0 ? sectionBreakdown : current?.section_breakdown,
+    };
+  };
+
+  // Rebuilds EnhancedSuggestion[] from the deductions in a fresh ats_display response.
+  const buildSuggestionsFromAtsDisplay = (
+    atsDisplay: { sections?: unknown[] } | undefined,
+  ): EnhancedSuggestion[] => {
+    if (!atsDisplay?.sections) return [];
+    type AtsSection = {
+      name: string;
+      deductions?: Array<{ id: string; after_example?: string; message?: string }>;
+    };
+    const result: EnhancedSuggestion[] = [];
+    for (const sec of (atsDisplay.sections as AtsSection[])) {
+      for (const d of (sec.deductions ?? [])) {
+        const text = d.after_example || d.message;
+        if (text) result.push({ id: d.id, section: sec.name, message: text, fix_type: "manual" });
+      }
+    }
+    return result;
+  };
+
+  const applyAutoFix = async (suggestionId: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "auto",
+    });
+    // Drop a response superseded by a newer apply-fix click (out-of-order guard).
+    if (requestId !== latestFixRequestRef.current) return;
+    if (response.success && response.enhancer_state) {
+      // Re-map raw parser resume into builder format
+      const mapped = mapParserOutputToBuilderData({
+        ...response.enhancer_state.resume,
+        enhancer_state: response.enhancer_state,
+      });
+      const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(
+        (mapped.personalInfo?.phone as string) || ""
+      );
+      const storedCodeAuto = (mapped.personalInfo?.countryCode as string) || "";
+      const resolvedCodeAuto = storedCodeAuto.startsWith("+") ? storedCodeAuto : (parsedCode || "+91");
+      setResumeData(prev => ({
+        ...prev,
+        ...mapped,
+        resume_id: prev.resume_id,
+        personalInfo: {
+          fullname: mapped.personalInfo?.fullname || prev.personalInfo.fullname,
+          email: mapped.personalInfo?.email || prev.personalInfo.email || '',
+          location: mapped.personalInfo?.location || prev.personalInfo.location || '',
+          countryCode: resolvedCodeAuto,
+          phone: parsedPhone || mapped.personalInfo?.phone || prev.personalInfo.phone,
+          linkedinUrl: mapped.personalInfo?.linkedinUrl || prev.personalInfo.linkedinUrl || '',
+          githubUrl: mapped.personalInfo?.githubUrl || prev.personalInfo.githubUrl || '',
+          portfolioUrl: mapped.personalInfo?.portfolioUrl || prev.personalInfo.portfolioUrl || '',
+          dateOfBirth: mapped.personalInfo?.dateOfBirth || prev.personalInfo.dateOfBirth || '',
+          nationality: mapped.personalInfo?.nationality || prev.personalInfo.nationality || '',
+          category: mapped.personalInfo?.category || prev.personalInfo.category || '',
+          languages: mapped.personalInfo?.languages || prev.personalInfo.languages || '',
+          titlePrefix: mapped.personalInfo?.titlePrefix || prev.personalInfo.titlePrefix || '',
+          qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
+        },
+      }));
+      // Update ATS score: prefer ats_breakdown from enhancer_state;
+      // fall back to top-level ats_display (apply_fix responses omit ats_breakdown).
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
+      }
+      // Rebuild suggestions from the fresh ats_display deductions so resolved items disappear
+      // and any still-failing ones (e.g. backend rejected the value) remain visible.
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
+      setTimeout(() => {
+        setEnhancedSuggestions(
+          freshSuggestions.length > 0
+            ? freshSuggestions
+            : prev => prev.filter(s => s.id !== suggestionId)
+        );
+      }, 1200);
+    }
+  };
+
+  const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "manual",
+      value,
+    });
+    // Drop a response superseded by a newer apply-fix click (out-of-order guard).
+    if (requestId !== latestFixRequestRef.current) return;
+    if (response.success) {
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state?.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
+      }
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
+      setTimeout(() => {
+        setEnhancedSuggestions(
+          freshSuggestions.length > 0
+            ? freshSuggestions
+            : prev => prev.filter(s => s.id !== suggestionId)
+        );
+      }, 1200);
+    }
+  };
+
+  const undoFix = async (suggestionId: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
+    const response = await deleteFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+    });
+    if (requestId !== latestFixRequestRef.current) return;
+    if (response.success && response.enhancer_state) {
+      const mapped = mapParserOutputToBuilderData({
+        ...response.enhancer_state.resume,
+        enhancer_state: response.enhancer_state,
+      });
+      const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(
+        (mapped.personalInfo?.phone as string) || ""
+      );
+      const storedCodeUndo = (mapped.personalInfo?.countryCode as string) || "";
+      const resolvedCodeUndo = storedCodeUndo.startsWith("+") ? storedCodeUndo : (parsedCode || "+91");
+      setResumeData(prev => ({
+        ...prev,
+        ...mapped,
+        resume_id: prev.resume_id,
+        personalInfo: {
+          fullname: mapped.personalInfo?.fullname || prev.personalInfo.fullname,
+          email: mapped.personalInfo?.email || prev.personalInfo.email || '',
+          location: mapped.personalInfo?.location || prev.personalInfo.location || '',
+          countryCode: resolvedCodeUndo,
+          phone: parsedPhone || mapped.personalInfo?.phone || prev.personalInfo.phone,
+          linkedinUrl: mapped.personalInfo?.linkedinUrl || prev.personalInfo.linkedinUrl || '',
+          githubUrl: mapped.personalInfo?.githubUrl || prev.personalInfo.githubUrl || '',
+          portfolioUrl: mapped.personalInfo?.portfolioUrl || prev.personalInfo.portfolioUrl || '',
+          dateOfBirth: mapped.personalInfo?.dateOfBirth || prev.personalInfo.dateOfBirth || '',
+          nationality: mapped.personalInfo?.nationality || prev.personalInfo.nationality || '',
+          category: mapped.personalInfo?.category || prev.personalInfo.category || '',
+          languages: mapped.personalInfo?.languages || prev.personalInfo.languages || '',
+          titlePrefix: mapped.personalInfo?.titlePrefix || prev.personalInfo.titlePrefix || '',
+          qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
+        },
+      }));
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
+      }
+      // Rebuild suggestions — the deleted fix's suggestion should reappear in the fresh list
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
+      setTimeout(() => {
+        setEnhancedSuggestions(freshSuggestions.length > 0 ? freshSuggestions : prev => prev);
+      }, 1200);
+    }
+  };
+
   const createResume = async () => {
     try {
-      const res = await fetch(process.env.NEXT_PUBLIC_RESUME_API as string, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(resumeData),
-      });
-
-      if (!res.ok) throw new Error("Failed to create resume");
-      const result = await res.json();
-      setResumeId(result.id);
-    } catch (error) {
-      // // console.error("Error creating resume:", error);
+      const result = await httpClient.post<{ id: string }>('/resumes/', resumeData);
+      setResumeId(result.data.id);
+    } catch {
+      // createResume failure is silent — caller handles fallback
     }
   };
 
@@ -501,10 +1319,23 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
         createResume,
         sectionOrder,
         setSectionOrder,
+        previewCatalogueKey,
+        setPreviewCatalogueKey,
         completionStatus,
         setCompletionStatus,
         getCompletionPercentage,
         isLoadingResume,
+        resumeSource: source ?? null,
+        enhancedAtsScore,
+        enhancedSuggestions,
+        addCustomSection,
+        removeCustomSection,
+        addCustomField,
+        updateCustomFieldValue,
+        deleteCustomField,
+        applyAutoFix,
+        applyManualFix,
+        undoFix,
       }}
     >
       {children}

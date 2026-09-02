@@ -1,0 +1,671 @@
+"use client";
+
+import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Search, LayoutTemplate, Sparkles, User } from 'lucide-react';
+import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
+import logger from '@/lib/logger';
+import CategorySidebar from './_components/CategorySidebar';
+import DomainTemplatesModal from './_components/DomainTemplatesModal';
+import DomainCard from './_components/DomainCard';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP } from '@/app/(resume)/builder/creation/_utils/templateStyles';
+import type { HeaderLayout } from '@/app/(resume)/builder/creation/_utils/templateStyles';
+import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from '@/app/browse-templates/_components/CatalogueThumbnail';
+import { DOMAIN_DISPLAY_NAMES } from '@/app/browse-templates/_data/constants';
+import Template1 from '@/app/(resume)/templates/Template1';
+import { type ResumeData, type ResumeStyle } from '@/app/(resume)/builder/creation/_context/ResumeContext';
+
+const DOMAIN_NAMES: Record<string, string> = {
+  core_engineering: 'Core Engineering',
+  software_engineering: 'Software Engineering',
+  healthcare: 'Healthcare',
+  finance: 'Finance',
+  education: 'Education',
+  cybersecurity: 'Cybersecurity',
+  electronics_and_vlsi: 'Electronics & VLSI',
+  government_standard: 'Government Standard',
+  legal: 'Legal',
+  logistics_warehouse_operations: 'Logistics & Warehouse Operations',
+  marine_merchant_navy: 'Marine & Merchant Navy',
+  research_scholar: 'Research Scholar',
+  sales_business_development: 'Sales & Business Development',
+  customer_support_service: 'Customer Support & Account Management',
+  product_engineering_leadership: 'Product & Engineering Leadership',
+  marketing_creative: 'Marketing & Creative',
+  operations_management: 'Operations & Management',
+  human_resources: 'Human Resources & Talent'
+};
+
+import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from './_constants/templateImages';
+import { resolveTemplateImageUrl } from '@/lib/imageUtils';
+
+const TRUST_BADGES = ['100% ATS Friendly', '18 Industries', '100+ Templates'];
+
+interface DomainModal {
+  domainFamily: string;
+  domainKey: string;
+  domainName: string;
+}
+
+function TemplatesPageContent() {
+  const searchParams = useSearchParams();
+  const urlResumeId = searchParams.get("resumeId") || undefined;
+  const urlSource = searchParams.get("source") || undefined;
+  const [categories, setCategories] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<TemplateResponse[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDomainModal, setSelectedDomainModal] = useState<DomainModal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [selectedCatalogue, setSelectedCatalogue] = useState<string>('galaxy');
+  // Per-catalogue section-header background / accent colour (only meaningful for code-thumbnail catalogues).
+  const [hoverBg, setHoverBg] = useState<Record<string, string | undefined>>({});
+  const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>({});
+
+  // Live preview state
+  const [showLivePreview, setShowLivePreview] = useState(false);
+  const [liveResumeData, setLiveResumeData] = useState<ResumeData | null>(null);
+  const liveSectionOrder = ['Personal Info', 'Professional Summary', 'Skills', 'Work Experience', 'Projects', 'Education', 'Certifications'];
+  const [cardScale, setCardScale] = useState(0.26);
+  const cardScaleRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    setCardScale(node.offsetWidth / 595);
+  }, []);
+
+  const hasUserData = !!(liveResumeData?.personalInfo?.fullname || liveResumeData?.workExperience?.length);
+
+  useEffect(() => {
+    // Load all localStorage-dependent state after hydration to avoid SSR mismatch
+    const savedCatalogue = localStorage.getItem('selected_catalogue');
+    if (savedCatalogue) setSelectedCatalogue(savedCatalogue);
+
+    const result: Record<string, string | undefined> = {};
+    for (const key of Object.keys(CATALOGUE_PALETTES)) {
+      const saved = localStorage.getItem(`selected_color_${key}`);
+      if (saved) result[key] = saved;
+    }
+    const legacy = localStorage.getItem('selected_section_bg');
+    if (legacy && !result.eclipse) result.eclipse = legacy;
+    if (Object.keys(result).length > 0) setSelectedBg(result);
+
+    const savedResume = localStorage.getItem('resumeData');
+    if (savedResume) {
+      try { setLiveResumeData(JSON.parse(savedResume)); } catch {}
+    }
+  }, []);
+
+  const buildStyleForCatalogue = useCallback((key: string): ResumeStyle => {
+    const catalogue = STYLE_CATALOGUES[key];
+    const s = catalogue?.style || STYLE_CATALOGUES.galaxy.style;
+    const density = (typeof window !== 'undefined' ? localStorage.getItem('selected_density') : null) || s.lineSpacing || '1.45';
+    const font = (typeof window !== 'undefined' ? localStorage.getItem('selected_font') : null) || s.fontFamily || 'arial';
+    const savedColor = selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
+    const accent = savedColor || (s as Record<string, string | undefined>).accentColor;
+    return {
+      fontFamily: font,
+      nameFontSize: '20px',
+      headingFontSize: '12px',
+      bodyFontSize: '9px',
+      bold: false,
+      italic: false,
+      lineSpacing: density,
+      headingColor: s.headingColor || '#1A1A1A',
+      bodyColor: s.bodyColor || '#4b5563',
+      accentColor: key !== 'eclipse' ? accent : undefined,
+      sectionHeaderBg: key === 'eclipse' ? (savedColor || '#dbeafe') : undefined,
+    };
+  }, [selectedBg]);
+
+  const getLayoutVariant = (key: string): HeaderLayout => {
+    const catalogue = STYLE_CATALOGUES[key];
+    return (CATALOGUE_LAYOUT_MAP[catalogue?.template_id || 'clean_simple'] as HeaderLayout) || 'centered';
+  };
+
+  const persistColorForBuilder = (catalogueKey: string, color: string | undefined) => {
+    // Eclipse's chosen colour drives `selected_section_bg` (the builder reads it for the
+    // classic-formal section-header background). Other catalogues persist per-key only.
+    if (catalogueKey === 'eclipse') {
+      if (color) localStorage.setItem('selected_section_bg', color);
+      else localStorage.removeItem('selected_section_bg');
+    }
+  };
+
+  const handleCatalogueSelect = (key: string) => {
+    setSelectedCatalogue(key);
+    localStorage.setItem('selected_catalogue', key);
+    persistColorForBuilder(key, selectedBg[key]);
+  };
+
+  const handleColorPick = (catalogueKey: string, color: string) => {
+    setSelectedCatalogue(catalogueKey);
+    setSelectedBg(prev => ({ ...prev, [catalogueKey]: color }));
+    localStorage.setItem('selected_catalogue', catalogueKey);
+    localStorage.setItem(`selected_color_${catalogueKey}`, color);
+    persistColorForBuilder(catalogueKey, color);
+  };
+
+  // Fetch categories on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true);
+        const cats = await getTemplateCategories();
+        setCategories(cats);
+        logger.debug('Templates: categories fetched', { count: cats.length });
+      } catch (err) {
+        logger.error('Templates: failed to fetch categories', err);
+        setCategories([]);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    };
+    fetchCategories();
+  }, []);
+
+  // Fetch all templates on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoading(true);
+        // Fetch all templates (no category filter to API)
+        const tmps = await getTemplatesByCategory();
+        setTemplates(tmps);
+        logger.debug('Templates: fetched all templates', { count: tmps.length });
+      } catch (err) {
+        logger.error('Templates: failed to fetch templates', err);
+        setTemplates([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  // Group templates by domain family and domain
+  const groupedTemplates = useMemo(() => {
+    const groups: Record<string, Record<string, TemplateResponse[]>> = {};
+
+    templates.forEach((template) => {
+      const family = ((template as unknown) as Record<string, unknown>).domain_family as string || 'other';
+      const applicableDomains = ((template as unknown) as Record<string, unknown>).applicable_domains as string[] || [];
+
+      if (!groups[family]) {
+        groups[family] = {};
+      }
+
+      // Add template to each applicable domain
+      if (applicableDomains.length > 0) {
+        applicableDomains.forEach((domain) => {
+          if (!groups[family][domain]) {
+            groups[family][domain] = [];
+          }
+          groups[family][domain].push(template);
+        });
+      } else {
+        if (!groups[family]['general']) {
+          groups[family]['general'] = [];
+        }
+        groups[family]['general'].push(template);
+      }
+    });
+
+    return groups;
+  }, [templates]);
+
+  // Filter templates by category (domain family) and search query
+  const filteredTemplates = templates.filter((template) => {
+    // Filter by domain family if not "All"
+    if (selectedCategory !== 'All') {
+      const family = ((template as unknown) as Record<string, unknown>).domain_family as string || 'other';
+      if (family !== selectedCategory) {
+        return false;
+      }
+    }
+
+    // Filter by search query
+    const query = searchQuery.toLowerCase();
+    if (!query) return true; // If no search query, show all (already filtered by category)
+
+    const name = (template.name || '').toLowerCase();
+    const subtitle = (template.subtitle || '').toLowerCase();
+    const description = (template.description || '').toLowerCase();
+
+    // Check if template matches by name, subtitle, or description
+    const matchesBasicInfo =
+      name.includes(query) ||
+      subtitle.includes(query) ||
+      description.includes(query);
+
+    // Also search by domain names (e.g., "Civil Engineering", "Mechanical Engineering")
+    const applicableDomains = ((template as unknown) as Record<string, unknown>).applicable_domains as string[] || [];
+    const matchesDomain = applicableDomains.some(domain => {
+      const displayName = (DOMAIN_DISPLAY_NAMES[domain] || domain).toLowerCase();
+      return displayName.includes(query);
+    });
+
+    return matchesBasicInfo || matchesDomain;
+  });
+
+  // Group filtered templates by domain
+  const filteredGroupedTemplates = useMemo(() => {
+    const groups: Record<string, Record<string, TemplateResponse[]>> = {};
+    const query = searchQuery.toLowerCase();
+
+    // Check if search query matches a family name (e.g., "Core Engineering")
+    const matchingFamilyKey = Object.entries(DOMAIN_NAMES).find(
+      ([, familyName]) => familyName.toLowerCase().includes(query)
+    )?.[0];
+
+    filteredTemplates.forEach((template) => {
+      const family = ((template as unknown) as Record<string, unknown>).domain_family as string || 'other';
+      const applicableDomains = ((template as unknown) as Record<string, unknown>).applicable_domains as string[] || [];
+
+      if (!groups[family]) {
+        groups[family] = {};
+      }
+
+      if (applicableDomains.length > 0) {
+        applicableDomains.forEach((domain) => {
+          const displayName = (DOMAIN_DISPLAY_NAMES[domain] || domain).toLowerCase();
+
+          // If no search query, show all domains
+          if (!query) {
+            if (!groups[family][domain]) {
+              groups[family][domain] = [];
+            }
+            groups[family][domain].push(template);
+          }
+          // If search matches family name, show all domains in that family
+          else if (matchingFamilyKey && family === matchingFamilyKey) {
+            if (!groups[family][domain]) {
+              groups[family][domain] = [];
+            }
+            groups[family][domain].push(template);
+          }
+          // If search matches domain name, only show that domain
+          else if (displayName.includes(query)) {
+            if (!groups[family][domain]) {
+              groups[family][domain] = [];
+            }
+            groups[family][domain].push(template);
+          }
+        });
+      } else {
+        if (!groups[family]['general']) {
+          groups[family]['general'] = [];
+        }
+        groups[family]['general'].push(template);
+      }
+    });
+
+    return groups;
+  }, [filteredTemplates, searchQuery]);
+
+  const openDomainModal = (family: string, domain: string) => {
+    setSelectedDomainModal({
+      domainFamily: family,
+      domainKey: domain,
+      domainName: DOMAIN_DISPLAY_NAMES[domain] || domain,
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] text-gray-900 overflow-x-hidden">
+
+      {/* ── Hero ──────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden pt-10 pb-16 px-6">
+        <div className="absolute inset-0 bg-linear-to-br from-blue-50 via-white to-teal-50/60" />
+        <div className="absolute -top-32 -right-32 w-[550px] h-[550px] bg-gradient-to-bl from-blue-100/70 to-transparent rounded-full blur-3xl" />
+        <div className="absolute -bottom-20 -left-20 w-[400px] h-[400px] bg-gradient-to-tr from-teal-100/60 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-indigo-50/60 rounded-full blur-3xl" />
+
+        <div className="max-w-7xl mx-auto relative">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-full text-xs font-semibold text-[#2257a7] mb-5 shadow-sm">
+            <Sparkles className="w-3.5 h-3.5" />
+            ATS-Optimized · Professional · 100+ Templates
+          </div>
+
+          <h1 className="text-5xl lg:text-6xl font-extrabold tracking-tight mb-5 leading-[1.08]">
+            <span className="text-gray-900">Find your </span>
+            <span className="bg-linear-to-r from-[#2257a7] via-[#1a6abf] to-[#0d9488] bg-clip-text text-transparent">
+              perfect resume style
+            </span>
+          </h1>
+
+          <p className="text-lg text-slate-500 max-w-xl leading-relaxed mb-7">
+            Beautiful templates for every industry and career level. Pick a colour theme, select your domain, and build in minutes.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-5">
+            {TRUST_BADGES.map(badge => (
+              <div key={badge} className="flex items-center gap-2 text-sm text-slate-500">
+                <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                </div>
+                {badge}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Catalogue style picker ─────────────────────────────── */}
+      <div className="px-6 py-14 bg-white border-y border-slate-100">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
+            <div>
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100 mb-3">
+                <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
+                Step 1 of 2
+              </div>
+              <h2 className="text-3xl font-extrabold text-slate-900">Choose a Style</h2>
+              <p className="text-slate-500 mt-1.5 text-sm max-w-md leading-relaxed">
+                Pick a colour theme — it will apply automatically when you open the builder.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue] && (
+                <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
+                  <span>{STYLE_CATALOGUES[selectedCatalogue].label}</span>
+                  <span className="text-blue-300">selected</span>
+                </div>
+              )}
+              <button
+                onClick={() => setShowLivePreview(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+                  showLivePreview
+                    ? 'bg-[#2257a7] text-white border-[#2257a7] shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-800'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                {showLivePreview ? 'Your Data' : 'Preview with Your Data'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+            {Object.entries(STYLE_CATALOGUES).map(([key, catalogue]) => {
+              const isSelected = selectedCatalogue === key;
+              const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
+              const paletteInfo = CATALOGUE_PALETTES[key];
+              const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor;
+              const primarySwatch = catalogue.swatches[0];
+
+              const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
+              return (
+                <div key={key} className="group flex flex-col">
+                  <div
+                    data-testid={`catalogue-card-${key}`}
+                    className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
+                    style={{
+                      boxShadow: isSelected
+                        ? `0 0 0 2.5px ${primarySwatch}, 0 16px 48px ${primarySwatch}30`
+                        : '0 1px 6px rgba(0,0,0,0.07)',
+                      transform: isSelected ? 'translateY(-3px)' : undefined,
+                    }}
+                    onClick={() => handleCatalogueSelect(key)}
+                  >
+                    <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
+                      <div
+                        ref={isFirst ? cardScaleRef : undefined}
+                        className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
+                        style={{ aspectRatio: '3/4' }}
+                      >
+                        {showLivePreview && liveResumeData ? (
+                          <>
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '595px',
+                                transform: `scale(${cardScale})`,
+                                transformOrigin: 'top left',
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              <Template1
+                                data={liveResumeData}
+                                style={buildStyleForCatalogue(key)}
+                                layoutVariant={getLayoutVariant(key)}
+                                sectionOrder={liveSectionOrder}
+                              />
+                            </div>
+                            {!hasUserData && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
+                                <User className="w-6 h-6 text-slate-300 mb-1" />
+                                <p className="text-[10px] text-slate-400 font-medium text-center px-3">Build your resume to preview here</p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
+                        )}
+                      </div>
+
+                      {isSelected && (
+                        <div
+                          className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg"
+                          style={{ backgroundColor: primarySwatch }}
+                        >
+                          ✓
+                        </div>
+                      )}
+
+                      <div className="absolute inset-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3 pointer-events-none">
+                        <div
+                          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
+                          style={{ backgroundColor: isSelected ? primarySwatch : '#1e293b' }}
+                        >
+                          {isSelected ? '✓ Selected' : 'Select Style'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-3 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
+                      {hasCodeThumbnail && paletteInfo ? (
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                          {paletteInfo.palette.slice(0, 5).map(color => {
+                            const isSel = selectedBg[key] === color || (!selectedBg[key] && color === paletteInfo.defaultColor);
+                            return (
+                              <button
+                                key={color}
+                                aria-label={`Select colour ${color}`}
+                                onMouseEnter={() => setHoverBg(prev => ({ ...prev, [key]: color }))}
+                                onMouseLeave={() => setHoverBg(prev => ({ ...prev, [key]: undefined }))}
+                                onClick={e => { e.stopPropagation(); handleColorPick(key, color); }}
+                                className={`w-4 h-4 rounded-full cursor-pointer transition-all duration-150 ${
+                                  isSel
+                                    ? 'ring-2 ring-[#2257a7] ring-offset-1 scale-110'
+                                    : 'ring-1 ring-slate-200 hover:scale-110 hover:ring-slate-400'
+                                }`}
+                                style={{ backgroundColor: color }}
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Monochrome</span>
+                      )}
+                      <div className="flex gap-1 shrink-0">
+                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">PDF</span>
+                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">DOCX</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 px-0.5">
+                    <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
+                      {catalogue.label}
+                    </p>
+                    <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search + Content unified rail ─────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6">
+
+      {/* Search */}
+      <div className="py-8 bg-linear-to-b from-white to-[#f8fafc] border-b border-slate-100">
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+              <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
+              Step 2 of 2
+            </div>
+            <span className="text-sm font-semibold text-slate-700">Select your industry &amp; career level</span>
+          </div>
+
+          <div className="relative group max-w-2xl">
+            <div className="absolute inset-0 bg-linear-to-r from-blue-400/15 to-teal-400/15 rounded-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg -m-1" />
+            <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
+              <Search className="absolute left-3.5 w-4 h-4 text-slate-400 group-focus-within:text-[#2257a7] transition-colors" />
+              <input
+                data-testid="template-search-input"
+                type="text"
+                placeholder="Search by role, industry, or template..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-9 py-3 bg-transparent border-0 focus:outline-none text-slate-900 placeholder-slate-400 text-sm"
+              />
+              {searchQuery && (
+                <button
+                  data-testid="clear-search-btn"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <span className="text-xs font-bold leading-none">✕</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            <span className="text-xs text-slate-400 font-medium mt-1">Try:</span>
+            {['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education'].map(q => (
+              <button
+                key={q}
+                data-testid={`quick-search-${q.toLowerCase().replace(/\s+/g, '-')}`}
+                onClick={() => setSearchQuery(q)}
+                className="text-xs px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#2257a7] hover:text-[#2257a7] transition-colors font-medium shadow-sm"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Content area ──────────────────────────────────────── */}
+      <div className="flex gap-6 py-8">
+        <div className="shrink-0">
+          <CategorySidebar
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            loading={categoriesLoading}
+          />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {loading ? (
+            <div className="space-y-8">
+              {[...Array(2)].map((_, familyIdx) => (
+                <div key={familyIdx}>
+                  <Skeleton className="h-7 w-48 mb-4 rounded-lg" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                        <Skeleton className="w-full h-56 rounded-none" />
+                        <div className="p-5 space-y-3">
+                          <Skeleton className="h-4 w-3/4 rounded" />
+                          <Skeleton className="h-3 w-1/2 rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-200/60 flex items-center justify-center mb-3">
+                <LayoutTemplate className="w-8 h-8 text-[#2257a7]" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-800 mb-1">No templates found</h3>
+              <p className="text-slate-500 text-sm max-w-md">
+                Try adjusting your search or filters. We have over 100 templates across all industries.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-10">
+              {Object.entries(filteredGroupedTemplates).filter(([family]) => family !== 'other').map(([family, domains], idx) => (
+                <div key={family} className="scroll-mt-20">
+                  <div className="mb-5">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
+                      <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                        {DOMAIN_NAMES[family] || family}
+                      </h2>
+                      <span className="px-2.5 py-0.5 bg-[#c9dcf2] text-[#2257a7] text-xs font-semibold rounded-full ring-1 ring-[#a5c6eb]">
+                        {Object.keys(domains).length} templates
+                      </span>
+                    </div>
+                    {idx > 0 && <div className="h-px bg-linear-to-r from-slate-200 via-slate-100 to-transparent mt-4 -mb-4" />}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.entries(domains).map(([domain, domainTemplates]) => (
+                      <DomainCard
+                        key={domain}
+                        domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
+                        templateCount={domainTemplates.length}
+                        previewImage={resolveTemplateImageUrl(
+                          (domainTemplates.find(t =>
+                            t.name?.toLowerCase().includes('early') &&
+                            t.name?.toLowerCase().includes('career')
+                          ) || domainTemplates[0])?.preview_url
+                        ) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
+                        onClick={() => openDomainModal(family, domain)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      </div>{/* end unified rail */}
+
+      {selectedDomainModal && (
+        <DomainTemplatesModal
+          domainName={selectedDomainModal.domainName}
+          domainFamily={selectedDomainModal.domainFamily}
+          templates={groupedTemplates[selectedDomainModal.domainFamily]?.[selectedDomainModal.domainKey] || []}
+          onClose={() => setSelectedDomainModal(null)}
+          sourceResumeId={urlResumeId}
+          source={urlSource}
+        />
+      )}
+    </div>
+  );
+}
+
+// useSearchParams must be inside a Suspense boundary for static export (Next.js).
+export default function TemplatesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <TemplatesPageContent />
+    </Suspense>
+  );
+}

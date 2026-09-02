@@ -1,5 +1,6 @@
 "use client";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Card = ({ title, children, className = "", action }: any) => (
   <section
     className={`bg-white rounded-2xl border-2 border-[#c7c7c7] shadow-sm p-5 md:p-6 ${className}`}

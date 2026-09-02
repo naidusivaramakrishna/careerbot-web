@@ -10,12 +10,14 @@ interface AutocompleteInputProps {
   label?: string;
   required?: boolean;
   error?: string;
+  hint?: string;
   className?: string;
+  maxLength?: number;
 }
 
 
 const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
-  value,
+  value: valueProp,
   onChange,
   onBlur,
   placeholder,
@@ -23,8 +25,11 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   label,
   required,
   error,
+  hint,
   className = "",
+  maxLength,
 }) => {
+  const value = valueProp ?? "";
   const [isOpen, setIsOpen] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -35,13 +40,26 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
   // Filter suggestions based on input value - ONLY ITEMS THAT START WITH THE INPUT
   useEffect(() => {
-    if (value.trim() && !justSelected) {
+    if (value && value.trim() && !justSelected) {
+      // ✅ FIXED: Check if value exactly matches a suggestion (already selected)
+      const isExactMatch = suggestions.some(item =>
+        item.toLowerCase() === value.toLowerCase()
+      );
+
+      // If exact match (value already selected), don't show dropdown
+      if (isExactMatch) {
+        setFilteredSuggestions([]);
+        setIsOpen(false);
+        return;
+      }
+
       const filtered = suggestions.filter((item) =>
         item.toLowerCase().startsWith(value.toLowerCase())
       );
       setFilteredSuggestions(filtered);
       setHighlightedIndex(-1);
-      setIsOpen(filtered.length > 0);
+      // Only open dropdown if there are suggestions AND user is actively typing (has partial match)
+      setIsOpen(filtered.length > 0 && filtered.length < suggestions.length);
     } else {
       setFilteredSuggestions([]);
       if (justSelected) {
@@ -122,9 +140,21 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     if (justSelected) {
       setJustSelected(false);
     }
-    
-    // Only show dropdown if there's text and there are matching suggestions
-    if (value.trim()) {
+
+    // ✅ FIXED: Don't show dropdown if value exactly matches a suggestion (already selected)
+    // Only show suggestions when actively filtering
+    if (value && value.trim()) {
+      const isExactMatch = suggestions.some(item =>
+        item.toLowerCase() === value.toLowerCase()
+      );
+
+      // If it's an exact match (already selected), don't show dropdown
+      if (isExactMatch) {
+        setIsOpen(false);
+        return;
+      }
+
+      // Otherwise, show filtered suggestions (user is typing)
       const filtered = suggestions.filter((item) =>
         item.toLowerCase().startsWith(value.toLowerCase())
       );
@@ -181,10 +211,12 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         onBlur={handleBlur}
         onFocus={handleFocus}
         placeholder={placeholder}
-        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#2557a7] ${className}`}
+        maxLength={maxLength}
+        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 ${error ? "border-red-500 focus:border-red-500" : hint ? "border-gray-400 focus:border-gray-400" : "border-transparent focus:border-[#2557a7]"} focus:outline-none ${className}`}
         autoComplete="off"
       />
       {error && <span className="text-xs text-red-500">{error}</span>}
+      {!error && hint && <span className="text-xs text-gray-400">{hint}</span>}
 
 
       {/* Dropdown */}

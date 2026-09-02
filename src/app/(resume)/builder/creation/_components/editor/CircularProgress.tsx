@@ -3,20 +3,24 @@ import React from "react";
 
 interface CircularProgressProps {
   percentage: number;
+  totalSections?: number;
+  completedCount?: number;
   size?: number;
   strokeWidth?: number;
 }
 
-const CircularProgress: React.FC<CircularProgressProps> = ({ 
-  percentage, 
-  size = 56, 
-  strokeWidth = 4 
+const CircularProgress: React.FC<CircularProgressProps> = ({
+  percentage,
+  totalSections = 16,
+  completedCount,
+  size = 56,
+  strokeWidth = 4
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  const completedSections = Math.round((percentage / 100) * 16); // 16 total sections
+  const completedSections = completedCount ?? Math.round((percentage / 100) * totalSections);
 
   return (
     <div className="flex items-center justify-center">
@@ -47,7 +51,7 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
       {/* Centered text */}
       <div className="absolute flex items-center justify-center flex-col">
         <span className="text-[14px] font-bold text-gray-700">
-          {completedSections}/{16}
+          {completedSections}/{totalSections}
         </span>
       </div>
     </div>

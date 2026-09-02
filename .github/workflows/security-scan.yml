@@ -1,0 +1,83 @@
+name: Security Scan
+
+on:
+  # Run on EVERY pull request, whatever it targets and whatever the source
+  # branch is called. Previously this was `branches: [master, develop2]`, and
+  # since every PR targets an integration branch such as
+  # feature/all-updated-features, NO pull_request run ever matched. Checks only
+  # appeared via the `push` trigger below, which matched `feature/**` — so a
+  # branch named fix/*, chore/* or hotfix/* got NO lint, NO build and NO
+  # security scan, and its PR showed a single green ai-review tick that looked
+  # like a full pass.
+  pull_request:
+    branches: ['**']
+  # Direct pushes to the long-lived branches only. Feature branches are covered
+  # by the pull_request trigger above; keeping `feature/**` here as well would
+  # run every check TWICE per PR. Two runners are registered but only one is
+  # normally online, so effective capacity is ONE.
+  push:
+    branches: [master, develop2]
+
+
+# Supersede in-flight runs for the same PR. Every push to a PR - or to the
+# base branch a PR targets - queues a fresh round of these jobs, and they all
+# land on ONE self-hosted runner shared with the AI review. Without this, five
+# pushes meant five full rounds queued back to back, and the checks that
+# actually gate a merge sat behind reviews of commits already superseded.
+#
+# github.workflow is part of the group key so Frontend CI and Security Scan do
+# not cancel each other - they are separate workflows and both must report.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  npm-audit:
+    name: npm audit
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Upgrade npm to match lockfile generator
+        run: npm install -g npm@11 || echo "skipping global npm upgrade (no permission on self-hosted runner)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (production, advisory)
+        run: npm audit --omit=dev --audit-level=high || true
+
+      - name: npm audit (full, advisory)
+        run: npm audit --audit-level=critical || true
+
+  gitleaks:
+    name: Gitleaks Secret Detection
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A self-hosted runner keeps /tmp between jobs; a GitHub-hosted one does
+      # not. gitleaks-action downloads to a fixed /tmp/gitleaks.tmp and refuses
+      # to overwrite an existing file, so the first self-hosted run succeeded
+      # and every run after it failed with "Destination file path
+      # /tmp/gitleaks.tmp already exists". Clear it before each run.
+      - name: Clear stale gitleaks download (self-hosted /tmp persists)
+        run: rm -rf /tmp/gitleaks.tmp /tmp/gitleaks-*
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

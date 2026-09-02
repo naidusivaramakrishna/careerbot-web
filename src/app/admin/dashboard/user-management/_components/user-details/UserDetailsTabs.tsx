@@ -15,8 +15,8 @@ export const UserDetailsTabs = memo(({ activeTab, onTabChange }: UserDetailsTabs
                     key={tab}
                     onClick={() => onTabChange(tab)}
                     className={`font-medium w-full py-2 transition-all ${activeTab === tab
-                            ? 'bg-white rounded-lg px-4'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-white rounded-lg px-4'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     {tab}

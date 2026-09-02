@@ -1,5 +1,6 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
+import { buildQueryString } from './utils';
 // ==================== INTERFACES ====================
 
 export interface AdminListQueryParams {
@@ -99,20 +100,7 @@ export const getAdminList = async (
     params?: AdminListQueryParams
 ): Promise<AdminListResponse> => {
     try {
-        const queryParams = new URLSearchParams();
-
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
-        if (params?.role) queryParams.append('role', params.role);
-        if (params?.status) queryParams.append('status', params.status);
-        if (params?.search) queryParams.append('search', params.search);
-        if (params?.created_from) queryParams.append('created_from', params.created_from);
-        if (params?.created_to) queryParams.append('created_to', params.created_to);
-        if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
-        if (params?.sort_order) queryParams.append('sort_order', params.sort_order);
-
-        const url = `/admin/auth/list${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-
+        const url = `/admin/auth/list${buildQueryString(params)}`;
         const response = await httpClient.get<AdminListResponse>(url);
         return response.data;
     } catch (error) {
@@ -171,7 +159,7 @@ export const updateAdminRole = async (
     try {
         const response = await httpClient.patch<UpdateAdminRoleResponse>(
             `/admin/auth/${adminId}/role`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -208,7 +196,7 @@ export const updateAdminStatus = async (
     try {
         const response = await httpClient.patch<UpdateAdminStatusResponse>(
             `/admin/auth/${adminId}/status`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -244,6 +232,130 @@ export const deleteAdmin = async (
         return response.data;
     } catch (error) {
         logger.error(`Error deleting admin ${adminId}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Get admin activity logs
+ */
+export const getAdminActivityLogs = async (
+    adminId: string,
+    params?: {
+        page?: number;
+        page_size?: number;
+        action_type?: string;
+        date_from?: string;
+        date_to?: string;
+    }
+): Promise<{
+    total: number;
+    page: number;
+    page_size: number;
+    logs: Array<{
+        id: string;
+        admin_id: string;
+        action_type: string;
+        action_details: string;
+        ip_address: string;
+        user_agent: string;
+        created_at: string;
+    }>;
+}> => {
+    try {
+        const url = `/admin/auth/${adminId}/activity${buildQueryString(params)}`;
+
+        const response = await httpClient.get<{
+            total: number;
+            page: number;
+            page_size: number;
+            logs: Array<{
+                id: string;
+                admin_id: string;
+                action_type: string;
+                action_details: string;
+                ip_address: string;
+                user_agent: string;
+                created_at: string;
+            }>;
+        }>(url);
+        return response.data;
+    } catch (error) {
+        logger.error(`Error fetching admin activity logs for ${adminId}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Reset admin password (Super Admin only)
+ */
+export const resetAdminPassword = async (
+    adminId: string,
+    data: {
+        new_password: string;
+        reason: string;
+    }
+): Promise<{ success: boolean; message: string }> => {
+    try {
+        const response = await httpClient.post<{ success: boolean; message: string }>(
+            `/admin/auth/${adminId}/reset-password`,
+            data,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        logger.error(`Error resetting password for admin ${adminId}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Get admin statistics
+ */
+export const getAdminStats = async (): Promise<{
+    total_admins: number;
+    active_admins: number;
+    suspended_admins: number;
+    inactive_admins: number;
+    admins_by_role: {
+        super_admin: number;
+        admin: number;
+        moderator: number;
+        support: number;
+    };
+    recent_logins: Array<{
+        admin_id: string;
+        email: string;
+        full_name: string;
+        last_login: string;
+    }>;
+}> => {
+    try {
+        const response = await httpClient.get<{
+            total_admins: number;
+            active_admins: number;
+            suspended_admins: number;
+            inactive_admins: number;
+            admins_by_role: {
+                super_admin: number;
+                admin: number;
+                moderator: number;
+                support: number;
+            };
+            recent_logins: Array<{
+                admin_id: string;
+                email: string;
+                full_name: string;
+                last_login: string;
+            }>;
+        }>('/admin/auth/stats');
+        return response.data;
+    } catch (error) {
+        logger.error('Error fetching admin statistics:', error);
         throw error;
     }
 };

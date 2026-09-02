@@ -18,6 +18,7 @@ declare module 'mespeak' {
     utf16?: boolean;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface MeSpeakVoice {
     id: string;
     name: string;

@@ -12,6 +12,9 @@ RUN npm install --legacy-peer-deps
 # Copy the rest of your project files
 COPY . .
 
+# NEXT_PUBLIC_BASE_URL / NEXT_PUBLIC_SERVER_URL are picked up automatically
+# by Next.js from the .env file copied above (per-environment values).
+
 # Build the Next.js app
 RUN npm run build
 
@@ -26,9 +29,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/package*.json ./
-
-# Install only production dependencies
-RUN npm install --omit=dev --legacy-peer-deps
+COPY --from=builder /app/node_modules ./node_modules
 
 # Expose the app port (default for Next.js)
 EXPOSE 3000

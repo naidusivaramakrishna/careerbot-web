@@ -36,35 +36,41 @@ function formatLogMessage(
   level: LogLevel,
   message: string,
   context: Partial<TraceContext>,
-  data?: LogData
+  _data?: LogData
 ): void {
   const correlationId = context.correlationId || getCorrelationId();
   const timestamp = new Date().toISOString();
 
-  const logPrefix = `[${timestamp}] [${level}]`;
-  const traceInfo = [
-    correlationId && `correlation_id=${correlationId}`,
-    context.traceId && `trace_id=${context.traceId}`,
-    context.service && `service=${context.service}`,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  // Logging is disabled in production
+  // const logPrefix = `[${timestamp}] [${level}]`;
+  // const traceInfo = [
+  //   correlationId && `correlation_id=${correlationId}`,
+  //   context.traceId && `trace_id=${context.traceId}`,
+  //   context.service && `service=${context.service}`,
+  // ]
+  //   .filter(Boolean)
+  //   .join(' ');
 
-  const fullMessage = traceInfo ? `${logPrefix} ${traceInfo} - ${message}` : `${logPrefix} ${message}`;
+  // const fullMessage = traceInfo ? `${logPrefix} ${traceInfo} - ${message}` : `${logPrefix} ${message}`;
+  // const styles: Record<LogLevel, string> = {
+  //   [LogLevel.DEBUG]: 'color: #888',
+  //   [LogLevel.INFO]: 'color: #0066cc',
+  //   [LogLevel.WARN]: 'color: #ff9900',
+  //   [LogLevel.ERROR]: 'color: #cc0000; font-weight: bold',
+  // };
 
-  // Color-coded console output
-  const styles: Record<LogLevel, string> = {
-    [LogLevel.DEBUG]: 'color: #888',
-    [LogLevel.INFO]: 'color: #0066cc',
-    [LogLevel.WARN]: 'color: #ff9900',
-    [LogLevel.ERROR]: 'color: #cc0000; font-weight: bold',
-  };
+  // if (_data) {
+  //   // console.log(`%c${fullMessage}`, styles[level], _data);
+  // } else {
+  //   // console.log(`%c${fullMessage}`, styles[level]);
+  // }
 
-  if (data) {
-    // // console.log(`%c${fullMessage}`, styles[level], data);
-  } else {
-    // // console.log(`%c${fullMessage}`, styles[level]);
-  }
+  // Prevent unused variable warnings
+  void level;
+  void message;
+  void correlationId;
+  void timestamp;
+  void _data;
 }
 
 /**
@@ -223,12 +229,13 @@ export function displaySessionInfo(): void {
     return;
   }
 
-  const correlationId = getCorrelationId();
-  console.group('%c🔍 Session Tracing Info', 'color: #0066cc; font-weight: bold; font-size: 14px');
-  // // console.log(`Correlation ID: ${correlationId || 'Not initialized'}`);
-  // // console.log(`Environment: ${process.env.NODE_ENV}`);
-  // // console.log(`Timestamp: ${new Date().toISOString()}`);
-  console.groupEnd();
+  // Logging is disabled
+  // const correlationId = getCorrelationId();
+  // console.group('%c🔍 Session Tracing Info', 'color: #0066cc; font-weight: bold; font-size: 14px');
+  // console.log(`Correlation ID: ${correlationId || 'Not initialized'}`);
+  // console.log(`Environment: ${process.env.NODE_ENV}`);
+  // console.log(`Timestamp: ${new Date().toISOString()}`);
+  // console.groupEnd();
 }
 
 /**

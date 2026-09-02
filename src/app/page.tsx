@@ -1,41 +1,94 @@
-"use client"
-import AuthModal from "@/components/SignUpModal";
-import { useEffect, useState } from "react";
+'use client';
+
+import { useState, useEffect } from 'react';
+import SignUpModal from '@/components/SignUpModal';
+import { useTenant } from '@/contexts/TenantContext';
+import { sanitizeAuthRedirect } from '@/lib/authRedirect';
+import LandingNavbar from './(landing)/_components/LandingNavbar';
+import HeroSection from './(landing)/_components/HeroSection';
+import ProblemStatement from './(landing)/_components/ProblemStatement';
+import FeaturesSection, { CareerPromoSection, MockTestSection } from './(landing)/_components/FeaturesSection';
+import HowItWorks from './(landing)/_components/HowItWorks';
+import UserSegments from './(landing)/_components/UserSegments';
+import Testimonials from './(landing)/_components/Testimonials';
+import PricingTeaser from './(landing)/_components/PricingTeaser';
+import FAQSection from './(landing)/_components/FAQSection';
+import FinalCTASection from './(landing)/_components/FinalCTASection';
+import LandingFooter from './(landing)/_components/LandingFooter';
 
 export default function Home() {
-  const [open, setOpen] = useState(false)
+  const [showModal, setShowModal] = useState(false);
+  const [initialFormType, setInitialFormType] = useState<'signup' | 'signin'>('signup');
+  const [authRedirectTo, setAuthRedirectTo] = useState<string | undefined>();
+  const { setActiveTenant } = useTenant();
+
+  const openSignup = () => {
+    setInitialFormType('signup');
+    setShowModal(true);
+  };
+
+  const openSignin = () => {
+    setInitialFormType('signin');
+    setShowModal(true);
+  };
 
   useEffect(() => {
-    // Check for showLogin query parameter (from http.ts redirect)
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('showLogin') === 'true') {
-      setOpen(true);
-      // Clean up URL to avoid showing the param on refresh
-      window.history.replaceState({}, '', '/');
+    // Handle URL parameters on initial mount
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+
+      const tenantId = params.get('tenant_id');
+      if (tenantId) {
+        setActiveTenant(tenantId);
+      }
+
+      if (params.get('showLogin') === 'true') {
+        setAuthRedirectTo(sanitizeAuthRedirect(params.get('next')));
+        // Delay slightly to ensure state updates properly
+        setTimeout(() => {
+          openSignin();
+        }, 0);
+        if (params.get('verified') === 'true') {
+          sessionStorage.setItem('emailVerified', 'true');
+        }
+        // Clean URL after opening modal
+        window.history.replaceState({}, '', '/');
+      }
     }
 
-    const openLogin = () => {
-      setOpen(true);
-    };
-
-    window.addEventListener("openLoginModal", openLogin);
-
-    return () => {
-      window.removeEventListener("openLoginModal", openLogin);
-    };
+    const handleOpenLogin = () => openSignin();
+    window.addEventListener('openLoginModal', handleOpenLogin);
+    return () => window.removeEventListener('openLoginModal', handleOpenLogin);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div>
-      <button
-        onClick={() => setOpen(true)}
-        className="flex justify-self-end text-sm  gap-2 border border-neutral-200 cursor-pointer bg-black text-white font-semibold rounded-lg px-6 py-2 m-4">
-        SignUp
-      </button>
-      <AuthModal
-        open={open}
-        onClose={() => setOpen(false)}
+    <>
+      {/* Enable smooth scrolling for anchor links */}
+      <style>{`html { scroll-behavior: smooth; }`}</style>
+
+      <main>
+        <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
+        <HeroSection />
+        <ProblemStatement />
+        <FeaturesSection />
+        <HowItWorks />
+        <CareerPromoSection />
+        <MockTestSection />
+        <UserSegments />
+        <Testimonials />
+        <PricingTeaser />
+        <FAQSection />
+        <FinalCTASection />
+        <LandingFooter />
+      </main>
+
+      <SignUpModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        initialFormType={initialFormType}
+        redirectTo={authRedirectTo}
       />
-    </div>
+    </>
   );
 }

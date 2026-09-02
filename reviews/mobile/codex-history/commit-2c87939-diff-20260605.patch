@@ -1,0 +1,19 @@
+diff --git a/src/features/resumes/components/__tests__/TemplateSelection.test.tsx b/src/features/resumes/components/__tests__/TemplateSelection.test.tsx
+index 64c64d5..4dacd0f 100644
+--- a/src/features/resumes/components/__tests__/TemplateSelection.test.tsx
++++ b/src/features/resumes/components/__tests__/TemplateSelection.test.tsx
+@@ -162,6 +162,14 @@ describe('TemplateSelection', () => {
+ 
+     expect(mockApplyTemplate).toHaveBeenNthCalledWith(1, { resumeId: 'r1', templateId: 'broken-slug' });
+     expect(mockApplyTemplate).toHaveBeenNthCalledWith(2, { resumeId: 'r1', templateId: 'mongo-77' });
++    // Codex r1 P1: the dual-id retry's load-bearing invariant is "same id
++    // for /apply AND /config so they never disagree" — the slug-first happy
++    // path test asserts getTemplateConfig was called with 'sleek-slug'; this
++    // fallback test must lock the symmetric mongo-77 case so a regression
++    // where /apply moves to mongo-77 but /config still uses broken-slug
++    // would fail loudly.
++    expect(mockGetTemplateConfig).toHaveBeenCalledTimes(1);
++    expect(mockGetTemplateConfig).toHaveBeenCalledWith('mongo-77');
+     expect(onTemplateApplied).toHaveBeenCalledTimes(1);
+   });
+ });

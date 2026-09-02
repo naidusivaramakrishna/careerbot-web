@@ -3,11 +3,15 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
 import AutocompleteInput from "../AutocompleteInput";
+import TechnologyChipsInput from "../TechnologyChipsInput";
+import SectionTipsPanel from "../SectionTipsPanel";
 import { companies } from "../../../../../../../types/companies";
 import { locations } from "../../../../../../../types/locations";
 import { roles } from "../../../../../../../types/roles";
+import { technologies } from "../../../../../../../types/technologies";
 import {
   FaSpellCheck,
   FaListUl,
@@ -19,10 +23,13 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface InternshipEntry {
   company: string;
@@ -32,7 +39,8 @@ interface InternshipEntry {
   currentlyWorking: boolean;
   description: string;
   location: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  technologies: string[];
+  id?: string;
 }
 
 const emptyInternship = (): InternshipEntry => ({
@@ -43,6 +51,7 @@ const emptyInternship = (): InternshipEntry => ({
   currentlyWorking: false,
   description: "",
   location: "",
+  technologies: [],
 });
 
 // Reusable Toolbar Button Component
@@ -56,7 +65,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -68,6 +77,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Internships: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -87,6 +98,8 @@ const Internships: React.FC = () => {
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<InternshipEntry | null>(null);
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -113,13 +126,75 @@ const Internships: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.internships) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, internships: allEntries });
-    }
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Internships") return;
+      let allValid = true;
+      editingEntries.forEach((internship, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("internship", globalIndex, {
+          company: internship.company,
+          role: internship.role,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Internships") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
+  useEffect(() => {
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
+    setResumeData(prev => {
+      const prevItems = (prev.internships ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.internships) === JSON.stringify(merged)) return prev;
+      return { ...prev, internships: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
+
+  useEffect(() => {
+    if (!resumeData.internships?.length) return;
+    setSavedEntries(prev => {
+      // If savedEntries is empty but API data has arrived, populate from API
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.internships!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
+      if (prev.length !== resumeData.internships!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.internships![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.internships]);
 
   const handleChange = <K extends keyof InternshipEntry>(
     index: number,
@@ -136,7 +211,17 @@ const Internships: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyInternship()]);
@@ -148,6 +233,8 @@ const Internships: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyInternship()]);
 
     setTimeout(() => {
@@ -160,7 +247,7 @@ const Internships: React.FC = () => {
   const removeInternship = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const internshipToDelete = savedEntries[index];
-    const itemId = internshipToDelete._id;
+    const itemId = internshipToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
@@ -178,7 +265,11 @@ const Internships: React.FC = () => {
       // // console.log("🗑️ Deleting internship item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "internships", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "internships", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "internships", itemId);
+      }
 
       // // console.log("✅ Internship item deleted from backend successfully");
 
@@ -191,7 +282,7 @@ const Internships: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete internship item:", error);
-      alert("Failed to delete internship. Please try again.");
+      toast.error("Failed to delete internship. Please try again.");
     } finally {
       setDeletingIndex(null);
     }
@@ -199,50 +290,65 @@ const Internships: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
 
-    setTimeout(() => {
-      const el = editorRefs.current[0];
-      if (el) {
-        el.focus();
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (el.childNodes.length > 0) {
-          range.selectNodeContents(el);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      }
-    }, 0);
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
   };
 
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(idx, "description", editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(idx, "description", content);
     }, 0);
   };
 
   const onEditorInput = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
-    handleChange(idx, "description", el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(idx, "description", content);
   };
 
-  function startToLabel(val: string) {
+  function startToLabel(val: string): string {
     if (!val) return "";
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -295,9 +401,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -310,18 +416,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {
@@ -334,8 +429,10 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   useEffect(() => {
     editingEntries.forEach((internship, idx) => {
       const el = editorRefs.current[idx];
-      if (el && internship.description && el.innerHTML !== internship.description) {
-        el.innerHTML = internship.description;
+      if (el && internship.description) {
+        if (document.activeElement !== el && el.innerHTML !== internship.description) {
+          el.innerHTML = internship.description;
+        }
       }
     });
   }, [editingEntries]);
@@ -369,10 +466,23 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                     </div>
                   )}
                   
+                  {internship.technologies && internship.technologies.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {internship.technologies.map((tech, techIndex) => (
+                        <span
+                          key={techIndex}
+                          className="inline-flex items-center bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {internship.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: internship.description }} 
+                    <div
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      dangerouslySetInnerHTML={{ __html: internship.description }}
                     />
                   )}
                 </div>
@@ -423,9 +533,18 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((internship, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -441,6 +560,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                         placeholder="Company"
                         suggestions={companies}
                         error={errors[`internship-${globalIndex}-company`]}
+                        className={errors[`internship-${globalIndex}-company`] ? "border-red-500" : ""}
+                        maxLength={100}
                       />
 
                       <AutocompleteInput
@@ -452,6 +573,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                         placeholder="Role"
                         suggestions={roles}
                         error={errors[`internship-${globalIndex}-role`]}
+                        className={errors[`internship-${globalIndex}-role`] ? "border-red-500" : ""}
+                        maxLength={100}
                       />
                     </div>
 
@@ -463,6 +586,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                           value={internship.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
+                          maxDate={internship.endDate || undefined}
                         />
                       </div>
 
@@ -473,6 +597,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                             value={internship.endDate}
                             onChange={(val) => handleChange(editIndex, "endDate", val)}
                             placeholder="MM/YY"
+                            minDate={internship.startDate}
                           />
                         </div>
                       )}
@@ -483,6 +608,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                         onChange={(val) => handleChange(editIndex, "location", val)}
                         placeholder="City, State"
                         suggestions={locations}
+                        maxLength={100}
                       />
                     </div>
 
@@ -496,6 +622,17 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                       />
                       <label className="text-xs font-semibold text-gray-700">Currently Working Here</label>
                     </div>
+
+                    {/* Technologies */}
+                    <TechnologyChipsInput
+                      label="Technologies Used"
+                      selectedTechnologies={internship.technologies ?? []}
+                      onTechnologiesChange={(techs) =>
+                        handleChange(editIndex, "technologies", techs)
+                      }
+                      suggestions={technologies}
+                      placeholder="Type to add technologies..."
+                    />
 
                     {/* Description */}
                     <div ref={(el) => { descriptionRefs.current[editIndex] = el; }} className="flex flex-col gap-1 relative">
@@ -534,8 +671,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                           ref={(el) => { editorRefs.current[editIndex] = el; }}
                           contentEditable
                           suppressContentEditableWarning
+                          lang="en"
                           onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                           spellCheck={spellCheckEnabled}
                         />
                       </div>
@@ -558,21 +696,34 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
 
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && activePopup === null ? (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Internship experiences demonstrate initiative and practical skills. Highlight specific contributions, projects completed, and skills gained during your internship.
-                  </p>
-                  <p>
-                    Emphasize measurable achievements and how you added value to the organization, even in a learning capacity. Use action verbs and quantify results whenever possible.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Internships are valued by 85% of employers as relevant work experience.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Internships"
+                entryContent={[
+                  editingEntries[0]?.company,
+                  editingEntries[0]?.role,
+                  ...(editingEntries[0]?.description || '')
+                    .split('\n')
+                    .map((l) => l.trim().slice(0, 60))
+                    .filter(Boolean),
+                ].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Internship experiences demonstrate initiative and practical skills. Highlight specific contributions, projects completed, and skills gained during your internship.
+                      </p>
+                      <p>
+                        Emphasize measurable achievements and how you added value to the organization, even in a learning capacity. Use action verbs and quantify results whenever possible.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Internships are valued by 85% of employers as relevant work experience.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             ) : (
               activePopup !== null && suggestions[activePopup] && (
                 <AISuggestions

@@ -1,35 +1,49 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Shield, Mail, Calendar, Activity, Edit2, Ban, Key } from "lucide-react";
-import Dropdown from "@/components/common/CustomDropdown";
+import { X, Shield, Calendar, Activity, Edit2, Ban, Key, Lock } from "lucide-react";
+import { formatRoleName } from "@/app/admin/_utils/permissions";
+import RoleDialog from "./RoleDialog";
+import StatusDialog from "./StatusDialog";
+import ResetPasswordDialog from "./ResetPasswordDialog";
 import {
     getAdminDetails,
     updateAdminRole,
     updateAdminStatus,
+    resetAdminPassword,
     AdminDetailsResponse
 } from "@/api/adminManagementApi";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
+import { useAdminAccess } from "@/app/admin/_hooks/useAdminAccess";
+import { extractApiError } from "@/app/admin/_utils/apiError";
+import { formatDateTime } from "@/app/admin/_utils/formatDate";
+import { SlidePanel } from "@/app/admin/_components/SlidePanel";
 
 interface Props {
     adminId: string;
     onClose: () => void;
 }
 
-const statusMap: Record<string, string> = {
-    ACTIVE: "active",
-    SUSPENDED: "suspended",
-    INACTIVE: "inactive",
+const ROLE_BADGE_COLORS: Record<string, string> = {
+    super_admin: 'text-purple-600 bg-purple-100',
+    admin: 'text-blue-600 bg-blue-100',
+    moderator: 'text-green-600 bg-green-100',
+    support: 'text-gray-600 bg-gray-100',
 };
 
-const RoleMap: Record<string, string> = {
-    SUPER_ADMIN: "super_admin",
-    ADMIN: "admin",
-    MODERATOR: "moderator",
-    SUPPORT: "support",
-};
+function getRoleBadgeColor(role: string): string {
+    return ROLE_BADGE_COLORS[role.toLowerCase()] ?? 'text-gray-600 bg-gray-100';
+}
 
 const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
+    const { userRole, loading: roleLoading } = useAdminAccess('admin-management');
+    // Intentional access-control tightening: Change Role, Change Status, and Reset Password
+    // are restricted to SUPER_ADMIN only. This is UI gating — the backend enforces the same
+    // constraint independently via require_role(SUPER_ADMIN) on all three endpoints
+    // (PATCH /{admin_id}/role, PATCH /{admin_id}/status, POST /{admin_id}/reset-password),
+    // returning 403 for any caller that is not SUPER_ADMIN. Client-side checks are not security.
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
+
     const [admin, setAdmin] = useState<AdminDetailsResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
@@ -37,30 +51,31 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
     // Dialogs state
     const [showRoleDialog, setShowRoleDialog] = useState(false);
     const [showStatusDialog, setShowStatusDialog] = useState(false);
+    const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
 
     // Form state
     const [roleForm, setRoleForm] = useState({ role: "", reason: "" });
     const [statusForm, setStatusForm] = useState({ status: "", reason: "" });
+    const [passwordForm, setPasswordForm] = useState({ new_password: "", reason: "" });
 
-    useEffect(() => {
-        fetchAdminDetails();
-    }, [adminId]);
-
-    const fetchAdminDetails = async () => {
+    const fetchAdminDetails = useCallback(async () => {
         try {
             setLoading(true);
             const details = await getAdminDetails(adminId);
             setAdmin(details);
-            setRoleForm({ role: details.role, reason: "" });
+            setRoleForm({ role: details.role.toUpperCase(), reason: "" });
             setStatusForm({ status: details.status, reason: "" });
         } catch (error: unknown) {
             logger.error("Error fetching admin details:", error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load admin details";
-            toast.error(errorMessage);
+            toast.error(extractApiError(error, "Failed to load admin details"));
         } finally {
             setLoading(false);
         }
-    };
+    }, [adminId]);
+
+    useEffect(() => {
+        fetchAdminDetails();
+    }, [fetchAdminDetails]);
 
     const handleUpdateRole = useCallback(async () => {
         if (!roleForm.reason || roleForm.reason.length < 10) {
@@ -71,7 +86,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
         try {
             setActionLoading(true);
             await updateAdminRole(adminId, {
-                role: roleForm.role,
+                role: roleForm.role.toLowerCase(),
                 reason: roleForm.reason,
             });
 
@@ -81,12 +96,11 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
             await fetchAdminDetails();
         } catch (error: unknown) {
             logger.error("Error updating role:", error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to update role";
-            toast.error(errorMessage);
+            toast.error(extractApiError(error, "Failed to update role"));
         } finally {
             setActionLoading(false);
         }
-    }, [adminId, roleForm]);
+    }, [adminId, roleForm, fetchAdminDetails]);
 
     const handleUpdateStatus = useCallback(async () => {
         if (!statusForm.reason || statusForm.reason.length < 10) {
@@ -107,59 +121,55 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
             await fetchAdminDetails();
         } catch (error: unknown) {
             logger.error("Error updating status:", error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to update status";
-            toast.error(errorMessage);
+            toast.error(extractApiError(error, "Failed to update status"));
         } finally {
             setActionLoading(false);
         }
-    }, [adminId, statusForm]);
+    }, [adminId, statusForm, fetchAdminDetails]);
 
-    const formatDate = useCallback((dateString: string | null) => {
-        if (!dateString) return "Never";
-        const date = new Date(dateString);
-        return date.toLocaleString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }, []);
-
-    const formatRole = useCallback((role: string) => {
-        return role.replace('_', ' ');
-    }, []);
-
-    const getRoleBadgeColor = useCallback((role: string) => {
-        switch (role) {
-            case 'super_admin':
-                return 'text-purple-600 bg-purple-100';
-            case 'admin':
-                return 'text-blue-600 bg-blue-100';
-            case 'moderator':
-                return 'text-green-600 bg-green-100';
-            case 'support':
-                return 'text-gray-600 bg-gray-100';
-            default:
-                return 'text-gray-600 bg-gray-100';
+    const handleResetPassword = useCallback(async () => {
+        if (!passwordForm.new_password || passwordForm.new_password.length < 8) {
+            toast.error("Password must be at least 8 characters");
+            return;
         }
-    }, []);
+
+        if (!passwordForm.reason || passwordForm.reason.length < 10) {
+            toast.error("Reason must be at least 10 characters");
+            return;
+        }
+
+        try {
+            setActionLoading(true);
+            await resetAdminPassword(adminId, {
+                new_password: passwordForm.new_password,
+                reason: passwordForm.reason,
+            });
+
+            toast.success("Admin password reset successfully");
+            setShowResetPasswordDialog(false);
+            setPasswordForm({ new_password: "", reason: "" });
+            await fetchAdminDetails();
+        } catch (error: unknown) {
+            logger.error("Error resetting password:", error);
+            toast.error(extractApiError(error, "Failed to reset password"));
+        } finally {
+            setActionLoading(false);
+        }
+    }, [adminId, passwordForm, fetchAdminDetails]);
+
 
     if (loading || !admin) {
         return (
-            <div className="fixed inset-0 flex items-center justify-end bg-black/50 z-50">
-                <div className="bg-white rounded-2xl rounded-tr-none rounded-br-none shadow-lg w-full max-w-2xl p-6 relative">
-                    <div className="flex items-center justify-center h-96">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                    </div>
+            <SlidePanel loading>
+                <div className="flex items-center justify-center h-96">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                 </div>
-            </div>
+            </SlidePanel>
         );
     }
 
     return (
-        <div className="fixed inset-0 flex items-center justify-end bg-black/50 z-50 overflow-y-auto">
-            <div className="bg-white rounded-2xl rounded-tr-none rounded-br-none shadow-lg w-full max-w-2xl p-6 relative my-4 max-h-screen overflow-y-auto">
+        <SlidePanel>
                 {/* Close Button */}
                 <button
                     onClick={onClose}
@@ -179,7 +189,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                 <div className="bg-gray-50 p-4 my-6 rounded-xl border border-gray-300">
                     <div className="flex items-center justify-between my-4">
                         <div className="flex items-center gap-3">
-                            <div className="bg-gradient-to-r from-purple-500 to-blue-600 text-white w-16 h-16 flex items-center justify-center rounded-lg text-2xl font-bold">
+                            <div className="bg-linear-to-r from-purple-500 to-blue-600 text-white w-16 h-16 flex items-center justify-center rounded-lg text-2xl font-bold">
                                 {admin.full_name.charAt(0).toUpperCase()}
                             </div>
                             <div>
@@ -190,7 +200,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                         </div>
 
                         <span className={`px-3 py-1 rounded-md text-xs font-medium ${getRoleBadgeColor(admin.role)}`}>
-                            {formatRole(admin.role)}
+                            {formatRoleName(admin.role)}
                         </span>
                     </div>
 
@@ -214,36 +224,55 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                             <Calendar size={16} className="text-gray-500" />
                             <div>
                                 <p className="text-gray-500 text-xs">Created</p>
-                                <p className="font-medium">{formatDate(admin.created_at)}</p>
+                                <p className="font-medium">{formatDateTime(admin.created_at)}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <Activity size={16} className="text-gray-500" />
                             <div>
                                 <p className="text-gray-500 text-xs">Last Login</p>
-                                <p className="font-medium">{formatDate(admin.last_login)}</p>
+                                <p className="font-medium">{formatDateTime(admin.last_login)}</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-4 my-6">
-                    <button
-                        onClick={() => setShowRoleDialog(true)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                    >
-                        <Edit2 className="w-4 h-4" />
-                        Change Role
-                    </button>
-                    <button
-                        onClick={() => setShowStatusDialog(true)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
-                    >
-                        <Ban className="w-4 h-4" />
-                        Change Status
-                    </button>
-                </div>
+                {/* Action Buttons — skeleton while role resolves to prevent flash-hidden */}
+                {(roleLoading || isSuperAdmin) && (
+                    <div className="grid grid-cols-3 gap-4 my-6">
+                        {roleLoading ? (
+                            <>
+                                <div className="h-9 rounded-lg bg-gray-100 animate-pulse" />
+                                <div className="h-9 rounded-lg bg-gray-100 animate-pulse" />
+                                <div className="h-9 rounded-lg bg-gray-100 animate-pulse" />
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setShowRoleDialog(true)}
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                    Change Role
+                                </button>
+                                <button
+                                    onClick={() => setShowStatusDialog(true)}
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                                >
+                                    <Ban className="w-4 h-4" />
+                                    Change Status
+                                </button>
+                                <button
+                                    onClick={() => setShowResetPasswordDialog(true)}
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                >
+                                    <Lock className="w-4 h-4" />
+                                    Reset Password
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
 
                 {/* Role Dialog */}
                 {showRoleDialog && (
@@ -254,7 +283,10 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                         onUpdate={handleUpdateRole}
                         onClose={() => {
                             setShowRoleDialog(false);
-                            setRoleForm({ role: admin.role, reason: "" });
+                            // Normalize to UPPERCASE so RoleDialog's VALID_ROLES check
+                            // (and the pre-selected value) stay valid on reopen — matches
+                            // the load-time normalization above and the .toLowerCase() on submit.
+                            setRoleForm({ role: admin.role.toUpperCase(), reason: "" });
                         }}
                     />
                 )}
@@ -272,123 +304,23 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                         }}
                     />
                 )}
-            </div>
-        </div>
+
+                {/* Reset Password Dialog */}
+                {showResetPasswordDialog && (
+                    <ResetPasswordDialog
+                        passwordForm={passwordForm}
+                        setPasswordForm={setPasswordForm}
+                        actionLoading={actionLoading}
+                        onUpdate={handleResetPassword}
+                        onClose={() => {
+                            setShowResetPasswordDialog(false);
+                            setPasswordForm({ new_password: "", reason: "" });
+                        }}
+                        adminName={admin.full_name}
+                    />
+                )}
+        </SlidePanel>
     );
 };
-
-// Role Dialog Component
-const RoleDialog: React.FC<{
-    roleForm: { role: string; reason: string };
-    setRoleForm: React.Dispatch<React.SetStateAction<{ role: string; reason: string }>>;
-    actionLoading: boolean;
-    onUpdate: () => void;
-    onClose: () => void;
-}> = ({ roleForm, setRoleForm, actionLoading, onUpdate, onClose }) => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Change Admin Role</h3>
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        New Role
-                    </label>
-                    <Dropdown
-                        options={["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT"]}
-                        defaultValue={Object.keys(RoleMap).find(key => RoleMap[key] === roleForm.role)}
-                        onChange={(value) => setRoleForm({ ...roleForm, role: RoleMap[value] })}
-                        bgColor="bg-gray-100"
-                        bgOptions="bg-white"
-                        className="w-full"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Reason (minimum 10 characters)
-                    </label>
-                    <textarea
-                        value={roleForm.reason}
-                        onChange={(e) => setRoleForm({ ...roleForm, reason: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        rows={3}
-                        placeholder="Explain why you're changing this admin's role..."
-                    />
-                </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-                <button
-                    onClick={onUpdate}
-                    disabled={actionLoading}
-                    className="flex-1 bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
-                >
-                    {actionLoading ? "Updating..." : "Update Role"}
-                </button>
-                <button
-                    onClick={onClose}
-                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                    Cancel
-                </button>
-            </div>
-        </div>
-    </div>
-);
-
-// Status Dialog Component
-const StatusDialog: React.FC<{
-    statusForm: { status: string; reason: string };
-    setStatusForm: React.Dispatch<React.SetStateAction<{ status: string; reason: string }>>;
-    actionLoading: boolean;
-    onUpdate: () => void;
-    onClose: () => void;
-}> = ({ statusForm, setStatusForm, actionLoading, onUpdate, onClose }) => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Change Admin Status</h3>
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        New Status
-                    </label>
-                    <Dropdown
-                        options={["ACTIVE", "SUSPENDED", "INACTIVE"]}
-                        defaultValue={Object.keys(statusMap).find(key => statusMap[key] === statusForm.status)}
-                        onChange={(value) => setStatusForm({ ...statusForm, status: statusMap[value] })}
-                        bgColor="bg-gray-100"
-                        bgOptions="bg-white"
-                        className="w-full"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Reason (minimum 10 characters)
-                    </label>
-                    <textarea
-                        value={statusForm.reason}
-                        onChange={(e) => setStatusForm({ ...statusForm, reason: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        rows={3}
-                        placeholder="Explain why you're changing this admin's status..."
-                    />
-                </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-                <button
-                    onClick={onUpdate}
-                    disabled={actionLoading}
-                    className="flex-1 bg-yellow-500 text-white py-2 rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors"
-                >
-                    {actionLoading ? "Updating..." : "Update Status"}
-                </button>
-                <button
-                    onClick={onClose}
-                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                    Cancel
-                </button>
-            </div>
-        </div>
-    </div>
-);
 
 export default AdminDetailsModal;

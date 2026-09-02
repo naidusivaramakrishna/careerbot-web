@@ -1,28 +1,39 @@
-import React, { memo } from 'react'
-import { FileText, CreditCard, Activity } from 'lucide-react'
-import type { UserDetailsResponse, UserActivityLog } from '@/api/userManagementApi'
+import React, { memo, useCallback } from 'react'
+import { FileText, CreditCard, Download } from 'lucide-react'
+import { toast } from 'sonner'
+import type { UserDetailsResponse, UserActivityLog, Resume, Payment } from '@/api/userManagementApi'
+import { formatDate as fmtDate } from '@/app/admin/_utils/formatDate'
 
 interface SubscriptionTabProps {
     user: UserDetailsResponse
 }
 
 export const SubscriptionTab = memo(({ user }: SubscriptionTabProps) => {
+    const sub = user.subscription
     return (
         <div className="border border-[#00000033]/40 p-4 rounded-lg text-sm">
             <h4 className="font-semibold mb-3">Subscription Details</h4>
             <div className="space-y-1">
                 <p className="flex justify-between items-center">
                     <span className="font-medium">Current Plan:</span>
-                    <span className="capitalize">{user.subscription || 'Free'}</span>
+                    <span className="capitalize">{sub?.plan || 'Free'}</span>
                 </p>
                 <p className="flex justify-between items-center">
                     <span className="font-medium">Billing Cycle:</span>
-                    Monthly
+                    <span className="capitalize">{sub?.billing_cycle || '—'}</span>
                 </p>
-                <p className="flex justify-between items-center">
-                    <span className="font-medium">Status:</span>
-                    <span className="capitalize">{user.status.replace('_', ' ')}</span>
-                </p>
+                {sub?.amount != null && (
+                    <p className="flex justify-between items-center">
+                        <span className="font-medium">Amount:</span>
+                        <span>{sub.currency === 'INR' ? '₹' : '$'}{sub.amount}</span>
+                    </p>
+                )}
+                {sub?.started_at && (
+                    <p className="flex justify-between items-center">
+                        <span className="font-medium">Started:</span>
+                        <span>{fmtDate(sub.started_at)}</span>
+                    </p>
+                )}
             </div>
         </div>
     )
@@ -31,11 +42,30 @@ export const SubscriptionTab = memo(({ user }: SubscriptionTabProps) => {
 SubscriptionTab.displayName = 'SubscriptionTab'
 
 interface ResumesTabProps {
-    resumes: any[]
+    resumes: Resume[]
     formatDate: (date: string) => string
 }
 
 export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
+    const handleDownloadResume = useCallback(async (resume: Resume) => {
+        try {
+            const backendUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'
+            const fullUrl = `${backendUrl}${resume.download_url}`
+            const response = await fetch(fullUrl)
+            if (!response.ok) throw new Error('Download failed')
+
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `${resume.title}.pdf`
+            link.click()
+            window.URL.revokeObjectURL(url)
+        } catch {
+            toast.error('Failed to download resume')
+        }
+    }, [])
+
     return (
         <div className="border border-[#00000033]/40 bg-gray-50 p-4 rounded-lg text-sm">
             <h4 className="font-semibold mb-3 flex items-center gap-2">
@@ -43,17 +73,22 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
             </h4>
             {resumes && resumes.length > 0 ? (
                 <div className="divide-y divide-gray-300">
-                    {resumes.map((resume: any) => (
+                    {resumes.map((resume) => (
                         <div key={resume.id} className="py-2 flex justify-between items-center">
                             <div>
-                                <p className="font-semibold text-black">{resume.title || 'Untitled Resume'}</p>
+                                <p className="font-semibold text-black">{resume.title}</p>
                                 <p className="text-gray-500 text-xs">
                                     Last updated: {formatDate(resume.updated_at)}
                                 </p>
                             </div>
-                            <span className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700 transition-colors">
-                                View
-                            </span>
+                            <button
+                                onClick={() => handleDownloadResume(resume)}
+                                className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 hover:underline"
+                                title={`Download ${resume.title}`}
+                            >
+                                <Download size={14} />
+                                Download
+                            </button>
                         </div>
                     ))}
                 </div>
@@ -66,8 +101,10 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
 
 ResumesTab.displayName = 'ResumesTab'
 
+const POSITIVE_STATUSES = new Set(['captured', 'authorized'])
+
 interface PaymentsTabProps {
-    payments: any[]
+    payments: Payment[]
     formatDate: (date: string) => string
 }
 
@@ -79,17 +116,22 @@ export const PaymentsTab = memo(({ payments, formatDate }: PaymentsTabProps) => 
             </h4>
             {payments && payments.length > 0 ? (
                 <div className="divide-y divide-gray-300">
-                    {payments.map((payment: any) => (
-                        <div key={payment.id} className="py-2 flex justify-between items-center">
+                    {payments.map((payment, index) => (
+                        <div key={index} className="py-2 flex justify-between items-center">
                             <div>
-                                <p className="font-semibold text-black">₹{payment.amount}</p>
-                                <p className="text-gray-500 text-xs">{formatDate(payment.created_at)}</p>
+                                <p className="font-semibold text-black">
+                                    {payment.currency === 'INR' ? '₹' : '$'}{payment.amount ?? '—'}
+                                </p>
+                                <p className="text-gray-500 text-xs capitalize">
+                                    {payment.feature?.replace(/_/g, ' ') || payment.plan || '—'}
+                                    {payment.payment_method && ` · ${payment.payment_method}`}
+                                </p>
+                                {payment.date && (
+                                    <p className="text-gray-400 text-xs">{formatDate(payment.date)}</p>
+                                )}
                             </div>
-                            <span
-                                className={`py-2 ${payment.status === 'completed' ? 'text-green-600' : 'text-red-600'
-                                    }`}
-                            >
-                                {payment.status}
+                            <span className={`capitalize ${POSITIVE_STATUSES.has(payment.status ?? '') ? 'text-green-600' : 'text-red-600'}`}>
+                                {payment.status ?? '—'}
                             </span>
                         </div>
                     ))}

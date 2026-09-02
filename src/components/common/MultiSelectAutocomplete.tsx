@@ -76,7 +76,7 @@ export default function MultiSelectAutocomplete({
                         }
                     }}
                     placeholder="Type to search..."
-                    className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
                 />
 
                 {filteredOptions.length > 0 && (

@@ -18,7 +18,7 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
     if (!container) return;
 
     const reactNodes = React.Children.toArray(children);
-    container.innerHTML = "";
+    container.replaceChildren();
 
     const heights: number[] = [];
 
@@ -27,10 +27,10 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
       wrapper.style.width = "100%";
       container.appendChild(wrapper);
 
-      wrapper.innerHTML = "<div></div>";
-      const temp = wrapper.firstElementChild as HTMLElement;
+      const temp = document.createElement("div"); // safe: static empty element
+      wrapper.appendChild(temp);
 
-      temp.innerHTML = serialize(child);
+      temp.innerHTML = serialize(child); // safe: serialize() outputs React-controlled HTML, no user-supplied raw strings
       heights[idx] = temp.offsetHeight;
 
       wrapper.remove();
@@ -54,7 +54,7 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
 
     setPages(newPages);
     onPageCountChange?.(newPages.length); // IMPORTANT: Notify PreviewPanel
-  }, [children]);
+  }, [children, onPageCountChange]);
 
   return (
     <>
@@ -78,12 +78,13 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
 };
 
 /* Convert React node to HTML string for height measurement */
-function serialize(child: any): string {
+function serialize(child: unknown): string {
   if (typeof child === "string" || typeof child === "number") return `${child}`;
-  if (!child?.props) return "";
+  const reactChild = child as { props?: { children?: React.ReactNode } };
+  if (!reactChild?.props) return "";
 
   let html = "<div>";
-  React.Children.forEach(child.props.children, (inner) => {
+  React.Children.forEach(reactChild.props.children, (inner) => {
     html += serialize(inner);
   });
   html += "</div>";

@@ -1,45 +1,58 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
-export async function POST(request: NextRequest) {
+const RASA_URL = process.env.CAREERBOT_AI_URL;
+const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL ?? '';
+const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
+
+export async function POST(req: Request) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('access_token')?.value;
+  if (!token) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Read body as text — check size before parsing to prevent large payload attacks
+  const raw = await req.text();
+  if (raw.length > MAX_BODY_BYTES) {
+    return Response.json({ error: 'Payload too large' }, { status: 413 });
+  }
+
   try {
-    const body = await request.json();
-    
-    // // console.log('📤 Sending to Rasa:', body);
-    
-    const response = await fetch('http://localhost:8001/webhooks/rest/webhook', {
+    const response = await fetch(`${RASA_URL}/webhooks/rest/webhook`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify(body),
+      body: raw,
     });
 
     if (!response.ok) {
-      // // console.error('❌ Rasa error:', response.status);
       throw new Error(`Rasa returned ${response.status}`);
     }
 
     const data = await response.json();
-    // // console.log('📥 Rasa response:', data);
-    
-    return NextResponse.json(data);
-  } catch (error: any) {
-    // // console.error('❌ Proxy error:', error.message);
+    return NextResponse.json(data, {
+      headers: { 'Access-Control-Allow-Origin': FRONTEND_URL },
+    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to connect to Rasa', details: error.message },
+      { error: 'Failed to connect to Rasa', details: errorMessage },
       { status: 500 }
     );
   }
 }
 
 // Handle CORS preflight
-export async function OPTIONS(request: NextRequest) {
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': FRONTEND_URL,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }

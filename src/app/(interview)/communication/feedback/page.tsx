@@ -1,17 +1,39 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
-import Sidebar from '@/components/layout/Sidebar';
-import Header from '@/components/layout/Header';
+import { getProfile } from '@/api/userApi';
+// import Sidebar from '@/components/layout/Sidebar';
+// import Header from '@/components/layout/Header';
 import logger from '@/lib/logger';
 
-export default function FeedbackPage() {
+// useSearchParams must be inside a Suspense boundary for static export (Next.js).
+// The default export below wraps the content component in <Suspense>.
+function FeedbackPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEarlyTermination = searchParams.get('reason') !== null; // covers timeout and violations
+
+  // Exit fullscreen when feedback page loads - assessment is over regardless of how we got here
+  useEffect(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
   const [rating, setRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
+
+  const ratingLabels: Record<number, string> = {
+    1: 'Poor',
+    2: 'Fair',
+    3: 'Good',
+    4: 'Very Good',
+    5: 'Excellent',
+  };
 
   const handleSubmitFeedback = async () => {
     if (rating === 0) {
@@ -22,15 +44,12 @@ export default function FeedbackPage() {
     setIsSubmitting(true);
 
     try {
-      // TODO: Call API to submit feedback
-      // await submitFeedbackAPI({ rating, feedbackText });
-
       logger.info('Feedback submitted:', { rating, feedbackText });
-
-      // Call final report API
+      if (isEarlyTermination) {
+        router.push('/dashboard');
+        return;
+      }
       await submitFinalReportAPI();
-
-      // Navigate to report page after successful submission
       router.push('/communication/report');
     } catch (error) {
       logger.error('Error submitting feedback:', error);
@@ -40,131 +59,106 @@ export default function FeedbackPage() {
   };
 
   const handleSkip = async () => {
-    setIsSubmitting(true);
-
+    setIsSkipping(true);
     try {
-      // Call final report API even when skipping feedback
+      if (isEarlyTermination) {
+        router.push('/dashboard');
+        return;
+      }
       await submitFinalReportAPI();
-
-      // Navigate to report page without submitting feedback
       router.push('/communication/report');
     } catch (error) {
       logger.error('Error submitting final report:', error);
       alert('Failed to generate report. Please try again.');
-      setIsSubmitting(false);
+      setIsSkipping(false);
     }
   };
 
   const submitFinalReportAPI = async () => {
-    // Get required data from localStorage
-    const emailId = localStorage.getItem('userEmail');
+    const profile = await getProfile();
+    const emailId = profile?.email;
     const testId = localStorage.getItem('test_id');
     const videoEvaluationId = localStorage.getItem('video_evaluation_id');
     const audioEvaluationId = localStorage.getItem('audio_evaluation_id');
+    const mcqEvaluationId = localStorage.getItem('mcq_evaluation_id');
 
     if (!emailId || !testId) {
       throw new Error('Missing required information (email or test_id)');
     }
 
-    // Get full evaluation response objects from localStorage
-    const videoEvaluationStr = localStorage.getItem('video_evaluation_response');
-    const audioEvaluationStr = localStorage.getItem('audio_evaluation_response');
-
-    let videoEvaluation = {};
-    let audioEvaluation = {};
-
-    try {
-      if (videoEvaluationStr) {
-        videoEvaluation = JSON.parse(videoEvaluationStr);
-        logger.info('Parsed video evaluation response from localStorage');
-      } else {
-        logger.warn('No video evaluation response found in localStorage');
-      }
-    } catch (error) {
-      logger.error('Error parsing video evaluation response:', error);
-    }
-
-    try {
-      if (audioEvaluationStr) {
-        audioEvaluation = JSON.parse(audioEvaluationStr);
-        logger.info('Parsed audio evaluation response from localStorage');
-      } else {
-        logger.warn('No audio evaluation response found in localStorage');
-      }
-    } catch (error) {
-      logger.error('Error parsing audio evaluation response:', error);
-    }
-
-    logger.info('Final report request data:', {
+    logger.info('ðŸ“‹ Final report request data:', {
       email_id: emailId,
       test_id: testId,
-      video_evaluation_id: videoEvaluationId || '',
-      audio_evaluation_id: audioEvaluationId || '',
-      has_video_evaluation: Object.keys(videoEvaluation).length > 0,
-      has_audio_evaluation: Object.keys(audioEvaluation).length > 0,
+      video_evaluation_id: videoEvaluationId || '(none)',
+      audio_evaluation_id: audioEvaluationId || '(none)',
+      mcq_evaluation_id: mcqEvaluationId || '(none)',
+      sample_report: false,
     });
 
-    // Call final report API with full evaluation objects
     const response = await submitFinalReport({
       email_id: emailId,
       test_id: testId,
-      video_evaluation_id: videoEvaluationId || '',
-      audio_evaluation_id: audioEvaluationId || '',
-      video_evaluation: videoEvaluation,
-      audio_evaluation: audioEvaluation,
+      video_evaluation_id: videoEvaluationId || undefined,
+      audio_evaluation_id: audioEvaluationId || undefined,
+      mcq_evaluation_id: mcqEvaluationId || undefined,
+      sample_report: false,
     });
 
-    logger.info('Final report submitted successfully:', response);
+    logger.info(' Final report submitted successfully:', response);
     return response;
   };
 
+  const displayRating = hoveredRating || rating;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <Sidebar />
+    <div className="h-full overflow-y-auto bg-slate-50 assessment-scroll">
+      {/* <Sidebar /> */}
+      {/* <Header /> */}
 
-      {/* Header */}
-      <Header />
+      <main>
+        <div className="mx-auto max-w-xl px-5 py-10">
 
-      {/* Main Content - with left margin for sidebar and top margin for header */}
-      <main className="ml-20 pt-14">
-        <div className="max-w-2xl mx-auto px-6 py-8">
           {/* Page Header */}
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full mb-4 shadow-lg">
-              <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/>
-                <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/>
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#2557a7] shadow-lg shadow-[#2557a7]/20">
+              <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-3">
-              Share Your Feedback
-            </h1>
-            <p className="text-lg text-gray-600">
-              Help us improve! We would love to hear about your experience with this assessment.
+            <h1 className="text-2xl font-black tracking-tight text-slate-950">Share Your Feedback</h1>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+              Help us improve the assessment experience. Your feedback is appreciated.
             </p>
           </div>
 
-          {/* Feedback Form Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 mb-6 border border-gray-200">
-            <div className="space-y-6">
-              {/* Rating Section */}
+          {/* Feedback Card */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+
+            {/* Blue top bar */}
+            <div className="h-1 bg-[#2557a7]" />
+
+            <div className="p-7 space-y-7">
+
+              {/* Rating */}
               <div>
-                <label className="block text-lg font-semibold text-gray-800 mb-4">
-                  How would you rate this assessment? <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
+                  How would you rate this assessment? <span className="text-red-500 normal-case font-normal">*</span>
                 </label>
-                <div className="flex gap-3 justify-center">
+
+                <div className="flex gap-2 justify-center mb-3">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
-                      onClick={() => setRating(star)}
-                      className="transition-transform hover:scale-110 focus:outline-none"
                       type="button"
+                      onClick={() => setRating(star)}
+                      onMouseEnter={() => setHoveredRating(star)}
+                      onMouseLeave={() => setHoveredRating(0)}
+                      className="transition-transform hover:scale-110 focus:outline-none"
                     >
                       <svg
-                        className={`w-14 h-14 ${
-                          star <= rating ? 'text-yellow-400' : 'text-gray-300'
-                        } transition-colors`}
+                        className={`w-10 h-10 transition-colors ${
+                          star <= displayRating ? 'text-amber-400' : 'text-gray-200'
+                        }`}
                         fill="currentColor"
                         viewBox="0 0 20 20"
                       >
@@ -173,81 +167,84 @@ export default function FeedbackPage() {
                     </button>
                   ))}
                 </div>
-                {rating > 0 && (
-                  <p className="text-center text-base text-gray-600 mt-4">
-                    You rated: <span className="font-semibold text-purple-600">{rating} star{rating > 1 ? 's' : ''}</span>
+
+                {displayRating > 0 && (
+                  <p className="text-center text-sm text-slate-600">
+                    <span className="font-bold text-[#2557a7]">{ratingLabels[displayRating]}</span>
+                    {' '}- {displayRating} star{displayRating !== 1 ? 's' : ''}
                   </p>
                 )}
               </div>
 
-              <hr className="border-gray-200" />
+              <div className="h-px bg-slate-100" />
 
-              {/* Comments Section */}
+              {/* Comment */}
               <div>
-                <label htmlFor="feedback" className="block text-lg font-semibold text-gray-800 mb-3">
-                  Additional Comments (Optional)
+                <label htmlFor="feedback" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Additional Comments <span className="normal-case font-normal text-slate-400">(optional)</span>
                 </label>
                 <textarea
                   id="feedback"
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
-                  rows={6}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none transition-colors resize-none text-gray-700"
-                  placeholder="Tell us about your experience with the assessment. What did you like? What could be improved?"
+                  rows={5}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-[#2557a7] focus:ring-2 focus:ring-[#2557a7]/10 focus:outline-none transition-all resize-none text-sm text-slate-700 bg-slate-50 placeholder-gray-400"
+                  placeholder="Tell us what you liked or how we can improve the assessment..."
                 />
-                <p className="text-sm text-gray-500 mt-2">
-                  Your feedback helps us create better assessments for everyone.
-                </p>
               </div>
+
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3 mt-5">
             <button
               onClick={handleSubmitFeedback}
-              disabled={isSubmitting}
-              className={`flex-1 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg flex items-center justify-center gap-3 ${
-                isSubmitting
-                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 hover:shadow-xl transform hover:-translate-y-0.5'
-              }`}
+              disabled={isSubmitting || isSkipping}
+              className="flex-1 py-3.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>
-                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Submitting...
                 </>
               ) : (
-                <>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Submit Feedback
-                </>
+                'Submit Feedback'
               )}
             </button>
 
             <button
               onClick={handleSkip}
-              disabled={isSubmitting}
-              className="flex-1 sm:flex-none px-8 py-4 bg-gray-200 text-gray-700 rounded-xl font-bold text-lg hover:bg-gray-300 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSubmitting || isSkipping}
+              className="sm:w-auto px-7 py-3.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl font-bold text-sm transition-colors flex items-center gap-2"
             >
-              Skip
+              {isSkipping ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                  Skipping...
+                </>
+              ) : (
+                'Skip'
+              )}
             </button>
           </div>
 
-          {/* Help Text */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500">
-              Submitting or skipping will take you to your assessment report
-            </p>
-          </div>
+          <p className="text-center text-xs text-slate-400 mt-4">
+            {isEarlyTermination
+              ? 'Submitting or skipping will take you to your dashboard.'
+              : 'Submitting or skipping will take you to your assessment report.'}
+          </p>
+
         </div>
       </main>
     </div>
+  );
+}
+
+export default function FeedbackPage() {
+  return (
+    <Suspense fallback={<div className="h-full bg-slate-50" />}>
+      <FeedbackPageContent />
+    </Suspense>
   );
 }

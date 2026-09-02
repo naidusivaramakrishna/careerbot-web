@@ -1,10 +1,6 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 import {
-  Eye,
-  Sparkles,
-  Layout,
-  Zap,
   ArrowDownToLine,
   ZoomIn,
   ZoomOut,
@@ -14,17 +10,29 @@ import {
 } from "lucide-react";
 import { useResume } from "../_context/ResumeContext";
 import { useScore } from "../_context/ScoreContext";
+import { useResumeScorePreview } from "../_hooks/useResumeScorePreview";
 import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
 import TemplateFour from "./templates/TemplateFour";
+import TemplateFive from "./templates/TemplateFive";
+import Template2 from "../../../templates/Template2";
+import Template3 from "../../../templates/Template3";
+import Template4 from "../../../templates/Template4";
+import { toPng } from "html-to-image";
+import jsPDF from "jspdf";
 import { downloadResume } from "../../../../../api/resumeApi";
-
+import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
+import { getProfile } from "@/api/userApi";
+import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
+import logger from "@/lib/logger";
+import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
   onOpenSidebar?: (tab: string) => void;
   resumeId?: string;
+  isEnhancedResume?: boolean;
 }
 
 const tabs = [
@@ -33,85 +41,62 @@ const tabs = [
   { label: "Job Match", icon: Shuffle },
 ];
 
-// A4 page dimensions at 96 DPI
-const A4_WIDTH_PX = 794;
-const A4_HEIGHT_PX = 1123;
 
-const PreviewPanel: React.FC<PreviewPanelProps> = ({ 
-  isTemplateSidebarOpen, 
+const PreviewPanel: React.FC<PreviewPanelProps> = ({
+  isTemplateSidebarOpen,
   onTabClick,
-  onOpenSidebar
+  onOpenSidebar,
+  resumeId: resumeIdProp,
+  isEnhancedResume = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle } = useResume();
-  const { overallScore } = useScore();
-  
+  const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder, previewCatalogueKey } = useResume();
+  const { canonicalScore, setCanonicalScore } = useScore();
+  const previewScore = useResumeScorePreview(resumeData);
+
+  // For enhanced resumes, seed the canonical score from the enhancer's ATS score
+  // so the toolbar and any other score consumers show the correct value.
+  useEffect(() => {
+    if (isEnhancedResume && enhancedAtsScore?.final_score) {
+      setCanonicalScore(Math.round(enhancedAtsScore.final_score));
+    }
+  }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
+
+  const displayScore = isEnhancedResume && enhancedAtsScore?.final_score
+    ? Math.round(enhancedAtsScore.final_score)
+    : (canonicalScore ?? previewScore.score);
+  const scoreLabel = "Score";
+
+  useEffect(() => {
+    console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
+  }, [sectionOrder, selectedTemplate]);
+
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const pageNavRef = useRef<HTMLDivElement>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [isEmailReady, setIsEmailReady] = useState(false);
 
+  // Fetch email before rendering template to avoid flash between global and scoped localStorage keys
   useEffect(() => {
-    const calculatePages = () => {
-      if (contentRef.current && selectedTemplate) {
-        const contentHeight = contentRef.current.scrollHeight;
-        const effectivePageHeight = A4_HEIGHT_PX;
-        const calculatedPages = Math.ceil(contentHeight / effectivePageHeight);
-        setTotalPages(calculatedPages > 0 ? calculatedPages : 1);
-        // // console.log(`📄 Total pages calculated: ${calculatedPages}`);
+    const fetchUserEmail = async () => {
+      try {
+        const profile = await getProfile();
+        if (profile.email) {
+          setUserEmail(profile.email);
+          logger.info('User email set for scoped storage:', profile.email);
+        }
+      } catch (err) {
+        logger.warn('Failed to get user email for scoped storage', err);
+      } finally {
+        setIsEmailReady(true);
       }
     };
 
-    calculatePages();
-    const timer = setTimeout(calculatePages, 500);
-    return () => clearTimeout(timer);
-  }, [selectedTemplate, resumeData, zoomLevel, resumeStyle]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (previewContainerRef.current && contentRef.current && selectedTemplate) {
-        const container = previewContainerRef.current;
-        const content = contentRef.current;
-        
-        const containerRect = container.getBoundingClientRect();
-        const contentRect = content.getBoundingClientRect();
-        
-        const scrolledContent = containerRect.top - contentRect.top;
-        const effectivePageHeight = A4_HEIGHT_PX * zoomLevel;
-        const page = Math.floor(scrolledContent / effectivePageHeight) + 1;
-        
-        setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-      }
-    };
-
-    const container = previewContainerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll);
-      return () => container.removeEventListener('scroll', handleScroll);
-    }
-  }, [selectedTemplate, totalPages, zoomLevel]);
-
-  const navigateToPage = (pageNumber: number) => {
-    if (previewContainerRef.current && contentRef.current) {
-      const containerRect = previewContainerRef.current.getBoundingClientRect();
-      const contentRect = contentRef.current.getBoundingClientRect();
-      
-      const contentOffsetFromTop = contentRect.top - containerRect.top + previewContainerRef.current.scrollTop;
-      const effectivePageHeight = A4_HEIGHT_PX * zoomLevel;
-      const targetPagePosition = (pageNumber - 1) * effectivePageHeight;
-      const scrollPosition = contentOffsetFromTop + targetPagePosition;
-      
-      previewContainerRef.current.scrollTo({
-        top: scrollPosition,
-        behavior: 'smooth'
-      });
-      setCurrentPage(pageNumber);
-    }
-  };
+    fetchUserEmail();
+  }, []);
 
   const handleZoomIn = () => {
     if (zoomLevel < 1.5) setZoomLevel((prev) => +(prev + 0.1).toFixed(1));
@@ -121,21 +106,70 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     if (zoomLevel > 0.5) setZoomLevel((prev) => +(prev - 0.1).toFixed(1));
   };
 
+  const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President" => {
+    try {
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+      const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
+      const careerLevelStorage = localStorage.getItem(careerLevelKey);
+      const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
+
+      if (careerLevelStorage && appliedTemplateId) {
+        const careerLevels = JSON.parse(careerLevelStorage) as Array<{ id: string; name: string }>;
+        const applied = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
+
+        if (applied) {
+          const name = applied.name.toLowerCase();
+          const detected = detectCareerLevelUtil(name);
+          if (detected) {
+            return detected;
+          }
+          if (name.includes('early') && name.includes('career')) return 'Early Career';
+          if (name.includes('mid')) return 'Mid-Level';
+        }
+      }
+    } catch (err) {
+      logger.warn('Error extracting career level:', err);
+    }
+    return 'Mid-Level';
+  };
+
   const handleExport = async (type: string) => {
     setIsDownloading(true);
     setDownloadError(null);
 
     try {
-      const resumeId = localStorage.getItem("current_resume_id");
+      const resumeId = resumeIdProp ?? localStorage.getItem("current_resume_id");
 
       if (!resumeId) {
         throw new Error("No resume ID found. Please save your resume first.");
       }
 
-      // // console.log("📥 Downloading resume:", resumeId, "Format:", type);
+      const format = type.toLowerCase() as "pdf" | "docx";
+      const fileExtension = format;
 
-      const format = type.toLowerCase() as "pdf" | "doc";
-      const blob = await downloadResume(resumeId, format);
+      // Read selected catalogue and resolve its backend template_id for the style overlay
+      const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+      const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+
+      // Pass the domain template ID so the backend uses the correct section structure
+      // (e.g., education template → "TEACHING EXPERIENCE"). This overrides the initial
+      // default template_id set at parse time when the user hasn't explicitly re-applied.
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+      const domainTemplateId = typeof window !== 'undefined' ? localStorage.getItem(selectedTemplateKey) ?? undefined : undefined;
+
+      // Pass section background color only for Eclipse — other catalogues don't use it,
+      // and a stale value in resumeStyle from a previous Eclipse session would bleed through.
+      const sectionBgColor = selectedCatalogue === 'eclipse' ? resumeStyle.sectionHeaderBg : undefined;
+      // Pass the accent/heading color so name + section headings match the preview
+      const accentColor = resumeStyle.accentColor || resumeStyle.headingColor;
+      // Pass the user's selected font and line spacing so the PDF matches the preview
+      const fontFamily = resumeStyle.fontFamily || undefined;
+      const lineSpacing = resumeStyle.lineSpacing || undefined;
+      const careerLevel = getCareerLevel();
+
+      const blob = isEnhancedResume
+        ? await downloadEnhancedResume(resumeId, format)
+        : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel);
 
       // ✅ Generate filename from person's name
       const fullname = resumeData.personalInfo?.fullname || "";
@@ -145,9 +179,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         .replace(/[^a-zA-Z0-9_-]/g, "")  // Remove special characters
         .substring(0, 50);  // Limit length to 50 chars
 
-      const filename = sanitizedName ? `${sanitizedName}.${format}` : `resume.${format}`;
-
-      console.log("📥 Downloading as:", filename);
+      const filename = sanitizedName ? `${sanitizedName}.${fileExtension}` : `resume.${fileExtension}`;
 
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -170,6 +202,99 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
   };
 
+  const handleDownloadPDF = async () => {
+    const el = contentRef.current;
+    if (!el) return;
+    setShowExportOptions(false);
+
+    const prevTransform = el.style.transform;
+    el.style.transform = "none";
+
+    try {
+      const dataUrl = await toPng(el, {
+        pixelRatio: 3,
+        backgroundColor: "#ffffff",
+        skipFonts: true,
+      });
+
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise<void>(resolve => { img.onload = () => resolve(); });
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = pageW;
+      const imgH = (img.naturalHeight * imgW) / img.naturalWidth;
+
+      let posY = 0;
+      let remaining = imgH;
+
+      pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
+      remaining -= pageH;
+
+      while (remaining > 0) {
+        posY -= pageH;
+        pdf.addPage();
+        pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
+        remaining -= pageH;
+      }
+
+      const fullname = resumeData.personalInfo?.fullname || "";
+      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
+      const filename = sanitizedName ? `${sanitizedName}.pdf` : "resume.pdf";
+
+      pdf.save(filename);
+    } finally {
+      el.style.transform = prevTransform;
+    }
+  };
+
+  const handleDownloadDOCX = async () => {
+    const el = contentRef.current;
+    if (!el) return;
+    setShowExportOptions(false);
+    setIsDownloading(true);
+    setDownloadError(null);
+
+    const prevTransform = el.style.transform;
+    el.style.transform = "none";
+
+    try {
+      // Send resume HTML to server-side API route (runs html-to-docx in Node.js)
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>${el.outerHTML}</body></html>`;
+
+      const response = await fetch("/api/generate-docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Server error" }));
+        throw new Error(err.error || "Server error");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const fullname = resumeData.personalInfo?.fullname || "";
+      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
+      link.setAttribute("download", sanitizedName ? `${sanitizedName}.docx` : "resume.docx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to generate DOCX";
+      setDownloadError(`DOCX generation failed. ${msg}`);
+    } finally {
+      el.style.transform = prevTransform;
+      setIsDownloading(false);
+    }
+  };
+
   const handleResumeScoreClick = () => {
     if (onOpenSidebar) {
       onOpenSidebar("Score");
@@ -179,8 +304,46 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   // ✅ UPDATED: renderTemplate to support all 4 templates with both string and number IDs
   const renderTemplate = () => {
-    // // console.log("🎨 Rendering template:", selectedTemplate, typeof selectedTemplate);
-    
+    // Create user-scoped localStorage keys
+    const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+    const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
+
+    const careerLevel = getCareerLevel();
+
+    // Compute layoutVariant — use hovered catalogue key during preview, else the persisted selection
+    const activeCatalogueKey = previewCatalogueKey ?? localStorage.getItem('selected_catalogue');
+    const catalogueTemplateId = activeCatalogueKey ? STYLE_CATALOGUES[activeCatalogueKey]?.template_id : undefined;
+    const layoutVariant: HeaderLayout = (catalogueTemplateId && CATALOGUE_LAYOUT_MAP[catalogueTemplateId]) || "centered";
+
+    // Function to get the correct template component based on domain_family
+    const getTemplateByDomain = (domainFamily?: string) => {
+      switch (domainFamily) {
+        case 'healthcare':
+        case 'education':
+        case 'cybersecurity':
+        case 'electronics_and_vlsi':
+        case 'sales_business_development':
+        case 'customer_support_service':
+        case 'product_engineering_leadership':
+        case 'marketing_creative':
+        case 'operations_management':
+        case 'human_resources':
+        case 'logistics_warehouse_operations':
+        case 'research_scholar':
+        case 'software_engineering':
+        case 'marine_merchant_navy':
+        case 'core_engineering':
+        case 'finance':
+          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+        case 'legal':
+          return <Template4 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+        case 'government_standard':
+          return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+        default:
+          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+      }
+    };
+
     // Template map with both string template_ids and numeric IDs
     const templateMap: { [key: string]: JSX.Element } = {
       // String-based template IDs
@@ -188,87 +351,83 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       'clean_simple': <TemplateTwo data={resumeData} style={resumeStyle} />,
       'minimalist_classic': <TemplateThree data={resumeData} style={resumeStyle} />,
       'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} />,
+      'classic_professional': <TemplateFive data={resumeData} style={resumeStyle} />,
       // Numeric IDs for backward compatibility
       '1': <TemplateOne data={resumeData} style={resumeStyle} />,
       '2': <TemplateTwo data={resumeData} style={resumeStyle} />,
       '3': <TemplateThree data={resumeData} style={resumeStyle} />,
       '4': <TemplateFour data={resumeData} style={resumeStyle} />,
+      '5': <TemplateFive data={resumeData} style={resumeStyle} />,
     };
 
-    // Get the template based on selectedTemplate
-    const template = templateMap[String(selectedTemplate)];
-    
-    if (template) {
-      // // console.log("✅ Template found and rendering:", selectedTemplate);
-      return template;
+    // Read and immediately consume the fresh-start flag so it only governs the first
+    // email-ready render. Reading sessionStorage here (after isEmailReady) is safe —
+    // getProfile() resolves after the mount effect that would have cleared the ref,
+    // so a ref approach was inert; direct sessionStorage read is the only reliable path.
+    const isFreshStart = typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true';
+    if (isFreshStart) sessionStorage.removeItem('builder_fresh_start');
+
+    // Check if this is a career level template and render appropriate template based on domain
+    const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
+    const careerLevelStorage = localStorage.getItem(careerLevelKey);
+    logger.info('Career level render check:', { appliedTemplateId, hasCareerLevelStorage: !!careerLevelStorage });
+    if (!isFreshStart && appliedTemplateId && careerLevelStorage) {
+      try {
+        const careerLevels = JSON.parse(careerLevelStorage) as Array<{
+          id: string;
+          name: string;
+          domain_family?: string;
+        }>;
+        logger.info('Parsed careerLevels:', careerLevels);
+        const appliedTemplate = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
+        logger.info('Applied template found:', appliedTemplate);
+        if (appliedTemplate) {
+          logger.info('Rendering career level template with domain:', appliedTemplate.domain_family);
+          return getTemplateByDomain(appliedTemplate.domain_family);
+        }
+      } catch (err) {
+        logger.warn('Error checking career level template:', err);
+      }
+    }
+    logger.info('Career level logic not triggered, checking templateMap');
+
+    // Only honour catalogue/style templates that the user explicitly applied
+    // via TemplatesTab. initializeBuilder auto-sets selectedTemplate to the API
+    // default ("clean_simple") on every load — without this guard that would
+    // cause new users to see old TemplateTwo instead of Template2.tsx.
+    const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
+    const userChoseStyle = localStorage.getItem(styleKey) === 'true';
+    if (userChoseStyle) {
+      const explicitTemplate = templateMap[String(selectedTemplate)];
+      if (explicitTemplate) return explicitTemplate;
     }
 
-    // Default empty state
-    // // console.log("⚠️ No template selected, showing empty state");
-    return (
-      <div className="w-full max-w-[100%] min-h-[800px] bg-white rounded-xl shadow-lg flex flex-col px-2 py-14 items-center">
-        <div className="mb-6">
-          <span
-            className="inline-flex items-center justify-center rounded-full bg-blue-50 shadow-sm"
-            style={{ width: 56, height: 56 }}
-          >
-            <Eye className="w-7 h-7 text-[#2557a7]" />
-          </span>
-        </div>
-        <div className="text-center">
-          <div className="text-lg font-bold text-gray-700 mb-1">
-            Your resume preview will appear here
-          </div>
-          <div className="text-gray-500 mb-6 text-sm">
-            Select template and start by adding your personal information
-            and professional summary to see your resume come to life.
-          </div>
-          <div className="flex justify-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1 bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600 font-medium shadow-sm">
-              <Sparkles className="w-4 h-4 text-yellow-500" />
-              AI-powered content
-            </span>
-            <span className="flex items-center gap-1 bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600 font-medium shadow-sm">
-              <Layout className="w-4 h-4 text-gray-800" />
-              Professional templates
-            </span>
-            <span className="flex items-center gap-1 bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600 font-medium shadow-sm">
-              <Zap className="w-4 h-4 text-yellow-500" />
-              Real-time preview
-            </span>
-          </div>
-        </div>
-      </div>
-    );
+    // Default: Template2.tsx with software_engineering domain
+    return getTemplateByDomain('software_engineering');
   };
 
   return (
     <section className="flex flex-col flex-1 bg-[#f8fafd] px-2 items-center h-[95vh] relative">
       {/* Toolbar - When Sidebar is Open */}
       {isTemplateSidebarOpen && (
-        <div 
-          className="flex items-center justify-center border border-gray-300 rounded px-2 py-1.5 mb-0 gap-2 bg-white shadow-sm space-x-2 relative z-30 transition-all duration-300 ease-in-out"
+        <div
+          className="flex items-center justify-between border border-gray-300 rounded px-6 py-1.5 mb-0 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
-          <div className={`flex flex-col items-center justify-center ml-6 bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold relative`}>
-            <span className="text-[#2d2d2d]">{`Resume Score ${overallScore}%`}</span>
+          <div className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold">
+            <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
           </div>
-
-          <div className="flex-1"></div>
 
           <div className="text-base font-semibold text-[#2d2d2d]">
             <span>PREVIEW</span>
           </div>
 
-          <div className="flex-1"></div>
-
-          <div className="ml-1 relative">
+          <div className="relative">
             <button
               onClick={() => setShowExportOptions((prev) => !prev)}
               disabled={isDownloading}
-              className={`flex items-center gap-1 mr-6 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${
-                isDownloading ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+              className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
+                }`}
             >
               <ArrowDownToLine size={16} />
               {isDownloading ? "Downloading..." : " Export"}
@@ -282,10 +441,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                   PDF
                 </button>
                 <button
-                  onClick={() => handleExport("DOC")}
+                  onClick={() => handleExport("DOCX")}
                   className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                 >
-                  DOC
+                  DOCX
                 </button>
               </div>
             )}
@@ -295,16 +454,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
       {/* Toolbar - When Sidebar is Closed */}
       {!isTemplateSidebarOpen && (
-        <div 
+        <div
           className="flex items-center justify-between rounded border border-gray-300 px-2 py-1.5 gap-2 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out mx-auto"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
           <div className="flex items-center gap-8 ml-4">
             <button
               onClick={handleResumeScoreClick}
-              className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
+              className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
             >
-              <span className="text-[#2d2d2d]">{`Resume Score ${overallScore}%`}</span>
+              <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -333,7 +492,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               <ZoomOut size={16} className="text-[#2557a7]" />
             </button>
 
-            <div className="px-3 text-sm font-semibold text-gray-700 min-w-[30px] text-center">
+            <div className="px-3 text-sm font-semibold text-gray-700 min-w-7.5 text-center">
               {Math.round(zoomLevel * 100)}%
             </div>
 
@@ -358,9 +517,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               <button
                 onClick={() => setShowExportOptions((prev) => !prev)}
                 disabled={isDownloading}
-                className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${
-                  isDownloading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
+                className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
               >
                 <ArrowDownToLine size={16} />
                 {isDownloading ? "Downloading..." : " Export"}
@@ -374,10 +532,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                     PDF
                   </button>
                   <button
-                    onClick={() => handleExport("DOC")}
+                    onClick={() => handleExport("DOCX")}
                     className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                   >
-                    DOC
+                    DOCX
                   </button>
                 </div>
               )}
@@ -387,7 +545,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       )}
 
       {downloadError && (
-        <div 
+        <div
           className="mb-4 px-4 py-2 bg-red-50 border border-red-200 rounded text-red-600 text-sm screen:block print:hidden transition-all duration-300 ease-in-out mx-auto"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
@@ -398,8 +556,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       <div
         ref={previewContainerRef}
         id="resume-preview"
-        className="h-[900px] overflow-y-auto bg-white rounded-xl shadow-lg mx-auto flex flex-col screen:overflow-auto print:overflow-visible print:h-auto print:shadow-none relative transition-all duration-300 ease-in-out"
-        style={{ 
+        className="h-225 overflow-y-auto bg-white rounded-xl shadow-lg mx-auto flex flex-col screen:overflow-auto print:overflow-visible print:h-auto print:shadow-none relative transition-all duration-300 ease-in-out"
+        style={{
           width: isTemplateSidebarOpen ? '99%' : '90%',
           maxWidth: isTemplateSidebarOpen ? '100%' : '1400px'
         }}
@@ -435,7 +593,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             width: "100%",
           }}
         >
-          {renderTemplate()}
+          {isEmailReady ? renderTemplate() : (
+            <div className="w-full flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
         </div>
       </div>
     </section>

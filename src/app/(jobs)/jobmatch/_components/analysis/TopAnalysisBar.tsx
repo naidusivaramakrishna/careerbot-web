@@ -1,177 +1,91 @@
 "use client";
 
 import React from "react";
+import { ArrowRight } from "lucide-react";
 
 interface TopAnalysisBarProps {
   matchScore: number;
-  missingCriticalCount: number;
-  missingImportantCount: number;
-  missingNiceToHaveCount: number;
-  missingSoftSkillsCount: number;
+  totalMissing: number;
+  matchedSkills?: number;
+  resumeSections?: number;
+  onViewMissingSkills?: () => void;
 }
 
-const clamp01 = (x: number): number => Math.max(0, Math.min(100, x));
+const clamp = (x: number) => Math.max(0, Math.min(100, Math.round(x)));
+
+const getScoreColor = (score: number) => {
+  if (score >= 80) return { ring: "#22c55e", text: "#16a34a" };
+  if (score >= 60) return { ring: "#f59e0b", text: "#d97706" };
+  if (score >= 40) return { ring: "#f97316", text: "#ea580c" };
+  return { ring: "#3b82f6", text: "#2557a7" };
+};
+
+const getLabel = (score: number) => {
+  if (score >= 85) return { text: "Excellent Match!", emoji: "🎉" };
+  if (score >= 70) return { text: "Great Match!",     emoji: "🎉" };
+  if (score >= 55) return { text: "Good Match",       emoji: "👍" };
+  if (score >= 40) return { text: "Fair Match",       emoji: "⚠️" };
+  return             { text: "Needs Work",            emoji: "❌" };
+};
+
 
 const TopAnalysisBar: React.FC<TopAnalysisBarProps> = ({
-  matchScore,
-  missingCriticalCount,
-  missingImportantCount,
-  missingNiceToHaveCount,
-  missingSoftSkillsCount,
+  matchScore, totalMissing, matchedSkills = 0, resumeSections = 0, onViewMissingSkills,
 }) => {
-  const r = 70;
-  const stroke = 12;
-  const normalizedRadius = r - stroke * 0.5;
-  const circumference = normalizedRadius * 2 * Math.PI;
-  const strokeDashoffset =
-    circumference - (clamp01(matchScore) / 100) * circumference;
+  const score  = clamp(matchScore);
+  const label  = getLabel(score);
+  const colors = getScoreColor(score);
 
-  const tiles = [
-    {
-      label: "Critical Skills",
-      count: missingCriticalCount,
-      bgColor: "bg-red-50",
-      borderColor: "border-red-300",
-      underlineColor:
-        "bg-gradient-to-r from-red-300 via-red-400 to-red-500",
-      textColor: "text-slate-700",
-    },
-    {
-      label: "Important Skills",
-      count: missingImportantCount,
-      bgColor: "bg-yellow-50",
-      borderColor: "border-yellow-300",
-      underlineColor:
-        "bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500",
-      textColor: "text-slate-700",
-    },
-    {
-      label: "Nice to Have",
-      count: missingNiceToHaveCount,
-      bgColor: "bg-cyan-50",
-      borderColor: "border-cyan-300",
-      underlineColor:
-        "bg-gradient-to-r from-cyan-300 via-cyan-400 to-cyan-500",
-      textColor: "text-slate-700",
-    },
-    {
-      label: "Soft Skills",
-      count: missingSoftSkillsCount,
-      bgColor: "bg-purple-50",
-      borderColor: "border-purple-300",
-      underlineColor:
-        "bg-gradient-to-r from-purple-300 via-purple-400 to-purple-500",
-      textColor: "text-slate-700",
-    },
-  ];
+  const r    = 65;
+  const sw   = 10;
+  const nr   = r - sw / 2;
+  const circ = 2 * Math.PI * nr;
+  const dash = circ - (score / 100) * circ;
 
   return (
-    <div className="bg-white border-2 border-slate-200 rounded-2xl p-3 md:p-4 shadow-lg hover:shadow-xl transition-all duration-500">
-      <div className="flex flex-col lg:flex-row items-center gap-3 md:gap-4">
-        {/* Circle gauge on the left */}
-        <div className="relative flex-shrink-0">
-          <div className="relative w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-full blur-xl opacity-60" />
-            <svg
-              height={r * 2}
-              width={r * 2}
-              className="transform -rotate-90 relative z-10"
-            >
-              <circle
-                stroke="#E5E7EB"
-                fill="transparent"
-                strokeWidth={stroke}
-                r={normalizedRadius}
-                cx={r}
-                cy={r}
-              />
-              <circle
-                stroke="url(#gaugeGreen)"
-                fill="transparent"
-                strokeWidth={stroke}
-                strokeDasharray={circumference + " " + circumference}
-                style={{
-                  strokeDashoffset,
-                  transition: "stroke-dashoffset 1s ease-out",
-                }}
-                strokeLinecap="round"
-                r={normalizedRadius}
-                cx={r}
-                cy={r}
-              />
-              <defs>
-                <linearGradient
-                  id="gaugeGreen"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="100%"
-                >
-                  <stop offset="0%" stopColor="#6EE7B7" />
-                  <stop offset="50%" stopColor="#34D399" />
-                  <stop offset="100%" stopColor="#10B981" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
-              <span className="text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-teal-600">
-                {clamp01(matchScore)}%
-              </span>
-              <span className="text-xs text-slate-500 font-semibold mt-0.5 tracking-wide">
-                Match Score
-              </span>
-            </div>
+    <div className="rounded-xl overflow-hidden" style={{ background: "#ffffff", border: "1px solid #E8EDF5", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+      {/* Main: Circular score (left) + Text (right) */}
+      <div className="flex items-center gap-5 px-6 py-5 border-b border-gray-100">
+        {/* Left: Circle */}
+        <div className="relative shrink-0" style={{ width: r * 1.2, height: r * 1.2 }}>
+          <svg width={r * 1.2} height={r * 1.2} className="-rotate-90" style={{ display: "block" }}>
+            <defs>
+              <linearGradient id="gaugeGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={colors.ring} stopOpacity="0.6" />
+                <stop offset="100%" stopColor={colors.ring} />
+              </linearGradient>
+            </defs>
+            <circle cx={r * 0.6} cy={r * 0.6} r={nr * 0.6} fill="none" stroke="rgba(37,87,167,0.12)" strokeWidth={sw} />
+            <circle cx={r * 0.6} cy={r * 0.6} r={nr * 0.6} fill="none" stroke="url(#gaugeGrad2)" strokeWidth={sw} strokeLinecap="round" strokeDasharray={`${circ} ${circ}`} strokeDashoffset={dash} style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)" }} />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-black" style={{ fontSize: 16, color: colors.text }}>{score}%</span>
           </div>
         </div>
 
-        {/* Text + tiles on the right */}
-        <div className="flex-1 w-full">
-          <div className="mb-2">
-            <h2 className="text-lg md:text-xl font-black text-slate-800 mb-0.5">
-              Job Match Analysis
-            </h2>
-            <p className="text-xs md:text-sm text-slate-600 font-medium">
-              {matchScore >= 80
-                ? "Excellent Match! Your resume aligns perfectly with the job requirements."
-                : matchScore >= 60
-                ? "Good Match. Consider adding a few more relevant skills to boost your score."
-                : "Needs Improvement. Add more relevant keywords and skills to increase your match score."}
-            </p>
+        {/* Right: Text + emoji */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-[16px] font-bold text-gray-900">{label.text}</p>
+            <span className="text-[20px]">{label.emoji}</span>
           </div>
+          <p className="text-[12px] text-gray-600">Your resume is a strong match for this position.</p>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-            {tiles.map((t) => (
-              <div
-                key={t.label}
-                className={[
-                  "relative overflow-hidden rounded-xl p-3 transition-all duration-300 hover:shadow-md",
-                  t.bgColor,
-                  "border-2",
-                  t.borderColor,
-                ].join(" ")}
-              >
-                <div className="flex flex-col items-center justify-center text-center space-y-0.5">
-                  <div
-                    className={[
-                      "text-4xl md:text-5xl font-black leading-none",
-                      t.textColor,
-                    ].join(" ")}
-                  >
-                    {t.count}
-                  </div>
-                  <div className="text-xs font-bold text-slate-600 uppercase tracking-wide">
-                    {t.label}
-                  </div>
-                </div>
-                <div
-                  className={[
-                    "absolute bottom-0 left-0 right-0 h-1.5 rounded-b-lg",
-                    t.underlineColor,
-                  ].join(" ")}
-                />
-              </div>
-            ))}
-          </div>
+      {/* Bottom: Three stat boxes */}
+      <div className="grid grid-cols-3 gap-4 px-6 py-4 bg-gray-50">
+        <div className="flex flex-col items-center text-center">
+          <div className="text-[18px] font-bold text-red-600">{totalMissing}</div>
+          <div className="text-[11px] font-medium text-gray-600 mt-1">Missing Skills</div>
+        </div>
+        <div className="flex flex-col items-center text-center">
+          <div className="text-[18px] font-bold text-green-600">{matchedSkills}</div>
+          <div className="text-[11px] font-medium text-gray-600 mt-1">Matched Skills</div>
+        </div>
+        <div className="flex flex-col items-center text-center">
+          <div className="text-[18px] font-bold text-blue-600">{resumeSections}</div>
+          <div className="text-[11px] font-medium text-gray-600 mt-1">Sections</div>
         </div>
       </div>
     </div>

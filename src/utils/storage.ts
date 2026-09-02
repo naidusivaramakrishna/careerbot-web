@@ -90,9 +90,8 @@ class IndexedDBStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        // // console.error("Storage.set error:", message);
+        // // console.error("Storage.set error:", error instanceof Error ? error.message : String(error));
       }
       throw error;
     }
@@ -121,10 +120,9 @@ class IndexedDBStorage {
           resolve(result?.data ?? null);
         };
       });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+    } catch {
       if (process.env.NODE_ENV === "development") {
-        // // console.error("Storage.get error:", message);
+        // // console.error("Storage.get error:", error instanceof Error ? error.message : String(error));
       }
       return null;
     }
@@ -145,7 +143,7 @@ class IndexedDBStorage {
         request.onerror = () => reject(new Error(`Failed to check key: ${request.error?.message}`));
         request.onsuccess = () => resolve(request.result !== undefined);
       });
-    } catch (error: unknown) {
+    } catch {
       if (process.env.NODE_ENV === "development") {
         // // console.error("Storage.has error:", error);
       }
@@ -174,9 +172,8 @@ class IndexedDBStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        // // console.error("Storage.remove error:", message);
+        // // console.error("Storage.remove error:", error instanceof Error ? error.message : String(error));
       }
       throw error;
     }
@@ -203,9 +200,8 @@ class IndexedDBStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        // // console.error("Storage.clear error:", message);
+        // // console.error("Storage.clear error:", error instanceof Error ? error.message : String(error));
       }
       throw error;
     }
@@ -239,7 +235,7 @@ class IndexedDBStorage {
           resolve(results);
         };
       });
-    } catch (error: unknown) {
+    } catch {
       if (process.env.NODE_ENV === "development") {
         // // console.error("Storage.getAll error:", error);
       }

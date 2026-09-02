@@ -2,15 +2,19 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
+import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import SectionTipsPanel from "../SectionTipsPanel";
 
 interface AwardEntry {
   title: string;
   issuedBy: string;
   year: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyAward = (): AwardEntry => ({
@@ -21,6 +25,8 @@ const emptyAward = (): AwardEntry => ({
 
 const Awards: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -32,6 +38,8 @@ const Awards: React.FC = () => {
 
   const [showTips] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<AwardEntry | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
@@ -55,13 +63,73 @@ const Awards: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.awards) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, awards: allEntries });
-    }
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Awards") return;
+      let allValid = true;
+      editingEntries.forEach((award, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("award", globalIndex, {
+          title: award.title,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Awards") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
+  useEffect(() => {
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
+    setResumeData(prev => {
+      const prevItems = (prev.awards ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.awards) === JSON.stringify(merged)) return prev;
+      return { ...prev, awards: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
+
+  useEffect(() => {
+    if (!resumeData.awards?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.awards!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
+      if (prev.length !== resumeData.awards!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.awards![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.awards]);
 
   const handleChange = <K extends keyof AwardEntry>(
     index: number,
@@ -78,13 +146,25 @@ const Awards: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyAward()]);
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyAward()]);
   };
 
@@ -92,7 +172,7 @@ const Awards: React.FC = () => {
   const removeAward = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const awardToDelete = savedEntries[index];
-    const itemId = awardToDelete._id;
+    const itemId = awardToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
@@ -110,7 +190,11 @@ const Awards: React.FC = () => {
       // // console.log("🗑️ Deleting award item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "awards", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "awards", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "awards", itemId);
+      }
 
       // // console.log("✅ Award item deleted from backend successfully");
 
@@ -123,7 +207,7 @@ const Awards: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete award item:", error);
-      alert("Failed to delete award. Please try again.");
+      toast.error("Failed to delete award. Please try again.");
     } finally {
       setDeletingIndex(null);
     }
@@ -131,10 +215,25 @@ const Awards: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   return (
@@ -214,9 +313,18 @@ const Awards: React.FC = () => {
           {/* Left Side: Scrollable Form Fields Section */}
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((award, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -233,7 +341,8 @@ const Awards: React.FC = () => {
                           placeholder="Award Title"
                           onChange={(e) => handleChange(editIndex, "title", e.target.value)}
                           onBlur={() => validateRequired("award", globalIndex, { title: award.title })}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
+                          maxLength={150}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`award-${globalIndex}-title`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                         />
                         {errors[`award-${globalIndex}-title`] && (
                           <span className="text-xs text-red-500">
@@ -251,6 +360,7 @@ const Awards: React.FC = () => {
                           value={award.issuedBy}
                           placeholder="Organization Name"
                           onChange={(e) => handleChange(editIndex, "issuedBy", e.target.value)}
+                          maxLength={100}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
                         />
                       </div>
@@ -265,6 +375,7 @@ const Awards: React.FC = () => {
                           value={award.year}
                           placeholder="YYYY"
                           onChange={(e) => handleChange(editIndex, "year", e.target.value)}
+                          maxLength={4}
                           className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
                         />
                       </div>
@@ -289,21 +400,27 @@ const Awards: React.FC = () => {
           {/* Right Side: Fixed Tips Section */}
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Awards and honors demonstrate recognition for excellence and outstanding performance. List achievements that showcase your unique contributions and distinguish you from other candidates.
-                  </p>
-                  <p>
-                    Include the award title, issuing organization, and year received. Focus on prestigious, relevant awards that align with your career goals and highlight your professional accomplishments.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *75% of hiring managers view awards as strong indicators of candidate quality.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Awards"
+                entryContent={[editingEntries[0]?.title, editingEntries[0]?.issuedBy].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Awards and honors demonstrate recognition for excellence and outstanding performance. List achievements that showcase your unique contributions and distinguish you from other candidates.
+                      </p>
+                      <p>
+                        Include the award title, issuing organization, and year received. Focus on prestigious, relevant awards that align with your career goals and highlight your professional accomplishments.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *75% of hiring managers view awards as strong indicators of candidate quality.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

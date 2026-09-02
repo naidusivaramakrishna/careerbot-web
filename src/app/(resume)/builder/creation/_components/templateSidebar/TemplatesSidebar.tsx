@@ -2,7 +2,6 @@
 import React, { useEffect } from "react";
 import Tabs from "./Tabs";
 import TemplatesTab from "../templates/TemplatesTab";
-import ScoreTab from "../score/ScoreTab";
 import JobMatchTab from "../job/JobMatchTab";
 import { SidebarClose } from "lucide-react";
 
@@ -61,8 +60,7 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
           {activeTab === "Templates" && (
             <TemplatesTab onTemplateSelect={handleTemplateSelect} resumeId={resumeId} />
           )}
-          {activeTab === "Score" && <ScoreTab />}
-          {activeTab === "Job Match" && <JobMatchTab />}
+{activeTab === "Job Match" && <JobMatchTab />}
         </div>
       )}
 

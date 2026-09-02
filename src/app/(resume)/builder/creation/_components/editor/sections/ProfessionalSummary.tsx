@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
+import SectionTipsPanel from "../SectionTipsPanel";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import AutocompleteInput from "../AutocompleteInput";
@@ -16,6 +17,7 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 
 // Reusable Toolbar Button Component
@@ -29,7 +31,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -51,15 +53,12 @@ const ProfessionalSummary: React.FC = () => {
   } = useAISuggestions();
 
 
-  const {
-    errors,
-    validateRequired,
-    clearError,
-  } = useValidation();
+  const { clearError } = useValidation();
 
 
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
+  const [aiRoleHint, setAIRoleHint] = useState("");
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -87,18 +86,30 @@ const ProfessionalSummary: React.FC = () => {
       },
     });
     clearError("summary", 0, "targetRole");
+    if (value.trim()) setAIRoleHint("");
   };
 
+
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+  };
 
   const exec = (command: string, value?: string) => {
     const editor = editorRef.current;
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(content);
     }, 0);
   };
 
@@ -106,14 +117,17 @@ const ProfessionalSummary: React.FC = () => {
   const onEditorInput = () => {
     const el = editorRef.current;
     if (!el) return;
-    handleChange(el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(content);
   };
 
 
   const handleAIWriterClick = () => {
-    if (!validateRequired("summary", 0, {
-      targetRole: resumeData.professionalSummary.targetRole,
-    })) return;
+    if (!resumeData.professionalSummary.targetRole?.trim()) {
+      setAIRoleHint("Please enter a target role to generate an AI description.");
+      return;
+    }
+    setAIRoleHint("");
 
 
     const summaryBox = summaryRef.current;
@@ -134,7 +148,7 @@ const ProfessionalSummary: React.FC = () => {
         const prompt = `Generate 5 concise unique(different) professional summary options for a resume targeting the following role:
 Target Role: ${resumeData.professionalSummary.targetRole}
 Requirements for each summary:
-- Length: 1-2 lines maximum (approximately 15-20 words)
+- Length: 3-4 lines maximum (approximately 25-30 words)
 - Start directly with your professional identity or key strength (e.g., "Results-driven software engineer...", "Strategic marketing professional...", "Detail-oriented data analyst...")
 - Highlight years of experience, core competencies, and measurable achievements
 - Include industry-specific keywords and technical skills relevant to ${resumeData.professionalSummary.targetRole}
@@ -155,16 +169,16 @@ Strategic Product Manager with proven ability to launch 10+ successful features,
 Innovative UX Designer specializing in user-centered design methodologies, creating intuitive interfaces that improved user satisfaction scores by 50% and reduced customer support tickets by 30%`;
 
 
-    generateSuggestions(0, prompt);
+    generateSuggestions(0, prompt, "summary");
   };
 
 
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -177,19 +191,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
 
@@ -203,8 +205,10 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
 
   useEffect(() => {
     const el = editorRef.current;
-    if (el && resumeData.professionalSummary.summary && el.innerHTML !== resumeData.professionalSummary.summary) {
-      el.innerHTML = resumeData.professionalSummary.summary;
+    if (el && resumeData.professionalSummary.summary) {
+      if (document.activeElement !== el && el.innerHTML !== resumeData.professionalSummary.summary) {
+        el.innerHTML = resumeData.professionalSummary.summary;
+      }
     }
   }, [resumeData.professionalSummary.summary]);
 
@@ -216,19 +220,18 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
         {/* Left Side: Scrollable Form Fields Section */}
         <div 
           ref={formScrollRef}
-          className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+          className="flex-1 mt-6 pr-2"
         >
           <div className="flex flex-col gap-3">
             {/* Target Role Input with Autocomplete */}
             <AutocompleteInput
               label="Target Role"
-              required
               value={resumeData.professionalSummary.targetRole}
               onChange={(val) => handleTargetRoleChange(val)}
-              onBlur={() => validateRequired("summary", 0, { targetRole: resumeData.professionalSummary.targetRole })}
               placeholder="e.g., Frontend Developer, Data Analyst"
               suggestions={roles}
-              error={errors[`summary-0-targetRole`]}
+              maxLength={100}
+              hint={aiRoleHint}
             />
 
 
@@ -236,7 +239,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             <div ref={summaryRef} className="flex flex-col gap-1 relative">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-semibold text-gray-700">
-                  Professional Summary
+                  Professional Summary <span className="text-red-500">*</span>
                 </label>
                 <button
                   type="button"
@@ -272,7 +275,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
                   contentEditable
                   suppressContentEditableWarning
                   onInput={onEditorInput}
-                  className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                  className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                   spellCheck={spellCheckEnabled}
                 />
               </div>
@@ -284,21 +287,26 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
         {/* Right Side: Fixed Tips Section */}
         <div className="w-80 flex-shrink-0 sticky top-2">
           {showTips && activePopup === null ? (
-            <div className="bg-[#faf9f8] rounded-lg p-5">
-              <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-              <div className="border-t border-gray-300 mb-3"></div>
-              <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                <p>
-                  Your professional summary is a brief overview highlighting your experience, skills, and career achievements. Keep it concise, focused, and tailored to your target role.*
-                </p>
-                <p>
-                  Include years of experience, key competencies, measurable achievements, and industry-specific keywords. Start with a strong professional descriptor and emphasize your unique value proposition.
-                </p>
-                <p className="text-xs text-gray-500 italic mt-6">
-                  *Recruiters spend an average of 6 seconds reviewing a resume—make your summary count.
-                </p>
-              </div>
-            </div>
+            <SectionTipsPanel
+              sectionKey="ProfessionalSummary"
+              staticTips={
+                <div className="bg-[#faf9f8] rounded-lg p-5">
+                  <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                  <div className="border-t border-gray-300 mb-3"></div>
+                  <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                    <p>
+                      Your professional summary is a brief overview highlighting your experience, skills, and career achievements. Keep it concise, focused, and tailored to your target role.*
+                    </p>
+                    <p>
+                      Include years of experience, key competencies, measurable achievements, and industry-specific keywords. Start with a strong professional descriptor and emphasize your unique value proposition.
+                    </p>
+                    <p className="text-xs text-gray-500 italic mt-6">
+                      *Recruiters spend an average of 6 seconds reviewing a resume—make your summary count.
+                    </p>
+                  </div>
+                </div>
+              }
+            />
           ) : (
             activePopup !== null && suggestions[activePopup] && (
               <AISuggestions

@@ -23,8 +23,8 @@ const TabNavigation = memo<TabNavigationProps>(({
                     key={tab}
                     onClick={() => handleTabClick(tab)}
                     className={`w-full font-semibold py-2 transition-colors duration-200 ${activeTab === tab
-                            ? 'bg-[#ECECF0] rounded-lg px-4'
-                            : 'hover:bg-gray-50 rounded-lg'
+                        ? 'bg-[#ECECF0] rounded-lg px-4'
+                        : 'hover:bg-gray-50 rounded-lg'
                         }`}
                     aria-selected={activeTab === tab}
                     role="tab"

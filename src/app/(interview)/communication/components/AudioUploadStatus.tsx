@@ -39,7 +39,7 @@ export function AudioUploadStatus({
           completed: data.completed,
           processing: data.processing,
           failed: data.failed,
-          missing: data.missing,
+          missing: data.missing.length,
         };
         setStatus(newStatus);
         onStatusChange?.(newStatus);
@@ -79,7 +79,7 @@ export function AudioUploadStatus({
       {/* Progress bar */}
       <div className="w-full bg-gray-200 rounded-full h-2.5">
         <div
-          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+          className="bg-[#2557a7] h-2 rounded-full transition-all duration-300"
           style={{ width: `${percentage}%` }}
         />
       </div>
@@ -90,7 +90,7 @@ export function AudioUploadStatus({
           {status.completed} done
         </span>
         {status.processing > 0 && (
-          <span className="text-blue-600">
+          <span className="text-[#2557a7]">
             {status.processing} processing
           </span>
         )}

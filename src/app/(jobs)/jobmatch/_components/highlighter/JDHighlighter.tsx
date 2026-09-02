@@ -4,36 +4,58 @@ import React, { useMemo } from "react";
 import { highlightJD } from "../_lib/utils/highlighter";
 import { JDHighlighterProps } from "../_types";
 
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  'matched-tech':  '#DCFCE7',
+  'missing-tech':  '#FEE2E2',
+  'matched-soft':  '#DBEAFE',
+  'missing-soft':  '#FEF9C3',
+  'matched-cap':   '#EDE9FE',
+};
+
 const JDHighlighter: React.FC<JDHighlighterProps> = ({
   text,
   matchedSkills,
   missingSkills,
+  matchedSoftSkills = [],
+  missingSoftSkills = [],
+  matchedCapabilities = [],
+  onMissingSkillClick,
 }) => {
   const spans = useMemo(
-    () => highlightJD(text, matchedSkills, missingSkills),
-    [text, matchedSkills, missingSkills]
+    () => highlightJD(text, matchedSkills, missingSkills, matchedSoftSkills, missingSoftSkills, matchedCapabilities),
+    [text, matchedSkills, missingSkills, matchedSoftSkills, missingSoftSkills, matchedCapabilities]
   );
-  
+
+  const isMissing = (matchType?: string) =>
+    matchType === 'missing-tech' || matchType === 'missing-soft';
+
   return (
-    <div className="text-sm leading-relaxed text-slate-700 space-y-1">
+    <p className="w-full text-[13px] leading-normal text-gray-900 whitespace-pre-wrap wrap-break-word">
       {spans.map((s, i) =>
         s.match ? (
-          <span
+          <mark
             key={i}
-            className={[
-              "inline-flex items-center px-2 py-1 mx-0.5 my-0.5 rounded-md font-semibold shadow-sm animate-in fade-in duration-300",
-              s.matchType === 'matched'
-                ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border border-emerald-300"
-                : "bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-300"
-            ].join(" ")}
+            style={{
+              background: HIGHLIGHT_COLORS[s.matchType ?? 'missing-tech'],
+              color: "inherit",
+              padding: "1px 3px",
+              borderRadius: "3px",
+              cursor: isMissing(s.matchType) && onMissingSkillClick ? "pointer" : "default",
+            }}
+            title={isMissing(s.matchType) ? "Click to add to resume" : undefined}
+            onClick={
+              isMissing(s.matchType) && onMissingSkillClick
+                ? () => onMissingSkillClick(s.text)
+                : undefined
+            }
           >
             {s.text}
-          </span>
+          </mark>
         ) : (
           <span key={i}>{s.text}</span>
         )
       )}
-    </div>
+    </p>
   );
 };
 

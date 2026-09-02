@@ -3,11 +3,15 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
+import SectionTipsPanel from "../SectionTipsPanel";
 import AutocompleteInput from "../AutocompleteInput";
+import TechnologyChipsInput from "../TechnologyChipsInput";
 import { companies } from "../../../../../../../types/companies";
 import { locations } from "../../../../../../../types/locations";
 import { roles } from "../../../../../../../types/roles";
+import { technologies } from "../../../../../../../types/technologies";
 import {
   FaSpellCheck,
   FaListUl,
@@ -19,10 +23,13 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface WorkEntry {
   company: string;
@@ -32,7 +39,8 @@ interface WorkEntry {
   currentlyWorking: boolean;
   description: string;
   location: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  technologies: string[];
+  id?: string;
 }
 
 const emptyWork = (): WorkEntry => ({
@@ -43,6 +51,7 @@ const emptyWork = (): WorkEntry => ({
   currentlyWorking: false,
   description: "",
   location: "",
+  technologies: [],
 });
 
 // Reusable Toolbar Button Component
@@ -56,7 +65,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -68,6 +77,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const WorkExperience: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -86,7 +97,25 @@ const WorkExperience: React.FC = () => {
 
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
-  const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<WorkEntry | null>(null);
+  const [bulletWarnings, setBulletWarnings] = useState<Record<number, string>>({});
+
+  const checkBulletQuality = (html: string): string => {
+    // Split on block-level closing tags before stripping so each bullet
+    // becomes its own line (contentEditable uses <li>/<div>, not \n).
+    const withBreaks = html.replace(/<\/(li|div|p)>|<br\s*\/?>/gi, '\n');
+    const plain = withBreaks.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+    const lines = plain.split(/[\n\r]/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (/^I\s+/i.test(line))
+        return 'Avoid starting bullets with "I" — use action verbs instead (e.g., Led, Built, Managed)';
+      if (/^responsible for/i.test(line))
+        return 'Avoid "Responsible for" — state what you achieved instead (e.g., Managed, Delivered, Reduced)';
+    }
+    return '';
+  };
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -113,13 +142,78 @@ const WorkExperience: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.workExperience) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, workExperience: allEntries });
-    }
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Work Experience") return;
+      let allValid = true;
+      editingEntries.forEach((work, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("work", globalIndex, {
+          company: work.company,
+          role: work.role,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Work Experience") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
+  useEffect(() => {
+    const validEntries = [
+      ...savedEntries,
+      ...editingEntries.filter(hasValidData)
+    ];
+    setResumeData(prev => {
+      const prevItems = (prev.workExperience ?? []) as Array<Record<string, unknown>>;
+      const merged = validEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.workExperience) === JSON.stringify(merged)) return prev;
+      return { ...prev, workExperience: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
+
+  useEffect(() => {
+    if (!resumeData.workExperience?.length) return;
+    setSavedEntries(prev => {
+      // If savedEntries is empty but API data has arrived, populate from API
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.workExperience!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
+      if (prev.length !== resumeData.workExperience!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.workExperience![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.workExperience]);
 
   const handleChange = <K extends keyof WorkEntry>(
     index: number,
@@ -136,7 +230,21 @@ const WorkExperience: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      // ✅ UPDATED: Check if editing existing entry or adding new
+      if (editingOriginalIndex !== null && editingOriginalEntry !== null) {
+        // Editing existing entry - preserve ID and replace at the original index
+        const editedEntry = { ...validEditingEntries[0], id: editingOriginalEntry.id };
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, editedEntry);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        // Adding new entries (no ID yet)
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyWork()]);
@@ -148,6 +256,8 @@ const WorkExperience: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyWork()]);
 
     setTimeout(() => {
@@ -160,7 +270,7 @@ const WorkExperience: React.FC = () => {
   const removeWork = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const workToDelete = savedEntries[index];
-    const itemId = workToDelete._id;
+    const itemId = workToDelete.id; // ✅ Use "id" not "_id"
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
@@ -178,7 +288,11 @@ const WorkExperience: React.FC = () => {
       // // console.log("🗑️ Deleting work experience item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "workExperience", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "work_experience", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "work_experience", itemId);
+      }
 
       // // console.log("✅ Work experience item deleted from backend successfully");
 
@@ -191,7 +305,7 @@ const WorkExperience: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete work experience item:", error);
-      alert("Failed to delete work experience. Please try again.");
+      toast.error("Failed to delete work experience. Please try again.");
     } finally {
       setDeletingIndex(null);
     }
@@ -199,50 +313,67 @@ const WorkExperience: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
 
-    setTimeout(() => {
-      const el = editorRefs.current[0];
-      if (el) {
-        el.focus();
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (el.childNodes.length > 0) {
-          range.selectNodeContents(el);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      }
-    }, 0);
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
   };
 
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(idx, "description", editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(idx, "description", content);
     }, 0);
   };
 
   const onEditorInput = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
-    handleChange(idx, "description", el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(idx, "description", content);
+    const warning = checkBulletQuality(content);
+    setBulletWarnings(prev => ({ ...prev, [idx]: warning }));
   };
 
-  function startToLabel(val: string) {
+  function startToLabel(val: string): string {
     if (!val) return "";
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -300,9 +431,9 @@ Spearheaded migration of legacy monolithic application to microservices architec
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -315,18 +446,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {
@@ -339,8 +459,11 @@ Spearheaded migration of legacy monolithic application to microservices architec
   useEffect(() => {
     editingEntries.forEach((work, idx) => {
       const el = editorRefs.current[idx];
-      if (el && work.description && el.innerHTML !== work.description) {
-        el.innerHTML = work.description;
+      if (el && work.description) {
+        // Only update innerHTML if element is not currently focused (to preserve cursor position)
+        if (document.activeElement !== el && el.innerHTML !== work.description) {
+          el.innerHTML = work.description;
+        }
       }
     });
   }, [editingEntries]);
@@ -374,10 +497,23 @@ Spearheaded migration of legacy monolithic application to microservices architec
                     </div>
                   )}
                   
+                  {work.technologies && work.technologies.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {work.technologies.map((tech, techIndex) => (
+                        <span
+                          key={techIndex}
+                          className="inline-flex items-center bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {work.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: work.description }} 
+                    <div
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      dangerouslySetInnerHTML={{ __html: work.description }}
                     />
                   )}
                 </div>
@@ -428,9 +564,18 @@ Spearheaded migration of legacy monolithic application to microservices architec
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((work, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -446,6 +591,8 @@ Spearheaded migration of legacy monolithic application to microservices architec
                         placeholder="Company"
                         suggestions={companies}
                         error={errors[`work-${globalIndex}-company`]}
+                        className={errors[`work-${globalIndex}-company`] ? "border-red-500" : ""}
+                        maxLength={100}
                       />
 
                       <AutocompleteInput
@@ -457,6 +604,8 @@ Spearheaded migration of legacy monolithic application to microservices architec
                         placeholder="Role"
                         suggestions={roles}
                         error={errors[`work-${globalIndex}-role`]}
+                        className={errors[`work-${globalIndex}-role`] ? "border-red-500" : ""}
+                        maxLength={100}
                       />
                     </div>
 
@@ -468,6 +617,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
                           value={work.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
+                          maxDate={work.endDate || undefined}
                         />
                       </div>
 
@@ -478,6 +628,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
                             value={work.endDate}
                             onChange={(val) => handleChange(editIndex, "endDate", val)}
                             placeholder="MM/YY"
+                            minDate={work.startDate}
                           />
                         </div>
                       )}
@@ -488,6 +639,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
                         onChange={(val) => handleChange(editIndex, "location", val)}
                         placeholder="City, State"
                         suggestions={locations}
+                        maxLength={100}
                       />
                     </div>
 
@@ -496,11 +648,28 @@ Spearheaded migration of legacy monolithic application to microservices architec
                       <input
                         type="checkbox"
                         checked={work.currentlyWorking}
-                        onChange={(e) => handleChange(editIndex, "currentlyWorking", e.target.checked)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          handleChange(editIndex, "currentlyWorking", checked);
+                          if (checked) {
+                            handleChange(editIndex, "endDate", "");
+                          }
+                        }}
                         className="w-4 h-4"
                       />
                       <label className="text-xs font-semibold text-gray-700">Currently Working Here</label>
                     </div>
+
+                    {/* Technologies */}
+                    <TechnologyChipsInput
+                      label="Technologies Used"
+                      selectedTechnologies={work.technologies ?? []}
+                      onTechnologiesChange={(techs) =>
+                        handleChange(editIndex, "technologies", techs)
+                      }
+                      suggestions={technologies}
+                      placeholder="Type to add technologies..."
+                    />
 
                     {/* Description */}
                     <div ref={(el) => { descriptionRefs.current[editIndex] = el; }} className="flex flex-col gap-1 relative">
@@ -535,15 +704,31 @@ Spearheaded migration of legacy monolithic application to microservices architec
                           <ToolbarButton onClick={() => toggleSpellCheck(editIndex)} title="Toggle Spellcheck" icon={<FaSpellCheck size={16} />} isActive={spellCheckEnabled} />
                         </div>
 
-                        <div
-                          ref={(el) => { editorRefs.current[editIndex] = el; }}
-                          contentEditable
-                          suppressContentEditableWarning
-                          onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
-                          spellCheck={spellCheckEnabled}
-                        />
+                        <div className="relative">
+                          {!work.description?.replace(/<[^>]+>/g, '').trim() && (
+                            <div className="absolute top-2 left-3 text-xs text-gray-400 pointer-events-none leading-5 z-10">
+                              <div>• Start with an action verb: Led, Built, Managed, Reduced...</div>
+                              <div>• Include what you did and the measurable result</div>
+                              <div className="mt-1 italic">e.g. "Led a team of 8 engineers, delivering the project 2 weeks ahead of schedule"</div>
+                            </div>
+                          )}
+                          <div
+                            ref={(el) => { editorRefs.current[editIndex] = el; }}
+                            contentEditable
+                            suppressContentEditableWarning
+                            lang="en"
+                            onInput={() => onEditorInput(editIndex)}
+                            className="w-full px-3 py-2 text-sm text-black min-h-45 focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                            spellCheck={spellCheckEnabled}
+                          />
+                        </div>
                       </div>
+                      {bulletWarnings[editIndex] && (
+                        <div className="flex items-start gap-2 mt-1 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
+                          <span className="mt-0.5">⚠</span>
+                          <span>{bulletWarnings[editIndex]}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -563,14 +748,27 @@ Spearheaded migration of legacy monolithic application to microservices architec
 
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && activePopup === null ? (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>Details can differentiate your resume. More than three out of four employers think that descriptions of experience must always be present on a resume.</p>
-                  <p>Show that you create value with your work by listing your responsibilities and quantifiable achievements in the experience section of your resume to help you catch their eye.</p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="WorkExperience"
+                entryContent={[
+                  editingEntries[0]?.company,
+                  editingEntries[0]?.role,
+                  ...(editingEntries[0]?.description || '')
+                    .split('\n')
+                    .map((l) => l.trim().slice(0, 60))
+                    .filter(Boolean),
+                ].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>Details can differentiate your resume. More than three out of four employers think that descriptions of experience must always be present on a resume.</p>
+                      <p>Show that you create value with your work by listing your responsibilities and quantifiable achievements in the experience section of your resume to help you catch their eye.</p>
+                    </div>
+                  </div>
+                }
+              />
             ) : (
               activePopup !== null && suggestions[activePopup] && (
                 <AISuggestions

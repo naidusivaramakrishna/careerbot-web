@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { SidebarOpen } from "lucide-react";
 import { DropResult } from "@hello-pangea/dnd";
 import { useResume } from "../../_context/ResumeContext";
@@ -7,6 +7,7 @@ import Tabs from "./Tabs";
 import EditorTab from "../editor/EditorTab";
 import ResumeGPTTab from "../resumeGPT/ResumeGPTTab";
 import AIReviewTab from "../aiReview/AIReviewTab";
+import ScoreTab from "../score/ScoreTab";
 
 import PersonalInfo from "../editor/sections/PersonalInfo";
 import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
@@ -23,9 +24,11 @@ import Awards from "../editor/sections/Awards";
 
 import { initialSections } from "../../_utils/sectionsConfig";
 import Publications from "../editor/sections/Publications";
+import Patents from "../editor/sections/Patents";
 import Interests from "../editor/sections/Interests";
 import Hobbies from "../editor/sections/Hobbies";
 import Languages from "../editor/sections/Languages";
+import Declaration from "../editor/sections/Declaration";
 
 interface SectionProps {
   formData: Record<string, string>;
@@ -48,47 +51,169 @@ const sectionComponents: Record<string, React.FC<SectionProps>> = {
   Internships,
   Awards,
   Publications,
+  Patents,
   Interests,
   Hobbies,
   Languages,
+  Declaration,
+};
+
+// Maps ATS report section names → builder section names
+const ATS_SECTION_TO_BUILDER: Record<string, string> = {
+  Contact: "Personal Info",
+  Headline: "Professional Summary",
+  Summary: "Professional Summary",
+  Formatting: "Professional Summary",
+  ATSCompatibility: "Personal Info",
+  Experience: "Work Experience",
+  WorkExperience: "Work Experience",
+  ContentQuality: "Work Experience",
+  Leadership: "Work Experience",
+  Education: "Education",
+  Skills: "Skills",
+  Keywords: "Skills",
+  Projects: "Projects",
+  Certifications: "Certifications",
+  Internships: "Internships",
+  Achievements: "Achievements",
+  Volunteering: "Volunteering",
+  Awards: "Awards",
+  Languages: "Languages",
+  Publications: "Publications",
+  Hobbies: "Hobbies",
+  Interests: "Interests",
+  References: "References",
 };
 
 interface ResumeSideProps {
   isTemplateSidebarOpen?: boolean;
   onToggleTemplateSidebar?: (isOpen: boolean) => void;
   resumeId?: string;
+  initialTab?: string;
+  defaultOpen?: boolean;
+  /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
+  openSection?: string;
 }
 
-const ResumeSide: React.FC<ResumeSideProps> = ({ 
+// All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
+const standardSectionNames = new Set([
+  "Personal Info", "Professional Summary", "Education", "Skills",
+  "Work Experience", "Projects", "Certifications", "Internships",
+  "Achievements", "Publications", "Patents", "Volunteering", "Awards",
+  "Hobbies", "Interests", "Languages", "References", "Declaration",
+]);
+
+const ResumeSide: React.FC<ResumeSideProps> = ({
   isTemplateSidebarOpen = true,
   onToggleTemplateSidebar,
+  initialTab,
+  defaultOpen = true,
+  openSection,
 }) => {
-  const [sections, setSections] = useState(initialSections);
-  
-  // ✅ Get completionStatus and setCompletionStatus from context
-  const { 
-    resumeData, 
+  // ✅ Get context first
+  const {
+    resumeData,
+    setResumeData,
     isLoadingResume,
     completionStatus,
-    setCompletionStatus 
+    setCompletionStatus,
+    sectionOrder,
+    setSectionOrder,
   } = useResume();
-  
-  const [extraSections, setExtraSections] = useState<{ name: string; ai: boolean }[]>([
+
+  // Defined before sections useState so both initializers can reference it
+  const defaultExtraSections: { name: string; ai: boolean }[] = [
     { name: "Achievements", ai: true },
     { name: "Publications", ai: false },
+    { name: "Patents", ai: false },
     { name: "Volunteering", ai: false },
     { name: "Awards", ai: false },
     { name: "Hobbies", ai: true },
     { name: "Interests", ai: true },
     { name: "Languages", ai: false },
     { name: "References", ai: false },
-  ]);
+  ];
+
+  const [sections, setSections] = useState(() => {
+    if (!sectionOrder || sectionOrder.length === 0) {
+      return initialSections;
+    }
+
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+    const hasSavedOrder = typeof window !== 'undefined' && !!localStorage.getItem(sectionOrderKey);
+
+    if (hasSavedOrder) {
+      // localStorage sectionOrder = exact main list (core + any extras the user added).
+      // Use the full known-sections map so restored extra sections resolve correctly.
+      // Only include Declaration if the backend sent it (domain-specific for government_standard).
+      const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+      const allKnownSections = [...initialSections, ...defaultExtraSections, ...declarationSection];
+      const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
+      return sectionOrder
+        .filter(name => sectionMap.has(name))
+        .map(name => sectionMap.get(name)!)
+        .filter(Boolean);
+    }
+
+    // No saved order: sectionOrder comes from getSectionOrderByDomainAndCareer() which lists ALL sections.
+    // Only include Declaration if the backend sent it (domain-specific for government_standard).
+    const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+    const sectionMap = new Map([...initialSections, ...declarationSection].map(s => [s.name, s]));
+    const reordered = sectionOrder
+      .filter(name => sectionMap.has(name))
+      .map(name => sectionMap.get(name)!)
+      .filter(Boolean);
+    const orderedNames = new Set(reordered.map(s => s.name));
+    const remaining = initialSections.filter(s => !orderedNames.has(s.name));
+    return [...reordered, ...remaining];
+  });
+
+  const [extraSections, setExtraSections] = useState(() => {
+    if (!sectionOrder || sectionOrder.length === 0) {
+      return defaultExtraSections;
+    }
+
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+    const hasSavedOrder = typeof window !== 'undefined' && !!localStorage.getItem(sectionOrderKey);
+
+    if (hasSavedOrder) {
+      // localStorage sectionOrder = exact main list. Show everything NOT in it.
+      const mainNames = new Set(sectionOrder);
+      const allKnown = [
+        ...defaultExtraSections,
+        ...initialSections.filter(s => !defaultExtraSections.some(d => d.name === s.name)),
+      ];
+      return allKnown.filter(s => !mainNames.has(s.name));
+    }
+
+    // No saved order: sectionOrder = getSectionOrder() which includes ALL sections.
+    // The main list only has initialSections, so all defaultExtraSections are available.
+    return defaultExtraSections;
+  });
 
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<number | null>(null);
-  const [isOpen, setIsOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState("Editor");
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
+  const [pendingOpenSection, setPendingOpenSection] = useState<string | null>(null);
+  const [pendingEditEntryIndex, setPendingEditEntryIndex] = useState<number | null>(null);
+
+  // Auto-open the section specified by the ATS report "Fix Now" button
+  const openSectionDone = useRef(false);
+  useEffect(() => {
+    if (!openSection || isLoadingResume || openSectionDone.current) return;
+    openSectionDone.current = true;
+    const builderName = ATS_SECTION_TO_BUILDER[openSection] ?? openSection;
+    const idx = sections.findIndex(s => s.name === builderName);
+    if (idx !== -1) {
+      setIsOpen(true);
+      setActiveTab("Editor");
+      setActiveSection(idx);
+    }
+  }, [openSection, isLoadingResume, sections]);
   
   const clearErrors = (fields?: string[]) => {
   if (!fields || fields.length === 0) {
@@ -114,131 +239,116 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       // Personal Info
       newFormData["fullname"] = resumeData.personalInfo?.fullname || "";
       newFormData["email"] = resumeData.personalInfo?.email || "";
+      newFormData["countryCode"] = resumeData.personalInfo?.countryCode || "+91";
       newFormData["phone"] = resumeData.personalInfo?.phone || "";
       newFormData["location"] = resumeData.personalInfo?.location || "";
       newFormData["linkedinUrl"] = resumeData.personalInfo?.linkedinUrl || "";
+      newFormData["githubUrl"] = resumeData.personalInfo?.githubUrl || "";
       newFormData["portfolioUrl"] = resumeData.personalInfo?.portfolioUrl || "";
+
+      // Government Standard Fields
+      newFormData["dateOfBirth"] = resumeData.personalInfo?.dateOfBirth || "";
+      newFormData["nationality"] = resumeData.personalInfo?.nationality || "";
+      newFormData["category"] = resumeData.personalInfo?.category || "";
+      newFormData["languages"] = resumeData.personalInfo?.languages || "";
+      newFormData["fathersName"] = resumeData.personalInfo?.fathersName || "";
+      newFormData["gender"] = resumeData.personalInfo?.gender || "";
+      newFormData["maritalStatus"] = resumeData.personalInfo?.maritalStatus || "";
+      newFormData["permanentAddress"] = resumeData.personalInfo?.permanentAddress || "";
+
+      // Healthcare Fields
+      newFormData["titlePrefix"] = resumeData.personalInfo?.titlePrefix || "";
+      newFormData["qualifications"] = resumeData.personalInfo?.qualifications || "";
+      newFormData["specialisation"] = resumeData.personalInfo?.specialisation || "";
+      newFormData["medicalRegNo"] = resumeData.personalInfo?.medicalRegNo || "";
+
+      // Legal Fields
+      newFormData["barEnrollmentNo"] = resumeData.personalInfo?.barEnrollmentNo || "";
+      newFormData["yearOfEnrollment"] = resumeData.personalInfo?.yearOfEnrollment || "";
+      newFormData["courtsOfPractise"] = resumeData.personalInfo?.courtsOfPractise || "";
+
+      // Marine Fields
+      newFormData["rank"] = resumeData.personalInfo?.rank || "";
+      newFormData["cocNumber"] = resumeData.personalInfo?.cocNumber || "";
+      newFormData["vesselTypes"] = resumeData.personalInfo?.vesselTypes || "";
+      newFormData["stcwCertificates"] = resumeData.personalInfo?.stcwCertificates || "";
+
+      // Research Scholar Fields
+      newFormData["orcidId"] = resumeData.personalInfo?.orcidId || "";
+      newFormData["hIndex"] = resumeData.personalInfo?.hIndex || "";
+      newFormData["googleScholarUrl"] = resumeData.personalInfo?.googleScholarUrl || "";
       
       // Professional Summary
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";
       newFormData["targetRole"] = resumeData.professionalSummary.targetRole || "";
       
-      // Skills
-      if (Array.isArray(resumeData.skills)) {
-        newFormData["skills"] = resumeData.skills.join(", ");
-      }
-      
-      // Education
-      resumeData.education?.forEach((edu, index) => {
-        newFormData[`education_${index}_school`] = edu.school || "";
-        newFormData[`education_${index}_degree`] = edu.degree || "";
-        newFormData[`education_${index}_startDate`] = edu.startDate || "";
-        newFormData[`education_${index}_endDate`] = edu.endDate || "";
-      });
-      
-      // Work Experience
-      resumeData.workExperience?.forEach((work, index) => {
-        newFormData[`workExperience_${index}_company`] = work.company || "";
-        newFormData[`workExperience_${index}_role`] = work.role || "";
-        newFormData[`workExperience_${index}_location`] = work.location || "";
-        newFormData[`workExperience_${index}_startDate`] = work.startDate || "";
-        newFormData[`workExperience_${index}_endDate`] = work.endDate || "";
-        newFormData[`workExperience_${index}_currentlyWorking`] = String(work.currentlyWorking);
-        newFormData[`workExperience_${index}_description`] = work.description || "";
-      });
-      
-      // Projects
-      resumeData.projects?.forEach((project, index) => {
-        newFormData[`project_${index}_title`] = project.title || "";
-        newFormData[`project_${index}_description`] = project.description || "";
-        newFormData[`project_${index}_technologies`] = Array.isArray(project.technologies) 
-          ? project.technologies.join(", ") 
-          : "";
-        newFormData[`project_${index}_startDate`] = project.startDate || "";
-        newFormData[`project_${index}_endDate`] = project.endDate || "";
-        newFormData[`project_${index}_link`] = project.link || "";
-      });
-      
-      // Certifications
-      resumeData.certifications?.forEach((cert, index) => {
-        newFormData[`certification_${index}_name`] = cert.name || "";
-        newFormData[`certification_${index}_issuedBy`] = cert.issuedBy || "";
-        newFormData[`certification_${index}_year`] = cert.year || "";
-      });
-      
-      // Achievements
-      resumeData.achievements?.forEach((ach, index) => {
-        newFormData[`achievement_${index}_title`] = ach.title || "";
-        newFormData[`achievement_${index}_date`] = ach.date || "";
-        newFormData[`achievement_${index}_description`] = ach.description || "";
-      });
-      
-      // Internships
-      resumeData.internships?.forEach((intern, index) => {
-        newFormData[`internship_${index}_company`] = intern.company || "";
-        newFormData[`internship_${index}_role`] = intern.role || "";
-        newFormData[`internship_${index}_location`] = intern.location || "";
-        newFormData[`internship_${index}_startDate`] = intern.startDate || "";
-        newFormData[`internship_${index}_endDate`] = intern.endDate || "";
-        newFormData[`internship_${index}_currentlyWorking`] = String(intern.currentlyWorking);
-        newFormData[`internship_${index}_description`] = intern.description || "";
-      });
-      
-      // Volunteering
-      resumeData.volunteering?.forEach((vol, index) => {
-        newFormData[`volunteering_${index}_organization`] = vol.organization || "";
-        newFormData[`volunteering_${index}_role`] = vol.role || "";
-        newFormData[`volunteering_${index}_startDate`] = vol.startDate || "";
-        newFormData[`volunteering_${index}_endDate`] = vol.endDate || "";
-      });
-      
-      // Awards
-      resumeData.awards?.forEach((award, index) => {
-        newFormData[`award_${index}_title`] = award.title || "";
-        newFormData[`award_${index}_issuedBy`] = award.issuedBy || "";
-        newFormData[`award_${index}_year`] = award.year || "";
-      });
-      
-      // Hobbies
-      resumeData.hobbies?.forEach((hobby, index) => {
-        newFormData[`hobbie_${index}_name`] = hobby.name || "";
-        newFormData[`hobbie_${index}_description`] = hobby.description || "";
-        newFormData[`hobbie_${index}_proficiencyLevel`] = hobby.proficiencyLevel || "";
-        newFormData[`hobbie_${index}_achievement`] = hobby.achievement || "";
-      });
-      
-      // Interests
-      resumeData.interests?.forEach((interest, index) => {
-        newFormData[`interest_${index}_name`] = interest.name || "";
-        newFormData[`interest_${index}_description`] = interest.description || "";
-        newFormData[`interest_${index}_category`] = interest.category || "";
-      });
-      
-      // Languages
-      resumeData.languages?.forEach((lang, index) => {
-        newFormData[`language_${index}_language`] = lang.language || "";
-        newFormData[`language_${index}_proficiency`] = lang.proficiency || "";
-      });
-      
-      // Publications
-      resumeData.publications?.forEach((pub, index) => {
-        newFormData[`publication_${index}_title`] = pub.title || "";
-        newFormData[`publication_${index}_authors`] = pub.authors || "";
-        newFormData[`publication_${index}_publicationName`] = pub.publicationName || "";
-        newFormData[`publication_${index}_date`] = pub.date || "";
-        newFormData[`publication_${index}_url`] = pub.url || "";
-      });
-      
-      // References
-      resumeData.references?.forEach((ref, index) => {
-        newFormData[`reference_${index}_name`] = ref.name || "";
-        newFormData[`reference_${index}_relation`] = ref.relation || "";
-        newFormData[`reference_${index}_contact`] = ref.contact || "";
-      });
+      // Skills is intentionally excluded from formData — the Skills component writes
+      // directly to resumeData.categorizedSkills via chip inputs and autosave reads
+      // from context, not formData. Including it here created a stale snapshot that
+      // caused validateSectionFields to treat the empty initial value as a missing
+      // required field and block Save with "Please fill in all required fields".
+      //
+      // Multi-entry sections (Education, Work Experience, Projects, etc.) are also
+      // excluded from formData. They manage their own state (savedEntries / editingEntries)
+      // and write directly to resumeData — they never read from formData.
       
       setFormData(newFormData);
     }
-  }, [isLoadingResume, resumeData]);
+  // Intentionally omit resumeData from deps: re-running on every context update
+  // would overwrite formData while the user is actively typing in a section modal.
+  // formData is populated once when the initial load completes (isLoadingResume → false).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingResume]);
+
+  // Restore custom sections into the main sections list after initial load only
+  useEffect(() => {
+    if (!isLoadingResume && resumeData.customSections?.length) {
+      setSections(prev => {
+        const existingNames = new Set(prev.map(s => s.name));
+        const toAdd = resumeData.customSections!
+          .filter(cs => !existingNames.has(cs.sectionName))
+          .map(cs => ({ name: cs.sectionName, ai: false }));
+        return toAdd.length ? [...prev, ...toAdd] : prev;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingResume]);
+
+  // Sync sections when sectionOrder changes (e.g. on career-level template switch).
+  // Guards with name-comparison so the 500ms polling in ResumeContext doesn't cause
+  // re-renders when the order hasn't actually changed.
+  useEffect(() => {
+    if (!sectionOrder || sectionOrder.length === 0) return;
+
+    // Only include Declaration if the backend sent it (domain-specific for government_standard).
+    const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+    const allKnownSections = [...initialSections, ...defaultExtraSections, ...declarationSection];
+    const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
+
+    setSections(prev => {
+      const prevMap = new Map(prev.map(s => [s.name, s]));
+      const initialNames = new Set(initialSections.map(s => s.name));
+      const newSections = sectionOrder
+        .map(name => sectionMap.get(name) || prevMap.get(name))
+        .filter((s): s is { name: string; ai: boolean } => !!s && (initialNames.has(s.name) || prevMap.has(s.name)));
+
+      const prevNames = prev.map(s => s.name).join(',');
+      const newNames = newSections.map(s => s.name).join(',');
+      if (prevNames === newNames) return prev;
+      return newSections;
+    });
+
+    setExtraSections(prev => {
+      const mainNames = new Set(sectionOrder);
+      const filtered = defaultExtraSections.filter(s => !mainNames.has(s.name));
+      const prevNames = prev.map(s => s.name).join(',');
+      const newNames = filtered.map(s => s.name).join(',');
+      if (prevNames === newNames) return prev;
+      return filtered;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionOrder]);
+
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -246,18 +356,75 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     const [moved] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, moved);
     setSections(items);
+    // Persist drag order so polling doesn't revert it
+    const newOrder = items.map(s => s.name);
+    setSectionOrder(newOrder);
+    try {
+      const email = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = email ? `sectionOrder_${email}` : 'sectionOrder';
+      localStorage.setItem(key, JSON.stringify(newOrder));
+    } catch { /* ignore */ }
+  };
+
+  const SECTION_DATA_KEY_MAP: Record<string, string> = {
+    "Work Experience": "workExperience",
+    "Education": "education",
+    "Projects": "projects",
+    "Certifications": "certifications",
+    "Internships": "internships",
+    "Achievements": "achievements",
+    "Awards": "awards",
+    "Volunteering": "volunteering",
+    "Publications": "publications",
+    "Patents": "patents",
+    "References": "references",
+    "Hobbies": "hobbies",
+    "Interests": "interests",
+    "Languages": "languages",
+    "Skills": "categorizedSkills",
   };
 
   const handleDeleteSection = (index: number) => {
     const removed = sections[index];
     setSections((prev) => prev.filter((_, i) => i !== index));
-    setExtraSections((prev) => [...prev, removed]);
+    // Only return standard sections to the "Add section" list — custom sections are deleted permanently
+    if (standardSectionNames.has(removed.name)) {
+      setExtraSections((prev) => [...prev, removed]);
+    }
     if (activeSection === index) setActiveSection(null);
+
+    // Clear section data from resumeData so the preview updates immediately
+    const dataKey = SECTION_DATA_KEY_MAP[removed.name];
+    if (dataKey) {
+      const emptyValue = dataKey === "categorizedSkills"
+        ? { programming_languages: [], frameworks: [], soft_skills: [], project_management: [], marketing_sales: [] }
+        : [];
+      setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
+    }
+
+    // Remove from sectionOrder so it doesn't come back on refresh
+    const updatedOrder = (sectionOrder || []).filter(n => n !== removed.name);
+    setSectionOrder(updatedOrder);
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      localStorage.setItem(key, JSON.stringify(updatedOrder));
+    } catch { /* ignore */ }
   };
 
   const handleAddSection = (section: { name: string; ai: boolean }) => {
     setSections((prev) => [...prev, section]);
     setExtraSections((prev) => prev.filter((s) => s.name !== section.name));
+
+    // Build order from the current sections state (accurate main list) + new section.
+    // Do NOT use sectionOrder context here — it may contain ALL sections from getSectionOrder().
+    const updatedOrder = [...sections.map(s => s.name), section.name];
+    setSectionOrder(updatedOrder);
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      localStorage.setItem(key, JSON.stringify(updatedOrder));
+    } catch { /* ignore */ }
   };
 
   // const handleChange = (key: string, value: string) => {
@@ -293,10 +460,10 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   //   }
   // };
   const handleBlur = (key: string, value: string) => {
-  // Check if this is a required field
   const lowerKey = key.toLowerCase();
   const optionalFields = [
     "linkedin",
+    "github",
     "portfolio",
     "currentlyworking",
     "link",
@@ -306,25 +473,59 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     "category",
     "proficiencylevel",
   ];
-  
+
   const isRequired = !optionalFields.some((optional) => lowerKey.includes(optional));
-  
-  // Only set error if field is required AND empty
-  if (isRequired && (!value || value.trim() === "")) {
-    setErrors(prev => ({
-      ...prev,
-      [key]: "This field is required"
-    }));
-  } else {
-    // Clear error if field has value
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[key];
-      return newErrors;
-    });
+
+  const trimmed = value?.trim() ?? "";
+
+  // Required-field empty check
+  if (isRequired && !trimmed) {
+    setErrors(prev => ({ ...prev, [key]: "This field is required" }));
+    return;
   }
+
+  // URL domain/prefix validation for LinkedIn, GitHub, Portfolio
+  if (trimmed) {
+    let urlError: string | null = null;
+
+    if (key === "linkedinUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "LinkedIn URL must start with http:// or https://";
+      } else if (!trimmed.includes("linkedin.com")) {
+        urlError = "LinkedIn URL must be a linkedin.com address";
+      }
+    } else if (key === "githubUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "GitHub URL must start with http:// or https://";
+      } else if (!trimmed.includes("github.com")) {
+        urlError = "GitHub URL must be a github.com address";
+      }
+    } else if (key === "portfolioUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "Portfolio URL must start with http:// or https://";
+      }
+    }
+
+    if (urlError) {
+      setErrors(prev => ({ ...prev, [key]: urlError as string }));
+      return;
+    }
+  }
+
+  // Clear error
+  setErrors(prev => {
+    const newErrors = { ...prev };
+    delete newErrors[key];
+    return newErrors;
+  });
 };
 
+
+  const handleFixNow = (atsSection: string, entryIndex?: number) => {
+    const builderName = ATS_SECTION_TO_BUILDER[atsSection] ?? atsSection;
+    setPendingEditEntryIndex(entryIndex ?? null);
+    setPendingOpenSection(builderName);
+  };
 
   const handleSidebarToggle = (isOpen: boolean) => {
     if (onToggleTemplateSidebar) {
@@ -377,9 +578,11 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       Interests: resumeData.interests.some(
         (interest) => isFilled(interest.name)),
       Languages: resumeData.languages.some(
-        (lang) => isFilled(lang.language)),
+        (lang) => isFilled(lang.name)),
       Publications: resumeData.publications.some(
         (pub) => isFilled(pub.title)),
+      Patents: (resumeData.patents ?? []).some(
+        (pat) => isFilled(pat.title)),
     };
     
     // ✅ Update context completion status (used for progress circle)
@@ -395,6 +598,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         ${isOpen ? `${dynamicWidth}` : "w-12 p-0"}
       `}
     >
+
       {isOpen && (
         <Tabs
           isOpen={isOpen}
@@ -407,7 +611,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
       {isOpen && (
         <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
-          {activeTab === "Editor" && (
+          {/* Always mounted so the fixed modal overlay works from any tab */}
+          <div className={activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
             <EditorTab
               sections={sections}
               extraSections={extraSections}
@@ -424,8 +629,13 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               completionStatus={completionStatus}
               onSidebarToggle={handleSidebarToggle}
               clearErrors={clearErrors}
+              setErrors={setErrors}
+              pendingOpenSection={pendingOpenSection}
+              pendingEditEntryIndex={pendingEditEntryIndex}
+              onClearPendingSection={() => { setPendingOpenSection(null); setPendingEditEntryIndex(null); }}
             />
-          )}
+          </div>
+          {activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} />}
           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
           {activeTab === "AI Review" && <AIReviewTab />}
         </div>
@@ -444,1267 +654,3 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 };
 
 export default ResumeSide;
-//  before custom sections add
-
-
-// "use client";
-// import React, { useState, useEffect } from "react";
-// import { SidebarOpen, Trash2 } from "lucide-react";
-// import { DropResult } from "@hello-pangea/dnd";
-// import { useResume, CustomSection, CustomField } from "../../_context/ResumeContext";
-// import Tabs from "./Tabs";
-// import EditorTab from "../editor/EditorTab";
-// import ResumeGPTTab from "../resumeGPT/ResumeGPTTab";
-// import AIReviewTab from "../aiReview/AIReviewTab";
-// import { toast } from "sonner";
-// import PersonalInfo from "../editor/sections/PersonalInfo";
-// import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
-// import Education from "../editor/sections/Education";
-// import WorkExperience from "../editor/sections/WorkExperience";
-// import Projects from "../editor/sections/Projects";
-// import Skills from "../editor/sections/Skills";
-// import Certifications from "../editor/sections/Certifications";
-// import Achievements from "../editor/sections/Achievements";
-// import Volunteering from "../editor/sections/Volunteering";
-// import References from "../editor/sections/References";
-// import Internships from "../editor/sections/Internships";
-// import Awards from "../editor/sections/Awards";
-
-// import { initialSections } from "../../_utils/sectionsConfig";
-// import Publications from "../editor/sections/Publications";
-// import Interests from "../editor/sections/Interests";
-// import Hobbies from "../editor/sections/Hobbies";
-// import Languages from "../editor/sections/Languages";
-
-// interface SectionProps {
-//   formData: Record<string, string>;
-//   errors: Record<string, string>;
-//   onChange: (fieldKey: string, value: string) => void;
-//   onBlur: (fieldKey: string, value: string) => void;
-// }
-
-// const sectionComponents: Record<string, React.FC<SectionProps>> = {
-//   "Personal Info": PersonalInfo,
-//   "Professional Summary": ProfessionalSummary,
-//   Education,
-//   "Work Experience": WorkExperience,
-//   Projects,
-//   Skills,
-//   Certifications,
-//   Achievements,
-//   Volunteering,
-//   References,
-//   Internships,
-//   Awards,
-//   Publications,
-//   Interests,
-//   Hobbies,
-//   Languages,
-// };
-
-// interface ResumeSideProps {
-//   isTemplateSidebarOpen?: boolean;
-//   onToggleTemplateSidebar?: (isOpen: boolean) => void;
-// }
-
-// const CustomSectionEditor = ({ section }: { section: CustomSection }) => {
-//   const { addCustomField, updateCustomFieldValue, deleteCustomField, removeCustomSection } = useResume();
-//   const [newFieldName, setNewFieldName] = useState("");
-//   const [newFieldType, setNewFieldType] = useState<CustomField["fieldType"]>("text");
-//   const [isEditingSectionName, setIsEditingSectionName] = useState(false);
-//   const [sectionNameInput, setSectionNameInput] = useState(section.sectionName);
-
-//   return (
-//     <div className="p-3 border rounded-lg shadow-sm mb-4">
-//       <div className="flex justify-between items-center mb-3">
-//         {isEditingSectionName ? (
-//           <input
-//             type="text"
-//             value={sectionNameInput}
-//             onChange={(e) => setSectionNameInput(e.target.value)}
-//             onBlur={() => setIsEditingSectionName(false)}
-//             onKeyDown={(e) => e.key === "Enter" && setIsEditingSectionName(false)}
-//             className="text-lg font-semibold border-b border-gray-400 focus:outline-none"
-//             autoFocus
-//           />
-//         ) : (
-//           <h3 className="text-lg font-semibold cursor-pointer" onClick={() => setIsEditingSectionName(true)}>
-//             {section.sectionName}
-//           </h3>
-//         )}
-//         <button onClick={() => removeCustomSection(section.id)} title="Delete Section" className="text-red-600 hover:text-red-800">
-//           <Trash2 size={18} />
-//         </button>
-//       </div>
-
-//       <div>
-//         {section.fields.map((field) => (
-//           <div key={field.id} className="mb-2">
-//             <label className="block font-medium text-gray-700 mb-1">
-//               {field.fieldName} ({field.fieldType})
-//             </label>
-
-//             {field.fieldType === "textarea" ? (
-//               <textarea
-//                 className="w-full border p-2 rounded"
-//                 value={field.value as string}
-//                 onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//                 rows={3}
-//               />
-//             ) : field.fieldType === "date" ? (
-//               <input
-//                 type="date"
-//                 className="w-full border p-2 rounded"
-//                 value={field.value as string}
-//                 onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//               />
-//             ) : field.fieldType === "url" ? (
-//               <input
-//                 type="url"
-//                 className="w-full border p-2 rounded"
-//                 value={field.value as string}
-//                 onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//               />
-//             ) : field.fieldType === "list" ? (
-//               <div className="space-y-2">
-//                 {(field.value as string[]).map((item, idx) => (
-//                   <div key={idx} className="flex gap-2">
-//                     <input
-//                       type="text"
-//                       className="flex-1 border p-2 rounded"
-//                       value={item}
-//                       onChange={(e) => {
-//                         const newList = [...(field.value as string[])];
-//                         newList[idx] = e.target.value;
-//                         updateCustomFieldValue(section.id, field.id, newList);
-//                       }}
-//                     />
-//                     <button
-//                       className="text-red-600 hover:text-red-800"
-//                       onClick={() => {
-//                         const newList = (field.value as string[]).filter((_, i) => i !== idx);
-//                         updateCustomFieldValue(section.id, field.id, newList);
-//                       }}
-//                       title="Delete item"
-//                     >
-//                       <Trash2 size={16} />
-//                     </button>
-//                   </div>
-//                 ))}
-//                 <button
-//                   className="text-blue-600 hover:underline"
-//                   onClick={() =>
-//                     updateCustomFieldValue(section.id, field.id, [...(field.value as string[]), ""])
-//                   }
-//                 >
-//                   + Add item
-//                 </button>
-//               </div>
-//             ) : (
-//               <input
-//                 type="text"
-//                 className="w-full border p-2 rounded"
-//                 value={field.value as string}
-//                 onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//               />
-//             )}
-
-//             <button
-//               onClick={() => deleteCustomField(section.id, field.id)}
-//               className="mt-1 text-red-600 hover:text-red-800"
-//               title="Delete field"
-//             >
-//               <Trash2 size={14} />
-//             </button>
-//           </div>
-//         ))}
-//       </div>
-
-//       <AddNewFieldForm sectionId={section.id} addCustomField={addCustomField} />
-//     </div>
-//   );
-// };
-
-// const AddNewFieldForm = ({
-//   sectionId,
-//   addCustomField,
-// }: {
-//   sectionId: string;
-//   addCustomField: (sectionId: string, fieldName: string, fieldType: CustomField["fieldType"]) => void;
-// }) => {
-//   const [newFieldName, setNewFieldName] = useState("");
-//   const [newFieldType, setNewFieldType] = useState<CustomField["fieldType"]>("text");
-
-//   const handleAdd = () => {
-//     if (!newFieldName.trim()) {
-//       toast.error("Field name cannot be empty");
-//       return;
-//     }
-//     addCustomField(sectionId, newFieldName, newFieldType);
-//     setNewFieldName("");
-//     setNewFieldType("text");
-//   };
-
-//   return (
-//     <div className="mt-4 border-t pt-3">
-//       <input
-//         type="text"
-//         placeholder="New field name"
-//         className="border p-2 rounded mr-2 w-2/3"
-//         value={newFieldName}
-//         onChange={(e) => setNewFieldName(e.target.value)}
-//       />
-//       <select
-//         value={newFieldType}
-//         onChange={(e) => setNewFieldType(e.target.value as CustomField["fieldType"])}
-//         className="border p-2 rounded mr-2"
-//       >
-//         <option value="text">Text</option>
-//         <option value="textarea">Long Text</option>
-//         <option value="date">Date</option>
-//         <option value="url">URL</option>
-//         <option value="list">List</option>
-//       </select>
-//       <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-//         Add Field
-//       </button>
-//     </div>
-//   );
-// };
-
-// const ResumeSide: React.FC<ResumeSideProps> = ({ 
-//   isTemplateSidebarOpen = true,
-//   onToggleTemplateSidebar,
-// }) => {
-//   const [sections, setSections] = useState(initialSections);
-  
-//   const { 
-//     resumeData, 
-//     isLoadingResume,
-//     completionStatus,
-//     setCompletionStatus,
-//     addCustomSection,
-//     removeCustomSection
-//   } = useResume();
-  
-//   const [extraSections, setExtraSections] = useState<{ name: string; ai: boolean }[]>([
-//     { name: "Achievements", ai: true },
-//     { name: "Publications", ai: false },
-//     { name: "Volunteering", ai: false },
-//     { name: "Awards", ai: false },
-//     { name: "Hobbies", ai: true },
-//     { name: "Interests", ai: true },
-//     { name: "Languages", ai: false },
-//     { name: "References", ai: false },
-//   ]);
-
-//   const [formData, setFormData] = useState<Record<string, string>>({});
-//   const [errors, setErrors] = useState<Record<string, string>>({});
-//   const [activeSection, setActiveSection] = useState<number | null>(null);
-//   const [isOpen, setIsOpen] = useState(true);
-//   const [activeTab, setActiveTab] = useState("Editor");
-  
-//   const clearErrors = (fields?: string[]) => {
-//     if (!fields || fields.length === 0) {
-//       setErrors({});
-//     } else {
-//       setErrors(prev => {
-//         const newErrors = { ...prev };
-//         fields.forEach(field => {
-//           delete newErrors[field];
-//         });
-//         return newErrors;
-//       });
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (!isLoadingResume && resumeData) {
-//       const newFormData: Record<string, string> = {};
-//       newFormData["name"] = resumeData.personalInfo?.fullName || "";
-//       newFormData["email"] = resumeData.personalInfo?.email || "";
-//       newFormData["phone"] = resumeData.personalInfo?.phone || "";
-//       newFormData["location"] = resumeData.personalInfo?.location || "";
-//       newFormData["linkedinurl"] = resumeData.personalInfo?.linkedinUrl || "";
-//       newFormData["portifoliourl"] = resumeData.personalInfo?.portifolioUrl || "";
-//       newFormData["professionalSummary"] = resumeData.professionalSummary || "";
-//       if (Array.isArray(resumeData.skills)) {
-//         newFormData["skills"] = resumeData.skills.join(", ");
-//       }
-//       resumeData.education?.forEach((edu, index) => {
-//         newFormData[`education_${index}_school`] = edu.school || "";
-//         newFormData[`education_${index}_degree`] = edu.degree || "";
-//         newFormData[`education_${index}_startDate`] = edu.startDate || "";
-//         newFormData[`education_${index}_endDate`] = edu.endDate || "";
-//       });
-//       resumeData.workExperience?.forEach((work, index) => {
-//         newFormData[`workExperience_${index}_company`] = work.company || "";
-//         newFormData[`workExperience_${index}_role`] = work.role || "";
-//         newFormData[`workExperience_${index}_location`] = work.location || "";
-//         newFormData[`workExperience_${index}_startDate`] = work.startDate || "";
-//         newFormData[`workExperience_${index}_endDate`] = work.endDate || "";
-//         newFormData[`workExperience_${index}_currentlyWorking`] = String(work.currentlyWorking);
-//         newFormData[`workExperience_${index}_description`] = work.description || "";
-//       });
-//       resumeData.projects?.forEach((project, index) => {
-//         newFormData[`project_${index}_title`] = project.title || "";
-//         newFormData[`project_${index}_description`] = project.description || "";
-//         newFormData[`project_${index}_technologies`] = Array.isArray(project.technologies) ? project.technologies.join(", ") : "";
-//         newFormData[`project_${index}_startDate`] = project.startDate || "";
-//         newFormData[`project_${index}_endDate`] = project.endDate || "";
-//         newFormData[`project_${index}_link`] = project.link || "";
-//       });
-//       resumeData.certifications?.forEach((cert, index) => {
-//         newFormData[`certification_${index}_name`] = cert.name || "";
-//         newFormData[`certification_${index}_issuedBy`] = cert.issuedBy || "";
-//         newFormData[`certification_${index}_year`] = cert.year || "";
-//       });
-//       resumeData.achievements?.forEach((ach, index) => {
-//         newFormData[`achievement_${index}_title`] = ach.title || "";
-//         newFormData[`achievement_${index}_date`] = ach.date || "";
-//         newFormData[`achievement_${index}_description`] = ach.description || "";
-//       });
-//       resumeData.internships?.forEach((intern, index) => {
-//         newFormData[`internship_${index}_company`] = intern.company || "";
-//         newFormData[`internship_${index}_role`] = intern.role || "";
-//         newFormData[`internship_${index}_location`] = intern.location || "";
-//         newFormData[`internship_${index}_startDate`] = intern.startDate || "";
-//         newFormData[`internship_${index}_endDate`] = intern.endDate || "";
-//         newFormData[`internship_${index}_currentlyWorking`] = String(intern.currentlyWorking);
-//         newFormData[`internship_${index}_description`] = intern.description || "";
-//       });
-//       resumeData.volunteering?.forEach((vol, index) => {
-//         newFormData[`volunteering_${index}_organization`] = vol.organization || "";
-//         newFormData[`volunteering_${index}_role`] = vol.role || "";
-//         newFormData[`volunteering_${index}_startDate`] = vol.startDate || "";
-//         newFormData[`volunteering_${index}_endDate`] = vol.endDate || "";
-//       });
-//       resumeData.awards?.forEach((award, index) => {
-//         newFormData[`award_${index}_title`] = award.title || "";
-//         newFormData[`award_${index}_issuedBy`] = award.issuedBy || "";
-//         newFormData[`award_${index}_year`] = award.year || "";
-//       });
-//       resumeData.hobbies?.forEach((hobby, index) => {
-//         newFormData[`hobbie_${index}_name`] = hobby.name || "";
-//         newFormData[`hobbie_${index}_description`] = hobby.description || "";
-//         newFormData[`hobbie_${index}_proficiencyLevel`] = hobby.proficiencyLevel || "";
-//         newFormData[`hobbie_${index}_achievement`] = hobby.achievement || "";
-//       });
-//       resumeData.interests?.forEach((interest, index) => {
-//         newFormData[`interest_${index}_name`] = interest.name || "";
-//         newFormData[`interest_${index}_description`] = interest.description || "";
-//         newFormData[`interest_${index}_category`] = interest.category || "";
-//       });
-//       resumeData.languages?.forEach((lang, index) => {
-//         newFormData[`language_${index}_language`] = lang.language || "";
-//         newFormData[`language_${index}_proficiency`] = lang.proficiency || "";
-//       });
-//       resumeData.publications?.forEach((pub, index) => {
-//         newFormData[`publication_${index}_title`] = pub.title || "";
-//         newFormData[`publication_${index}_authors`] = pub.authors || "";
-//         newFormData[`publication_${index}_publicationName`] = pub.publicationName || "";
-//         newFormData[`publication_${index}_date`] = pub.date || "";
-//         newFormData[`publication_${index}_url`] = pub.url || "";
-//       });
-//       resumeData.references?.forEach((ref, index) => {
-//         newFormData[`reference_${index}_name`] = ref.name || "";
-//         newFormData[`reference_${index}_relation`] = ref.relation || "";
-//         newFormData[`reference_${index}_contact`] = ref.contact || "";
-//       });
-
-//       // Populate customSections fields to formData using keys: customSection_{sectionId}_field_{fieldId}
-//       resumeData.customSections?.forEach((section) => {
-//         section.fields.forEach((field) => {
-//           const key = `customSection_${section.id}_field_${field.id}`;
-//           if (Array.isArray(field.value)) {
-//             newFormData[key] = field.value.join(", ");
-//           } else {
-//             newFormData[key] = field.value || "";
-//           }
-//         });
-//       });
-
-//       setFormData(newFormData);
-//     }
-//   }, [isLoadingResume, resumeData]);
-
-//   const handleDragEnd = (result: DropResult) => {
-//     if (!result.destination) return;
-//     const items = [...sections];
-//     const [moved] = items.splice(result.source.index, 1);
-//     items.splice(result.destination.index, 0, moved);
-//     setSections(items);
-//   };
-
-//   const handleDeleteSection = (index: number) => {
-//     const removed = sections[index];
-//     setSections((prev) => prev.filter((_, i) => i !== index));
-//     setExtraSections((prev) => [...prev, removed]);
-//     if (activeSection === index) setActiveSection(null);
-//   };
-
-//   const handleAddSection = (section: { name: string; ai: boolean }) => {
-//     setSections((prev) => [...prev, section]);
-//     setExtraSections((prev) => prev.filter((s) => s.name !== section.name));
-//   };
-
-//   const handleChange = (key: string, value: string) => {
-//     setFormData(prev => ({
-//       ...prev,
-//       [key]: value
-//     }));
-
-//     if (errors[key]) {
-//       setErrors(prev => {
-//         const newErrors = { ...prev };
-//         delete newErrors[key];
-//         return newErrors;
-//       });
-//     }
-//   };
-
-//   const handleBlur = (key: string, value: string) => {
-//     const lowerKey = key.toLowerCase();
-//     const optionalFields = [
-//       "linkedin",
-//       "portfolio",
-//       "currentlyworking",
-//       "link",
-//       "technologies",
-//       "description",
-//       "achievement",
-//       "category",
-//       "proficiencylevel",
-//     ];
-
-//     const isRequired = !optionalFields.some((optional) => lowerKey.includes(optional));
-
-//     if (isRequired && (!value || value.trim() === "")) {
-//       setErrors(prev => ({
-//         ...prev,
-//         [key]: "This field is required"
-//       }));
-//     } else {
-//       setErrors(prev => {
-//         const newErrors = { ...prev };
-//         delete newErrors[key];
-//         return newErrors;
-//       });
-//     }
-//   };
-
-//   const handleSidebarToggle = (isOpen: boolean) => {
-//     if (onToggleTemplateSidebar) {
-//       onToggleTemplateSidebar(isOpen);
-//     }
-//   };
-
-//   useEffect(() => {
-//     const isFilled = (value?: string) => !!value && value.length > 0;
-//     const isArrayFilled = (arr?: string[]) => !!arr && arr.length > 0;
-
-//     const newStatus: Record<string, boolean> = {
-//       "Personal Info":
-//         !!resumeData.personalInfo.fullName &&
-//         !!resumeData.personalInfo.email &&
-//         !!resumeData.personalInfo.phone &&
-//         !!resumeData.personalInfo.location,
-//       "Professional Summary": !!resumeData.professionalSummary.summary?.trim(),
-//       Education: resumeData.education.some(
-//         (edu) =>
-//           isFilled(edu.school) && isFilled(edu.degree) 
-//       ),
-//       Skills: isArrayFilled(resumeData.skills),
-//       "Work Experience": resumeData.workExperience.some(
-//         (exp) =>
-//           isFilled(exp.company) &&
-//           isFilled(exp.role)
-//       ),
-//       Projects: resumeData.projects.some(
-//         (proj) => isFilled(proj.title) && isArrayFilled(proj.technologies)
-//       ),
-//       Certifications: resumeData.certifications.some(
-//         (cert) => isFilled(cert.name)),
-//       Achievements: resumeData.achievements.some(
-//         (ach) => isFilled(ach.title)),
-//       Awards: resumeData.awards.some(
-//         (awd) => isFilled(awd.title)),
-//       Volunteering: resumeData.volunteering.some(
-//         (vol) => isFilled(vol.organization) && isFilled(vol.role)
-//       ),
-//       References: resumeData.references.some(
-//         (ref) => isFilled(ref.name) && isFilled(ref.contact)
-//       ),
-//       Internships: resumeData.internships.some(
-//         (intern) => isFilled(intern.company) && isFilled(intern.role)
-//       ),
-//       Hobbies: resumeData.hobbies.some(
-//         (hobby) => isFilled(hobby.name)),
-//       Interests: resumeData.interests.some(
-//         (interest) => isFilled(interest.name)),
-//       Languages: resumeData.languages.some(
-//         (lang) => isFilled(lang.language)),
-//       Publications: resumeData.publications.some(
-//         (pub) => isFilled(pub.title)),
-//     };
-
-//     // Also mark custom sections completion:
-//     (resumeData.customSections || []).forEach((cs) => {
-//       newStatus[cs.id] = cs.fields.some((f) => {
-//         if (Array.isArray(f.value)) {
-//           return f.value.length > 0 && f.value.some(v => v.trim() !== "");
-//         }
-//         return f.value && f.value.trim() !== "";
-//       });
-//     });
-
-//     setCompletionStatus(newStatus);
-
-//   }, [resumeData, setCompletionStatus]);
-
-//   const dynamicWidth = isTemplateSidebarOpen ? "w-[30%]" : "w-[32%]";
-
-//   return (
-//     <div
-//       className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
-//         ${isOpen ? `${dynamicWidth} px-3` : "w-12 p-0"}
-//       `}
-//     >
-//       {isOpen && (
-//         <Tabs
-//           isOpen={isOpen}
-//           onToggle={() => setIsOpen(!isOpen)}
-//           activeTab={activeTab}
-//           setActiveTab={setActiveTab}
-//           isTemplateSidebarOpen={isTemplateSidebarOpen}
-//         />
-//       )}
-
-//       {isOpen && (
-//         <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
-
-//           {activeTab === "Editor" && (
-//             <EditorTab
-//               sections={sections}
-//               extraSections={extraSections}
-//               activeSection={activeSection}
-//               formData={formData}
-//               errors={errors}
-//               sectionComponents={sectionComponents}
-//               handleDeleteSection={handleDeleteSection}
-//               handleAddSection={handleAddSection}
-//               handleChange={handleChange}
-//               handleBlur={handleBlur}
-//               setActiveSection={setActiveSection}
-//               handleDragEnd={handleDragEnd}
-//               completionStatus={completionStatus}
-//               onSidebarToggle={handleSidebarToggle}
-//               clearErrors={clearErrors}
-//             />
-//           )}
-//           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
-//           {activeTab === "AI Review" && <AIReviewTab />}
-
-//           {/* Custom Sections Editors displayed in sidebar */}
-//           {resumeData.customSections?.map((section) => (
-//             <CustomSectionEditor key={section.id} section={section} />
-//           ))}
-
-//           {/* Add Custom Section Input & Button */}
-//           <div className="my-4">
-//             <input
-//               className="w-full px-3 py-2 border rounded mb-2"
-//               placeholder="New custom section name"
-//               value={formData["customSectionNewName"] || ""}
-//               onChange={(e) => setFormData((prev) => ({ ...prev, customSectionNewName: e.target.value }))}
-//               onKeyDown={(e) => {
-//                 if (e.key === "Enter" && formData["customSectionNewName"]?.trim()) {
-//                   addCustomSection(formData["customSectionNewName"].trim());
-//                   setFormData((prev) => ({ ...prev, customSectionNewName: "" }));
-//                 }
-//               }}
-//             />
-//             <button
-//               onClick={() => {
-//                 if (formData["customSectionNewName"]?.trim()) {
-//                   addCustomSection(formData["customSectionNewName"].trim());
-//                   setFormData((prev) => ({ ...prev, customSectionNewName: "" }));
-//                 } else {
-//                   toast.error("Section name cannot be empty");
-//                 }
-//               }}
-//               className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded"
-//             >
-//               + Add Custom Section
-//             </button>
-//           </div>
-
-//         </div>
-//       )}
-
-//       {!isOpen && (
-//         <button
-//           onClick={() => setIsOpen(true)}
-//           className="absolute top-4 left-2 p-1.5 bg-white border  border-white rounded shadow hover:shadow-md hover:border-blue-400 transition"
-//         >
-//           <SidebarOpen className="text-blue-500" size={20} />
-//         </button>
-//       )}
-//     </div>
-//   );
-// };
-
-// export default ResumeSide; before popup
-
-// "use client";
-
-// import React, { useState, useEffect } from "react";
-// import { SidebarOpen } from "lucide-react";
-// import { DropResult } from "@hello-pangea/dnd";
-// import { useResume, CustomSection, CustomField } from "../../_context/ResumeContext";
-// import Tabs from "./Tabs";
-// import EditorTab from "../editor/EditorTab";
-// import ResumeGPTTab from "../resumeGPT/ResumeGPTTab";
-// import AIReviewTab from "../aiReview/AIReviewTab";
-// import { Trash2 } from "lucide-react";
-// import { toast } from "sonner";
-
-// import PersonalInfo from "../editor/sections/PersonalInfo";
-// import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
-// import Education from "../editor/sections/Education";
-// import WorkExperience from "../editor/sections/WorkExperience";
-// import Projects from "../editor/sections/Projects";
-// import Skills from "../editor/sections/Skills";
-// import Certifications from "../editor/sections/Certifications";
-// import Achievements from "../editor/sections/Achievements";
-// import Volunteering from "../editor/sections/Volunteering";
-// import References from "../editor/sections/References";
-// import Internships from "../editor/sections/Internships";
-// import Awards from "../editor/sections/Awards";
-
-// import { initialSections } from "../../_utils/sectionsConfig";
-// import Publications from "../editor/sections/Publications";
-// import Interests from "../editor/sections/Interests";
-// import Hobbies from "../editor/sections/Hobbies";
-// import Languages from "../editor/sections/Languages";
-
-// interface SectionProps {
-//   formData: Record<string, string>;
-//   errors: Record<string, string>;
-//   onChange: (fieldKey: string, value: string) => void;
-//   onBlur: (fieldKey: string, value: string) => void;
-// }
-
-// const sectionComponents: Record<string, React.FC<SectionProps>> = {
-//   "Personal Info": PersonalInfo,
-//   "Professional Summary": ProfessionalSummary,
-//   Education,
-//   "Work Experience": WorkExperience,
-//   Projects,
-//   Skills,
-//   Certifications,
-//   Achievements,
-//   Volunteering,
-//   References,
-//   Internships,
-//   Awards,
-//   Publications,
-//   Interests,
-//   Hobbies,
-//   Languages,
-// };
-
-// interface ResumeSideProps {
-//   isTemplateSidebarOpen?: boolean;
-//   onToggleTemplateSidebar?: (isOpen: boolean) => void;
-// }
-
-// interface CustomSectionModalProps {
-//   section: CustomSection;
-//   isOpen: boolean;
-//   onClose: () => void;
-// }
-
-// const CustomSectionModal: React.FC<CustomSectionModalProps> = ({ section, isOpen, onClose }) => {
-//   const { addCustomField, updateCustomFieldValue, deleteCustomField, removeCustomSection } = useResume();
-//   const [newFieldName, setNewFieldName] = useState("");
-//   const [newFieldType, setNewFieldType] = useState<CustomField["fieldType"]>("text");
-
-//   if (!isOpen) return null;
-
-//   const handleAddField = () => {
-//     if (!newFieldName.trim()) {
-//       toast.error("Field name cannot be empty");
-//       return;
-//     }
-//     addCustomField(section.id, newFieldName, newFieldType);
-//     setNewFieldName("");
-//     setNewFieldType("text");
-//     toast.success("Field added successfully");
-//   };
-
-//   const handleDeleteSection = () => {
-//     if (confirm(`Are you sure you want to delete "${section.sectionName}"?`)) {
-//       removeCustomSection(section.id);
-//       onClose();
-//       toast.success("Section deleted");
-//     }
-//   };
-
-//   return (
-//     <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50" onClick={onClose}>
-//       <div className="bg-white max-w-3xl w-full max-h-[85vh] rounded-lg shadow-lg p-6 overflow-y-auto relative" onClick={(e) => e.stopPropagation()}>
-//         <div className="flex justify-between items-center mb-4">
-//           <h2 className="text-xl font-bold">{section.sectionName}</h2>
-//           <div className="flex gap-2">
-//             <button
-//               className="text-red-600 hover:text-red-800 px-3 py-1 border border-red-600 rounded"
-//               onClick={handleDeleteSection}
-//               aria-label="Delete section"
-//             >
-//               Delete Section
-//             </button>
-//             <button
-//               className="text-gray-500 hover:text-gray-700"
-//               onClick={onClose}
-//               aria-label="Close modal"
-//             >
-//               <Trash2 size={20} />
-//             </button>
-//           </div>
-//         </div>
-
-//         <div className="space-y-4">
-//           {section.fields.length === 0 && (
-//             <p className="text-gray-500 text-center py-4">No fields added yet. Add fields below.</p>
-//           )}
-//           {section.fields.map((field) => (
-//             <div key={field.id} className="border-b pb-3">
-//               <div className="flex justify-between items-center mb-1">
-//                 <label className="block text-gray-700 font-medium">
-//                   {field.fieldName} ({field.fieldType})
-//                 </label>
-//                 <button
-//                   className="text-red-600 hover:text-red-800"
-//                   onClick={() => {
-//                     deleteCustomField(section.id, field.id);
-//                     toast.success("Field deleted");
-//                   }}
-//                   aria-label="Delete field"
-//                 >
-//                   <Trash2 size={16} />
-//                 </button>
-//               </div>
-//               {field.fieldType === "textarea" ? (
-//                 <textarea
-//                   className="w-full border p-2 rounded"
-//                   rows={3}
-//                   value={field.value as string}
-//                   onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//                   placeholder={`Enter ${field.fieldName}`}
-//                 />
-//               ) : field.fieldType === "date" ? (
-//                 <input
-//                   type="date"
-//                   className="w-full border p-2 rounded"
-//                   value={field.value as string}
-//                   onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//                 />
-//               ) : field.fieldType === "url" ? (
-//                 <input
-//                   type="url"
-//                   className="w-full border p-2 rounded"
-//                   value={field.value as string}
-//                   onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//                   placeholder="https://example.com"
-//                 />
-//               ) : field.fieldType === "list" ? (
-//                 <div className="space-y-2">
-//                   {(field.value as string[]).map((item, idx) => (
-//                     <div key={idx} className="flex gap-2">
-//                       <input
-//                         type="text"
-//                         className="flex-1 border p-2 rounded"
-//                         value={item}
-//                         onChange={(e) => {
-//                           const newList = [...(field.value as string[])];
-//                           newList[idx] = e.target.value;
-//                           updateCustomFieldValue(section.id, field.id, newList);
-//                         }}
-//                         placeholder={`Item ${idx + 1}`}
-//                       />
-//                       <button
-//                         className="text-red-600 hover:text-red-800 px-2"
-//                         onClick={() => {
-//                           const newList = (field.value as string[]).filter((_, i) => i !== idx);
-//                           updateCustomFieldValue(section.id, field.id, newList);
-//                         }}
-//                         aria-label="Delete list item"
-//                       >
-//                         <Trash2 size={16} />
-//                       </button>
-//                     </div>
-//                   ))}
-//                   <button
-//                     className="text-blue-600 hover:underline text-sm"
-//                     onClick={() =>
-//                       updateCustomFieldValue(section.id, field.id, [...(field.value as string[]), ""])
-//                     }
-//                   >
-//                     + Add item
-//                   </button>
-//                 </div>
-//               ) : (
-//                 <input
-//                   type="text"
-//                   className="w-full border p-2 rounded"
-//                   value={field.value as string}
-//                   onChange={(e) => updateCustomFieldValue(section.id, field.id, e.target.value)}
-//                   placeholder={`Enter ${field.fieldName}`}
-//                 />
-//               )}
-//             </div>
-//           ))}
-//         </div>
-
-//         <div className="mt-6 pt-4 border-t">
-//           <h3 className="font-semibold mb-3">Add New Field</h3>
-//           <div className="flex items-center gap-3">
-//             <input
-//               type="text"
-//               className="border p-2 rounded flex-1"
-//               placeholder="Field name (e.g., Description, Date)"
-//               value={newFieldName}
-//               onChange={(e) => setNewFieldName(e.target.value)}
-//               onKeyDown={(e) => e.key === "Enter" && handleAddField()}
-//             />
-//             <select
-//               className="border p-2 rounded"
-//               value={newFieldType}
-//               onChange={(e) => setNewFieldType(e.target.value as CustomField["fieldType"])}
-//             >
-//               <option value="text">Text</option>
-//               <option value="textarea">Long Text</option>
-//               <option value="date">Date</option>
-//               <option value="url">URL</option>
-//               <option value="list">List</option>
-//             </select>
-//             <button
-//               onClick={handleAddField}
-//               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-//             >
-//               Add Field
-//             </button>
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// const ResumeSide: React.FC<ResumeSideProps> = ({ 
-//   isTemplateSidebarOpen = true,
-//   onToggleTemplateSidebar,
-// }) => {
-//   const [sections, setSections] = useState(initialSections);
-  
-//   const { 
-//     resumeData, 
-//     isLoadingResume,
-//     completionStatus,
-//     setCompletionStatus,
-//     addCustomSection,
-//   } = useResume();
-  
-//   const [extraSections, setExtraSections] = useState<{ name: string; ai: boolean }[]>([
-//     { name: "Achievements", ai: true },
-//     { name: "Publications", ai: false },
-//     { name: "Volunteering", ai: false },
-//     { name: "Awards", ai: false },
-//     { name: "Hobbies", ai: true },
-//     { name: "Interests", ai: true },
-//     { name: "Languages", ai: false },
-//     { name: "References", ai: false },
-//   ]);
-
-//   const [formData, setFormData] = useState<Record<string, string>>({});
-//   const [errors, setErrors] = useState<Record<string, string>>({});
-//   const [activeSection, setActiveSection] = useState<number | null>(null);
-//   const [isOpen, setIsOpen] = useState(true);
-//   const [activeTab, setActiveTab] = useState("Editor");
-  
-//   const [modalOpen, setModalOpen] = useState(false);
-//   const [activeCustomSection, setActiveCustomSection] = useState<CustomSection | null>(null);
-//   const [newSectionName, setNewSectionName] = useState("");
-  
-//   const clearErrors = (fields?: string[]) => {
-//     if (!fields || fields.length === 0) {
-//       setErrors({});
-//     } else {
-//       setErrors(prev => {
-//         const newErrors = { ...prev };
-//         fields.forEach(field => {
-//           delete newErrors[field];
-//         });
-//         return newErrors;
-//       });
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (!isLoadingResume && resumeData) {
-//       const newFormData: Record<string, string> = {};
-//       newFormData["name"] = resumeData.personalInfo?.fullName || "";
-//       newFormData["email"] = resumeData.personalInfo?.email || "";
-//       newFormData["phone"] = resumeData.personalInfo?.phone || "";
-//       newFormData["location"] = resumeData.personalInfo?.location || "";
-//       newFormData["linkedinurl"] = resumeData.personalInfo?.linkedinUrl || "";
-//       newFormData["portifoliourl"] = resumeData.personalInfo?.portifolioUrl || "";
-//       newFormData["professionalSummary"] = resumeData.professionalSummary || "";
-//       if (Array.isArray(resumeData.skills)) {
-//         newFormData["skills"] = resumeData.skills.join(", ");
-//       }
-//       resumeData.education?.forEach((edu, index) => {
-//         newFormData[`education_${index}_school`] = edu.school || "";
-//         newFormData[`education_${index}_degree`] = edu.degree || "";
-//         newFormData[`education_${index}_startDate`] = edu.startDate || "";
-//         newFormData[`education_${index}_endDate`] = edu.endDate || "";
-//       });
-//       resumeData.workExperience?.forEach((work, index) => {
-//         newFormData[`workExperience_${index}_company`] = work.company || "";
-//         newFormData[`workExperience_${index}_role`] = work.role || "";
-//         newFormData[`workExperience_${index}_location`] = work.location || "";
-//         newFormData[`workExperience_${index}_startDate`] = work.startDate || "";
-//         newFormData[`workExperience_${index}_endDate`] = work.endDate || "";
-//         newFormData[`workExperience_${index}_currentlyWorking`] = String(work.currentlyWorking);
-//         newFormData[`workExperience_${index}_description`] = work.description || "";
-//       });
-//       resumeData.projects?.forEach((project, index) => {
-//         newFormData[`project_${index}_title`] = project.title || "";
-//         newFormData[`project_${index}_description`] = project.description || "";
-//         newFormData[`project_${index}_technologies`] = Array.isArray(project.technologies) ? project.technologies.join(", ") : "";
-//         newFormData[`project_${index}_startDate`] = project.startDate || "";
-//         newFormData[`project_${index}_endDate`] = project.endDate || "";
-//         newFormData[`project_${index}_link`] = project.link || "";
-//       });
-//       resumeData.certifications?.forEach((cert, index) => {
-//         newFormData[`certification_${index}_name`] = cert.name || "";
-//         newFormData[`certification_${index}_issuedBy`] = cert.issuedBy || "";
-//         newFormData[`certification_${index}_year`] = cert.year || "";
-//       });
-//       resumeData.achievements?.forEach((ach, index) => {
-//         newFormData[`achievement_${index}_title`] = ach.title || "";
-//         newFormData[`achievement_${index}_date`] = ach.date || "";
-//         newFormData[`achievement_${index}_description`] = ach.description || "";
-//       });
-//       resumeData.internships?.forEach((intern, index) => {
-//         newFormData[`internship_${index}_company`] = intern.company || "";
-//         newFormData[`internship_${index}_role`] = intern.role || "";
-//         newFormData[`internship_${index}_location`] = intern.location || "";
-//         newFormData[`internship_${index}_startDate`] = intern.startDate || "";
-//         newFormData[`internship_${index}_endDate`] = intern.endDate || "";
-//         newFormData[`internship_${index}_currentlyWorking`] = String(intern.currentlyWorking);
-//         newFormData[`internship_${index}_description`] = intern.description || "";
-//       });
-//       resumeData.volunteering?.forEach((vol, index) => {
-//         newFormData[`volunteering_${index}_organization`] = vol.organization || "";
-//         newFormData[`volunteering_${index}_role`] = vol.role || "";
-//         newFormData[`volunteering_${index}_startDate`] = vol.startDate || "";
-//         newFormData[`volunteering_${index}_endDate`] = vol.endDate || "";
-//       });
-//       resumeData.awards?.forEach((award, index) => {
-//         newFormData[`award_${index}_title`] = award.title || "";
-//         newFormData[`award_${index}_issuedBy`] = award.issuedBy || "";
-//         newFormData[`award_${index}_year`] = award.year || "";
-//       });
-//       resumeData.hobbies?.forEach((hobby, index) => {
-//         newFormData[`hobbie_${index}_name`] = hobby.name || "";
-//         newFormData[`hobbie_${index}_description`] = hobby.description || "";
-//         newFormData[`hobbie_${index}_proficiencyLevel`] = hobby.proficiencyLevel || "";
-//         newFormData[`hobbie_${index}_achievement`] = hobby.achievement || "";
-//       });
-//       resumeData.interests?.forEach((interest, index) => {
-//         newFormData[`interest_${index}_name`] = interest.name || "";
-//         newFormData[`interest_${index}_description`] = interest.description || "";
-//         newFormData[`interest_${index}_category`] = interest.category || "";
-//       });
-//       resumeData.languages?.forEach((lang, index) => {
-//         newFormData[`language_${index}_language`] = lang.language || "";
-//         newFormData[`language_${index}_proficiency`] = lang.proficiency || "";
-//       });
-//       resumeData.publications?.forEach((pub, index) => {
-//         newFormData[`publication_${index}_title`] = pub.title || "";
-//         newFormData[`publication_${index}_authors`] = pub.authors || "";
-//         newFormData[`publication_${index}_publicationName`] = pub.publicationName || "";
-//         newFormData[`publication_${index}_date`] = pub.date || "";
-//         newFormData[`publication_${index}_url`] = pub.url || "";
-//       });
-//       resumeData.references?.forEach((ref, index) => {
-//         newFormData[`reference_${index}_name`] = ref.name || "";
-//         newFormData[`reference_${index}_relation`] = ref.relation || "";
-//         newFormData[`reference_${index}_contact`] = ref.contact || "";
-//       });
-
-//       resumeData.customSections?.forEach((section) => {
-//         section.fields.forEach((field) => {
-//           const key = `customSection_${section.id}_field_${field.id}`;
-//           if (Array.isArray(field.value)) {
-//             newFormData[key] = field.value.join(", ");
-//           } else {
-//             newFormData[key] = field.value || "";
-//           }
-//         });
-//       });
-
-//       setFormData(newFormData);
-//     }
-//   }, [isLoadingResume, resumeData]);
-
-//   const handleDragEnd = (result: DropResult) => {
-//     if (!result.destination) return;
-//     const items = [...sections];
-//     const [moved] = items.splice(result.source.index, 1);
-//     items.splice(result.destination.index, 0, moved);
-//     setSections(items);
-//   };
-
-//   const handleDeleteSection = (index: number) => {
-//     const removed = sections[index];
-//     setSections((prev) => prev.filter((_, i) => i !== index));
-//     setExtraSections((prev) => [...prev, removed]);
-//     if (activeSection === index) setActiveSection(null);
-//   };
-
-//   const handleAddSection = (section: { name: string; ai: boolean }) => {
-//     setSections((prev) => [...prev, section]);
-//     setExtraSections((prev) => prev.filter((s) => s.name !== section.name));
-//   };
-
-//   const handleChange = (key: string, value: string) => {
-//     setFormData(prev => ({
-//       ...prev,
-//       [key]: value
-//     }));
-
-//     if (errors[key]) {
-//       setErrors(prev => {
-//         const newErrors = { ...prev };
-//         delete newErrors[key];
-//         return newErrors;
-//       });
-//     }
-//   };
-
-//   const handleBlur = (key: string, value: string) => {
-//     const lowerKey = key.toLowerCase();
-//     const optionalFields = [
-//       "linkedin",
-//       "portfolio",
-//       "currentlyworking",
-//       "link",
-//       "technologies",
-//       "description",
-//       "achievement",
-//       "category",
-//       "proficiencylevel",
-//     ];
-
-//     const isRequired = !optionalFields.some((optional) => lowerKey.includes(optional));
-
-//     if (isRequired && (!value || value.trim() === "")) {
-//       setErrors(prev => ({
-//         ...prev,
-//         [key]: "This field is required"
-//       }));
-//     } else {
-//       setErrors(prev => {
-//         const newErrors = { ...prev };
-//         delete newErrors[key];
-//         return newErrors;
-//       });
-//     }
-//   };
-
-//   const handleSidebarToggle = (isOpen: boolean) => {
-//     if (onToggleTemplateSidebar) {
-//       onToggleTemplateSidebar(isOpen);
-//     }
-//   };
-
-//   useEffect(() => {
-//     const isFilled = (value?: string) => !!value && value.length > 0;
-//     const isArrayFilled = (arr?: string[]) => !!arr && arr.length > 0;
-
-//     const newStatus: Record<string, boolean> = {
-//       "Personal Info":
-//         !!resumeData.personalInfo.fullName &&
-//         !!resumeData.personalInfo.email &&
-//         !!resumeData.personalInfo.phone,
-//       "Professional Summary": !!resumeData.professionalSummary.summary?.trim(),
-//       Education: resumeData.education.some(
-//         (edu) =>
-//           isFilled(edu.school) && isFilled(edu.degree) 
-//       ),
-//       Skills: isArrayFilled(resumeData.skills),
-//       "Work Experience": resumeData.workExperience.some(
-//         (exp) =>
-//           isFilled(exp.company) &&
-//           isFilled(exp.role)
-//       ),
-//       Projects: resumeData.projects.some(
-//         (proj) => isFilled(proj.title) && isArrayFilled(proj.technologies)
-//       ),
-//       Certifications: resumeData.certifications.some(
-//         (cert) => isFilled(cert.name)),
-//       Achievements: resumeData.achievements.some(
-//         (ach) => isFilled(ach.title)),
-//       Awards: resumeData.awards.some(
-//         (awd) => isFilled(awd.title)),
-//       Volunteering: resumeData.volunteering.some(
-//         (vol) => isFilled(vol.organization) && isFilled(vol.role)
-//       ),
-//       References: resumeData.references.some(
-//         (ref) => isFilled(ref.name) && isFilled(ref.contact)
-//       ),
-//       Internships: resumeData.internships.some(
-//         (intern) => isFilled(intern.company) && isFilled(intern.role)
-//       ),
-//       Hobbies: resumeData.hobbies.some(
-//         (hobby) => isFilled(hobby.name)),
-//       Interests: resumeData.interests.some(
-//         (interest) => isFilled(interest.name)),
-//       Languages: resumeData.languages.some(
-//         (lang) => isFilled(lang.language)),
-//       Publications: resumeData.publications.some(
-//         (pub) => isFilled(pub.title)),
-//     };
-
-//     (resumeData.customSections || []).forEach((cs) => {
-//       newStatus[cs.id] = cs.fields.some((f) => {
-//         if (Array.isArray(f.value)) {
-//           return f.value.length > 0 && f.value.some(v => v.trim() !== "");
-//         }
-//         return f.value && f.value.trim() !== "";
-//       });
-//     });
-
-//     setCompletionStatus(newStatus);
-
-//   }, [resumeData, setCompletionStatus]);
-
-//   const openCustomSectionModal = (section: CustomSection) => {
-//     setActiveCustomSection(section);
-//     setModalOpen(true);
-//   };
-
-//   const closeModal = () => {
-//     setModalOpen(false);
-//     setActiveCustomSection(null);
-//   };
-
-//   const handleAddCustomSection = () => {
-//     if (!newSectionName.trim()) {
-//       toast.error("Section name cannot be empty.");
-//       return;
-//     }
-//     addCustomSection(newSectionName.trim());
-//     setNewSectionName("");
-//   };
-
-//   const dynamicWidth = isTemplateSidebarOpen ? "w-[30%]" : "w-[32%]";
-
-//   return (
-//     <div
-//       className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
-//         ${isOpen ? `${dynamicWidth} px-3` : "w-12 p-0"}
-//       `}
-//     >
-//       {isOpen && (
-//         <Tabs
-//           isOpen={isOpen}
-//           onToggle={() => setIsOpen(!isOpen)}
-//           activeTab={activeTab}
-//           setActiveTab={setActiveTab}
-//           isTemplateSidebarOpen={isTemplateSidebarOpen}
-//         />
-//       )}
-
-//       {isOpen && (
-//         <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
-
-//           {activeTab === "Editor" && (
-//             <EditorTab
-//               sections={sections}
-//               extraSections={extraSections}
-//               activeSection={activeSection}
-//               formData={formData}
-//               errors={errors}
-//               sectionComponents={sectionComponents}
-//               handleDeleteSection={handleDeleteSection}
-//               handleAddSection={handleAddSection}
-//               handleChange={handleChange}
-//               handleBlur={handleBlur}
-//               setActiveSection={setActiveSection}
-//               handleDragEnd={handleDragEnd}
-//               completionStatus={completionStatus}
-//               onSidebarToggle={handleSidebarToggle}
-//               clearErrors={clearErrors}
-//             />
-//           )}
-//           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
-//           {activeTab === "AI Review" && <AIReviewTab />}
-
-//           <div className="mt-4 pt-4 border-t">
-//             <h3 className="font-semibold mb-3 text-gray-700">Custom Sections</h3>
-//             <div className="mb-3">
-//               <input
-//                 type="text"
-//                 className="w-full p-2 border rounded mb-2"
-//                 placeholder="New custom section name"
-//                 value={newSectionName}
-//                 onChange={(e) => setNewSectionName(e.target.value)}
-//                 onKeyDown={(e) => e.key === "Enter" && handleAddCustomSection()}
-//               />
-//               <button
-//                 onClick={handleAddCustomSection}
-//                 className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
-//               >
-//                 + Add Custom Section
-//               </button>
-//             </div>
-
-//             {resumeData.customSections.map((section) => (
-//               <div
-//                 key={section.id}
-//                 className="cursor-pointer px-3 py-2 mb-2 border rounded hover:bg-gray-100 flex justify-between items-center transition-colors"
-//                 onClick={() => openCustomSectionModal(section)}
-//               >
-//                 <span className="font-medium">{section.sectionName}</span>
-//                 <span className="text-sm text-gray-500">{section.fields.length} fields</span>
-//               </div>
-//             ))}
-//           </div>
-
-//         </div>
-//       )}
-
-//       {!isOpen && (
-//         <button
-//           onClick={() => setIsOpen(true)}
-//           className="absolute top-4 left-2 p-1.5 bg-white border  border-white rounded shadow hover:shadow-md hover:border-blue-400 transition"
-//         >
-//           <SidebarOpen className="text-blue-500" size={20} />
-//         </button>
-//       )}
-
-//       {activeCustomSection && (
-//         <CustomSectionModal section={activeCustomSection} isOpen={modalOpen} onClose={closeModal} />
-//       )}
-//     </div>
-//   );
-// };
-
-// export default ResumeSide;
-
-
-

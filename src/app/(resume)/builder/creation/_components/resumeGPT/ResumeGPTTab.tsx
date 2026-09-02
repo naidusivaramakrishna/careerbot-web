@@ -39,7 +39,7 @@ type AchievementEntry = { title: string; date: string; description: string };
 type PublicationsEntry = { title: string; authors: string; publicationName: string; date: string; url: string; };
 type HobbiesEntry = { name: string; description: string; proficiencyLevel?: string; achievement?: string; };
 type InterestEntry = { name: string; description: string; category?: string; };
-type LanguageEntry = { language: string; proficiency: string; };
+type LanguageEntry = { name: string; proficiency: string; };
 type SectionName = | "Professional Summary" | "Education" | "Work Experience" | "Projects" | "Certifications" | "Volunteering" | "References" | "Internships" | "Awards" | "Skills" | "Achievements" | "Languages" | "Hobbies" | "Interests" | "Publications";
 interface Message { sender: "bot" | "user"; text?: string; form?: ReactElement; }
 
@@ -79,7 +79,7 @@ export default function ResumeGPT() {
     "phone",
     "location",
     "linkedinUrl",
-    "portifolioUrl",
+    "portfolioUrl",
   ];
 
   // Function to send message to Rasa
@@ -120,13 +120,14 @@ export default function ResumeGPT() {
 
   // Local fallback logic when Rasa is unavailable
   const handleLocalFallback = (text: string) => {
-    const personalPrompts: Record<keyof typeof resumeData.personalInfo, string> = {
+    const personalPrompts: Partial<Record<keyof typeof resumeData.personalInfo, string>> = {
       fullname: "What's your full name?",
       email: "Great! Now, what's your email?",
       phone: "Nice! What's your phone number?",
       location: "Thanks! Where are you located?",
+      countryCode: "What's your country code?",
       linkedinUrl: "Finally, What's your LinkedIn URL?",
-      portifolioUrl: "What's your Portfolio link?",
+      portfolioUrl: "What's your Portfolio link?",
     };
 
     // Handle "Add more?" logic
@@ -165,7 +166,7 @@ export default function ResumeGPT() {
     const nextStep = stepOrder[currentIndex + 1];
 
     if (nextStep) {
-      setMessages((prev) => [...prev, { sender: "bot", text: personalPrompts[nextStep] }]);
+      setMessages((prev) => [...prev, { sender: "bot", text: personalPrompts[nextStep] ?? "" }]);
       setCurrentStep(nextStep);
     } else {
       setMessages((prev) => [
@@ -283,7 +284,7 @@ export default function ResumeGPT() {
       const updated = { ...prev };
       switch (section) {
         case "Professional Summary":
-          updated.professionalSummary = data as string;
+          updated.professionalSummary = data as { summary: string; targetRole: string; };
           break;
         case "Education":
           updated.education = [...prev.education, ...(Array.isArray(data) ? data : [data])];

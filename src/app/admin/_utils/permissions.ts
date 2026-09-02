@@ -9,8 +9,9 @@ export type AdminPageKey =
   | 'dashboard'
   | 'user-management'
   | 'admin-management'
-  | 'job-management'
   | 'system-monitoring'
+  | 'colleges'
+  | 'ai-spend'
   | 'settings';
 
 /**
@@ -21,8 +22,18 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   'dashboard': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'user-management': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'admin-management': ['SUPER_ADMIN'],
-  'job-management': ['SUPER_ADMIN', 'ADMIN'],
+  // Onboarding a college is an ADMIN job, not only a founder's: the technical
+  // team raises it with the super-admin team and whoever takes it creates the
+  // college and appoints its officer. Mirrors the server, where ADMIN holds
+  // institutions:create, :cpo:appoint and :cpo:revoke. Moderator and support
+  // hold none of them, so the nav must not offer them a page whose every
+  // request would be refused.
+  'colleges': ['SUPER_ADMIN', 'ADMIN'],
   'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
+  // SAME ROLES AS COLLEGES, and for the same reason the backend gates the
+  // route on the billing permission: deciding what a college pays and seeing
+  // what a college costs are the same job. Moderator and support see neither.
+  'ai-spend': ['SUPER_ADMIN', 'ADMIN'],
   'settings': ['SUPER_ADMIN'],
 };
 
@@ -55,5 +66,5 @@ export const formatRoleName = (role: AdminRole | string): string => {
     'MODERATOR': 'Moderator',
     'SUPPORT': 'Support Staff',
   };
-  return roleMap[role] || role;
+  return roleMap[role?.toUpperCase() ?? ''] || role;
 };

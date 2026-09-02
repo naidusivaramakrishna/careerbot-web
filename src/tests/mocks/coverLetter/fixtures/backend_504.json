@@ -1,0 +1,11 @@
+{
+  "success": false,
+  "error": {
+    "message": "Generation timed out.",
+    "error_code": "UPSTREAM_TIMEOUT",
+    "error_id": "v1-fixture-504",
+    "request_id": "fixture-504",
+    "timestamp": "2026-05-25T11:00:00.000000+00:00",
+    "path": "/api/v1/cover-letter/generate"
+  }
+}

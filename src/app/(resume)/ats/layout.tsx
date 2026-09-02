@@ -1,14 +1,5 @@
-import { Montserrat } from "next/font/google";
-import Nav from "./_components/Navbar";
-
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-montserrat",
-});
-
 export const metadata = {
-  title: "ATS Resume Analyzer - CareerBot",
+  title: "ATS Login - Resume Analyzer - CareerBot",
   description: "Analyze your resume with our ATS system",
 };
 
@@ -18,8 +9,7 @@ export default function ATSLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`${montserrat.variable} antialiased font-montserrat min-h-screen`}>
-      <Nav />
+    <div className="antialiased font-montserrat min-h-screen">
       {children}
       <footer />
     </div>

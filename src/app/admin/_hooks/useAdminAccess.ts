@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AdminRole, AdminPageKey, hasPageAccess, getRequiredRoles } from '../_utils/permissions';
 import { getCurrentAdmin } from '@/api/adminAuthApi';
+import { getAdminRoleCache, setAdminRoleCache, clearAdminRoleCache } from './adminRoleCache';
 import { logger } from '@/lib/logger';
 
 interface UseAdminAccessReturn {
@@ -12,6 +13,11 @@ interface UseAdminAccessReturn {
   loading: boolean;
   error: string | null;
 }
+
+// In-memory role cache lives in a dependency-free module (adminRoleCache) so
+// adminLogin/adminLogout can reset it without a circular import. Resets on full
+// page refresh, which is acceptable for a 30s TTL.
+const ROLE_CACHE_TTL_MS = 30 * 1000;
 
 /**
  * Hook to check if current admin has access to a page
@@ -27,32 +33,32 @@ export const useAdminAccess = (pageKey: AdminPageKey): UseAdminAccessReturn => {
         setLoading(true);
         setError(null);
 
-        // Check cache first (role doesn't change during session)
-        const cached = sessionStorage.getItem('admin_role');
-        if (cached) {
-          const normalizedRole = cached as AdminRole;
-          setUserRole(normalizedRole);
-          logger.debug(`Admin role from cache: ${normalizedRole}`);
+        // Use in-memory cache — not writable from DevTools, unlike sessionStorage
+        const cached = getAdminRoleCache();
+        const isCacheValid = cached && (Date.now() - cached.at) < ROLE_CACHE_TTL_MS;
+        if (isCacheValid) {
+          setUserRole(cached!.role);
+          logger.debug(`Admin role from cache: ${cached!.role}`);
           setLoading(false);
           return;
         }
+
+        clearAdminRoleCache();
 
         const admin = await getCurrentAdmin();
         logger.debug(`getCurrentAdmin response: role=${admin?.role}`);
 
         if (admin && admin.role) {
-          // Normalize role to uppercase (API might return lowercase)
           const normalizedRole = admin.role.toUpperCase() as AdminRole;
           setUserRole(normalizedRole);
-          // Cache the role for subsequent page navigations
-          sessionStorage.setItem('admin_role', normalizedRole);
+          setAdminRoleCache(normalizedRole);
           logger.debug(`Admin access check: role=${normalizedRole}, page=${pageKey}, hasAccess=${hasPageAccess(normalizedRole, pageKey)}`);
         } else {
           logger.error('Unable to determine admin role');
           setError('Unable to determine admin role');
           setUserRole(null);
         }
-      } catch (err) {
+      } catch {
         logger.error('Error checking admin access');
         setError('Failed to verify admin permissions');
         setUserRole(null);

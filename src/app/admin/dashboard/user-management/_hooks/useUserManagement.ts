@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getUserList, exportUsers, downloadExportedFile, type UserListItem } from '@/api/userManagementApi'
 import { logger } from '@/lib/logger'
+import { extractApiError } from '@/app/admin/_utils/apiError'
 
 export interface UserFilters {
     search: string
@@ -60,34 +61,29 @@ export const useUserManagement = () => {
             setTotalUsers(response.total)
         } catch (error: unknown) {
             logger.error('Error fetching users:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to fetch users'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to fetch users'))
         } finally {
             setLoading(false)
         }
     }, [currentPage, pageSize, filters])
 
-    // Fetch users when dependencies change
+    // Fetch users when page or filters change
     useEffect(() => {
         fetchUsers()
-    }, [currentPage, pageSize, filters.role, filters.subscription, filters.status])
+    }, [currentPage, pageSize, filters.role, filters.subscription, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order, fetchUsers])
 
-    // Handle search with debounce
+    // Handle search with debounce and reset to page 1
     useEffect(() => {
         const debounceTimer = setTimeout(() => {
-            if (currentPage === 1) {
-                fetchUsers()
-            } else {
-                setCurrentPage(1)
-            }
+            setCurrentPage(1)
         }, 500)
 
         return () => clearTimeout(debounceTimer)
     }, [filters.search])
 
     // Handle filter change
-    const handleFilterChange = useCallback((key: keyof UserFilters, value: string) => {
-        setFilters(prev => ({ ...prev, [key]: value }))
+    const handleFilterChange = useCallback((key: string, value: string) => {
+        setFilters(prev => ({ ...prev, [key as keyof UserFilters]: value }))
         setCurrentPage(1)
     }, [])
 
@@ -122,7 +118,7 @@ export const useUserManagement = () => {
         try {
             toast.loading('Preparing export...')
 
-            const exportParams: any = {
+            const exportParams: Record<string, unknown> = {
                 page: 1,
                 page_size: 10000,
             }

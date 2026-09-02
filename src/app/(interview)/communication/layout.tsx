@@ -1,15 +1,9 @@
 "use client";
 import { usePathname } from "next/navigation";
-import Sidebar from "@/components/layout/Sidebar";
-import Header from "@/components/layout/Header";
-import { Montserrat } from "next/font/google";
 import { VideoRecordingProvider } from "@/contexts/VideoRecordingContext";
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "700", "900"],
-});
+import { DashboardProvider } from "@/contexts/DashboardContext";
+import CommunicationHeader from "./components/CommunicationHeader";
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
 
 export default function CommunicationLayout({
   children,
@@ -17,30 +11,36 @@ export default function CommunicationLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const isLandingPage = pathname === "/communication";
 
-  // Only show sidebar and header for starting page and sections page
-  const showLayout =
-    pathname === "/communication" || pathname === "/communication/sections";
-
-  if (!showLayout) {
-    // For other pages (assessment pages), render children without layout but with video context
-    return (
-      <VideoRecordingProvider>
-        <div className={montserrat.variable}>{children}</div>
-      </VideoRecordingProvider>
-    );
-  }
-
-  // For starting page and sections page, show sidebar and header
+  // All communication pages: h-screen flex-col keeps everything within viewport, no browser scroll
   return (
-    <VideoRecordingProvider>
-      <div className={`${montserrat.variable} antialiased font-montserrat`}>
-        <Header />
-        <div className="flex pt-13 bg-gradient-to-br from-indigo-50 to-purple-100">
-          <Sidebar />
-          <div className="flex-1 ml-20 overflow-auto min-h-screen">{children}</div>
+    <DashboardProvider>
+      <VideoRecordingProvider>
+        <div className={`antialiased font-sans h-screen flex flex-col overflow-hidden`}>
+          {isLandingPage ? <LandingNavbar /> : <CommunicationHeader />}
+          <div className={`flex-1 min-h-0 ${isLandingPage ? "overflow-auto" : "overflow-hidden"}`}>
+            {children}
+          </div>
         </div>
-      </div>
-    </VideoRecordingProvider>
+      </VideoRecordingProvider>
+    </DashboardProvider>
   );
+
+  // Old layout with global Sidebar + Header (kept for reference)
+  // const pathname = usePathname();
+  // const showLayout = pathname === "/communication" || pathname === "/communication/sections";
+  // if (showLayout) return (
+  //   <DashboardProvider>
+  //     <VideoRecordingProvider>
+  //       <div className={`antialiased font-sans`}>
+  //         <Header />
+  //         <div className="flex pt-14 bg-gray-50">
+  //           <Sidebar />
+  //           <div className="flex-1 overflow-auto min-h-screen" style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}>{children}</div>
+  //         </div>
+  //       </div>
+  //     </VideoRecordingProvider>
+  //   </DashboardProvider>
+  // );
 }

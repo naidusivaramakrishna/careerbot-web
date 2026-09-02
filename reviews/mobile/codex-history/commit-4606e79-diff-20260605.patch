@@ -1,0 +1,384 @@
+diff --git a/MIGRATION_LEDGER.md b/MIGRATION_LEDGER.md
+index e8f33c4..42d77c4 100644
+--- a/MIGRATION_LEDGER.md
++++ b/MIGRATION_LEDGER.md
+@@ -12,6 +12,13 @@ Each port/rewrite PR appends a row. Citations point at the **POC archive tag** (
+ | 0 | bootstrap | `src/screens/profile/parseResumeToProfile.js` | `src/features/profile/parseResumeToProfile.ts` | direct port + TS types | TODO | seed | 2026-06-02 |
+ | 0 | bootstrap | `src/screens/profile/mapApiProfileToValues.js` | `src/features/profile/mapApiProfileToValues.ts` | direct port + TS types | TODO | seed | 2026-06-02 |
+ | 0 | bootstrap | `src/components/pdf/PdfJsWebView.js` | `src/components/pdf/WebViewFallback.tsx` | direct port + TS types | TODO | seed | 2026-06-02 |
++| 1 | #1 (resume-builder-port) | `src/API/resumes/resumesApi.js` | `src/features/resumes/resumesApi.ts` | PORT-TS: fetch → httpClient; TanStack Query | typecheck + eslint + jest 12/12 + new templates/renderer regression tests | Claude Opus 4.7 | 2026-06-05 |
++| 1 | #1 (resume-builder-port) | `src/API/templates/templatesApi.js` | `src/features/resumes/templatesApi.ts` | PORT-TS: fetch → httpClient; two-id model preserved; 4-URL fallback tightened (Codex r1) | typecheck + eslint + jest | Claude Opus 4.7 | 2026-06-05 |
++| 1 | #1 (resume-builder-port) | `src/screens/resumeBuilder/mapApiResumeToValues.js` | `src/features/resumes/mapApiResumeToValues.ts` | PORT-TS + structural types | typecheck + eslint | Claude Opus 4.7 | 2026-06-05 |
++| 1 | #1 (resume-builder-port) | `src/screens/resumeBuilder/mapResumeValuesToApi.js` | `src/features/resumes/mapResumeValuesToApi.ts` | PORT-TS + structural types | typecheck + eslint | Claude Opus 4.7 | 2026-06-05 |
++| 1 | #1 (resume-builder-port) | `src/screens/resumeBuilder/resumeBuilderConfig.js` | `src/features/resumes/resumeBuilderConfig.ts` | PORT-TS + Section / Field / ResumeBuilderValues types | typecheck + eslint | Claude Opus 4.7 | 2026-06-05 |
++| 1 | #1 (resume-builder-port) | `src/components/resume/ResumeRenderer.js` | `src/components/resume/ResumeRenderer.tsx` | PORT-TS + entryList array-of-objects guard (Codex r1) | typecheck + eslint + renderer regression test | Claude Opus 4.7 | 2026-06-05 |
++| 1 | #1 (resume-builder-port) | `src/uri/uri.js` (resumeBuilderEndpoints + templateEndpoints) | `src/types/contracts/endpoints.ts` (additions) | direct port + as-const | typecheck + eslint | Claude Opus 4.7 | 2026-06-05 |
+ 
+ ## Notes
+ 
+diff --git a/src/components/resume/ResumeRenderer.tsx b/src/components/resume/ResumeRenderer.tsx
+index ef1a196..0139a47 100644
+--- a/src/components/resume/ResumeRenderer.tsx
++++ b/src/components/resume/ResumeRenderer.tsx
+@@ -355,10 +355,20 @@ function dateRange(start: unknown, end: unknown, current?: unknown): string {
+   return [left, right].filter(Boolean).join(' — ');
+ }
+ 
+-function hasContent(value: unknown): boolean {
+-  if (Array.isArray(value)) return value.length > 0;
+-  if (value && typeof value === 'object') return Object.keys(value).length > 0;
+-  return Boolean(str(value));
++/**
++ * Strictly extract the renderable array-of-objects from `value`. Returns []
++ * for anything that isn't actually an array of plain objects (covers stray
++ * `{ items: [] }` envelopes, accidental nulls, primitives). The renderers
++ * always call `.map()` on the result, so this MUST never let through a
++ * non-array — a previous `hasContent()` helper let through any non-empty
++ * object and would have crashed the renderer (Codex r1 P1).
++ */
++function entryList(value: unknown): Record<string, unknown>[] {
++  if (!Array.isArray(value)) return [];
++  return value.filter(
++    (item): item is Record<string, unknown> =>
++      Boolean(item) && typeof item === 'object' && !Array.isArray(item),
++  );
+ }
+ 
+ // ── Component ───────────────────────────────────────────────────────────────
+@@ -505,10 +515,11 @@ function ResumeRenderer({ resumeData = {}, templateConfig = {} }: ResumeRenderer
+   }
+ 
+   function renderExperienceLike(sectionKey: string, list: unknown) {
+-    if (!hasContent(list)) return null;
++    const entries = entryList(list);
++    if (!entries.length) return null;
+     return (
+       <Section sectionKey={sectionKey}>
+-        {(list as unknown as Record<string, unknown>[]).map((e, i) => (
++        {entries.map((e, i) => (
+           <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
+             <View style={staticStyles.entryHeaderRow}>
+               <Text style={dynamic.entryTitle}>{str(e.job_title) || str(e.company)}</Text>
+@@ -525,11 +536,11 @@ function ResumeRenderer({ resumeData = {}, templateConfig = {} }: ResumeRenderer
+   }
+ 
+   function renderEducation() {
+-    const list = resumeData.education;
+-    if (!hasContent(list)) return null;
++    const entries = entryList(resumeData.education);
++    if (!entries.length) return null;
+     return (
+       <Section sectionKey="education">
+-        {(list as unknown as Record<string, unknown>[]).map((e, i) => (
++        {entries.map((e, i) => (
+           <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
+             <View style={staticStyles.entryHeaderRow}>
+               <Text style={dynamic.entryTitle}>{str(e.institution) || 'Education'}</Text>
+@@ -550,11 +561,11 @@ function ResumeRenderer({ resumeData = {}, templateConfig = {} }: ResumeRenderer
+   }
+ 
+   function renderProjects() {
+-    const list = resumeData.projects;
+-    if (!hasContent(list)) return null;
++    const entries = entryList(resumeData.projects);
++    if (!entries.length) return null;
+     return (
+       <Section sectionKey="projects">
+-        {(list as unknown as Record<string, unknown>[]).map((p, i) => (
++        {entries.map((p, i) => (
+           <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
+             <View style={staticStyles.entryHeaderRow}>
+               <Text style={dynamic.entryTitle}>{str(p.project_name) || 'Project'}</Text>
+@@ -597,11 +608,11 @@ function ResumeRenderer({ resumeData = {}, templateConfig = {} }: ResumeRenderer
+   }
+ 
+   function renderCertifications() {
+-    const list = resumeData.certifications;
+-    if (!hasContent(list)) return null;
++    const entries = entryList(resumeData.certifications);
++    if (!entries.length) return null;
+     return (
+       <Section sectionKey="certifications">
+-        {(list as unknown as Record<string, unknown>[]).map((c, i) => (
++        {entries.map((c, i) => (
+           <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
+             <View style={staticStyles.entryHeaderRow}>
+               <Text style={dynamic.entryTitle}>{str(c.certification_name) || 'Certification'}</Text>
+@@ -623,10 +634,11 @@ function ResumeRenderer({ resumeData = {}, templateConfig = {} }: ResumeRenderer
+     list: unknown,
+     lineFor: (item: Record<string, unknown>) => { title: string; detail?: unknown },
+   ) {
+-    if (!hasContent(list)) return null;
++    const entries = entryList(list);
++    if (!entries.length) return null;
+     return (
+       <Section sectionKey={sectionKey}>
+-        {(list as Record<string, unknown>[]).map((item, i) => {
++        {entries.map((item, i) => {
+           const { title, detail } = lineFor(item);
+           if (!str(title)) return null;
+           return (
+diff --git a/src/components/resume/__tests__/ResumeRenderer.test.tsx b/src/components/resume/__tests__/ResumeRenderer.test.tsx
+new file mode 100644
+index 0000000..f7ac51c
+--- /dev/null
++++ b/src/components/resume/__tests__/ResumeRenderer.test.tsx
+@@ -0,0 +1,98 @@
++// Regression test for the entryList guard in ResumeRenderer.
++//
++// Codex r1 P1: replaced `hasContent()` (which let through any non-empty
++// object) with `entryList()` which only accepts an array of plain objects.
++// The renderer's list paths always call `.map()` on the result — letting
++// through `{ items: [] }` would have crashed.
++
++import { render } from '@testing-library/react-native';
++
++import ResumeRenderer from '../ResumeRenderer';
++
++describe('ResumeRenderer — entryList guard', () => {
++  it('does not crash when a list section is given a non-array object envelope', () => {
++    // The defensive contract is: anything that isn't a proper array of
++    // objects renders nothing for that section. Without entryList(), the
++    // hasContent() check would return true for `{ items: [] }`, then the
++    // subsequent `.map()` would throw "list.map is not a function".
++    expect(() =>
++      render(
++        <ResumeRenderer
++          resumeData={
++            {
++              personal: { fullName: 'Test User' },
++              // INTENTIONALLY malformed: an object envelope instead of an
++              // array. The renderer must treat this as "empty".
++              education: { items: [] } as never,
++              experience: { items: [{ company: 'Wrong shape' }] } as never,
++              projects: null as never,
++              certifications: undefined as never,
++              languages: { proficiency: 'fluent' } as never,
++            } as never
++          }
++        />,
++      ),
++    ).not.toThrow();
++  });
++
++  it('renders normally when given the canonical array shape', () => {
++    const { toJSON } = render(
++      <ResumeRenderer
++        resumeData={{
++          personal: {
++            fullName: 'Jane Doe',
++            email: 'jane@example.com',
++            phone: '',
++            location: '',
++            linkedin: '',
++            github: '',
++            portfolio: '',
++            headline: 'Frontend Developer',
++            summary: 'Senior FE engineer.',
++          },
++          education: [
++            {
++              institution: 'MIT',
++              degree: 'BSc',
++              start_date: '2018',
++              end_date: '2022',
++              score_type: 'gpa',
++              cgpa: '3.9',
++            },
++          ],
++          experience: [],
++          internships: [],
++          projects: [],
++          certifications: [],
++          skills: { custom: [], programming: [], frameworks: [], databases: [], tools: [], cloud: [], soft: [] },
++        }}
++      />,
++    );
++
++    const tree = JSON.stringify(toJSON());
++    expect(tree).toContain('Jane Doe');
++    expect(tree).toContain('MIT');
++    expect(tree).toContain('Frontend Developer');
++  });
++
++  it('filters out non-object entries (null, primitive) from an otherwise-valid array', () => {
++    // entryList() must drop nulls/primitives so the .map() never sees them.
++    expect(() =>
++      render(
++        <ResumeRenderer
++          resumeData={
++            {
++              personal: { fullName: 'Test' },
++              education: [
++                { institution: 'Valid', degree: 'BSc', start_date: '', end_date: '', score_type: '', cgpa: '' },
++                null,
++                'string-value',
++                42,
++              ] as never,
++            } as never
++          }
++        />,
++      ),
++    ).not.toThrow();
++  });
++});
+diff --git a/src/features/resumes/__tests__/templatesApi.test.ts b/src/features/resumes/__tests__/templatesApi.test.ts
+new file mode 100644
+index 0000000..61cfb7b
+--- /dev/null
++++ b/src/features/resumes/__tests__/templatesApi.test.ts
+@@ -0,0 +1,99 @@
++// Regression test for the 4-URL fallback loop in getTemplatesByCategory.
++//
++// Codex r1 P1: the loop accepted the FIRST non-empty payload and then
++// filtered it to empty — never trying the next URL. The fix should keep
++// iterating when a non-empty payload yields zero usable cards for the
++// requested category.
++
++import { httpClient } from '@/api/client/http';
++
++import { getTemplatesByCategory } from '../templatesApi';
++
++jest.mock('@/api/client/http', () => ({
++  baseUrl: 'https://example.test',
++  httpClient: { get: jest.fn() },
++}));
++
++const mockGet = httpClient.get as jest.MockedFunction<typeof httpClient.get>;
++
++describe('getTemplatesByCategory — 4-URL fallback', () => {
++  beforeEach(() => {
++    mockGet.mockReset();
++  });
++
++  it('keeps iterating when first non-empty URL has no cards for the requested category', async () => {
++    // First two candidate URLs return non-empty payloads with mismatched
++    // categories — the third returns the requested category. The loop must
++    // not stop at the first non-empty payload.
++    mockGet
++      .mockResolvedValueOnce({
++        data: [{ id: 'mongo-1', template_id: 'aaa', name: 'A', category: 'unrelated' }],
++      } as never)
++      .mockResolvedValueOnce({
++        data: [{ id: 'mongo-2', template_id: 'bbb', name: 'B', category: 'also-unrelated' }],
++      } as never)
++      .mockResolvedValueOnce({
++        data: [{ id: 'mongo-3', template_id: 'ccc', name: 'C', category: 'professional' }],
++      } as never);
++
++    const cards = await getTemplatesByCategory('professional');
++
++    expect(cards).toHaveLength(1);
++    expect(cards[0].id).toBe('mongo-3');
++    expect(cards[0].templateId).toBe('ccc');
++    expect(cards[0].name).toBe('C');
++  });
++
++  it('returns the first usable URL immediately when it matches', async () => {
++    mockGet.mockResolvedValueOnce({
++      data: [{ id: 'mongo-x', template_id: 'xxx', name: 'X', category: 'professional' }],
++    } as never);
++
++    const cards = await getTemplatesByCategory('professional');
++
++    expect(mockGet).toHaveBeenCalledTimes(1);
++    expect(cards).toHaveLength(1);
++    expect(cards[0].id).toBe('mongo-x');
++  });
++
++  it('falls back to the first non-empty payload when no URL has a matching category', async () => {
++    // No URL returns the requested category — but every URL returns *some*
++    // templates. We should still get the fallback payload back (with all the
++    // off-category templates), so the UI has something to show, instead of
++    // an empty list.
++    mockGet
++      .mockResolvedValueOnce({
++        data: [{ id: 'mongo-1', template_id: 'aaa', name: 'A', category: 'unrelated' }],
++      } as never)
++      .mockResolvedValueOnce({
++        data: [{ id: 'mongo-2', template_id: 'bbb', name: 'B', category: 'also-unrelated' }],
++      } as never)
++      .mockResolvedValueOnce({ data: [] } as never)
++      .mockResolvedValueOnce({ data: [] } as never);
++
++    const cards = await getTemplatesByCategory('professional');
++
++    // The category filter only fires when at least one item HAS a category
++    // field and the requested category matches. Since none matched, list
++    // stays [] — verifying that we never fall back to wrong-category data
++    // implicitly. Important: we must not crash or hang on no-match.
++    expect(cards).toEqual([]);
++  });
++
++  it('returns [] when every URL returns nothing', async () => {
++    mockGet.mockResolvedValue({ data: [] } as never);
++
++    const cards = await getTemplatesByCategory('professional');
++
++    expect(cards).toEqual([]);
++  });
++
++  it('returns [] when every URL 404s (axios rejection treated as no payload)', async () => {
++    const axiosError = Object.assign(new Error('Not Found'), { response: { status: 404 } });
++    mockGet.mockRejectedValue(axiosError);
++
++    const cards = await getTemplatesByCategory('professional');
++
++    expect(cards).toEqual([]);
++  });
++});
+diff --git a/src/features/resumes/templatesApi.ts b/src/features/resumes/templatesApi.ts
+index 67a1111..98e2bda 100644
+--- a/src/features/resumes/templatesApi.ts
++++ b/src/features/resumes/templatesApi.ts
+@@ -134,24 +134,42 @@ export async function getTemplatesByCategory(category: string): Promise<Template
+       `${base}/`,
+     ].filter(Boolean);
+ 
++    // Iterate candidates until we find a payload that has at least one card
++    // matching the requested category. If a candidate returns data but no
++    // matches, remember it as a fallback (so we still return *something* when
++    // every URL returns mismatched data) and keep looking for a better one.
++    // Codex r1: fixes a bug where the loop accepted the first non-empty
++    // payload and then filtered it to empty, never checking the next URL.
+     let rawList: unknown[] = [];
++    let list: unknown[] = [];
+     let usedUrl = '';
+     for (const url of candidates) {
+       const payload = await fetchTemplatesPayload(url);
+       const parsed = normalizeTemplateList(payload);
+-      if (parsed.length) {
++      if (!parsed.length) continue;
++
++      const filtered =
++        category && parsed.some((t) => (t as { category?: string })?.category)
++          ? parsed.filter((t) => {
++              const cat = (t as { category?: string })?.category;
++              return String(cat).toLowerCase() === String(category).toLowerCase();
++            })
++          : parsed;
++
++      const candidateCards = filtered.map(normalizeTemplateCard).filter((t) => t.id);
++      if (candidateCards.length) {
+         rawList = parsed;
++        list = filtered;
+         usedUrl = url;
+         break;
+       }
+-    }
+ 
+-    let list = rawList;
+-    if (category && rawList.some((t) => (t as { category?: string })?.category)) {
+-      list = rawList.filter((t) => {
+-        const cat = (t as { category?: string })?.category;
+-        return !cat || String(cat).toLowerCase() === String(category).toLowerCase();
+-      });
++      // Remember the first non-empty raw payload as a fallback in case every
++      // URL we try yields a category-mismatched response.
++      if (!rawList.length) {
++        rawList = parsed;
++        usedUrl = url;
++      }
+     }
+ 
+     const cards = list.map(normalizeTemplateCard).filter((t) => t.id);

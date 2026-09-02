@@ -1,0 +1,1643 @@
+diff --git a/.eslintrc.cjs b/.eslintrc.cjs
+index ca71a07..19f0240 100644
+--- a/.eslintrc.cjs
++++ b/.eslintrc.cjs
+@@ -7,7 +7,11 @@ module.exports = {
+     '@typescript-eslint/no-explicit-any': 'error',
+     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+     'no-console': ['warn', { allow: ['warn', 'error'] }],
+-    'react-hooks/exhaustive-deps': 'error',
++    // TECH DEBT: eslint-plugin-react-hooks@4.6.2 (pulled in by eslint-config-expo)
++    // crashes on ESLint 9 — context.getSource() was removed. Disabled until we
++    // can upgrade eslint-config-expo to a version that pins react-hooks@5+.
++    // Until then, exhaustive-deps must be reviewed manually in PRs.
++    'react-hooks/exhaustive-deps': 'off',
+   },
+   ignorePatterns: ['ios/', 'android/', 'node_modules/', '.expo/', 'dist/'],
+ };
+diff --git a/app/(auth)/_layout.tsx b/app/(auth)/_layout.tsx
+index bd30296..4e5eaa5 100644
+--- a/app/(auth)/_layout.tsx
++++ b/app/(auth)/_layout.tsx
+@@ -1 +1,13 @@
+-// Auth stack layout — no tab bar
++// Unauthenticated route group layout — no tab bar; stack of auth screens.
++import { Stack } from 'expo-router';
++
++export default function AuthLayout() {
++  return (
++    <Stack
++      screenOptions={{
++        headerShown: false,
++        contentStyle: { backgroundColor: '#ffffff' },
++      }}
++    />
++  );
++}
+diff --git a/app/(auth)/forgot.tsx b/app/(auth)/forgot.tsx
+index 6106940..96bf482 100644
+--- a/app/(auth)/forgot.tsx
++++ b/app/(auth)/forgot.tsx
+@@ -1 +1,87 @@
+-// Request password-reset email
++// Forgot-password screen — request reset email.
++
++import { router } from 'expo-router';
++import { useState } from 'react';
++import { Pressable, ScrollView, Text, View } from 'react-native';
++
++import AuthInput from '@/components/forms/AuthInput';
++import { getApiErrorMessage } from '@/api/client/errors';
++import { authStyles } from '@/features/auth/styles';
++import { useRequestPasswordReset } from '@/features/auth/passwordResetApi';
++import { isValidEmail } from '@/utils/validators';
++
++export default function ForgotPasswordScreen() {
++  const [email, setEmail] = useState('');
++  const [error, setError] = useState<string | undefined>();
++  const [successMessage, setSuccessMessage] = useState<string | undefined>();
++  const requestMutation = useRequestPasswordReset();
++
++  async function onSubmit() {
++    setError(undefined);
++    setSuccessMessage(undefined);
++
++    if (!email.trim()) return setError('Email is required.');
++    if (!isValidEmail(email)) return setError('Enter a valid email address.');
++
++    try {
++      const result = await requestMutation.mutateAsync({ email });
++      // Backend returns generic message regardless of whether email exists
++      // (anti-enumeration). Show it as-is.
++      setSuccessMessage(
++        result.message ||
++          'If this email is registered, you will receive a reset link shortly.',
++      );
++    } catch (e) {
++      setError(getApiErrorMessage(e, 'Could not send reset email.'));
++    }
++  }
++
++  return (
++    <ScrollView contentContainerStyle={authStyles.screen} keyboardShouldPersistTaps="handled">
++      <View style={authStyles.panel}>
++        <Text style={authStyles.title}>Forgot password</Text>
++        <Text style={authStyles.subtitle}>
++          Enter the email tied to your CareerBot account; we will send a reset link.
++        </Text>
++
++        {error ? <Text style={authStyles.formErrorText}>{error}</Text> : null}
++        {successMessage ? <Text style={authStyles.successText}>{successMessage}</Text> : null}
++
++        <View style={authStyles.form}>
++          <AuthInput
++            autoCapitalize="none"
++            autoComplete="email"
++            keyboardType="email-address"
++            label="Email"
++            onChangeText={setEmail}
++            placeholder="you@example.com"
++            returnKeyType="done"
++            textContentType="emailAddress"
++            value={email}
++          />
++        </View>
++
++        <Pressable
++          accessibilityRole="button"
++          disabled={requestMutation.isPending}
++          onPress={onSubmit}
++          style={({ pressed }) => [
++            authStyles.primaryButton,
++            pressed && authStyles.buttonPressed,
++            requestMutation.isPending && authStyles.buttonDisabled,
++          ]}
++        >
++          <Text style={authStyles.primaryButtonText}>
++            {requestMutation.isPending ? 'Sending...' : 'Send reset link'}
++          </Text>
++        </Pressable>
++
++        <View style={authStyles.footerRow}>
++          <Pressable accessibilityRole="link" onPress={() => router.back()}>
++            <Text style={authStyles.linkText}>Back to sign in</Text>
++          </Pressable>
++        </View>
++      </View>
++    </ScrollView>
++  );
++}
+diff --git a/app/(auth)/reset.tsx b/app/(auth)/reset.tsx
+index 29e90c4..760aa71 100644
+--- a/app/(auth)/reset.tsx
++++ b/app/(auth)/reset.tsx
+@@ -1 +1,118 @@
+-// Confirm new password (deep-link entry from email)
++// Reset-password screen — accept token from email deep-link + new password.
++
++import { router, useLocalSearchParams } from 'expo-router';
++import { useState } from 'react';
++import { Pressable, ScrollView, Text, View } from 'react-native';
++
++import AuthInput from '@/components/forms/AuthInput';
++import { getApiErrorMessage } from '@/api/client/errors';
++import { authStyles } from '@/features/auth/styles';
++import { useConfirmPasswordReset } from '@/features/auth/passwordResetApi';
++import { PASSWORD_REQUIREMENT_TEXT, isStrongPassword } from '@/utils/validators';
++
++export default function ResetPasswordScreen() {
++  const params = useLocalSearchParams<{ token?: string }>();
++  const tokenFromLink = typeof params.token === 'string' ? params.token : '';
++
++  const [token, setToken] = useState(tokenFromLink);
++  const [password, setPassword] = useState('');
++  const [confirmPassword, setConfirmPassword] = useState('');
++  const [error, setError] = useState<string | undefined>();
++  const [done, setDone] = useState(false);
++  const confirmMutation = useConfirmPasswordReset();
++
++  async function onSubmit() {
++    setError(undefined);
++
++    if (!token.trim()) return setError('Reset token is required.');
++    if (!password.trim()) return setError('New password is required.');
++    if (!isStrongPassword(password)) return setError(PASSWORD_REQUIREMENT_TEXT);
++    if (password !== confirmPassword) return setError('Passwords do not match.');
++
++    try {
++      await confirmMutation.mutateAsync({ token, new_password: password });
++      setDone(true);
++    } catch (e) {
++      setError(getApiErrorMessage(e, 'Could not reset password.'));
++    }
++  }
++
++  return (
++    <ScrollView contentContainerStyle={authStyles.screen} keyboardShouldPersistTaps="handled">
++      <View style={authStyles.panel}>
++        <Text style={authStyles.title}>Set a new password</Text>
++        <Text style={authStyles.subtitle}>
++          {tokenFromLink
++            ? 'Choose a new password for your CareerBot account.'
++            : 'Enter the reset token from your email and a new password.'}
++        </Text>
++
++        {error ? <Text style={authStyles.formErrorText}>{error}</Text> : null}
++        {done ? (
++          <Text style={authStyles.successText}>
++            Password reset. You can now sign in with your new password.
++          </Text>
++        ) : null}
++
++        {done ? (
++          <Pressable
++            accessibilityRole="button"
++            onPress={() => router.replace('/(auth)/signin')}
++            style={({ pressed }) => [authStyles.primaryButton, pressed && authStyles.buttonPressed]}
++          >
++            <Text style={authStyles.primaryButtonText}>Back to sign in</Text>
++          </Pressable>
++        ) : (
++          <>
++            <View style={authStyles.form}>
++              {tokenFromLink ? null : (
++                <AuthInput
++                  autoCapitalize="none"
++                  label="Reset token"
++                  onChangeText={setToken}
++                  placeholder="Paste token from email"
++                  value={token}
++                />
++              )}
++              <AuthInput
++                autoCapitalize="none"
++                autoComplete="password-new"
++                label="New password"
++                onChangeText={setPassword}
++                placeholder="At least 8 chars, letters + numbers"
++                secureTextEntry
++                textContentType="newPassword"
++                value={password}
++              />
++              <AuthInput
++                autoCapitalize="none"
++                autoComplete="password-new"
++                label="Confirm new password"
++                onChangeText={setConfirmPassword}
++                placeholder="Re-enter password"
++                secureTextEntry
++                textContentType="newPassword"
++                value={confirmPassword}
++              />
++            </View>
++
++            <Pressable
++              accessibilityRole="button"
++              disabled={confirmMutation.isPending}
++              onPress={onSubmit}
++              style={({ pressed }) => [
++                authStyles.primaryButton,
++                pressed && authStyles.buttonPressed,
++                confirmMutation.isPending && authStyles.buttonDisabled,
++              ]}
++            >
++              <Text style={authStyles.primaryButtonText}>
++                {confirmMutation.isPending ? 'Resetting...' : 'Reset password'}
++              </Text>
++            </Pressable>
++          </>
++        )}
++      </View>
++    </ScrollView>
++  );
++}
+diff --git a/app/(auth)/signin.tsx b/app/(auth)/signin.tsx
+index 2e6b189..ea1bf2d 100644
+--- a/app/(auth)/signin.tsx
++++ b/app/(auth)/signin.tsx
+@@ -1 +1,158 @@
+-// Sign-in screen — email/password + Google + LinkedIn + Apple
++// Sign-in screen — email/password + Google + LinkedIn + Apple.
++// TS port of POC src/screens/signin/SignInScreen.js as an Expo Router screen.
++
++import { router } from 'expo-router';
++import { useState } from 'react';
++import { Pressable, ScrollView, Text, View } from 'react-native';
++
++import AuthAssurance from '@/components/forms/AuthAssurance';
++import AuthInput from '@/components/forms/AuthInput';
++import SocialAuthButtons from '@/components/forms/SocialAuthButtons';
++import { getApiErrorMessage } from '@/api/client/errors';
++import { authStyles } from '@/features/auth/styles';
++import { signInWithApple } from '@/features/auth/oauth/apple';
++import { signInWithGoogle } from '@/features/auth/oauth/google';
++import { signInWithLinkedIn } from '@/features/auth/oauth/linkedin';
++import { useSignIn } from '@/features/auth/signinApi';
++import { isValidEmail } from '@/utils/validators';
++
++type ProviderKey = 'google' | 'linkedin' | 'apple';
++
++interface FormErrors {
++  identifier?: string;
++  password?: string;
++  general?: string;
++}
++
++export default function SignInScreen() {
++  const [identifier, setIdentifier] = useState('');
++  const [password, setPassword] = useState('');
++  const [errors, setErrors] = useState<FormErrors>({});
++  const [loadingProvider, setLoadingProvider] = useState<ProviderKey | null>(null);
++
++  const signInMutation = useSignIn();
++
++  function validate(): boolean {
++    const next: FormErrors = {};
++    const trimmed = identifier.trim();
++
++    if (!trimmed) next.identifier = 'Email is required.';
++    else if (!isValidEmail(trimmed)) next.identifier = 'Enter a valid email address.';
++
++    if (!password.trim()) next.password = 'Password is required.';
++
++    setErrors(next);
++    return Object.keys(next).length === 0;
++  }
++
++  async function onSubmit() {
++    setErrors({});
++    if (!validate()) return;
++    try {
++      await signInMutation.mutateAsync({ email: identifier, password });
++      router.replace('/(tabs)/home');
++    } catch (error) {
++      setErrors({
++        general: getApiErrorMessage(error, 'Sign in failed.', { credentials: true }),
++      });
++    }
++  }
++
++  async function onSocialPress(provider: ProviderKey) {
++    setLoadingProvider(provider);
++    setErrors({});
++    try {
++      const fn =
++        provider === 'google'
++          ? signInWithGoogle
++          : provider === 'linkedin'
++            ? signInWithLinkedIn
++            : signInWithApple;
++      const token = await fn();
++      if (token) router.replace('/(tabs)/home');
++      // null = user cancelled or failure handled by the oauth module's PII-safe log
++    } finally {
++      setLoadingProvider(null);
++    }
++  }
++
++  return (
++    <ScrollView contentContainerStyle={authStyles.screen} keyboardShouldPersistTaps="handled">
++      <View style={authStyles.panel}>
++        <Text style={authStyles.title}>Welcome back</Text>
++        <Text style={authStyles.subtitle}>Sign in to continue with CareerBot</Text>
++
++        <SocialAuthButtons
++          disabled={signInMutation.isPending}
++          loadingProvider={loadingProvider}
++          onPress={onSocialPress}
++        />
++
++        {errors.general ? <Text style={authStyles.formErrorText}>{errors.general}</Text> : null}
++
++        <View style={authStyles.form}>
++          <AuthInput
++            autoCapitalize="none"
++            autoComplete="email"
++            error={errors.identifier}
++            keyboardType="email-address"
++            label="Email"
++            onChangeText={setIdentifier}
++            placeholder="you@example.com"
++            returnKeyType="next"
++            textContentType="emailAddress"
++            value={identifier}
++          />
++          <AuthInput
++            autoCapitalize="none"
++            autoComplete="password"
++            error={errors.password}
++            label="Password"
++            onChangeText={setPassword}
++            placeholder="Enter your password"
++            returnKeyType="done"
++            secureTextEntry
++            textContentType="password"
++            value={password}
++          />
++
++          <View style={authStyles.signInMetaRow}>
++            <Pressable
++              accessibilityRole="link"
++              onPress={() => router.push('/(auth)/forgot')}
++            >
++              <Text style={authStyles.linkText}>Forgot password?</Text>
++            </Pressable>
++          </View>
++        </View>
++
++        <Pressable
++          accessibilityRole="button"
++          disabled={signInMutation.isPending}
++          onPress={onSubmit}
++          style={({ pressed }) => [
++            authStyles.primaryButton,
++            pressed && authStyles.buttonPressed,
++            signInMutation.isPending && authStyles.buttonDisabled,
++          ]}
++        >
++          <Text style={authStyles.primaryButtonText}>
++            {signInMutation.isPending ? 'Signing in...' : 'Sign in'}
++          </Text>
++        </Pressable>
++
++        <View style={authStyles.footerRow}>
++          <Text style={authStyles.footerText}>New to CareerBot?</Text>
++          <Pressable
++            accessibilityRole="link"
++            onPress={() => router.replace('/(auth)/signup')}
++          >
++            <Text style={authStyles.linkText}>Create an account</Text>
++          </Pressable>
++        </View>
++
++        <AuthAssurance />
++      </View>
++    </ScrollView>
++  );
++}
+diff --git a/app/(auth)/signup.tsx b/app/(auth)/signup.tsx
+index bebc7b6..30ec5d9 100644
+--- a/app/(auth)/signup.tsx
++++ b/app/(auth)/signup.tsx
+@@ -1 +1,176 @@
+-// Sign-up screen — same providers + terms acceptance
++// Sign-up screen — same providers + email/password/name + terms acceptance.
++
++import { router } from 'expo-router';
++import { useState } from 'react';
++import { Pressable, ScrollView, Text, View } from 'react-native';
++
++import AuthAssurance from '@/components/forms/AuthAssurance';
++import AuthInput from '@/components/forms/AuthInput';
++import SocialAuthButtons from '@/components/forms/SocialAuthButtons';
++import { getApiErrorMessage } from '@/api/client/errors';
++import { authStyles } from '@/features/auth/styles';
++import { signInWithApple } from '@/features/auth/oauth/apple';
++import { signInWithGoogle } from '@/features/auth/oauth/google';
++import { signInWithLinkedIn } from '@/features/auth/oauth/linkedin';
++import { useSignUp } from '@/features/auth/signupApi';
++import {
++  PASSWORD_REQUIREMENT_TEXT,
++  isStrongPassword,
++  isValidEmail,
++} from '@/utils/validators';
++
++type ProviderKey = 'google' | 'linkedin' | 'apple';
++
++interface FormErrors {
++  email?: string;
++  password?: string;
++  username?: string;
++  full_name?: string;
++  general?: string;
++}
++
++export default function SignUpScreen() {
++  const [fullName, setFullName] = useState('');
++  const [username, setUsername] = useState('');
++  const [email, setEmail] = useState('');
++  const [password, setPassword] = useState('');
++  const [errors, setErrors] = useState<FormErrors>({});
++  const [loadingProvider, setLoadingProvider] = useState<ProviderKey | null>(null);
++
++  const signUpMutation = useSignUp();
++
++  function validate(): boolean {
++    const next: FormErrors = {};
++    if (!fullName.trim()) next.full_name = 'Full name is required.';
++    if (!username.trim()) next.username = 'Username is required.';
++    if (!email.trim()) next.email = 'Email is required.';
++    else if (!isValidEmail(email)) next.email = 'Enter a valid email address.';
++    if (!password.trim()) next.password = 'Password is required.';
++    else if (!isStrongPassword(password)) next.password = PASSWORD_REQUIREMENT_TEXT;
++
++    setErrors(next);
++    return Object.keys(next).length === 0;
++  }
++
++  async function onSubmit() {
++    setErrors({});
++    if (!validate()) return;
++    try {
++      await signUpMutation.mutateAsync({
++        email,
++        password,
++        username,
++        full_name: fullName,
++      });
++      router.replace('/(tabs)/home');
++    } catch (error) {
++      setErrors({ general: getApiErrorMessage(error, 'Sign up failed.') });
++    }
++  }
++
++  async function onSocialPress(provider: ProviderKey) {
++    setLoadingProvider(provider);
++    setErrors({});
++    try {
++      const fn =
++        provider === 'google'
++          ? signInWithGoogle
++          : provider === 'linkedin'
++            ? signInWithLinkedIn
++            : signInWithApple;
++      const token = await fn();
++      if (token) router.replace('/(tabs)/home');
++    } finally {
++      setLoadingProvider(null);
++    }
++  }
++
++  return (
++    <ScrollView contentContainerStyle={authStyles.screen} keyboardShouldPersistTaps="handled">
++      <View style={authStyles.panel}>
++        <Text style={authStyles.title}>Create your account</Text>
++        <Text style={authStyles.subtitle}>Land your next role faster with CareerBot</Text>
++
++        <SocialAuthButtons
++          disabled={signUpMutation.isPending}
++          loadingProvider={loadingProvider}
++          onPress={onSocialPress}
++        />
++
++        {errors.general ? <Text style={authStyles.formErrorText}>{errors.general}</Text> : null}
++
++        <View style={authStyles.form}>
++          <AuthInput
++            autoCapitalize="words"
++            autoComplete="name"
++            error={errors.full_name}
++            label="Full name"
++            onChangeText={setFullName}
++            placeholder="Your full name"
++            textContentType="name"
++            value={fullName}
++          />
++          <AuthInput
++            autoCapitalize="none"
++            autoComplete="username"
++            error={errors.username}
++            label="Username"
++            onChangeText={setUsername}
++            placeholder="Pick a username"
++            textContentType="username"
++            value={username}
++          />
++          <AuthInput
++            autoCapitalize="none"
++            autoComplete="email"
++            error={errors.email}
++            keyboardType="email-address"
++            label="Email"
++            onChangeText={setEmail}
++            placeholder="you@example.com"
++            textContentType="emailAddress"
++            value={email}
++          />
++          <AuthInput
++            autoCapitalize="none"
++            autoComplete="password-new"
++            error={errors.password}
++            label="Password"
++            onChangeText={setPassword}
++            placeholder="At least 8 chars, letters + numbers"
++            secureTextEntry
++            textContentType="newPassword"
++            value={password}
++          />
++        </View>
++
++        <Pressable
++          accessibilityRole="button"
++          disabled={signUpMutation.isPending}
++          onPress={onSubmit}
++          style={({ pressed }) => [
++            authStyles.primaryButton,
++            pressed && authStyles.buttonPressed,
++            signUpMutation.isPending && authStyles.buttonDisabled,
++          ]}
++        >
++          <Text style={authStyles.primaryButtonText}>
++            {signUpMutation.isPending ? 'Creating account...' : 'Create account'}
++          </Text>
++        </Pressable>
++
++        <View style={authStyles.footerRow}>
++          <Text style={authStyles.footerText}>Already have an account?</Text>
++          <Pressable
++            accessibilityRole="link"
++            onPress={() => router.replace('/(auth)/signin')}
++          >
++            <Text style={authStyles.linkText}>Sign in</Text>
++          </Pressable>
++        </View>
++
++        <AuthAssurance />
++      </View>
++    </ScrollView>
++  );
++}
+diff --git a/app/(auth)/verify.tsx b/app/(auth)/verify.tsx
+index 7abae3d..3ad2ccb 100644
+--- a/app/(auth)/verify.tsx
++++ b/app/(auth)/verify.tsx
+@@ -1 +1,151 @@
+-// Verify email via token (deep-link entry from email)
++// Email-verification screen — accept token from email deep-link, also
++// supports manual paste + resend.
++
++import { router, useLocalSearchParams } from 'expo-router';
++import { useEffect, useRef, useState } from 'react';
++import { Pressable, ScrollView, Text, View } from 'react-native';
++
++import AuthInput from '@/components/forms/AuthInput';
++import { getApiErrorMessage } from '@/api/client/errors';
++import { authStyles } from '@/features/auth/styles';
++import {
++  useResendVerificationEmail,
++  useVerifyEmail,
++} from '@/features/auth/emailVerificationApi';
++import { isValidEmail } from '@/utils/validators';
++
++export default function VerifyEmailScreen() {
++  const params = useLocalSearchParams<{ token?: string }>();
++  const tokenFromLink = typeof params.token === 'string' ? params.token : '';
++
++  const [token, setToken] = useState(tokenFromLink);
++  const [resendEmail, setResendEmail] = useState('');
++  const [error, setError] = useState<string | undefined>();
++  const [done, setDone] = useState(false);
++  const [resendMessage, setResendMessage] = useState<string | undefined>();
++
++  const verifyMutation = useVerifyEmail();
++  const resendMutation = useResendVerificationEmail();
++
++  // Auto-submit when token arrives from a deep link.
++  const autoSubmittedRef = useRef(false);
++  useEffect(() => {
++    if (tokenFromLink && !autoSubmittedRef.current) {
++      autoSubmittedRef.current = true;
++      void verifyMutation
++        .mutateAsync({ token: tokenFromLink })
++        .then(() => setDone(true))
++        .catch((e) => setError(getApiErrorMessage(e, 'Verification failed.')));
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [tokenFromLink]);
++
++  async function onSubmit() {
++    setError(undefined);
++    if (!token.trim()) return setError('Verification token is required.');
++    try {
++      await verifyMutation.mutateAsync({ token });
++      setDone(true);
++    } catch (e) {
++      setError(getApiErrorMessage(e, 'Verification failed.'));
++    }
++  }
++
++  async function onResend() {
++    setError(undefined);
++    setResendMessage(undefined);
++    if (!resendEmail.trim()) return setError('Email is required to resend.');
++    if (!isValidEmail(resendEmail)) return setError('Enter a valid email address.');
++    try {
++      const result = await resendMutation.mutateAsync({ email: resendEmail });
++      setResendMessage(
++        result.message ||
++          'If this email is registered, you will receive a verification link shortly.',
++      );
++    } catch (e) {
++      setError(getApiErrorMessage(e, 'Could not resend verification email.'));
++    }
++  }
++
++  return (
++    <ScrollView contentContainerStyle={authStyles.screen} keyboardShouldPersistTaps="handled">
++      <View style={authStyles.panel}>
++        <Text style={authStyles.title}>Verify your email</Text>
++        <Text style={authStyles.subtitle}>
++          Tap the link in the email we sent, or paste the token here to verify.
++        </Text>
++
++        {error ? <Text style={authStyles.formErrorText}>{error}</Text> : null}
++        {done ? (
++          <Text style={authStyles.successText}>
++            Email verified. You can now sign in.
++          </Text>
++        ) : null}
++        {resendMessage ? <Text style={authStyles.successText}>{resendMessage}</Text> : null}
++
++        {done ? (
++          <Pressable
++            accessibilityRole="button"
++            onPress={() => router.replace('/(auth)/signin')}
++            style={({ pressed }) => [authStyles.primaryButton, pressed && authStyles.buttonPressed]}
++          >
++            <Text style={authStyles.primaryButtonText}>Continue to sign in</Text>
++          </Pressable>
++        ) : (
++          <>
++            <View style={authStyles.form}>
++              <AuthInput
++                autoCapitalize="none"
++                label="Verification token"
++                onChangeText={setToken}
++                placeholder="Paste token from email"
++                value={token}
++              />
++            </View>
++            <Pressable
++              accessibilityRole="button"
++              disabled={verifyMutation.isPending}
++              onPress={onSubmit}
++              style={({ pressed }) => [
++                authStyles.primaryButton,
++                pressed && authStyles.buttonPressed,
++                verifyMutation.isPending && authStyles.buttonDisabled,
++              ]}
++            >
++              <Text style={authStyles.primaryButtonText}>
++                {verifyMutation.isPending ? 'Verifying...' : 'Verify email'}
++              </Text>
++            </Pressable>
++
++            <View style={[authStyles.form, { marginTop: 28 }]}>
++              <Text style={authStyles.inputLabel}>Did not get the email?</Text>
++              <AuthInput
++                autoCapitalize="none"
++                autoComplete="email"
++                keyboardType="email-address"
++                label="Resend to"
++                onChangeText={setResendEmail}
++                placeholder="you@example.com"
++                value={resendEmail}
++              />
++              <Pressable
++                accessibilityRole="button"
++                disabled={resendMutation.isPending}
++                onPress={onResend}
++                style={({ pressed }) => [
++                  authStyles.socialButton,
++                  pressed && authStyles.buttonPressed,
++                  resendMutation.isPending && authStyles.buttonDisabled,
++                ]}
++              >
++                <Text style={authStyles.socialButtonText}>
++                  {resendMutation.isPending ? 'Sending...' : 'Resend verification email'}
++                </Text>
++              </Pressable>
++            </View>
++          </>
++        )}
++      </View>
++    </ScrollView>
++  );
++}
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+index d81b0f5..b274758 100644
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -1 +1,85 @@
+-// Root layout — Providers (Auth, Theme, QueryClient, ErrorBoundary), fonts, Sentry init
++// Root layout — Providers + bootstrap wiring.
++//
++// Per docs/design/notes/2026-06-03-auth-lifecycle-orchestration.md §3 Option D.
++//
++// Bootstrap order (DO NOT REORDER — caught by Codex rounds 3 + 4):
++//   1. restoreSession()                          — read SecureStore → useAuthStore
++//   2. registerSignOutHandler(signOut)           — wire http.ts onSignOut hook
++//   3. configureAuthActions({ queryClient })     — wire authActions.signOut deps
++//   4. authLifecycle.start({ queryClient, signOut }) — schedule + AppState
++//   5. UI gate releases (children render)
++//
++// If authLifecycle.start() detects a near-expired restored token and refresh
++// FAILS, it calls deps.signOut() internally and returns. The route gate in
++// app/index.tsx then sees isSignedIn=false and redirects to /(auth)/signin.
++
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { Stack } from 'expo-router';
++import { useEffect, useState } from 'react';
++import { ActivityIndicator, View } from 'react-native';
++
++import { registerSignOutHandler } from '@/api/client/http';
++import { configureAuthActions, signOut } from '@/features/auth/authActions';
++import { authLifecycle } from '@/features/auth/authLifecycle';
++import { restoreSession } from '@/features/auth/sessionRestore';
++
++const queryClient = new QueryClient({
++  defaultOptions: {
++    queries: {
++      retry: 2,
++      staleTime: 30_000,
++      gcTime: 5 * 60_000,
++    },
++  },
++});
++
++export default function RootLayout() {
++  const [bootstrapped, setBootstrapped] = useState(false);
++
++  useEffect(() => {
++    let cancelled = false;
++
++    async function bootstrap() {
++      // 1. Read SecureStore → useAuthStore (hydrates synchronously after await).
++      await restoreSession();
++
++      // 2. Wire http.ts onSignOut hook before any 401 can fire.
++      registerSignOutHandler(signOut);
++
++      // 3. Configure the authActions composition with its dependencies.
++      configureAuthActions({ queryClient });
++
++      // 4. Start the lifecycle service (snapshot reconcile + scheduler + AppState).
++      await authLifecycle.start({
++        queryClient,
++        signOut,
++      });
++
++      // 5. Release UI gate.
++      if (!cancelled) setBootstrapped(true);
++    }
++
++    void bootstrap();
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  if (!bootstrapped) {
++    return (
++      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
++        <ActivityIndicator size="large" />
++      </View>
++    );
++  }
++
++  return (
++    <QueryClientProvider client={queryClient}>
++      <Stack screenOptions={{ headerShown: false }}>
++        <Stack.Screen name="index" />
++        <Stack.Screen name="(auth)" />
++        <Stack.Screen name="(tabs)" />
++      </Stack>
++    </QueryClientProvider>
++  );
++}
+diff --git a/app/index.tsx b/app/index.tsx
+index 00a05b9..75325e2 100644
+--- a/app/index.tsx
++++ b/app/index.tsx
+@@ -1 +1,11 @@
+-// Splash/route gate — decide auth vs onboarding vs home based on session
++// Splash / route gate — runs after root _layout.tsx bootstrap completes.
++// Reads useAuthStore.isSignedIn and redirects to (auth) or (tabs).
++
++import { Redirect } from 'expo-router';
++
++import { useAuthStore } from '@/features/auth/authStore';
++
++export default function Index() {
++  const isSignedIn = useAuthStore((s) => s.isSignedIn);
++  return <Redirect href={isSignedIn ? '/(tabs)/home' : '/(auth)/signin'} />;
++}
+diff --git a/package.json b/package.json
+index 5a7dd2d..bed720d 100644
+--- a/package.json
++++ b/package.json
+@@ -16,6 +16,7 @@
+   },
+   "dependencies": {
+     "@expo-google-fonts/inter": "^0.4.2",
++    "@expo/vector-icons": "~14.0.4",
+     "@tanstack/react-query": "^5.0.0",
+     "axios": "^1.13.2",
+     "date-fns": "^4.1.0",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index c8806b1..198bd24 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -11,6 +11,9 @@ importers:
+       '@expo-google-fonts/inter':
+         specifier: ^0.4.2
+         version: 0.4.2
++      '@expo/vector-icons':
++        specifier: ~14.0.4
++        version: 14.0.4
+       '@tanstack/react-query':
+         specifier: ^5.0.0
+         version: 5.100.14(react@18.3.1)
+@@ -8976,7 +8979,7 @@ snapshots:
+       '@typescript-eslint/eslint-plugin': 8.60.1(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)(typescript@5.9.3)
+       '@typescript-eslint/parser': 8.60.1(eslint@9.39.4)(typescript@5.9.3)
+       eslint: 9.39.4
+-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4))(eslint@9.39.4)
++      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4)
+       eslint-plugin-expo: 0.1.4(eslint@9.39.4)(typescript@5.9.3)
+       eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4)
+       eslint-plugin-react: 7.37.5(eslint@9.39.4)
+@@ -8999,7 +9002,7 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
+-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4))(eslint@9.39.4):
++  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4):
+     dependencies:
+       '@nolyfill/is-core-module': 1.0.39
+       debug: 4.4.3
+@@ -9014,14 +9017,14 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
+-  eslint-module-utils@2.13.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4))(eslint@9.39.4))(eslint@9.39.4):
++  eslint-module-utils@2.13.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4):
+     dependencies:
+       debug: 3.2.7
+     optionalDependencies:
+       '@typescript-eslint/parser': 8.60.1(eslint@9.39.4)(typescript@5.9.3)
+       eslint: 9.39.4
+       eslint-import-resolver-node: 0.3.10
+-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4))(eslint@9.39.4)
++      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4)
+     transitivePeerDependencies:
+       - supports-color
+ 
+@@ -9045,7 +9048,7 @@ snapshots:
+       doctrine: 2.1.0
+       eslint: 9.39.4
+       eslint-import-resolver-node: 0.3.10
+-      eslint-module-utils: 2.13.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4))(eslint@9.39.4))(eslint@9.39.4)
++      eslint-module-utils: 2.13.0(@typescript-eslint/parser@8.60.1(eslint@9.39.4)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4)
+       hasown: 2.0.4
+       is-core-module: 2.16.2
+       is-glob: 4.0.3
+diff --git a/src/components/forms/AuthAssurance.tsx b/src/components/forms/AuthAssurance.tsx
+new file mode 100644
+index 0000000..4438455
+--- /dev/null
++++ b/src/components/forms/AuthAssurance.tsx
+@@ -0,0 +1,37 @@
++// AuthAssurance — trust badges + legal text shown on signin/signup.
++// TS port of POC src/components/AuthAssurance.js.
++
++import { Ionicons } from '@expo/vector-icons';
++import { StyleSheet, Text, View } from 'react-native';
++
++export default function AuthAssurance() {
++  return (
++    <View style={styles.container}>
++      <View style={styles.trustRow}>
++        <Ionicons color="#637083" name="lock-closed-outline" size={13} />
++        <Text style={styles.trustText}>Secure Login</Text>
++      </View>
++      <View style={styles.trustRow}>
++        <Ionicons color="#637083" name="checkmark" size={14} />
++        <Text style={styles.trustText}>Trusted by professionals</Text>
++      </View>
++
++      <View style={styles.legalBlock}>
++        <Text style={styles.legalText}>
++          By continuing, you agree to our <Text style={styles.legalLink}>Terms</Text> and{' '}
++          <Text style={styles.legalLink}>Privacy policy</Text>.
++        </Text>
++        <Text style={styles.legalText}>your data is Secure &amp; encrypted.</Text>
++      </View>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  container: { alignItems: 'center', gap: 6, marginTop: 18 },
++  trustRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
++  trustText: { color: '#637083', fontSize: 13, fontWeight: '600' },
++  legalBlock: { alignItems: 'center', gap: 2, marginTop: 8 },
++  legalText: { color: '#8d98a7', fontSize: 12, lineHeight: 17, textAlign: 'center' },
++  legalLink: { color: '#1d4ed8', fontWeight: '700' },
++});
+diff --git a/src/components/forms/AuthInput.tsx b/src/components/forms/AuthInput.tsx
+new file mode 100644
+index 0000000..8509df9
+--- /dev/null
++++ b/src/components/forms/AuthInput.tsx
+@@ -0,0 +1,89 @@
++// AuthInput — labelled input with trailing icon or password toggle.
++// TS port of POC src/components/AuthInput.js.
++
++import { Ionicons } from '@expo/vector-icons';
++import { useState } from 'react';
++import {
++  Pressable,
++  Text,
++  TextInput,
++  View,
++  type KeyboardTypeOptions,
++  type TextInputProps,
++} from 'react-native';
++
++import { authStyles } from '@/features/auth/styles';
++
++export interface AuthInputProps {
++  label: string;
++  placeholder?: string;
++  value: string;
++  onChangeText: (value: string) => void;
++  error?: string;
++  secureTextEntry?: boolean;
++  keyboardType?: KeyboardTypeOptions;
++  autoCapitalize?: TextInputProps['autoCapitalize'];
++  autoComplete?: TextInputProps['autoComplete'];
++  returnKeyType?: TextInputProps['returnKeyType'];
++  textContentType?: TextInputProps['textContentType'];
++  icon?: React.ComponentProps<typeof Ionicons>['name'];
++}
++
++export default function AuthInput({
++  label,
++  placeholder,
++  value,
++  onChangeText,
++  error,
++  secureTextEntry,
++  keyboardType,
++  autoCapitalize,
++  autoComplete,
++  returnKeyType,
++  textContentType,
++  icon,
++}: AuthInputProps) {
++  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
++  const shouldShowPasswordToggle = Boolean(secureTextEntry);
++
++  return (
++    <View style={authStyles.inputGroup}>
++      <Text style={authStyles.inputLabel}>{label}</Text>
++      <View style={[authStyles.inputWrapper, error ? authStyles.inputError : null]}>
++        <TextInput
++          accessibilityLabel={label}
++          autoCapitalize={autoCapitalize}
++          autoComplete={autoComplete}
++          autoCorrect={false}
++          keyboardType={keyboardType}
++          onChangeText={onChangeText}
++          placeholder={placeholder}
++          placeholderTextColor="#8d98a7"
++          returnKeyType={returnKeyType}
++          secureTextEntry={secureTextEntry && !isPasswordVisible}
++          style={authStyles.input}
++          textContentType={textContentType}
++          value={value}
++        />
++        {shouldShowPasswordToggle ? (
++          <Pressable
++            accessibilityLabel={isPasswordVisible ? 'Hide password' : 'Show password'}
++            accessibilityRole="button"
++            hitSlop={8}
++            onPress={() => setIsPasswordVisible((visible) => !visible)}
++            style={authStyles.passwordToggle}
++          >
++            <Ionicons
++              color="#637083"
++              name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
++              size={22}
++            />
++          </Pressable>
++        ) : icon ? (
++          <Ionicons color="#9aa6b5" name={icon} size={20} style={authStyles.inputIcon} />
++        ) : null}
++      </View>
++      {error ? <Text style={authStyles.errorText}>{error}</Text> : null}
++    </View>
++  );
++}
+diff --git a/src/components/forms/SocialAuthButtons.tsx b/src/components/forms/SocialAuthButtons.tsx
+new file mode 100644
+index 0000000..50c5dd6
+--- /dev/null
++++ b/src/components/forms/SocialAuthButtons.tsx
+@@ -0,0 +1,100 @@
++// SocialAuthButtons — Google + LinkedIn + Apple (iOS only).
++//
++// REWRITE of POC src/components/SocialAuthButtons.js to:
++//   1. Add Apple button per OAuth design Option 2.
++//   2. Hide Apple button on Android per OAuth design §2.
++//   3. Use Apple's native button styling (AppleAuthenticationButton) on iOS,
++//      not a custom Pressable, to satisfy App Store Guideline 4.8.
++//
++// Reference: docs/design/2026-06-03-oauth-providers.md.
++
++import * as AppleAuthentication from 'expo-apple-authentication';
++import { Ionicons } from '@expo/vector-icons';
++import { useEffect, useState } from 'react';
++import { Pressable, Text, View } from 'react-native';
++
++import { authStyles } from '@/features/auth/styles';
++import { isAppleSignInAvailable } from '@/features/auth/oauth/apple';
++
++type ProviderKey = 'google' | 'linkedin' | 'apple';
++
++interface SocialAuthButtonsProps {
++  disabled?: boolean;
++  loadingProvider?: ProviderKey | null;
++  onPress: (provider: ProviderKey) => void;
++}
++
++const browserProviders = [
++  {
++    color: '#4285f4',
++    icon: 'logo-google' as const,
++    key: 'google' as const,
++    label: 'Google',
++  },
++  {
++    color: '#0a66c2',
++    icon: 'logo-linkedin' as const,
++    key: 'linkedin' as const,
++    label: 'LinkedIn',
++  },
++];
++
++export default function SocialAuthButtons({
++  disabled,
++  loadingProvider,
++  onPress,
++}: SocialAuthButtonsProps) {
++  const [appleAvailable, setAppleAvailable] = useState(false);
++
++  useEffect(() => {
++    void isAppleSignInAvailable().then(setAppleAvailable);
++  }, []);
++
++  return (
++    <View style={authStyles.socialSection}>
++      {/* Apple — iOS native button, blessed by App Store guideline 4.8.
++          Rendered ABOVE Google/LinkedIn (Apple HIG: first or equal prominence). */}
++      {appleAvailable ? (
++        <AppleAuthentication.AppleAuthenticationButton
++          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
++          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
++          cornerRadius={10}
++          onPress={() => onPress('apple')}
++          style={{ height: 48, width: '100%' }}
++        />
++      ) : null}
++
++      <View style={authStyles.socialButtonGrid}>
++        {browserProviders.map((provider) => {
++          const isLoading = loadingProvider === provider.key;
++          const isDisabled = disabled || Boolean(loadingProvider);
++
++          return (
++            <Pressable
++              accessibilityRole="button"
++              disabled={isDisabled}
++              key={provider.key}
++              onPress={() => onPress(provider.key)}
++              style={({ pressed }) => [
++                authStyles.socialButton,
++                pressed && authStyles.buttonPressed,
++                isDisabled && !isLoading && authStyles.buttonDisabled,
++              ]}
++            >
++              <Ionicons color={provider.color} name={provider.icon} size={20} />
++              <Text style={authStyles.socialButtonText}>
++                {isLoading ? 'Opening...' : provider.label}
++              </Text>
++            </Pressable>
++          );
++        })}
++      </View>
++
++      <View style={authStyles.authDivider}>
++        <View style={authStyles.authDividerLine} />
++        <Text style={authStyles.authDividerText}>Or continue with email</Text>
++        <View style={authStyles.authDividerLine} />
++      </View>
++    </View>
++  );
++}
+diff --git a/src/features/auth/styles.ts b/src/features/auth/styles.ts
+new file mode 100644
+index 0000000..cdbe843
+--- /dev/null
++++ b/src/features/auth/styles.ts
+@@ -0,0 +1,117 @@
++// Shared auth-screen styles (TS port of POC src/styles/authStyles.js).
++
++import { StyleSheet } from 'react-native';
++
++export const authStyles = StyleSheet.create({
++  panel: { width: '100%' },
++  title: {
++    color: '#152033',
++    fontSize: 26,
++    fontWeight: '800',
++    marginBottom: 6,
++    textAlign: 'center',
++  },
++  subtitle: {
++    color: '#637083',
++    fontSize: 14,
++    lineHeight: 20,
++    marginBottom: 22,
++    textAlign: 'center',
++  },
++  form: { gap: 16 },
++  socialSection: { gap: 18, marginBottom: 18 },
++  socialButtonGrid: { flexDirection: 'row', gap: 12 },
++  socialButton: {
++    alignItems: 'center',
++    backgroundColor: '#ffffff',
++    borderColor: '#dce3ec',
++    borderRadius: 10,
++    borderWidth: 1,
++    flex: 1,
++    flexDirection: 'row',
++    gap: 8,
++    justifyContent: 'center',
++    minHeight: 48,
++    paddingHorizontal: 12,
++  },
++  socialButtonText: { color: '#25334a', fontSize: 15, fontWeight: '700' },
++  authDivider: { alignItems: 'center', flexDirection: 'row', gap: 10 },
++  authDividerLine: { backgroundColor: '#dce3ec', flex: 1, height: 1 },
++  authDividerText: { color: '#8d98a7', fontSize: 13, fontWeight: '600' },
++  formErrorText: {
++    backgroundColor: '#fff1f0',
++    borderColor: '#ffccc7',
++    borderRadius: 8,
++    borderWidth: 1,
++    color: '#b42318',
++    fontSize: 14,
++    fontWeight: '700',
++    lineHeight: 20,
++    marginBottom: 16,
++    padding: 12,
++  },
++  successText: {
++    backgroundColor: '#ecfdf3',
++    borderColor: '#abefc6',
++    borderRadius: 8,
++    borderWidth: 1,
++    color: '#067647',
++    fontSize: 14,
++    fontWeight: '700',
++    lineHeight: 20,
++    marginBottom: 16,
++    padding: 12,
++  },
++  inputGroup: { gap: 7 },
++  inputLabel: { color: '#1f2a3d', fontSize: 14, fontWeight: '700' },
++  inputWrapper: {
++    alignItems: 'center',
++    backgroundColor: '#f1f3f6',
++    borderColor: '#e4e8ee',
++    borderRadius: 10,
++    borderWidth: 1,
++    flexDirection: 'row',
++    minHeight: 52,
++    paddingHorizontal: 14,
++  },
++  input: { color: '#152033', flex: 1, fontSize: 15, minHeight: 52, paddingRight: 10 },
++  inputError: { borderColor: '#d92d20' },
++  inputIcon: { marginLeft: 4 },
++  passwordToggle: { alignItems: 'center', height: 40, justifyContent: 'center', width: 36 },
++  errorText: { color: '#d92d20', fontSize: 13, fontWeight: '700' },
++  primaryButton: {
++    alignItems: 'center',
++    backgroundColor: '#2557A7',
++    borderRadius: 10,
++    justifyContent: 'center',
++    marginTop: 22,
++    minHeight: 52,
++  },
++  buttonPressed: { opacity: 0.85 },
++  buttonDisabled: { opacity: 0.6 },
++  primaryButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
++  signInMetaRow: {
++    alignItems: 'center',
++    flexDirection: 'row',
++    gap: 10,
++    justifyContent: 'space-between',
++    marginTop: 10,
++  },
++  inlineErrorText: { color: '#d92d20', flex: 1, fontSize: 13, fontWeight: '700' },
++  footerRow: {
++    alignItems: 'center',
++    flexDirection: 'row',
++    flexWrap: 'wrap',
++    gap: 5,
++    justifyContent: 'center',
++    marginTop: 20,
++  },
++  footerText: { color: '#637083', fontSize: 14 },
++  linkText: { color: '#1d4ed8', fontSize: 14, fontWeight: '800' },
++  screen: {
++    backgroundColor: '#ffffff',
++    flex: 1,
++    paddingHorizontal: 24,
++    paddingTop: 28,
++  },
++});
+diff --git a/src/test/msw/handlers.ts b/src/test/msw/handlers.ts
+new file mode 100644
+index 0000000..bc1b1d5
+--- /dev/null
++++ b/src/test/msw/handlers.ts
+@@ -0,0 +1,292 @@
++// MSW (Mock Service Worker) handlers for auth endpoints.
++//
++// Per IMPLEMENTATION_BLUEPRINT_FOR_DEVELOPER.txt Day 6 + mobile-API fallback
++// track in MOBILE_ARCHITECTURE_BLUEPRINT §15.B.
++//
++// Lets mobile UI build against accurate mock responses while the backend
++// completes A3 (Apple Sign In endpoint). Shapes match careerbot-api develop2
++// (verified via BACKEND_REALITY_CHECK_2026-06-04.txt).
++//
++// Used by:
++//   - Jest tests (via jest setup file importing setupServer + listen())
++//   - Optional dev-mode toggle (EXPO_PUBLIC_USE_MOCK_API=true)
++//
++// Every mock handler that emulates a backend feature not yet in develop2
++// is tagged `// mockApi: true` so we can audit which tests need re-running
++// when the real endpoints land.
++
++import { http, HttpResponse } from 'msw';
++
++import { httpClient } from '@/api/client/http';
++
++const baseUrl = httpClient.defaults.baseURL ?? '';
++
++// ── Token-response factory ──────────────────────────────────────────────────
++
++interface MockTokenOpts {
++  username?: string;
++  expiresInSec?: number;
++}
++
++function mockTokenResponse(opts: MockTokenOpts = {}) {
++  return {
++    access_token: `mock-access-${Date.now()}`,
++    refresh_token: `mock-refresh-${Date.now()}`,
++    token_type: 'bearer',
++    expires_in: opts.expiresInSec ?? 3600,
++    username: opts.username ?? 'mock-user',
++  };
++}
++
++// ── Sign-in (OAuth2PasswordRequestForm) ─────────────────────────────────────
++
++const signInHandler = http.post(`${baseUrl}/api/v1/auth/signin`, async ({ request }) => {
++  const text = await request.text();
++  const params = new URLSearchParams(text);
++  const username = params.get('username') ?? '';
++  const password = params.get('password') ?? '';
++
++  if (!username || !password) {
++    return HttpResponse.json(
++      { detail: 'Username and password required' },
++      { status: 422 },
++    );
++  }
++
++  // Canned failure for testing 401 path: special "wrong@example.com" email
++  if (username === 'wrong@example.com') {
++    return HttpResponse.json(
++      { detail: 'Invalid credentials' },
++      { status: 401 },
++    );
++  }
++
++  return HttpResponse.json(mockTokenResponse({ username }));
++});
++
++// ── Sign-up (JSON body) ─────────────────────────────────────────────────────
++
++const signUpHandler = http.post(`${baseUrl}/api/v1/auth/signup`, async ({ request }) => {
++  const body = (await request.json()) as Record<string, string>;
++  if (!body.email || !body.password || !body.username || !body.full_name) {
++    return HttpResponse.json(
++      { detail: 'Missing required fields' },
++      { status: 422 },
++    );
++  }
++
++  if (body.email === 'taken@example.com') {
++    return HttpResponse.json(
++      { detail: 'Email already registered' },
++      { status: 409 },
++    );
++  }
++
++  return HttpResponse.json(mockTokenResponse({ username: body.username }));
++});
++
++// ── Refresh (single-flight target) ──────────────────────────────────────────
++
++const refreshHandler = http.post(`${baseUrl}/api/v1/auth/refresh`, async ({ request }) => {
++  const body = (await request.json()) as { refresh_token?: string };
++  if (!body.refresh_token) {
++    return HttpResponse.json(
++      { detail: 'Refresh token not provided' },
++      { status: 401 },
++    );
++  }
++
++  // Canned: refresh tokens starting with "expired-" are rejected (blacklist behavior).
++  if (body.refresh_token.startsWith('expired-')) {
++    return HttpResponse.json(
++      { detail: 'Refresh token revoked or already used' },
++      { status: 401 },
++    );
++  }
++
++  return HttpResponse.json(mockTokenResponse({ username: 'mock-user' }));
++});
++
++// ── Sign-out ────────────────────────────────────────────────────────────────
++
++const signOutHandler = http.post(
++  `${baseUrl}/api/v1/auth/signout`,
++  () => HttpResponse.json({ message: 'Logged out' }),
++);
++
++// ── Password reset (request POST + confirm PATCH) ───────────────────────────
++
++const requestPasswordResetHandler = http.post(
++  `${baseUrl}/api/v1/auth/password/reset`,
++  async () =>
++    HttpResponse.json({
++      success: true,
++      message: 'If this email is registered, you will receive an email shortly',
++    }),
++);
++
++const confirmPasswordResetHandler = http.patch(
++  `${baseUrl}/api/v1/auth/password/reset`,
++  async ({ request }) => {
++    const body = (await request.json()) as { token?: string; new_password?: string };
++    if (!body.token || !body.new_password) {
++      return HttpResponse.json(
++        { detail: 'Token and new_password required' },
++        { status: 422 },
++      );
++    }
++    if (body.token === 'expired-token') {
++      return HttpResponse.json(
++        { detail: 'Reset token expired' },
++        { status: 401 },
++      );
++    }
++    return HttpResponse.json({ message: 'Password reset successfully' });
++  },
++);
++
++// ── Email verification (verify POST + resend POST) ──────────────────────────
++
++const verifyEmailHandler = http.post(
++  `${baseUrl}/api/v1/auth/email/verify`,
++  async ({ request }) => {
++    const body = (await request.json()) as { token?: string };
++    if (!body.token) {
++      return HttpResponse.json({ detail: 'Token required' }, { status: 422 });
++    }
++    if (body.token === 'invalid-verify-token') {
++      return HttpResponse.json({ detail: 'Invalid token' }, { status: 401 });
++    }
++    return HttpResponse.json({ message: 'Email verified successfully' });
++  },
++);
++
++const resendVerificationHandler = http.post(
++  `${baseUrl}/api/v1/auth/email/resend`,
++  async () =>
++    HttpResponse.json({
++      success: true,
++      message: 'If this email is registered, you will receive an email shortly',
++    }),
++);
++
++// ── Profile (GET /auth/profile — used by useUser hook in Phase 3) ───────────
++
++const profileHandler = http.get(`${baseUrl}/api/v1/auth/profile`, ({ request }) => {
++  const auth = request.headers.get('Authorization') ?? '';
++  if (!auth.startsWith('Bearer ')) {
++    return HttpResponse.json({ detail: 'Not authenticated' }, { status: 401 });
++  }
++  return HttpResponse.json({
++    id: 'mock-user-id',
++    username: 'mock-user',
++    email: 'mock@example.com',
++    full_name: 'Mock User',
++    plan: 'free',
++  });
++});
++
++// ── Google OAuth (login-url + callback) ─────────────────────────────────────
++
++const googleLoginUrlHandler = http.get(
++  `${baseUrl}/api/v1/auth/google/login-url`,
++  () =>
++    HttpResponse.json({
++      url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=mock&redirect_uri=careerbot://auth/google/callback&response_type=code&scope=openid+email+profile&state=mock-state-12345',
++      state: 'mock-state-12345',
++    }),
++);
++
++const googleCallbackHandler = http.post(
++  `${baseUrl}/api/v1/auth/google/callback`,
++  async ({ request }) => {
++    const body = (await request.json()) as { code?: string; state?: string };
++    if (!body.code || !body.state) {
++      return HttpResponse.json(
++        { detail: 'code and state required' },
++        { status: 422 },
++      );
++    }
++    return HttpResponse.json(mockTokenResponse({ username: 'mock-google-user' }));
++  },
++);
++
++// ── LinkedIn OAuth ──────────────────────────────────────────────────────────
++
++const linkedInLoginUrlHandler = http.get(
++  `${baseUrl}/api/v1/auth/linkedin/login-url`,
++  () =>
++    HttpResponse.json({
++      url: 'https://www.linkedin.com/oauth/v2/authorization?client_id=mock&redirect_uri=careerbot://auth/linkedin/callback&response_type=code&scope=r_liteprofile+r_emailaddress&state=mock-li-state-67890',
++      state: 'mock-li-state-67890',
++    }),
++);
++
++const linkedInCallbackHandler = http.post(
++  `${baseUrl}/api/v1/auth/linkedin/callback`,
++  async ({ request }) => {
++    const body = (await request.json()) as { code?: string; state?: string };
++    if (!body.code || !body.state) {
++      return HttpResponse.json(
++        { detail: 'code and state required' },
++        { status: 422 },
++      );
++    }
++    return HttpResponse.json(mockTokenResponse({ username: 'mock-linkedin-user' }));
++  },
++);
++
++// ── Apple OAuth (mockApi: true — backend A3 not yet implemented) ────────────
++//
++// mockApi: true (delete this handler when backend A3 lands)
++
++const appleLoginUrlHandler = http.get(
++  `${baseUrl}/api/v1/auth/apple/login-url`,
++  () =>
++    HttpResponse.json({
++      url: 'https://appleid.apple.com/auth/authorize?client_id=com.careerbot.mobile&redirect_uri=careerbot://auth/apple/callback&response_type=code&scope=name+email&state=mock-apple-state',
++      state: 'mock-apple-state',
++    }),
++);
++
++const appleCallbackHandler = http.post(
++  `${baseUrl}/api/v1/auth/apple/callback`,
++  async ({ request }) => {
++    const body = (await request.json()) as {
++      identityToken?: string;
++      authorizationCode?: string;
++      rawNonce?: string;
++      state?: string;
++      fullName?: { givenName?: string; familyName?: string } | null;
++    };
++    if (!body.identityToken || !body.authorizationCode || !body.rawNonce || !body.state) {
++      return HttpResponse.json(
++        { detail: 'identityToken, authorizationCode, rawNonce, state all required' },
++        { status: 422 },
++      );
++    }
++    return HttpResponse.json(
++      mockTokenResponse({ username: body.fullName?.givenName ?? 'mock-apple-user' }),
++    );
++  },
++);
++
++// ── Exported handler array ──────────────────────────────────────────────────
++
++export const authHandlers = [
++  signInHandler,
++  signUpHandler,
++  refreshHandler,
++  signOutHandler,
++  requestPasswordResetHandler,
++  confirmPasswordResetHandler,
++  verifyEmailHandler,
++  resendVerificationHandler,
++  profileHandler,
++  googleLoginUrlHandler,
++  googleCallbackHandler,
++  linkedInLoginUrlHandler,
++  linkedInCallbackHandler,
++  appleLoginUrlHandler,         // mockApi: true
++  appleCallbackHandler,         // mockApi: true
++];
+diff --git a/src/test/msw/server.ts b/src/test/msw/server.ts
+new file mode 100644
+index 0000000..6c56d9b
+--- /dev/null
++++ b/src/test/msw/server.ts
+@@ -0,0 +1,14 @@
++// MSW server for Jest unit/integration tests.
++// Per IMPLEMENTATION_BLUEPRINT_FOR_DEVELOPER.txt Day 6.
++//
++// Usage in jest.setup.ts:
++//   import { server } from '@/test/msw/server';
++//   beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
++//   afterEach(() => server.resetHandlers());
++//   afterAll(() => server.close());
++
++import { setupServer } from 'msw/node';
++
++import { authHandlers } from './handlers';
++
++export const server = setupServer(...authHandlers);
+diff --git a/src/utils/validators.ts b/src/utils/validators.ts
+new file mode 100644
+index 0000000..e1c5cf7
+--- /dev/null
++++ b/src/utils/validators.ts
+@@ -0,0 +1,18 @@
++// Shared form validators (TS port of POC src/utils/validators.js).
++// Used by SignIn, SignUp, ForgotPassword, ResetPassword.
++
++const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
++
++// At least 8 chars, one letter and one number.
++const STRONG_PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
++
++export function isValidEmail(value: unknown): boolean {
++  return typeof value === 'string' && EMAIL_PATTERN.test(value.trim());
++}
++
++export function isStrongPassword(value: unknown): boolean {
++  return typeof value === 'string' && STRONG_PASSWORD_PATTERN.test(value);
++}
++
++export const PASSWORD_REQUIREMENT_TEXT =
++  'Password must be at least 8 characters and include a letter and a number.';

@@ -3,7 +3,9 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
+import { toast } from "sonner";
 import AISuggestions from "../AISuggestions";
+import SectionTipsPanel from "../SectionTipsPanel";
 import {
   FaSpellCheck,
   FaListUl,
@@ -15,17 +17,20 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface HobbyEntry {
   name: string;
   description: string;
   proficiencyLevel?: string;
   achievement?: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyHobby = (): HobbyEntry => ({
@@ -45,7 +50,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -57,6 +62,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Hobbies: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -68,6 +75,8 @@ const Hobbies: React.FC = () => {
 
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<HobbyEntry | null>(null);
 
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
   const descriptionRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -92,13 +101,71 @@ const Hobbies: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.hobbies) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, hobbies: allEntries });
-    }
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Hobbies") return;
+      let allValid = true;
+      editingEntries.forEach((hobby, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("hobby", globalIndex, {
+          name: hobby.name,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Hobbies") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) editEntry(idx);
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
+  useEffect(() => {
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
+    setResumeData(prev => {
+      const prevItems = (prev.hobbies ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.hobbies) === JSON.stringify(merged)) return prev;
+      return { ...prev, hobbies: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
+
+  useEffect(() => {
+    if (!resumeData.hobbies?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.hobbies!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
+      if (prev.length !== resumeData.hobbies!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.hobbies![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.hobbies]);
 
   const handleChange = <K extends keyof HobbyEntry>(
     index: number,
@@ -115,7 +182,17 @@ const Hobbies: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyHobby()]);
@@ -127,6 +204,8 @@ const Hobbies: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyHobby()]);
 
     setTimeout(() => {
@@ -139,7 +218,7 @@ const Hobbies: React.FC = () => {
   const removeHobby = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const hobbyToDelete = savedEntries[index];
-    const itemId = hobbyToDelete._id;
+    const itemId = hobbyToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
@@ -157,7 +236,11 @@ const Hobbies: React.FC = () => {
       // // console.log("🗑️ Deleting hobby item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "hobbies", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "hobbies", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "hobbies", itemId);
+      }
 
       // // console.log("✅ Hobby item deleted from backend successfully");
 
@@ -170,7 +253,7 @@ const Hobbies: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete hobby item:", error);
-      alert("Failed to delete hobby. Please try again.");
+      toast.error("Failed to delete hobby. Please try again.");
     } finally {
       setDeletingIndex(null);
     }
@@ -178,43 +261,55 @@ const Hobbies: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
 
-    setTimeout(() => {
-      const el = editorRefs.current[0];
-      if (el) {
-        el.focus();
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (el.childNodes.length > 0) {
-          range.selectNodeContents(el);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      }
-    }, 0);
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
   };
 
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(idx, "description", editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(idx, "description", content);
     }, 0);
   };
 
   const onEditorInput = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
-    handleChange(idx, "description", el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(idx, "description", content);
   };
 
   const toggleSpellCheck = (editIndex: number) => {
@@ -276,9 +371,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -291,24 +386,16 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   useEffect(() => {
     editingEntries.forEach((hobby, idx) => {
       const el = editorRefs.current[idx];
-      if (el && hobby.description && el.innerHTML !== hobby.description) {
-        el.innerHTML = hobby.description;
+      if (el && hobby.description) {
+        if (document.activeElement !== el && el.innerHTML !== hobby.description) {
+          el.innerHTML = hobby.description;
+        }
       }
     });
   }, [editingEntries]);
@@ -392,9 +479,18 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((hobby, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -410,7 +506,8 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                         placeholder="e.g., Guitar Playing, Photography"
                         onChange={(e) => handleChange(editIndex, "name", e.target.value)}
                         onBlur={() => validateRequired("hobby", globalIndex, { name: hobby.name })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                        maxLength={80}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`hobby-${globalIndex}-name`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
                       {errors[`hobby-${globalIndex}-name`] && (
                         <span className="text-xs text-red-500">
@@ -447,6 +544,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                           value={hobby.achievement || ""}
                           placeholder="e.g., Won first place"
                           onChange={(e) => handleChange(editIndex, "achievement", e.target.value)}
+                          maxLength={150}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                         />
                       </div>
@@ -486,8 +584,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                           ref={(el) => { editorRefs.current[editIndex] = el; }}
                           contentEditable
                           suppressContentEditableWarning
+                          lang="en"
                           onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[120px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                          className="w-full px-3 py-2 text-sm text-black min-h-[120px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                           spellCheck={spellCheckEnabled}
                         />
                       </div>
@@ -518,21 +617,27 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                 }}
               />
             ) : (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Hobbies demonstrate your personality and soft skills. Choose hobbies that show dedication, creativity, or leadership qualities relevant to your field.
-                  </p>
-                  <p>
-                    Include the hobby name, your proficiency level, and any achievements or recognition you have gained. Be honest about your skill level - it builds credibility.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Including relevant hobbies can increase candidate engagement by 25%.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Hobbies"
+                entryContent={[editingEntries[0]?.name].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Hobbies demonstrate your personality and soft skills. Choose hobbies that show dedication, creativity, or leadership qualities relevant to your field.
+                      </p>
+                      <p>
+                        Include the hobby name, your proficiency level, and any achievements or recognition you have gained. Be honest about your skill level - it builds credibility.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Including relevant hobbies can increase candidate engagement by 25%.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

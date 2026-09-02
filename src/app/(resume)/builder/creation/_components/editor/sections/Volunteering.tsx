@@ -3,16 +3,20 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import MonthYearPicker from "../MonthYearPicker";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { toast } from "sonner";
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import SectionTipsPanel from "../SectionTipsPanel";
 
 interface VolunteeringEntry {
   organization: string;
   role: string;
   startDate: string;
   endDate: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyVolunteering = (): VolunteeringEntry => ({
@@ -24,6 +28,8 @@ const emptyVolunteering = (): VolunteeringEntry => ({
 
 const Volunteering: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -35,6 +41,8 @@ const Volunteering: React.FC = () => {
 
   const [showTips] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<VolunteeringEntry | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
@@ -58,13 +66,73 @@ const Volunteering: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.volunteering) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, volunteering: allEntries });
-    }
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Volunteering") return;
+      let allValid = true;
+      editingEntries.forEach((volunteering, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("volunteering", globalIndex, {
+          organization: volunteering.organization,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Volunteering") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
+  useEffect(() => {
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
+    setResumeData(prev => {
+      const prevItems = (prev.volunteering ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.volunteering) === JSON.stringify(merged)) return prev;
+      return { ...prev, volunteering: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
+
+  useEffect(() => {
+    if (!resumeData.volunteering?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.volunteering!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
+      if (prev.length !== resumeData.volunteering!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.volunteering![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.volunteering]);
 
   const handleChange = <K extends keyof VolunteeringEntry>(
     index: number,
@@ -81,13 +149,25 @@ const Volunteering: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyVolunteering()]);
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyVolunteering()]);
   };
 
@@ -95,7 +175,7 @@ const Volunteering: React.FC = () => {
   const removeVolunteering = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const volunteeringToDelete = savedEntries[index];
-    const itemId = volunteeringToDelete._id;
+    const itemId = volunteeringToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
@@ -113,7 +193,11 @@ const Volunteering: React.FC = () => {
       // // console.log("🗑️ Deleting volunteering item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "volunteering", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "volunteering", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "volunteering", itemId);
+      }
 
       // // console.log("✅ Volunteering item deleted from backend successfully");
 
@@ -126,7 +210,7 @@ const Volunteering: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete volunteering item:", error);
-      alert("Failed to delete volunteering entry. Please try again.");
+      toast.error("Failed to delete volunteering entry. Please try again.");
     } finally {
       setDeletingIndex(null);
     }
@@ -134,17 +218,35 @@ const Volunteering: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
   };
 
-  function startToLabel(val: string) {
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
+  function startToLabel(val: string): string {
     if (!val) return "";
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -227,9 +329,18 @@ const Volunteering: React.FC = () => {
           {/* Left Side: Scrollable Form Fields Section */}
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((volunteering, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -246,7 +357,8 @@ const Volunteering: React.FC = () => {
                           placeholder="Organization Name"
                           onChange={(e) => handleChange(editIndex, "organization", e.target.value)}
                           onBlur={() => validateRequired("volunteering", globalIndex, { organization: volunteering.organization })}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                          maxLength={150}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`volunteering-${globalIndex}-organization`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                         />
                         {errors[`volunteering-${globalIndex}-organization`] && (
                           <span className="text-xs text-red-500">
@@ -264,6 +376,7 @@ const Volunteering: React.FC = () => {
                           value={volunteering.role}
                           placeholder="Volunteer Role"
                           onChange={(e) => handleChange(editIndex, "role", e.target.value)}
+                          maxLength={100}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                         />
                       </div>
@@ -277,6 +390,7 @@ const Volunteering: React.FC = () => {
                           value={volunteering.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
+                          maxDate={volunteering.endDate}
                         />
                       </div>
 
@@ -286,6 +400,7 @@ const Volunteering: React.FC = () => {
                           value={volunteering.endDate}
                           onChange={(val) => handleChange(editIndex, "endDate", val)}
                           placeholder="MM/YY"
+                          minDate={volunteering.startDate}
                         />
                       </div>
                     </div>
@@ -309,21 +424,27 @@ const Volunteering: React.FC = () => {
           {/* Right Side: Fixed Tips Section */}
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Volunteer experience demonstrates commitment to community service and transferable skills. Highlight leadership roles, significant contributions, and relevant experience that aligns with your career goals.
-                  </p>
-                  <p>
-                    Include the organization name, your role, and dates of service. Emphasize skills developed, responsibilities held, and impact made through your volunteer work.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *82% of hiring managers value volunteer experience when evaluating candidates.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Volunteering"
+                entryContent={[editingEntries[0]?.organization, editingEntries[0]?.role].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Volunteer experience demonstrates commitment to community service and transferable skills. Highlight leadership roles, significant contributions, and relevant experience that aligns with your career goals.
+                      </p>
+                      <p>
+                        Include the organization name, your role, and dates of service. Emphasize skills developed, responsibilities held, and impact made through your volunteer work.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *82% of hiring managers value volunteer experience when evaluating candidates.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

@@ -1,0 +1,654 @@
+================================================================================
+        CAREERBOT-WEB — RESUME BUILDER + ENHANCER MERGE ANALYSIS REPORT
+================================================================================
+Date       : 2026-03-21
+Branch     : feature/communication-assessment
+Prepared by: Claude Code (Sonnet 4.6)
+================================================================================
+
+
+TABLE OF CONTENTS
+-----------------
+1. OVERVIEW OF BOTH FEATURES
+2. FILE STRUCTURE — BUILDER
+3. FILE STRUCTURE — ENHANCER
+4. STATE MANAGEMENT COMPARISON
+5. API LAYER COMPARISON
+6. NAVIGATION FLOW COMPARISON
+7. COMPONENT DUPLICATION AUDIT
+8. PROPOSED USER FLOW (CHOOSE YOUR PATH)
+9. COMPLEXITY ANALYSIS
+10. RISK BREAKDOWN
+11. RECOMMENDED IMPLEMENTATION PLAN
+12. FILES TO CREATE / MODIFY
+13. FINAL VERDICT
+
+
+================================================================================
+1. OVERVIEW OF BOTH FEATURES
+================================================================================
+
+RESUME BUILDER
+--------------
+- Purpose  : Create a brand new resume from scratch using guided form inputs
+- Input    : Manual data entry (form fields) OR auto-fill from user profile
+- AI       : Per-section suggestions, ResumeGPT chat assistant
+- Templates: 4 built-in templates
+- Scoring  : Completion percentage (how filled in the resume is)
+- Storage  : localStorage (survives page refresh)
+- Routes   : /builder/start → /builder/start/list → /builder/creation/[resumeId]
+- Editor   : Tab-based (Editor tab, Templates tab, Score tab, JobMatch tab)
+
+RESUME ENHANCER
+---------------
+- Purpose  : Upload an existing resume and improve it using AI
+- Input    : PDF or DOCX file upload
+- AI       : Full document analysis, ATS scoring, improvement suggestions list
+- Templates: 5 built-in templates
+- Scoring  : ATS score + keyword match + format score
+- Storage  : sessionStorage (cleared when tab closes)
+- Routes   : /enhancer → /enhancer/builder
+- Editor   : Modal-based (click section → full-screen editor modal opens)
+
+
+================================================================================
+2. FILE STRUCTURE — BUILDER
+================================================================================
+
+src/app/(resume)/builder/
+├── start/
+│   ├── page.tsx                         Entry page — redirects based on resume count
+│   └── list/
+│       ├── page.tsx                     Lists all saved resumes
+│       └── _components/
+│           ├── EmptyState.tsx           Shown when no resumes exist
+│           ├── ResumeTableRow.tsx       Single resume card in list
+│           ├── ResumeProgressBar.tsx    Score visualization bar
+│           ├── AddResumeModal.tsx       Modal to create new resume
+│           ├── DeleteConfirmModal.tsx   Delete confirmation dialog
+│           └── DownloadModal.tsx        PDF/DOCX download options
+│
+└── creation/
+    ├── layout.tsx                       Wraps with ResumeProvider + ScoreProvider
+    ├── [resumeId]/page.tsx              Dynamic resume editing page
+    ├── _context/
+    │   ├── ResumeContext.tsx            MAIN STATE — all resume data + methods
+    │   └── ScoreContext.tsx             Score calculation and tracking
+    └── _components/
+        ├── Header.tsx                   Top nav with back button
+        ├── PreviewPanel.tsx             A4 preview with zoom + download
+        ├── editor/
+        │   ├── EditorTab.tsx            Main form editor (drag-drop sections)
+        │   ├── SectionItem.tsx          Collapsible section container
+        │   ├── AddNewSection.tsx        Add custom section modal
+        │   ├── CircularProgress.tsx     Completion percentage wheel
+        │   ├── AISuggestions.tsx        AI-powered content suggestions
+        │   ├── AutocompleteInput.tsx    Smart text completion input
+        │   ├── CustomSectionEditor.tsx  Custom fields editor
+        │   ├── CustomSectionModal.tsx   Modal for new custom sections
+        │   ├── MonthYearPicker.tsx      Date picker
+        │   ├── TechnologyChipsInput.tsx Skill/tech tag chips input
+        │   └── sections/               16 pre-built section editors
+        │       ├── PersonalInfo.tsx
+        │       ├── ProfessionalSummary.tsx
+        │       ├── WorkExperience.tsx
+        │       ├── Education.tsx
+        │       ├── Projects.tsx
+        │       ├── Skills.tsx
+        │       ├── Certifications.tsx
+        │       ├── Achievements.tsx
+        │       ├── Volunteering.tsx
+        │       ├── Internships.tsx
+        │       ├── Awards.tsx
+        │       ├── Languages.tsx
+        │       ├── Publications.tsx
+        │       ├── References.tsx
+        │       ├── Hobbies.tsx
+        │       └── Interests.tsx
+        ├── resumeGPT/
+        │   ├── ResumeGPTTab.tsx         AI chat interface
+        │   ├── MessageBubble.tsx        Chat message component
+        │   └── forms/                   14+ AI-powered section forms
+        ├── aiReview/
+        │   └── AIReviewTab.tsx          AI review and feedback panel
+        ├── job/
+        │   └── JobMatchTab.tsx          Job match analysis
+        ├── templateSidebar/             Template selection sidebar
+        ├── resumeSidebar/               Section navigation sidebar
+        └── templates/                  4 resume display templates
+            ├── TemplateOne.tsx
+            ├── TemplateTwo.tsx
+            ├── TemplateThree.tsx
+            └── TemplateFour.tsx
+
+API File: src/api/resumeApi.ts
+Key Functions:
+  - createResumeWithAuth()              POST /resumes/
+  - getAllResumes()                     GET  /resumes/
+  - getResumeById(resumeId)             GET  /resumes/{id}
+  - updateResume(resumeId, data)        PATCH /resumes/{id}
+  - autoSaveResume(resumeId, data)      PATCH /resumes/{id}/autosave
+  - deleteResume(resumeId)              DELETE /resumes/{id}
+  - downloadResume(resumeId, format)    GET  /resumes/{id}/download
+  - publishResume(resumeId)             POST /resumes/{id}/publish
+  - getBuilderScore(resumeId)           GET  /resumes/{id}/score
+  - triggerScoreCalculation(resumeId)   POST /resumes/{id}/calculate-score
+  - getTemplatesByCategory(category)    GET  /templates/
+  - applyTemplateToResume(id, tplId)    POST /templates/{id}/apply
+
+
+================================================================================
+3. FILE STRUCTURE — ENHANCER
+================================================================================
+
+src/app/(resume)/enhancer/
+├── page.tsx                             Suspense wrapper
+├── layout.tsx                           ResumeProvider wrapper
+└── _components/
+    ├── EnhancerPage.tsx                 Main upload + file handling UI
+    ├── ResumeContext.tsx                ENHANCER STATE (different from builder)
+    ├── ResumeTemplate.tsx               Resume preview renderer
+    ├── SectionEditorModal.tsx           Full-screen section editor modal
+    ├── ExportModal.tsx                  Export options (PDF/DOCX + template)
+    ├── TemplateSelectionModal.tsx       Template gallery modal
+    ├── AISuggestionsModal.tsx           AI improvements list
+    ├── LoadingModal.tsx                 Upload/processing progress modal
+    ├── AutoPaginator.tsx                Multi-page pagination
+    ├── section-editors/                 16 section editors (separate from builder)
+    │   ├── PersonalInfoEditor.tsx
+    │   ├── SummaryEditor.tsx
+    │   ├── ExperienceEditor.tsx
+    │   ├── EducationEditor.tsx
+    │   ├── SkillsEditor.tsx
+    │   ├── ProjectsEditor.tsx
+    │   ├── LanguagesEditor.tsx
+    │   ├── CertificatesEditor.tsx
+    │   ├── AwardsEditor.tsx
+    │   ├── AchievementsEditor.tsx
+    │   ├── InternshipsEditor.tsx
+    │   ├── VolunteeringEditor.tsx
+    │   ├── HobbiesEditor.tsx
+    │   ├── InterestsEditor.tsx
+    │   ├── PublicationsEditor.tsx
+    │   ├── ReferencesEditor.tsx
+    │   ├── RichTextEditorField.tsx
+    │   └── index.ts                     Editor export registry
+    ├── _hooks/
+    │   ├── useEnhancer.ts               Main enhancement workflow hook
+    │   └── useAISuggestions.ts          AI suggestions hook
+    ├── _utils/
+    │   ├── cleanResumeData.ts           Data cleaning utilities
+    │   └── generateAISuggestions.ts     Suggestion generation
+    └── templates/                       5 resume display templates
+        ├── TemplateOne.tsx
+        ├── TemplateTwo.tsx
+        ├── TemplateThree.tsx
+        ├── TemplateFour.tsx
+        └── TemplateFive.tsx             (EXTRA — not in Builder)
+
+└── builder/
+    └── page.tsx                         Full enhancement editor page
+
+API File: src/api/enhancerApi.ts
+Key Functions:
+  - parseResumeForEnhancer(file)         POST /parser/parse_resume/
+  - enhanceResume(request)               POST /resume/enhance
+  - getEnhancedResume(enhanced_id)       GET  /resume/enhance/{id}
+  - updateEnhancedResume(id, request)    PUT  /resume/enhance/{id}
+  - downloadEnhancedResume(id, format)   GET  /resume/enhance/{id}/download
+  - previewEnhancedResume(id)            GET  /resume/enhance/{id}/preview
+  - applyFix(request)                    POST /resume/enhance/apply
+  - getEnhancementHistory(limit)         GET  /resume/enhance/history/list
+  - deleteEnhancedResume(id)             DELETE /resume/enhance/{id}
+  - processResumeEnhancement(file, jd)   COMBINED: parse + enhance
+
+
+================================================================================
+4. STATE MANAGEMENT COMPARISON
+================================================================================
+
+BUILDER — ResumeContext
+------------------------
+Location: src/app/(resume)/builder/creation/_context/ResumeContext.tsx
+
+Data Shape:
+  resumeData = {
+    resume_id, personalInfo, professionalSummary, education[],
+    workExperience[], projects[], skills[], categorizedSkills{},
+    certifications[], achievements[], volunteering[], internships[],
+    awards[], hobbies[], interests[], languages[], publications[],
+    customSections[]      ← UNIQUE TO BUILDER
+  }
+
+Methods:
+  createResume()
+  updateResume(resumeId, data)
+  getCompletionPercentage()
+  addCustomSection / removeCustomSection
+  addCustomField / updateCustomFieldValue / deleteCustomField
+
+Storage: localStorage
+  - Key: "resumeData"         → full resume object
+  - Key: "selected_template"  → template preference
+  - Key: "current_resume_id"  → active resume ID
+  - Backup save on beforeunload event
+
+
+ENHANCER — ResumeContext
+------------------------
+Location: src/app/(resume)/enhancer/_components/ResumeContext.tsx
+
+Data Shape:
+  resumeData = flexible (mapped from parsed PDF)
+  sectionOrder: SectionName[]
+  enabledSections: SectionName[]
+  selectedTemplate: TemplateId
+  activeSection: SectionName | null
+  highlightedSection: SectionName | null
+  editedSections: Set<SectionName>   ← tracks green highlights
+  addedFields: Record<string, string[]>  ← tracks newly added fields
+  isLoaded: boolean                  ← session restore complete flag
+
+SectionName values:
+  "PersonalInfo" | "Summary" | "Experience" | "Skills" | "Education"
+  | "Projects" | "Languages" | "Certificates" | "Awards" | "Achievements"
+  | "Internships" | "Volunteering" | "Hobbies" | "Interests"
+  | "Publications" | "References"
+
+TemplateId values:
+  "default" | "apollo" | "atlas" | "terra" | "tempe"
+  | "classic_professional" | "nexus" | "pulse" | "zen" | "nova" | "flow"
+
+Storage: sessionStorage
+  - Key: "ctx_resumeData"       → resume content
+  - Key: "ctx_enabledSections"  → visible sections
+  - Key: "ctx_selectedTemplate" → chosen template
+  - Key: "enhanced_id"          → backend ID for saves
+  - Key: "ats_score"            → ATS breakdown
+  - Key: "improvements"         → AI suggestions list
+  - Key: "all_improvements"     → full suggestions history
+
+
+KEY DIFFERENCE:
+  Builder uses localStorage  → data persists across browser sessions
+  Enhancer uses sessionStorage → data lost when tab closes
+  These cannot be unified without changing data persistence strategy
+
+
+================================================================================
+5. API LAYER COMPARISON
+================================================================================
+
+BUILDER ENDPOINTS (src/api/resumeApi.ts)
+-----------------------------------------
+  POST   /resumes/                          Create new resume
+  GET    /resumes/                          List all resumes
+  GET    /resumes/{id}                      Load resume by ID
+  PATCH  /resumes/{id}                      Save full resume
+  PATCH  /resumes/{id}/autosave             Incremental auto-save
+  DELETE /resumes/{id}                      Delete resume
+  GET    /resumes/{id}/download             Export PDF/DOCX
+  POST   /resumes/{id}/publish              Publish resume
+  GET    /resumes/{id}/score                Get completion score
+  POST   /resumes/{id}/calculate-score      Trigger score calculation
+  DELETE /resumes/{id}/sections/{section}   Delete a section
+  DELETE /resumes/{id}/sections/{section}/items/{itemId}  Delete item
+
+  GET    /templates/                        List templates
+  GET    /templates/categories              List categories
+  GET    /templates/default                 Get default template
+  POST   /templates/{id}/apply             Apply template to resume
+  POST   /templates/{id}/set-default       Set user default
+
+ENHANCER ENDPOINTS (src/api/enhancerApi.ts)
+--------------------------------------------
+  POST   /parser/parse_resume/              Parse uploaded PDF/DOCX
+  POST   /resume/enhance                    AI enhance parsed resume
+  GET    /resume/enhance/{id}               Load enhanced resume
+  PUT    /resume/enhance/{id}               Save user edits
+  DELETE /resume/enhance/{id}               Delete enhanced resume
+  GET    /resume/enhance/{id}/download      Export PDF/DOCX
+  GET    /resume/enhance/{id}/preview       Preview as PDF blob
+  POST   /resume/enhance/apply              Apply specific AI suggestion
+  GET    /resume/enhance/history/list       Enhancement history list
+
+CONCLUSION:
+  Zero overlap in API endpoints.
+  Completely separate backend services.
+  Cannot share API layer without backend changes.
+
+
+================================================================================
+6. NAVIGATION FLOW COMPARISON
+================================================================================
+
+BUILDER FLOW:
+  /builder/start
+      ↓ (no resumes) → EmptyState component shown
+      ↓ (has resumes) → redirect to /builder/start/list
+  /builder/start/list
+      ↓ user clicks "New Resume" → createResumeWithAuth() API call
+      ↓ user clicks existing resume
+  /builder/creation/[resumeId]
+      ↓ back button → /builder/start/list?refresh={timestamp}
+      ↓ download → stays on same page (modal)
+      ↓ publish → stays on same page
+
+ENHANCER FLOW:
+  /enhancer
+      ↓ user drops/selects PDF or DOCX file
+      ↓ processResumeEnhancement(file) called
+          → Step 1: parseResumeForEnhancer(file) — POST /parser/parse_resume/
+          → Step 2: enhanceResume({ resume_id }) — POST /resume/enhance
+      ↓ data stored in sessionStorage
+  /enhancer/builder
+      ↓ user edits sections (modal-based)
+      ↓ updateEnhancedResume() called on each save
+      ↓ export → ExportModal opens → downloadEnhancedResume()
+      ↓ back → returns to /enhancer (loses session data)
+
+PROPOSED UNIFIED FLOW:
+  /resume  ← NEW entry page
+      ↓ user selects "Build from Scratch"
+  /builder/start  (existing flow, unchanged)
+
+      OR
+
+      ↓ user selects "Enhance Existing"
+  /enhancer  (existing flow, unchanged)
+
+
+================================================================================
+7. COMPONENT DUPLICATION AUDIT
+================================================================================
+
+SECTION EDITORS — DUPLICATED (16 editors exist in both features)
+-----------------------------------------------------------------
+  Builder location : src/app/(resume)/builder/creation/_components/editor/sections/
+  Enhancer location: src/app/(resume)/enhancer/_components/section-editors/
+
+  Duplicated editors:
+    PersonalInfo / PersonalInfoEditor
+    ProfessionalSummary / SummaryEditor
+    WorkExperience / ExperienceEditor
+    Education / EducationEditor
+    Skills / SkillsEditor
+    Projects / ProjectsEditor
+    Languages / LanguagesEditor
+    Certifications / CertificatesEditor
+    Awards / AwardsEditor
+    Achievements / AchievementsEditor
+    Internships / InternshipsEditor
+    Volunteering / VolunteeringEditor
+    Hobbies / HobbiesEditor
+    Interests / InterestsEditor
+    Publications / PublicationsEditor
+    References / ReferencesEditor
+
+  NOTE: Field names differ between versions (e.g. "summary" vs "professionalSummary")
+  NOTE: Editor UI style differs (Builder: inline form, Enhancer: modal with rich text)
+  NOTE: Merging these 16 editors would require touching 32 files minimum
+
+TEMPLATES — PARTIALLY DUPLICATED
+----------------------------------
+  Builder : TemplateOne, TemplateTwo, TemplateThree, TemplateFour
+  Enhancer: TemplateOne, TemplateTwo, TemplateThree, TemplateFour, TemplateFive
+
+  Builder is MISSING TemplateFive
+  Template rendering logic may differ between versions
+  Template IDs differ (Builder uses numbers, Enhancer uses names like "apollo")
+
+PREVIEW/DOWNLOAD — DUPLICATED LOGIC
+-------------------------------------
+  Builder : PreviewPanel.tsx with zoom, multi-page, download button
+  Enhancer: ResumeTemplate.tsx + ExportModal.tsx + AutoPaginator.tsx
+  Both handle A4 preview but with completely different implementations
+
+
+================================================================================
+8. PROPOSED USER FLOW (CHOOSE YOUR PATH)
+================================================================================
+
+SCREEN DESIGN:
+--------------
+  User arrives at /resume (new unified page)
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                  Create Your Resume                      │
+  │                                                          │
+  │   ┌─────────────────────┐  ┌─────────────────────────┐  │
+  │   │                     │  │                         │  │
+  │   │   Build from        │  │   Enhance Existing      │  │
+  │   │   Scratch           │  │   Resume                │  │
+  │   │                     │  │                         │  │
+  │   │   Start fresh with  │  │   Upload your PDF or    │  │
+  │   │   guided forms and  │  │   DOCX and improve it   │  │
+  │   │   AI assistance     │  │   with AI analysis      │  │
+  │   │                     │  │                         │  │
+  │   │   [Get Started →]   │  │   [Upload Resume →]     │  │
+  │   └─────────────────────┘  └─────────────────────────┘  │
+  └─────────────────────────────────────────────────────────┘
+
+  Clicking "Build from Scratch"  → navigate to /builder/start
+  Clicking "Enhance Existing"    → navigate to /enhancer
+
+NOTE: Both flows remain completely independent after selection.
+NOTE: No shared state, no shared context, no data crossover.
+NOTE: User sees only ONE path at a time after selection.
+
+
+================================================================================
+9. COMPLEXITY ANALYSIS
+================================================================================
+
+TASK 1: Create unified entry page (/resume)
+  Complexity  : VERY LOW
+  Risk        : ZERO
+  Files       : 1 new file created
+  Effort      : 2-3 hours
+  Description : New page.tsx with two clickable cards. No existing code changed.
+
+TASK 2: Update sidebar navigation
+  Complexity  : LOW
+  Risk        : LOW
+  Files       : src/components/layout/Sidebar.tsx
+  Effort      : 30 minutes
+  Description : Replace 2 separate menu items with 1 "Resume" link to /resume
+
+TASK 3: Redirect old routes (keep backward compatibility)
+  Complexity  : LOW
+  Risk        : LOW
+  Files       : next.config.ts (add redirects)
+  Effort      : 30 minutes
+  Description : /builder → /resume, but keep /builder/start working
+
+TASK 4: Merge section editors (eliminate duplication)
+  Complexity  : VERY HIGH
+  Risk        : HIGH
+  Files       : 32+ files across builder and enhancer
+  Effort      : 1-2 weeks
+  Description : Field names differ, UI patterns differ, context shapes differ.
+                Would break both features if done carelessly.
+
+TASK 5: Merge ResumeContext files
+  Complexity  : VERY HIGH
+  Risk        : CRITICAL
+  Files       : 2 context files + all consuming components
+  Effort      : 2-3 weeks
+  Description : Completely different state shapes, storage strategies, methods.
+                Builder uses localStorage, Enhancer uses sessionStorage.
+                Merging without rewriting both features is nearly impossible.
+
+TASK 6: Merge template components
+  Complexity  : MEDIUM
+  Risk        : MEDIUM
+  Files       : 8-10 template files + all import references
+  Effort      : 3-5 days
+  Description : Template IDs are different naming systems.
+                Builder missing TemplateFive.
+                Rendering logic slightly different.
+
+TASK 7: Unified "My Resumes" history page
+  Complexity  : MEDIUM
+  Risk        : LOW
+  Files       : 1 new page + 2 API calls
+  Effort      : 1-2 days
+  Description : Fetch from both getAllResumes() and getEnhancementHistory()
+                Show both in single list with type badge (Built / Enhanced)
+
+
+================================================================================
+10. RISK BREAKDOWN
+================================================================================
+
+RISK 1: Breaking existing builder navigation
+  Likelihood: LOW (if we only add new entry page)
+  Impact    : HIGH (users can't create resumes)
+  Mitigation: Keep /builder/start route working. New /resume page just adds entry point.
+
+RISK 2: SessionStorage data loss in enhancer
+  Likelihood: ALREADY EXISTS (not caused by merge)
+  Impact    : MEDIUM (user loses work if tab closes)
+  Mitigation: Not related to the merge task. Separate issue.
+
+RISK 3: Context conflicts if merging ResumeContext
+  Likelihood: HIGH (if attempted)
+  Impact    : CRITICAL (both builder and enhancer break)
+  Mitigation: DO NOT merge contexts. Keep them completely separate.
+
+RISK 4: Template ID mismatch
+  Likelihood: HIGH (if templates are merged)
+  Impact    : MEDIUM (wrong templates shown)
+  Mitigation: Defer template unification. Keep separate for now.
+
+RISK 5: TypeScript errors from section editor merge
+  Likelihood: HIGH (if editors are merged)
+  Impact    : HIGH (build fails, forms break)
+  Mitigation: Defer editor consolidation. Out of scope for now.
+
+RISK 6: Sidebar navigation confusion
+  Likelihood: LOW
+  Impact    : LOW
+  Mitigation: Clear labeling on unified entry page.
+
+
+================================================================================
+11. RECOMMENDED IMPLEMENTATION PLAN
+================================================================================
+
+PHASE 1 — IMMEDIATE (Safe, Zero Risk) — Estimated: 1 day
+----------------------------------------------------------
+  Step 1: Create src/app/(resume)/resume/page.tsx
+          - Two-card selection UI
+          - "Build from Scratch" card → link to /builder/start
+          - "Enhance Existing" card → link to /enhancer
+          - Clean, minimal design matching app style
+
+  Step 2: Update Sidebar.tsx
+          - Remove separate "Resume Builder" and "Resume Enhancer" menu items
+          - Add single "Resume" menu item → /resume
+
+  Step 3: Optional — add redirect in next.config.ts
+          - /resume-builder → /resume (for any old bookmarks)
+
+  RESULT: Unified entry point. Both features work exactly as before.
+          Zero code changes to builder or enhancer internals.
+
+
+PHASE 2 — SHORT TERM (Low Risk) — Estimated: 2-3 days
+-------------------------------------------------------
+  Step 1: Create unified "My Resumes" page
+          - Fetch from getAllResumes() + getEnhancementHistory()
+          - Show combined list with type badges
+          - Allow continue editing either type
+
+  Step 2: Add "Back to Resume" breadcrumb in both builder and enhancer
+          - Back button points to /resume instead of separate locations
+
+
+PHASE 3 — LONG TERM (Only if product requires it) — Estimated: 3-4 weeks
+--------------------------------------------------------------------------
+  Step 1: Shared template library
+          - Extract templates to src/components/resume/templates/
+          - Unify template IDs
+          - Both builder and enhancer import from shared location
+
+  Step 2: Shared section editors
+          - Extract editors to src/components/resume/section-editors/
+          - Normalize field names between builder and enhancer data shapes
+          - Test exhaustively on both flows
+
+  Step 3: Unified ResumeContext
+          - Design new context with mode flag: 'builder' | 'enhancer'
+          - Migrate both features to new context
+          - ONLY do this after Phase 3 Steps 1 and 2 are stable
+
+
+================================================================================
+12. FILES TO CREATE / MODIFY
+================================================================================
+
+PHASE 1 FILES:
+
+  CREATE:
+    src/app/(resume)/resume/page.tsx          ← New unified entry page
+
+  MODIFY:
+    src/components/layout/Sidebar.tsx         ← Update navigation links
+
+  OPTIONAL MODIFY:
+    next.config.ts                            ← Add redirect rules
+
+
+PHASE 2 FILES:
+
+  CREATE:
+    src/app/(resume)/resume/list/page.tsx     ← Combined resume history page
+
+  MODIFY:
+    src/app/(resume)/builder/creation/_components/Header.tsx  ← Back button URL
+    src/app/(resume)/enhancer/builder/page.tsx  ← Back button URL
+
+
+PHASE 3 FILES (future):
+  src/components/resume/templates/            ← Shared template directory
+  src/components/resume/section-editors/     ← Shared editors directory
+  src/app/(resume)/resume/_context/ResumeContext.tsx  ← Unified context
+
+
+================================================================================
+13. FINAL VERDICT
+================================================================================
+
+QUESTION: Can we combine Resume Builder and Resume Enhancer?
+ANSWER  : YES — at the user experience level (entry point unification)
+          NO  — at the code/architecture level (too risky to merge internals)
+
+QUESTION: Is the "Choose Your Path" screen the right approach?
+ANSWER  : YES — it is the cleanest, safest, and fastest solution
+
+QUESTION: What is the minimum work needed to achieve this?
+ANSWER  : 1 new file (entry page) + 1 file edit (sidebar)
+          Estimated: 3-4 hours of work
+
+QUESTION: What should we NEVER do (too risky)?
+ANSWER  : - Merging the two ResumeContext.tsx files
+          - Merging section editors across builder and enhancer
+          - Changing storage strategy (localStorage vs sessionStorage)
+          - Removing /builder or /enhancer routes
+
+QUESTION: Will there be duplicate code after Phase 1?
+ANSWER  : YES — section editors and templates remain duplicated
+          This is acceptable technical debt.
+          The features work correctly and are stable.
+          Deduplication is a separate, future task.
+
+RECOMMENDED IMMEDIATE ACTION:
+  Implement Phase 1 only.
+  Create /resume entry page with two-path selection.
+  Update sidebar navigation.
+  Ship it. Both features continue working independently.
+
+================================================================================
+END OF REPORT
+================================================================================

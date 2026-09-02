@@ -7,7 +7,7 @@ interface LoggerConfig {
 }
 
 const config: LoggerConfig = {
-  enabledInProduction: false,
+  enabledInProduction: true, // Enable logs in production for Docker visibility
   prefix: '[CareerBOT]',
 };
 
@@ -18,43 +18,60 @@ function shouldLog(): boolean {
 }
 
 export const logger = {
-  debug: (message: string, ...args: unknown[]) => {
+  debug: (_message: string, ..._args: unknown[]) => {
     if (shouldLog()) {
-      // // console.log(`${config.prefix} [DEBUG]`, message, ...args);
+      console.log(`${config.prefix} [DEBUG]`, _message, ..._args);
     }
+    void _message;
+    void _args;
   },
 
-  info: (message: string, ...args: unknown[]) => {
+  info: (_message: string, ..._args: unknown[]) => {
     if (shouldLog()) {
-      // // console.log(`${config.prefix} [INFO]`, message, ...args);
+      console.log(`${config.prefix} [INFO]`, _message, ..._args);
     }
+    void _message;
+    void _args;
   },
 
-  warn: (message: string, ...args: unknown[]) => {
+  warn: (_message: string, ..._args: unknown[]) => {
     if (shouldLog()) {
-      // // console.warn(`${config.prefix} [WARN]`, message, ...args);
+      console.warn(`${config.prefix} [WARN]`, _message, ..._args);
     }
+    void _message;
+    void _args;
   },
 
-  error: (message: string, ...args: unknown[]) => {
+  error: (_message: string, ..._args: unknown[]) => {
     // Always log errors
-    // // console.error(`${config.prefix} [ERROR]`, message, ...args);
+    console.error(`${config.prefix} [ERROR]`, _message, ..._args);
+    void _message;
+    void _args;
   },
 
   // API-specific logging (disabled in production)
   api: {
-    request: (method: string, url: string, data?: unknown) => {
+    request: (_method: string, _url: string, _data?: unknown) => {
       if (shouldLog()) {
-        // // console.log(`${config.prefix} [API] ${method} ${url}`, data ?? '');
+        console.log(`${config.prefix} [API] ${_method} ${_url}`, _data ?? '');
       }
+      void _method;
+      void _url;
+      void _data;
     },
-    response: (method: string, url: string, status: number) => {
+    response: (_method: string, _url: string, _status: number) => {
       if (shouldLog()) {
-        // // console.log(`${config.prefix} [API] ${method} ${url} -> ${status}`);
+        console.log(`${config.prefix} [API] ${_method} ${_url} -> ${_status}`);
       }
+      void _method;
+      void _url;
+      void _status;
     },
-    error: (method: string, url: string, error: unknown) => {
-      // // console.error(`${config.prefix} [API ERROR] ${method} ${url}`, error);
+    error: (_method: string, _url: string, _error: unknown) => {
+      console.error(`${config.prefix} [API ERROR] ${_method} ${_url}`, _error);
+      void _method;
+      void _url;
+      void _error;
     },
   },
 };

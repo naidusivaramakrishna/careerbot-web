@@ -1,4 +1,3 @@
-// page.tsx
 "use client";
 import ATSLoginPage from "./_components/ATSLoginPage";
 

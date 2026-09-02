@@ -36,7 +36,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          // // console.error("Failed to add skill:", err);
+          console.error("Failed to add skill:", err);
           setMatchedCritical((p) => ({ ...p, [skill]: false }));
           // Remove from tracking if API failed
           setAddedCritical((prev) => prev.filter((s) => s !== skill));
@@ -56,7 +56,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
             setAddedCritical((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            // // console.error("Failed to remove skill:", err);
+            console.error("Failed to remove skill:", err);
           });
       } else {
         // Fallback: just update local state if no API handler
@@ -81,7 +81,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          // // console.error("Failed to add skill:", err);
+          console.error("Failed to add skill:", err);
           setMatchedImportant((p) => ({ ...p, [skill]: false }));
           setAddedImportant((prev) => prev.filter((s) => s !== skill));
         });
@@ -99,7 +99,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
             setAddedImportant((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            // // console.error("Failed to remove skill:", err);
+            console.error("Failed to remove skill:", err);
           });
       } else {
         setMatchedImportant((prev) => ({ ...prev, [skill]: false }));
@@ -123,7 +123,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          // // console.error("Failed to add skill:", err);
+          console.error("Failed to add skill:", err);
           setMatchedNice((p) => ({ ...p, [skill]: false }));
           setAddedNice((prev) => prev.filter((s) => s !== skill));
         });
@@ -141,7 +141,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
             setAddedNice((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            // // console.error("Failed to remove skill:", err);
+            console.error("Failed to remove skill:", err);
           });
       } else {
         setMatchedNice((prev) => ({ ...prev, [skill]: false }));
@@ -178,29 +178,25 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
   const totalSkills = mergedCritical.length + mergedImportant.length + mergedNice.length;
 
   return (
-    <div className={`bg-white rounded-2xl p-6 border border-slate-200 space-y-4 ${className}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-10 bg-orange-400 rounded-full"></div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">Missing Technical Skills</h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Click to add skills • Click ✕ to remove
-            </p>
-          </div>
+    <div className={`bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4 ${className}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-base font-bold text-gray-900">Technical Skills</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Click to add · ✕ to remove</p>
         </div>
-        <div className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200">
-          <span className="text-sm font-bold text-slate-700">
+        <div className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100">
+          <span className="text-xs font-bold text-blue-700">
             {totalSelected} / {totalSkills} added
           </span>
         </div>
       </div>
 
-      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+      <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
         {mergedCritical.length > 0 && (
-          <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+          <div className="bg-red-50 rounded-xl p-4 border border-red-100 hover:shadow-sm transition-all duration-200">
             <ListSection
               title="🔴 Critical Skills"
+              titleColor="text-red-600"
               items={mergedCritical}
               matchedMap={matchedCritical}
               onToggle={toggleCritical}
@@ -210,9 +206,10 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
         )}
 
         {mergedImportant.length > 0 && (
-          <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-100 hover:shadow-sm transition-all duration-200">
             <ListSection
               title="🟡 Important Skills"
+              titleColor="text-amber-600"
               items={mergedImportant}
               matchedMap={matchedImportant}
               onToggle={toggleImportant}
@@ -222,9 +219,10 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
         )}
 
         {mergedNice.length > 0 && (
-          <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-200">
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 hover:shadow-sm transition-all duration-200">
             <ListSection
               title="🔵 Nice to Have"
+              titleColor="text-blue-600"
               items={mergedNice}
               matchedMap={matchedNice}
               onToggle={toggleNice}

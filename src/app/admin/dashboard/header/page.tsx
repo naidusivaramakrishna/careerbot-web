@@ -1,9 +1,8 @@
 "use client";
 import { getCurrentAdmin } from '@/api/adminAuthApi';
-import { Bell } from 'lucide-react'
-import Image from 'next/image'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { logger } from '@/lib/logger'
+import { formatRoleName } from '@/app/admin/_utils/permissions'
 
 interface AdminInfo {
   id: string;
@@ -23,23 +22,8 @@ const AdminHeader = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Format role for display
-  const formatRole = (role: string) => {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Administrator';
-      case 'admin':
-        return 'Administrator';
-      case 'moderator':
-        return 'Moderator';
-      case 'support':
-        return 'Support';
-      default:
-        return role;
-    }
-  };
   // Fetch current admin details from API
-  const fetchAdminDetails = async () => {
+  const fetchAdminDetails = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -48,7 +32,7 @@ const AdminHeader = () => {
       setAdminInfo({
         id: details.id,
         name: details.full_name || details.username || 'Admin',
-        role: formatRole(details.role),
+        role: formatRoleName(details.role),
         email: details.email,
         status: details.status
       });
@@ -69,7 +53,7 @@ const AdminHeader = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAdminDetails();
@@ -85,17 +69,7 @@ const AdminHeader = () => {
     return () => {
       window.removeEventListener('adminTokenUpdated', handleTokenUpdate);
     };
-  }, []);
-
-  // Get initials for avatar fallback
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  }, [fetchAdminDetails]);
 
   return (
     <div className='border-b py-2 border-[#E5E7EB]'>

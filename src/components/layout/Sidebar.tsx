@@ -1,334 +1,564 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { FaUser, FaRegUser, FaCog } from "react-icons/fa";
-import { RiFileEditFill, RiFileEditLine } from "react-icons/ri";
-import Image from "next/image";
-import { Wand2, LogOut, MessageSquare } from "lucide-react";
-import { FaArrowRightArrowLeft } from "react-icons/fa6";
-import { MdOutlineWork } from "react-icons/md";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { getProfile, getProfilePicture, UserProfile } from "@/api/userApi";
-import { signOut } from "@/api/authApi";
-import { toast } from "sonner";
-import axios from "axios";
+import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
+import { getEnhancementHistory } from "@/api/enhancerApi";
+import { useDashboard } from "@/contexts/DashboardContext";
+import { useHasCollegeMembership } from "@/hooks/useCollegeMembership";
+import {
+  EnterpriseApplicationTrackerIcon as IcoTracker,
+  EnterpriseAtsScanIcon as IcoAtsScan,
+  EnterpriseChevronRightIcon as IcoChevronRight,
+  EnterpriseCommunicationIcon as IcoCommunication,
+  EnterpriseCoverLetterIcon as IcoCoverLetter,
+  EnterpriseDashboardIcon as IcoDashboard,
+  EnterpriseInterviewPrepIcon as IcoInterview,
+  EnterpriseJobMatchIcon as IcoJobMatch,
+  EnterpriseJobsIcon as IcoJobs,
+  EnterpriseNotesIcon as IcoNotes,
+  EnterpriseProfileIcon as IcoProfile,
+  EnterpriseResumeIcon as IcoResume,
+  type EnterpriseNavIcon,
+} from "@/components/icons/EnterpriseNavIcons";
+/* NAV CONFIG */
+type NavIcon = EnterpriseNavIcon | ((props: IP) => React.ReactElement);
 
-const navItems = [
-  { id: "profile", icon: "profile_icon", label: "Profile", path: "/dashboard/profile" },
-  { id: "resume", icon: "resume_icon", label: "Resume", path: "/builder" },
+type SubNavItem = { id: string; label: string; path: string };
 
-  // ATS Login Page (Updated)
+/* ══════════════════════════════════════════════════════════════
+   CUSTOM ICON (Coding Practice — not in EnterpriseNavIcons set)
+══════════════════════════════════════════════════════════════ */
+type IP = { size?: number; className?: string; sw?: number };
+
+/** Mock Test — clipboard checklist */
+const IcoMockTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="4" y="3" width="12" height="15" rx="1.5" stroke="currentColor" strokeWidth={sw} />
+    <path d="M7.5 3.5V2.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1" stroke="currentColor" strokeWidth={sw} />
+    <path d="M7 8h6M7 11.5h6M7 15h3.5" stroke="currentColor" strokeWidth={sw * 0.85} />
+  </svg>
+);
+
+/** My College — a building with a flag, distinct from the job-search icons */
+const IcoCollege = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M2.5 17.5h15" stroke="currentColor" strokeWidth={sw} />
+    <path d="M4 17.5V8.5L10 5.5l6 3v9" stroke="currentColor" strokeWidth={sw} />
+    <path d="M10 5.5V2.5l3 1-3 1" stroke="currentColor" strokeWidth={sw * 0.9} />
+    <path d="M8 17.5v-4h4v4" stroke="currentColor" strokeWidth={sw * 0.9} />
+  </svg>
+);
+
+/** Coding Practice — terminal bracket + prompt cursor */
+const IcoCodingTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Screen body */}
+    <rect x="1.5" y="3" width="17" height="12.5" rx="1.5"
+      stroke="currentColor" strokeWidth={sw} />
+    {/* Chevron left — </ bracket */}
+    <path d="M6 8.5L4 10L6 11.5" stroke="currentColor" strokeWidth={sw * 0.9} />
+    {/* Chevron right — /> bracket */}
+    <path d="M9 8.5L11 10L9 11.5" stroke="currentColor" strokeWidth={sw * 0.9} />
+    {/* Cursor blink underscore */}
+    <path d="M12.5 11.5H14.5" stroke="currentColor" strokeWidth={sw * 0.9} />
+    {/* Stand stem */}
+    <path d="M10 15.5V17.5" stroke="currentColor" strokeWidth={sw} />
+    {/* Base */}
+    <path d="M7 17.5H13" stroke="currentColor" strokeWidth={sw} />
+  </svg>
+);
+
+/* ══════════════════════════════════════════════════════════════
+   NAV CONFIG
+══════════════════════════════════════════════════════════════ */
+
+const NAV_GROUPS: {
+  label: string;
+  items: {
+    id: string;
+    label: string;
+    icon: NavIcon;
+    path: string;
+    smartNav?: boolean;
+    showBadge?: boolean;
+    flag?: string;
+    subItems?: SubNavItem[];
+  }[];
+}[] = [
   {
-    id: "ats",
-    icon: "ats_scan",
-    label: "ATS Scan",
-    path: "/atslogin",
+    label: "MAIN",
+    items: [
+      { id: "dashboard", label: "Dashboard",    icon: IcoDashboard, path: "/dashboard" },
+      { id: "profile",   label: "Profile",      icon: IcoProfile,   path: "/profile", showBadge: true },
+    ],
   },
-
-  // Enhancer
   {
-    id: "enhancer",
-    icon: <Wand2 size={24} />,
-    label: "Enhancer",
-    path: "/enhancer",
+    label: "BUILD",
+    items: [
+      { id: "resume", label: "Resume",   icon: IcoResume,  path: "/builder", smartNav: true },
+      { id: "ats",    label: "ATS Scan", icon: IcoAtsScan, path: "/atslogin" },
+    ],
   },
-
-  { id: "jd_match", icon: <FaArrowRightArrowLeft size={24} />, label: "Job Match", path: "/jobmatch" },
-  { id: "jobs", icon: <MdOutlineWork size={24} />, label: "Jobs", path: "/jobs" },
   {
-    id: "communication",
-    icon: <MessageSquare size={24} />,
-    label: "Comm.",
-    path: "/communication"
+    label: "CAREER",
+    items: [
+      { id: "jd_match", label: "Job Match",          icon: IcoJobMatch, path: "/jobmatch/app" },
+      { id: "jobs",     label: "Jobs",               icon: IcoJobs,     path: "/jobslogin" },
+      { id: "tracker",  label: "Track Applications", icon: IcoTracker,  path: "/tracker" },
+    ],
+  },
+  // GENERATE - AI-driven artifact generators (top-level peer to RESUME
+  // and CAREER per the cover-letter wireframes route-group decision,
+  // 2026-05-25). Items are conditionally pruned below by NEXT_PUBLIC_*
+  // flags so disabled features don't even appear in nav.
+  {
+    label: "GENERATE",
+    items: [
+      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history" },
+      { id: "interview_notes", label: "Interview Notes", icon: IcoNotes, path: "/notes/generate" },
+    ],
+  },
+  {
+    label: "PREPARE",
+    items: [
+      { id: "mock_interview", label: "Mock Interview",  icon: IcoInterview, path: "/mock-interview/live" },
+      { id: "comm_assess",   label: "Communication",   icon: IcoCommunication, path: "/communication/start" },
+      { id: "mock_test",     label: "Mock Test",       icon: IcoMockTest,  path: "/mock-test" },
+      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test" },
+    ],
   },
 ];
 
-export default function Sidebar() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [active, setActive] = useState("profile");
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+const VISIBLE_NAV_GROUPS = NAV_GROUPS;
 
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+// The college area is NOT in NAV_GROUPS. That list is computed once at module
+// scope from build-time flags, and college membership is a per-USER fact
+// resolved at runtime -- putting it there would show every jobseeker a link
+// that refuses them the moment they follow it.
+// Typed as one of NAV_GROUPS' own elements rather than `as const`: the render
+// loop reads `item.subItems`, and a narrower literal type drops that property
+// from the union and fails the build.
+const COLLEGE_NAV_GROUP: (typeof NAV_GROUPS)[number] = {
+  label: "COLLEGE",
+  items: [
+    { id: "institution", label: "My College", icon: IcoCollege, path: "/institution" },
+  ],
+};
 
-  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/notes"];
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
+/* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
+   cursor can cross the gap between icon and panel without it disappearing. */
+function CollapsedSubItem({
+  item,
+  isActive,
+  pathname,
+  onNavigate,
+}: {
+  item: { id: string; label: string; icon: React.ElementType; subItems?: { id: string; label: string; path: string }[] };
+  isActive: boolean;
+  pathname: string;
+  onNavigate: (path: string) => void;
+}) {
+  const Icon = item.icon as React.ElementType<{ size?: number; sw?: number; className?: string }>;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null);
 
-  // Detect current page with better path matching
-  useEffect(() => {
-    const current = navItems.find((item) => {
-      // Handle root path separately
-      if (item.path === "/" && pathname !== item.path) {
-        return false;
-      }
-      // Check if current pathname starts with the item path
-      return pathname.startsWith(item.path);
-    });
-
-    if (current) setActive(current.id);
-    else if (pathname === "/settings") setActive("settings");
-  }, [pathname]);
-
-  // Outside click: close profile dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowProfileDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+  const open = useCallback(() => {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+    if (!wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    setPopPos({ top: r.top - 48, left: r.right + 4 });
   }, []);
 
-  // Fetch profile
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const profile = await getProfile();
-        setUserProfile(profile);
-        // Fetch profile picture
-        const picRes = await getProfilePicture();
-        if (picRes?.picture_url) {
-          const fullUrl = picRes.picture_url.startsWith("http")
-            ? picRes.picture_url
-            : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${picRes.picture_url}`;
-          setProfilePicUrl(fullUrl);
-        }
-      } catch (error: any) {
-        if (axios.isAxiosError(error)) {
-          if ([401, 403].includes(error.response?.status ?? 0)) {
-            // ✅ Backend clears httpOnly cookies automatically
-            // ❌ No manual localStorage cleanup needed
-            toast.error("Session expired. Please login again.");
-            // router.push("/signup");
-          } else {
-            // toast.error("Failed to load profile image.");
-          }
-        }
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
-
-    fetchProfile();
-
-    const handleTokenUpdate = () => {
-      fetchProfile();
-    };
-
-    // Listen for profile picture updates from MainSection
-    const handleProfilePictureUpdate = (event: CustomEvent) => {
-      const newPicUrl = event.detail?.profilePicUrl;
-      if (newPicUrl !== undefined) {
-        setProfilePicUrl(newPicUrl);
-      }
-    };
-
-    window.addEventListener('tokenUpdated', handleTokenUpdate);
-    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener);
-
-    return () => {
-      window.removeEventListener('tokenUpdated', handleTokenUpdate);
-      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener);
-    };
-  }, [router]);
-
-  const handleNavigation = (path: string, id: string) => {
-    setActive(id);
-
-    if (id === "resume") router.push("/builder/start");
-    else router.push(path);
-  };
-
-  const handleLogout = async () => {
-    if (isLoggingOut) return;
-
-    setIsLoggingOut(true);
-    setShowProfileDropdown(false);
-
-    try {
-      await signOut();
-
-      // Clear state
-      setUserProfile(null);
-      toast.success("Logged out successfully");
-      // Note: signOut() already redirects to "/"
-    } catch {
-      toast.error("Logout failed.");
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
-  // Dynamic icon renderer with hover support
-  const renderIcon = (item: typeof navItems[0]) => {
-    const isActive = active === item.id;
-    const isHovered = hoveredItem === item.id;
-
-    // Profile icon - filled when active, outline when inactive
-    if (item.icon === "profile_icon") {
-      return isActive || isHovered ? (
-        <FaUser size={24} />
-      ) : (
-        <FaRegUser size={24} />
-      );
-    }
-
-    // Resume icon - filled when active, outline when inactive
-    if (item.icon === "resume_icon") {
-      return isActive || isHovered ? (
-        <RiFileEditFill size={24} />
-      ) : (
-        <RiFileEditLine size={24} />
-      );
-    }
-
-    // ATS icon
-    if (item.icon === "ats_scan") {
-      return (
-        <Image
-          src={
-            isActive
-              ? "/assets/icons/ATS_Scan_Selected.svg"
-              : "/assets/icons/ATS_Scan.svg"
-          }
-          alt="ATS Icon"
-          width={22}
-          height={22}
-          className={
-            isActive || isHovered
-              ? "brightness-0 saturate-100 transition-all duration-200"
-              : "transition-all duration-200"
-          }
-          style={
-            isActive || isHovered
-              ? {
-                filter:
-                  "invert(26%) sepia(88%) saturate(1567%) hue-rotate(197deg) brightness(91%) contrast(91%)",
-              }
-              : {}
-          }
-        />
-      );
-    }
-
-    return item.icon;
-  };
-
-  const displayName = userProfile?.full_name || userProfile?.username || "User";
-  const displayEmail = userProfile?.email || "No email";
-  const displayInitial = displayName?.[0]?.toUpperCase() || "U";
+  const close = useCallback(() => {
+    closeTimer.current = setTimeout(() => setPopPos(null), 150);
+  }, []);
 
   return (
-    <div className="fixed top-0 left-0 bottom-0 w-20 bg-white flex flex-col items-center z-50 shadow-sm">
-
-      {/* Logo */}
-      <div className="py-4">
-        <Image
-          src="/assets/icons/image.svg"
-          alt="Logo"
-          width={55}
-          height={55}
-          priority
-        />
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex flex-col items-center gap-1 w-full px-2">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => handleNavigation(item.path, item.id)}
-            onMouseEnter={() => setHoveredItem(item.id)}
-            onMouseLeave={() => setHoveredItem(null)}
-            className={`flex flex-col items-center justify-center py-2  w-full rounded-lg transition-all ${active === item.id
-                ? "bg-[#e8eff9] text-[#2557a7]"
-                : "text-gray-600 hover:text-[#2557a7] hover:bg-gray-50"
-              }`}
-          >
-            <div>
-              {renderIcon(item)}
-            </div>
-            <span
-              className={`text-[10px] font-medium transition-colors duration-200 ${active === item.id || hoveredItem === item.id
-                  ? "text-[#2557a7]"
-                  : "text-gray-800"
-                }`}
-            >
-              {item.label}
-            </span>
-          </button>
-        ))}
-      </nav>
-
-      {/* Settings + Profile */}
-      <div className="mt-auto flex flex-col items-center gap-2 pb-4 w-full px-1">
-
-        {/* Settings */}
-        <button
-          onClick={() => handleNavigation("/settings", "settings")}
-          onMouseEnter={() => setHoveredItem("settings")}
-          onMouseLeave={() => setHoveredItem(null)}
-          className={`flex flex-col items-center justify-center gap-1 py-3 px-2 w-full rounded-lg transition-all ${active === "settings"
-              ? "bg-[#e8eff9] text-[#2557a7]"
-              : "text-gray-600 hover:text-[#2557a7] hover:bg-gray-50"
-            }`}
+    <div
+      ref={wrapRef}
+      className="w-full flex items-center justify-center py-px"
+      onMouseEnter={open}
+      onMouseLeave={close}
+    >
+      <button
+        aria-label={item.label}
+        className="group/icon"
+        onClick={() => popPos ? setPopPos(null) : open()}
+      >
+        <div
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+            isActive ? "" : "group-hover/icon:bg-gray-100"
+          }`}
+          style={isActive ? { background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
         >
-          <FaCog size={24} />
-          <span
-            className={`text-[10px] font-medium transition-colors duration-200 ${active === "settings" || hoveredItem === "settings"
-                ? "text-[#2557a7]"
-                : "text-gray-800"
-              }`}
-          >
-            Settings
-          </span>
-        </button>
-
-        {/* Profile */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-blue-400 to-purple-500 rounded-full hover:opacity-90 transition"
-          >
-            {isLoadingProfile ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : profilePicUrl ? (
-              <Image
-                src={profilePicUrl}
-                alt="Profile"
-                width={48}
-                height={48}
-                className="object-cover w-full h-full cursor-pointer rounded-full"
-              />
-            ) : (
-                <span className="text-white font-bold text-sm">{displayInitial}</span>
-              )}
-          </button>
-
-          {showProfileDropdown && (
-            <div className="absolute bottom-full left-0 mb-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
-                <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
-              </div>
-
-              <button
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="text-xs">{isLoggingOut ? "Logging out..." : "Logout"}</span>
-              </button>
-            </div>
-          )}
+          <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover/icon:text-[#2557a7]"}`} />
         </div>
-      </div>
+      </button>
+
+      {popPos && (
+        <div
+          style={{ position: "fixed", top: popPos.top, left: popPos.left, zIndex: 9999 }}
+          onMouseEnter={open}
+          onMouseLeave={close}
+        >
+          <div className="bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden py-1.5 min-w-[180px]">
+            <p className="px-3 pt-0.5 pb-1.5 text-[9px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50">
+              {item.label}
+            </p>
+            {item.subItems!.map((sub) => {
+              const subActive = pathname === sub.path || pathname.startsWith(sub.path + "/");
+              return (
+                <button
+                  key={sub.id}
+                  onClick={() => { setPopPos(null); onNavigate(sub.path); }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium transition-colors ${
+                    subActive ? "text-[#2557a7] bg-[#2557a7]/5" : "text-gray-600 hover:bg-gray-50 hover:text-[#2557a7]"
+                  }`}
+                >
+                  <span className="w-1 h-1 rounded-full shrink-0" style={{ background: subActive ? "#2557a7" : "#d1d5db" }} />
+                  {sub.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+/* SIDEBAR COMPONENT */
+export default function Sidebar() {
+  const router   = useRouter();
+  const pathname = usePathname();
+
+  const [isExpanded, setIsExpanded] = useState(
+    EXPANDED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
+  );
+
+  useEffect(() => {
+    setIsExpanded(
+      EXPANDED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
+    );
+  }, [pathname]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-width",
+      isExpanded ? "200px" : "64px"
+    );
+  }, [isExpanded]);
+
+  const handleToggle = () => setIsExpanded((v) => !v);
+
+  useEffect(() => {
+    window.addEventListener("toggle-sidebar", handleToggle);
+    return () => window.removeEventListener("toggle-sidebar", handleToggle);
+  }, []);
+
+  const { data: dashboardData } = useDashboard();
+  const profileCompleteness = dashboardData?.profile.completeness ?? 0;
+
+  // Appended, not interleaved: a college user is still a jobseeker, so their
+  // own tools stay where they have always been and the college is one more
+  // place they can go.
+  const hasCollege = useHasCollegeMembership();
+  const navGroups = useMemo(
+    () => (hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS),
+    [hasCollege],
+  );
+
+  const getActiveId = () => {
+    for (const group of navGroups) {
+      for (const item of group.items) {
+        if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
+          return item.id;
+        }
+        if (item.path && (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path)))) {
+          return item.id;
+        }
+      }
+    }
+    if (pathname.startsWith("/notes"))                                          return "interview_notes";
+    if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
+    if (pathname.startsWith("/communication"))                                  return "comm_assess";
+    if (pathname.startsWith("/mock-test"))                                      return "mock_test";
+    if (pathname.startsWith("/settings"))                                       return "settings";
+    if (pathname.startsWith("/account/subscriptions"))  return "subscription";
+    if (pathname.startsWith("/settings/billing"))       return "billing_history";
+    return "";
+  };
+  const activeId = getActiveId();
+
+  // Track the last resume-related page the user visited so the resume icon restores it exactly
+  useEffect(() => {
+    if (pathname.startsWith('/builder/creation/')) {
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      sessionStorage.setItem('last_resume_path', pathname + search);
+    } else if (pathname === '/builder/start/list' || pathname === '/builder/start') {
+      sessionStorage.setItem('last_resume_path', pathname);
+    }
+  }, [pathname]);
+
+  const handleNavigation = async (item: { id: string; path: string; smartNav?: boolean }) => {
+    if (!item.path) return; // items with subItems have no direct path
+    if (item.smartNav) {
+      // Restore exactly where the user last was in the resume section
+      const lastResumePath = sessionStorage.getItem('last_resume_path');
+      if (lastResumePath) {
+        router.push(lastResumePath);
+        return;
+      }
+      // No recorded path (new user / post-logout) - decide between list and start
+      try {
+        const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
+        const hasAny = builder_resumes.length > 0 || enhanced_resumes.length > 0;
+        router.push(hasAny ? "/builder/start/list" : "/builder/start");
+      } catch {
+        try {
+          const [builderResumes, enhancedResumes] = await Promise.allSettled([
+            getAllResumes(),
+            getEnhancementHistory(),
+          ]);
+          const hasBuilder  = builderResumes.status  === "fulfilled" && builderResumes.value.length  > 0;
+          const hasEnhanced = enhancedResumes.status === "fulfilled" && enhancedResumes.value.length > 0;
+          router.push(hasBuilder || hasEnhanced ? "/builder/start/list" : "/builder/start");
+        } catch {
+          router.push("/builder/start");
+        }
+      }
+    } else {
+      router.push(item.path);
+    }
+  };
+
+
+  /* COLLAPSED - 64 px */
+  if (!isExpanded) {
+    return (
+      <>
+      <button
+      onClick={handleToggle}
+      title="Expand sidebar"
+      aria-label="Expand sidebar navigation"
+      aria-expanded={isExpanded}
+      aria-controls="dashboard-sidebar"
+        style={{ position: "fixed", top: 58, left: 50, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+      >
+        {/* Expand icon: filled strip on the right */}
+        <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
+          <rect x="0.7" y="0.7" width="13.6" height="11.6" rx="2" stroke="#2557a7" strokeWidth="1.3" />
+          <rect x="10.2" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
+        </svg>
+      </button>
+      <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
+        id="dashboard-sidebar"
+        style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
+        <nav className="flex-1 min-h-0 overflow-visible py-0.5 px-2" aria-label="Primary navigation collapsed" role="navigation">
+          {navGroups.map((group, gi) => (
+            <div key={group.label}>
+              {gi > 0 && <div className="mx-1 my-1 border-t border-gray-300" />}
+              <div className="space-y-0">
+                {group.items.map((item) => {
+                  const isActive = activeId === item.id;
+                  const Icon = item.icon;
+                  const hasSub = item.subItems && item.subItems.length > 0;
+
+                  if (hasSub) {
+                    return (
+                      <CollapsedSubItem
+                        key={item.id}
+                        item={item}
+                        isActive={isActive}
+                        pathname={pathname}
+                        onNavigate={(path) => router.push(path)}
+                      />
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleNavigation(item)}
+                      aria-label={item.label}
+                      title={item.label}
+                      className="w-full flex items-center justify-center py-px group"
+                    >
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          isActive ? "" : "group-hover:bg-gray-100"
+                        }`}
+                        style={isActive ? { background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
+                      >
+                        <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover:text-[#2557a7]"}`} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+      </div>
+      </>
+    );
+  }
+
+  /* EXPANDED - 240 px */
+  const NavItem = ({
+    item,
+    showBadge,
+  }: {
+    item: (typeof NAV_GROUPS)[0]["items"][0];
+    showBadge?: boolean;
+  }) => {
+    const isActive = activeId === item.id;
+    const Icon = item.icon;
+    const hasSub = item.subItems && item.subItems.length > 0;
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [dropPos, setDropPos] = useState<{ top: number; left: number } | null>(null);
+
+    const openDrop = useCallback(() => {
+      if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+      if (!wrapperRef.current) return;
+      const r = wrapperRef.current.getBoundingClientRect();
+      setDropPos({ top: r.top - 20, left: r.right + 4 });
+    }, []);
+
+    const closeDrop = useCallback(() => {
+      closeTimerRef.current = setTimeout(() => setDropPos(null), 150);
+    }, []);
+
+    const btn = (
+      <button
+        onClick={() => handleNavigation(item)}
+        className={`w-full flex items-center gap-2 px-2.5 py-0.5 rounded-lg transition-all duration-200 group/btn relative ${
+          isActive ? "" : "hover:bg-gray-50"
+        }`}
+        style={
+          isActive
+            ? { background: "#2557a7", boxShadow: "0 4px 16px rgba(37,87,167,0.28), inset 0 1px 0 rgba(255,255,255,0.12)" }
+            : {}
+        }
+      >
+        {!isActive && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.75 rounded-r-full bg-[#2557a7] transition-all duration-200 h-0 group-hover/btn:h-5 opacity-0 group-hover/btn:opacity-100" />
+        )}
+        <Icon size={17} sw={isActive ? 1.75 : 1.55} className={`shrink-0 transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover/btn:text-[#2557a7]"}`} />
+        <span className={`flex-1 text-left truncate text-[12px] font-medium transition-colors ${isActive ? "text-white font-semibold" : "text-gray-600 group-hover/btn:text-[#2557a7]"}`}>
+          {item.label}
+        </span>
+        {showBadge && !isActive && (
+          <span className={`text-[9px] font-semibold px-1.5 py-px rounded-full shrink-0 leading-none ${profileCompleteness >= 100 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+            {profileCompleteness}%
+          </span>
+        )}
+        {hasSub && !isActive && <IcoChevronRight size={10} className="text-gray-400 group-hover/btn:text-[#2557a7] shrink-0 transition-colors" sw={2} />}
+        {isActive && !hasSub && <IcoChevronRight size={11} className="text-white/65 shrink-0" sw={2.5} />}
+        {isActive && hasSub && <IcoChevronRight size={10} className="text-white/65 shrink-0" sw={2} />}
+      </button>
+    );
+
+    if (!hasSub) return btn;
+
+    return (
+      <div ref={wrapperRef} onMouseEnter={openDrop} onMouseLeave={closeDrop}>
+        {btn}
+        {/* Dropdown rendered fixed so sidebar overflow-hidden/overflow-y-auto can't clip it */}
+        {dropPos && (
+          <div
+            onMouseEnter={openDrop}
+            onMouseLeave={closeDrop}
+            style={{ position: "fixed", top: dropPos.top, left: dropPos.left, minWidth: 190, zIndex: 9999 }}
+          >
+            <div className="bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden py-1">
+              {item.subItems!.map((sub) => {
+                const subActive = pathname === sub.path || pathname.startsWith(sub.path + "/");
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => { closeDrop(); router.push(sub.path); }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[11px] font-medium transition-colors ${
+                      subActive ? "text-[#2557a7] bg-[#2557a7]/5" : "text-gray-600 hover:bg-gray-50 hover:text-[#2557a7]"
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full shrink-0" style={{ background: subActive ? "#2557a7" : "#d1d5db" }} />
+                    {sub.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <>
+    <button
+      onClick={handleToggle}
+      title="Collapse sidebar"
+      aria-label="Collapse sidebar navigation"
+      aria-expanded={isExpanded}
+      aria-controls="dashboard-sidebar"
+      style={{ position: "fixed", top: 58, left: 186, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+    >
+      {/* Collapse icon: filled strip on the left */}
+      <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
+        <rect x="0.7" y="0.7" width="13.6" height="11.6" rx="2" stroke="#2557a7" strokeWidth="1.3" />
+        <rect x="0.7" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
+      </svg>
+    </button>
+    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] bg-white flex flex-col z-30 overflow-hidden"
+      id="dashboard-sidebar"
+      style={{ width: 200, borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
+
+      <nav className="min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1 pb-1 space-y-0.5" aria-label="Primary navigation" role="navigation">
+        {navGroups.map((group) => (
+          <div key={group.label}>
+            {/* Section label with trailing line */}
+            <div className="flex items-center gap-1.5 px-1 mb-0.5">
+              <span className="text-[8.5px] font-semibold text-gray-400 tracking-[0.08em] uppercase shrink-0">
+                {group.label}
+              </span>
+              <div className="flex-1 h-px bg-gray-100" />
+            </div>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavItem
+                  key={item.id}
+                  item={item}
+                  showBadge={item.showBadge}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+      <div className="flex-1" />
+      <div className="px-4 py-3 border-t border-gray-100">
+        <p className="text-[10px] text-gray-400 text-center tracking-wide">CareerBot AI</p>
+      </div>
+    </div>
+    </>
+  );
+}
+
+
+
+
+
+
+
+
+
+

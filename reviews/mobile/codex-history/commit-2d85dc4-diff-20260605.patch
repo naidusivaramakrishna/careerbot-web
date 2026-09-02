@@ -1,0 +1,2275 @@
+diff --git a/src/components/resume/ResumeRenderer.tsx b/src/components/resume/ResumeRenderer.tsx
+new file mode 100644
+index 0000000..ef1a196
+--- /dev/null
++++ b/src/components/resume/ResumeRenderer.tsx
+@@ -0,0 +1,724 @@
++// ResumeRenderer — the single, config-driven renderer for every resume
++// template. There are NO per-template screens: a template is a JSON
++// configuration (colors, typography, layout, section order, margins, styling
++// rules) returned by GET /api/v1/templates/{template_id}, and this component
++// applies it to the resume data.
++//
++//   <ResumeRenderer resumeData={resumeData} templateConfig={templateConfig} />
++//
++//   resumeData      — the Resume Builder state shape (see resumeBuilderConfig):
++//                     { personal, education, experience, projects, skills,
++//                       certifications, languages, awards, ... }
++//   templateConfig  — the backend template configuration JSON. All fields are
++//                     optional; sensible defaults fill any gaps so a partial or
++//                     missing config still renders.
++//
++// The same renderer is intended to back future PDF export / download / share
++// and live template switching — keep it pure (props in, view out) so it can be
++// snapshotted or rasterised without side effects.
++//
++// TS port of POC src/components/resume/ResumeRenderer.js.
++
++import { memo, useMemo, type ReactNode } from 'react';
++import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
++
++import type { ResumeBuilderValues, ResumeSkillsState } from '@/features/resumes/resumeBuilderConfig';
++
++// ── Fallback config (used when fields are missing in backend config) ────────
++
++const FALLBACK = {
++  colors: {
++    primary: '#2557A7',
++    accent: '#2557A7',
++    heading: '#152033',
++    sectionHeading: '#152033',
++    text: '#1f2a3d',
++    muted: '#637083',
++    background: '#ffffff',
++    divider: '#e1e6ee',
++  },
++  typography: {
++    fontFamily: undefined as string | undefined,
++    nameSize: 20,
++    sectionHeadingSize: 13,
++    subheadingSize: 12.5,
++    bodySize: 11,
++    lineHeight: 1.45,
++    uppercaseHeadings: true,
++    letterSpacing: 0.5,
++    nameTransform: null as TextStyle['textTransform'] | null,
++  },
++  layout: {
++    alignment: 'left' as 'left' | 'center',
++    margin: 26,
++    sectionGap: 16,
++    showDividers: true,
++    sectionHeadingAlignment: null as TextStyle['textAlign'] | null,
++    sectionLabels: {} as Record<string, string>,
++    sectionOrder: [
++      'summary',
++      'experience',
++      'education',
++      'projects',
++      'skills',
++      'certifications',
++      'languages',
++      'awards',
++      'achievements',
++      'volunteering',
++      'references',
++      'hobbies',
++    ],
++  },
++};
++
++// Normalises backend section key names (snake_case, camelCase, plural) to the
++// internal keys used by sectionRenderers.
++const SECTION_KEY_ALIASES: Record<string, string> = {
++  professional_summary: 'summary',
++  professionalSummary: 'summary',
++  summary: 'summary',
++  // Objective (fresher templates) renders into the same summary slot
++  objective: 'summary',
++  // Executive summary (senior/manager templates) also renders as summary
++  executive_summary: 'summary',
++  executiveSummary: 'summary',
++  work_experience: 'experience',
++  workExperience: 'experience',
++  work: 'experience',
++  experience: 'experience',
++  internship: 'internships',
++  internships: 'internships',
++  education: 'education',
++  project: 'projects',
++  projects: 'projects',
++  skill: 'skills',
++  skills: 'skills',
++  // Core competencies and technical skills share the skills slot
++  core_competencies: 'skills',
++  coreCompetencies: 'skills',
++  technical_skills: 'skills',
++  technicalSkills: 'skills',
++  certification: 'certifications',
++  certifications: 'certifications',
++  language: 'languages',
++  languages: 'languages',
++  award: 'awards',
++  awards: 'awards',
++  achievement: 'achievements',
++  achievements: 'achievements',
++  volunteering: 'volunteering',
++  reference: 'references',
++  references: 'references',
++  hobby: 'hobbies',
++  hobbies: 'hobbies',
++  interest: 'hobbies',
++  interests: 'hobbies',
++};
++
++function normalizeSectionKey(key: string): string {
++  return SECTION_KEY_ALIASES[key] || key;
++}
++
++const SECTION_TITLES: Record<string, string> = {
++  summary: 'Professional Summary',
++  experience: 'Experience',
++  internships: 'Internships',
++  education: 'Education',
++  projects: 'Projects',
++  skills: 'Skills',
++  certifications: 'Certifications',
++  languages: 'Languages',
++  awards: 'Awards',
++  achievements: 'Achievements',
++  volunteering: 'Volunteering',
++  references: 'References',
++  hobbies: 'Interests & Hobbies',
++};
++
++const SKILL_LABELS: Record<string, string> = {
++  programming: 'Programming Languages',
++  frameworks: 'Frameworks & Libraries',
++  databases: 'Databases',
++  tools: 'Tools & Technologies',
++  cloud: 'Cloud Platforms',
++  soft: 'Soft Skills',
++};
++
++// ── resolveConfig ───────────────────────────────────────────────────────────
++
++interface ResolvedConfig {
++  colors: typeof FALLBACK.colors;
++  typography: typeof FALLBACK.typography;
++  layout: {
++    alignment: 'left' | 'center';
++    margin: number;
++    sectionGap: number;
++    showDividers: boolean;
++    sectionOrder: string[];
++    sectionLabels: Record<string, string>;
++    sectionHeadingAlignment: TextStyle['textAlign'] | null;
++  };
++}
++
++interface RawConfig {
++  colors?: Record<string, unknown>;
++  typography?: Record<string, unknown>;
++  fonts?: Record<string, unknown>;
++  layout?: Record<string, unknown>;
++  styling?: Record<string, unknown>;
++  sections?: Record<string, { order?: number; enabled?: boolean; label?: string }>;
++  sectionOrder?: string[];
++  section_order?: string[];
++  primaryColor?: string;
++  alignment?: string;
++  margins?: number | { top?: number; right?: number; bottom?: number; left?: number };
++  [extra: string]: unknown;
++}
++
++/**
++ * Merge backend config over the fallback. Handles snake_case + camelCase typo
++ * keys, styling.* shortcuts, layout.margins as scalar/object, and the sections
++ * map → sectionOrder + sectionLabels conversion.
++ */
++function resolveConfig(config: RawConfig = {}): ResolvedConfig {
++  const c = config || {};
++  const rawColors = (c.colors ?? {}) as Record<string, string | undefined>;
++  const rawTypo = (c.typography ?? c.fonts ?? {}) as Record<string, unknown>;
++  const rawLayout = (c.layout ?? {}) as Record<string, unknown>;
++  const rawStyling = (c.styling ?? {}) as Record<string, unknown>;
++
++  // ── Colors ──────────────────────────────────────────────────────────────
++  const dividerColor =
++    (rawStyling.divider_color as string | undefined) ?? rawColors.divider ?? FALLBACK.colors.divider;
++  const sectionHeadingColor =
++    (rawStyling.section_heading_color as string | undefined) ??
++    rawColors.accent ??
++    rawColors.primary ??
++    FALLBACK.colors.sectionHeading;
++
++  const colors = {
++    ...FALLBACK.colors,
++    ...(rawColors.primary != null && { primary: rawColors.primary }),
++    ...(rawColors.accent != null && { accent: rawColors.accent }),
++    // secondary from the backend maps to body text color
++    ...(rawColors.secondary != null && { text: rawColors.secondary }),
++    ...(rawColors.heading != null && { heading: rawColors.heading }),
++    // explicit `text` overrides secondary if both are present
++    ...(rawColors.text != null && { text: rawColors.text }),
++    ...(rawColors.muted != null && { muted: rawColors.muted }),
++    ...(rawColors.background != null && { background: rawColors.background }),
++    ...(c.primaryColor != null && { primary: c.primaryColor }),
++    divider: dividerColor,
++    sectionHeading: sectionHeadingColor,
++  };
++
++  // ── Typography (accepts snake_case OR camelCase) ─────────────────────────
++  const nameSize =
++    (rawStyling.name_size as number | undefined) ??
++    (rawTypo.nameSize as number | undefined) ??
++    (rawTypo.name_size as number | undefined) ??
++    (rawTypo.headingSize as number | undefined) ??
++    (rawTypo.heading_size as number | undefined) ??
++    FALLBACK.typography.nameSize;
++
++  const sectionHeadingSize =
++    (rawTypo.sectionHeadingSize as number | undefined) ??
++    (rawTypo.section_heading_size as number | undefined) ??
++    FALLBACK.typography.sectionHeadingSize;
++
++  const typography = {
++    fontFamily:
++      (rawTypo.fontFamily as string | undefined) ?? (rawTypo.font_family as string | undefined) ?? FALLBACK.typography.fontFamily,
++    nameSize,
++    sectionHeadingSize,
++    subheadingSize:
++      (rawTypo.subheadingSize as number | undefined) ??
++      (rawTypo.subheading_size as number | undefined) ??
++      FALLBACK.typography.subheadingSize,
++    bodySize: (rawTypo.bodySize as number | undefined) ?? (rawTypo.body_size as number | undefined) ?? FALLBACK.typography.bodySize,
++    lineHeight:
++      (rawTypo.lineHeight as number | undefined) ?? (rawTypo.line_height as number | undefined) ?? FALLBACK.typography.lineHeight,
++    uppercaseHeadings:
++      (rawTypo.uppercaseHeadings as boolean | undefined) ??
++      (rawTypo.uppercase_headings as boolean | undefined) ??
++      FALLBACK.typography.uppercaseHeadings,
++    letterSpacing:
++      (rawTypo.letterSpacing as number | undefined) ??
++      (rawTypo.letter_spacing as number | undefined) ??
++      FALLBACK.typography.letterSpacing,
++    nameTransform:
++      (rawStyling.name_transform as TextStyle['textTransform'] | undefined) ??
++      (rawTypo.nameTransform as TextStyle['textTransform'] | undefined) ??
++      (rawTypo.name_transform as TextStyle['textTransform'] | undefined) ??
++      null,
++  };
++
++  // ── Section order + labels ───────────────────────────────────────────────
++  let sectionOrder: string[] | null = null;
++  const sectionLabels: Record<string, string> = {};
++
++  const rawOrder =
++    c.sectionOrder ?? c.section_order ?? (rawLayout.sectionOrder as string[] | undefined) ?? (rawLayout.section_order as string[] | undefined);
++
++  if (Array.isArray(rawOrder) && rawOrder.length) {
++    sectionOrder = rawOrder.map(normalizeSectionKey);
++  } else if (c.sections && typeof c.sections === 'object' && !Array.isArray(c.sections)) {
++    sectionOrder = Object.entries(c.sections)
++      .filter(([, v]) => v?.enabled !== false)
++      .sort(([, a], [, b]) => (a?.order ?? 999) - (b?.order ?? 999))
++      .map(([key]) => normalizeSectionKey(key));
++    if (!sectionOrder.length) sectionOrder = null;
++
++    // Extract per-section labels so the renderer can show the template's
++    // intended heading (e.g. "OBJECTIVE" vs "PROFESSIONAL SUMMARY").
++    for (const [key, def] of Object.entries(c.sections)) {
++      if (def?.label) {
++        const normalizedKey = normalizeSectionKey(key);
++        sectionLabels[normalizedKey] = def.label;
++      }
++    }
++  }
++
++  if (!sectionOrder) sectionOrder = FALLBACK.layout.sectionOrder;
++
++  // Deduplicate (e.g. two keys that both map to 'skills').
++  const seen = new Set<string>();
++  sectionOrder = sectionOrder.filter((k) => {
++    if (seen.has(k)) return false;
++    seen.add(k);
++    return true;
++  });
++
++  // ── Layout margin — number or { top, right, bottom, left } ───────────────
++  let margin: number = FALLBACK.layout.margin;
++  const rawMargins = (rawLayout.margins ?? rawLayout.margin ?? c.margins) as
++    | number
++    | { top?: number; right?: number; bottom?: number; left?: number }
++    | undefined;
++  if (typeof rawMargins === 'number') {
++    margin = rawMargins;
++  } else if (rawMargins && typeof rawMargins === 'object') {
++    margin = rawMargins.left ?? rawMargins.right ?? rawMargins.top ?? FALLBACK.layout.margin;
++  }
++
++  // ── Remaining layout fields ──────────────────────────────────────────────
++  const alignmentRaw =
++    (rawStyling.name_alignment as string | undefined) ??
++    (rawStyling.alignment as string | undefined) ??
++    (rawLayout.alignment as string | undefined) ??
++    c.alignment ??
++    FALLBACK.layout.alignment;
++  const alignment: 'left' | 'center' = alignmentRaw === 'center' ? 'center' : 'left';
++
++  const showDividers =
++    (rawStyling.section_dividers as boolean | undefined) ??
++    (rawLayout.showDividers as boolean | undefined) ??
++    (rawLayout.show_dividers as boolean | undefined) ??
++    FALLBACK.layout.showDividers;
++
++  const sectionGap =
++    (rawStyling.section_spacing as number | undefined) ??
++    (rawLayout.sectionGap as number | undefined) ??
++    (rawLayout.section_gap as number | undefined) ??
++    FALLBACK.layout.sectionGap;
++
++  const sectionHeadingAlignment =
++    (rawStyling.section_heading_alignment as TextStyle['textAlign'] | undefined) ??
++    (rawLayout.sectionHeadingAlignment as TextStyle['textAlign'] | undefined) ??
++    null;
++
++  return {
++    colors,
++    typography,
++    layout: {
++      alignment,
++      margin,
++      sectionGap,
++      showDividers,
++      sectionOrder,
++      sectionLabels,
++      sectionHeadingAlignment,
++    },
++  };
++}
++
++// ── Small helpers ───────────────────────────────────────────────────────────
++
++function str(value: unknown): string {
++  return typeof value === 'string' ? value.trim() : value ? String(value) : '';
++}
++
++function dateRange(start: unknown, end: unknown, current?: unknown): string {
++  const left = str(start);
++  const right = current ? 'Present' : str(end);
++  return [left, right].filter(Boolean).join(' — ');
++}
++
++function hasContent(value: unknown): boolean {
++  if (Array.isArray(value)) return value.length > 0;
++  if (value && typeof value === 'object') return Object.keys(value).length > 0;
++  return Boolean(str(value));
++}
++
++// ── Component ───────────────────────────────────────────────────────────────
++
++export interface ResumeRendererProps {
++  resumeData?: Partial<ResumeBuilderValues>;
++  templateConfig?: RawConfig;
++}
++
++function ResumeRenderer({ resumeData = {}, templateConfig = {} }: ResumeRendererProps) {
++  // resolveConfig + StyleSheet.create are both pure functions of templateConfig.
++  // Memoising them on `templateConfig` means typing in the builder (which only
++  // changes `resumeData`) no longer rebuilds ~15 style objects and re-resolves
++  // the config on every keystroke — only a template change does.
++  const { colors, typography, layout } = useMemo(() => resolveConfig(templateConfig), [templateConfig]);
++
++  const personal = resumeData.personal ?? ({} as Partial<ResumeBuilderValues['personal']>);
++  const headingAlign: TextStyle['textAlign'] = layout.alignment === 'center' ? 'center' : 'left';
++
++  const dynamic = useMemo(
++    () =>
++      StyleSheet.create({
++        page: {
++          backgroundColor: colors.background,
++          padding: layout.margin,
++        },
++        name: {
++          color: colors.heading,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.nameSize,
++          fontWeight: '800',
++          textAlign: headingAlign,
++          textTransform: typography.nameTransform ?? 'none',
++        },
++        headline: {
++          color: colors.primary,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.subheadingSize,
++          fontWeight: '700',
++          marginTop: 2,
++          textAlign: headingAlign,
++        },
++        contact: {
++          color: colors.muted,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.bodySize,
++          lineHeight: typography.bodySize * typography.lineHeight,
++          marginTop: 6,
++          textAlign: headingAlign,
++        },
++        sectionHeading: {
++          color: colors.sectionHeading,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.sectionHeadingSize,
++          fontWeight: '800',
++          letterSpacing: typography.letterSpacing,
++          textTransform: typography.uppercaseHeadings ? 'uppercase' : 'none',
++          ...(layout.sectionHeadingAlignment && { textAlign: layout.sectionHeadingAlignment }),
++        },
++        divider: {
++          backgroundColor: colors.divider,
++          height: StyleSheet.hairlineWidth * 2,
++          marginTop: 4,
++        },
++        entryTitle: {
++          color: colors.heading,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.subheadingSize,
++          fontWeight: '700',
++        },
++        entrySubtitle: {
++          color: colors.text,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.bodySize,
++          fontWeight: '600',
++        },
++        entryMeta: {
++          color: colors.muted,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.bodySize - 0.5,
++        },
++        body: {
++          color: colors.text,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.bodySize,
++          lineHeight: typography.bodySize * typography.lineHeight,
++          marginTop: 3,
++        },
++        skillLabel: {
++          color: colors.heading,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.bodySize,
++          fontWeight: '700',
++        },
++        skillValue: {
++          color: colors.text,
++          fontFamily: typography.fontFamily,
++          fontSize: typography.bodySize,
++        },
++      }),
++    [colors, typography, layout, headingAlign],
++  );
++
++  function Section({ sectionKey, children }: { sectionKey: string; children: ReactNode }) {
++    // Template-specific label wins over the generic title (e.g. "OBJECTIVE"
++    // for fresher templates, "PROFESSIONAL EXPERIENCE" for work experience).
++    const title = layout.sectionLabels?.[sectionKey] ?? SECTION_TITLES[sectionKey] ?? sectionKey;
++    return (
++      <View style={[staticStyles.section, { marginTop: layout.sectionGap }]}>
++        <Text style={dynamic.sectionHeading}>{title}</Text>
++        {layout.showDividers ? <View style={dynamic.divider} /> : null}
++        <View style={staticStyles.sectionBody}>{children}</View>
++      </View>
++    );
++  }
++
++  function renderHeader() {
++    const contactParts = [
++      str(personal.email),
++      str(personal.phone),
++      str(personal.location),
++      str(personal.linkedin),
++      str(personal.github),
++      str(personal.portfolio),
++    ].filter(Boolean);
++
++    return (
++      <View>
++        <Text style={dynamic.name}>{str(personal.fullName) || 'Your Name'}</Text>
++        {str(personal.headline) ? <Text style={dynamic.headline}>{str(personal.headline)}</Text> : null}
++        {contactParts.length ? <Text style={dynamic.contact}>{contactParts.join('  ·  ')}</Text> : null}
++      </View>
++    );
++  }
++
++  function renderSummary() {
++    const summary = str(personal.summary);
++    if (!summary) return null;
++    return (
++      <Section sectionKey="summary">
++        <Text style={dynamic.body}>{summary}</Text>
++      </Section>
++    );
++  }
++
++  function renderExperienceLike(sectionKey: string, list: unknown) {
++    if (!hasContent(list)) return null;
++    return (
++      <Section sectionKey={sectionKey}>
++        {(list as unknown as Record<string, unknown>[]).map((e, i) => (
++          <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
++            <View style={staticStyles.entryHeaderRow}>
++              <Text style={dynamic.entryTitle}>{str(e.job_title) || str(e.company)}</Text>
++              <Text style={dynamic.entryMeta}>{dateRange(e.start_date, e.end_date, e.currentlyWorking)}</Text>
++            </View>
++            <Text style={dynamic.entrySubtitle}>
++              {[str(e.company), str(e.location)].filter(Boolean).join('  ·  ')}
++            </Text>
++            {str(e.description) ? <Text style={dynamic.body}>{str(e.description)}</Text> : null}
++          </View>
++        ))}
++      </Section>
++    );
++  }
++
++  function renderEducation() {
++    const list = resumeData.education;
++    if (!hasContent(list)) return null;
++    return (
++      <Section sectionKey="education">
++        {(list as unknown as Record<string, unknown>[]).map((e, i) => (
++          <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
++            <View style={staticStyles.entryHeaderRow}>
++              <Text style={dynamic.entryTitle}>{str(e.institution) || 'Education'}</Text>
++              <Text style={dynamic.entryMeta}>{dateRange(e.start_date, e.end_date)}</Text>
++            </View>
++            <Text style={dynamic.entrySubtitle}>
++              {[
++                str(e.degree),
++                e.cgpa ? `${str(e.score_type).toUpperCase() || 'Score'}: ${str(e.cgpa)}` : '',
++              ]
++                .filter(Boolean)
++                .join('  ·  ')}
++            </Text>
++          </View>
++        ))}
++      </Section>
++    );
++  }
++
++  function renderProjects() {
++    const list = resumeData.projects;
++    if (!hasContent(list)) return null;
++    return (
++      <Section sectionKey="projects">
++        {(list as unknown as Record<string, unknown>[]).map((p, i) => (
++          <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
++            <View style={staticStyles.entryHeaderRow}>
++              <Text style={dynamic.entryTitle}>{str(p.project_name) || 'Project'}</Text>
++              <Text style={dynamic.entryMeta}>{dateRange(p.start_date, p.end_date)}</Text>
++            </View>
++            {str(p.technologies) ? <Text style={dynamic.entrySubtitle}>{str(p.technologies)}</Text> : null}
++            {str(p.description) ? <Text style={dynamic.body}>{str(p.description)}</Text> : null}
++            {str(p.project_link) ? <Text style={dynamic.entryMeta}>{str(p.project_link)}</Text> : null}
++          </View>
++        ))}
++      </Section>
++    );
++  }
++
++  function renderSkills() {
++    const skills = (resumeData.skills ?? {}) as ResumeSkillsState;
++    const groups: { label: string; value: string }[] = [];
++
++    for (const [key, label] of Object.entries(SKILL_LABELS)) {
++      const list = skills[key];
++      if (Array.isArray(list) && list.length) groups.push({ label, value: (list as string[]).join(', ') });
++    }
++    (skills.custom ?? []).forEach((cat) => {
++      if (cat?.name && (cat.skills ?? []).length) {
++        groups.push({ label: str(cat.name), value: cat.skills.join(', ') });
++      }
++    });
++
++    if (!groups.length) return null;
++    return (
++      <Section sectionKey="skills">
++        {groups.map((g, i) => (
++          <Text key={i} style={[dynamic.body, i > 0 ? staticStyles.skillSpacing : null]}>
++            <Text style={dynamic.skillLabel}>{g.label}: </Text>
++            <Text style={dynamic.skillValue}>{g.value}</Text>
++          </Text>
++        ))}
++      </Section>
++    );
++  }
++
++  function renderCertifications() {
++    const list = resumeData.certifications;
++    if (!hasContent(list)) return null;
++    return (
++      <Section sectionKey="certifications">
++        {(list as unknown as Record<string, unknown>[]).map((c, i) => (
++          <View key={i} style={(i > 0 ? staticStyles.entrySpacing : null) as StyleProp<TextStyle>}>
++            <View style={staticStyles.entryHeaderRow}>
++              <Text style={dynamic.entryTitle}>{str(c.certification_name) || 'Certification'}</Text>
++              <Text style={dynamic.entryMeta}>{dateRange(c.start_date, c.end_date)}</Text>
++            </View>
++            {[str(c.issuer), str(c.credential_id)].filter(Boolean).length ? (
++              <Text style={dynamic.entrySubtitle}>
++                {[str(c.issuer), str(c.credential_id)].filter(Boolean).join('  ·  ')}
++              </Text>
++            ) : null}
++          </View>
++        ))}
++      </Section>
++    );
++  }
++
++  function renderSimpleList(
++    sectionKey: string,
++    list: unknown,
++    lineFor: (item: Record<string, unknown>) => { title: string; detail?: unknown },
++  ) {
++    if (!hasContent(list)) return null;
++    return (
++      <Section sectionKey={sectionKey}>
++        {(list as Record<string, unknown>[]).map((item, i) => {
++          const { title, detail } = lineFor(item);
++          if (!str(title)) return null;
++          return (
++            <View key={i} style={(i > 0 ? staticStyles.skillSpacing : null) as StyleProp<TextStyle>}>
++              <Text style={dynamic.entrySubtitle}>{str(title)}</Text>
++              {str(detail) ? <Text style={dynamic.body}>{str(detail)}</Text> : null}
++            </View>
++          );
++        })}
++      </Section>
++    );
++  }
++
++  function renderHobbies() {
++    const items = str(resumeData.hobbies?.items);
++    if (!items) return null;
++    return (
++      <Section sectionKey="hobbies">
++        <Text style={dynamic.body}>{items}</Text>
++      </Section>
++    );
++  }
++
++  const sectionRenderers: Record<string, () => ReactNode> = {
++    summary: renderSummary,
++    experience: () => renderExperienceLike('experience', resumeData.experience),
++    internships: () => renderExperienceLike('internships', resumeData.internships),
++    education: renderEducation,
++    projects: renderProjects,
++    skills: renderSkills,
++    certifications: renderCertifications,
++    languages: () =>
++      renderSimpleList('languages', resumeData.languages, (l) => ({
++        title: [str(l.language), str(l.proficiency)].filter(Boolean).join(' — '),
++      })),
++    awards: () =>
++      renderSimpleList('awards', resumeData.awards, (a) => ({
++        title: [str(a.title), str(a.issuer)].filter(Boolean).join(' — '),
++        detail: a.description,
++      })),
++    achievements: () =>
++      renderSimpleList('achievements', resumeData.achievements, (a) => ({
++        title: str(a.title),
++        detail: a.description,
++      })),
++    volunteering: () =>
++      renderSimpleList('volunteering', resumeData.volunteering, (v) => ({
++        title: [str(v.organization), str(v.role)].filter(Boolean).join(' — '),
++        detail: v.description,
++      })),
++    references: () =>
++      renderSimpleList('references', resumeData.references, (r) => ({
++        title: [str(r.name), str(r.relationship)].filter(Boolean).join(' — '),
++        detail: r.contact,
++      })),
++    hobbies: renderHobbies,
++  };
++
++  return (
++    <View style={dynamic.page}>
++      {renderHeader()}
++      {layout.sectionOrder.map((key) => {
++        const renderer = sectionRenderers[key];
++        if (!renderer) return null;
++        return <View key={key}>{renderer()}</View>;
++      })}
++    </View>
++  );
++}
++
++// Memoised so a parent re-render with unchanged resumeData/templateConfig
++// (e.g. the preview screen re-rendering for an unrelated reason) doesn't
++// re-render the whole resume.
++export default memo(ResumeRenderer);
++
++const staticStyles = StyleSheet.create({
++  section: {
++    width: '100%',
++  },
++  sectionBody: {
++    marginTop: 8,
++  },
++  entrySpacing: {
++    marginTop: 12,
++  },
++  entryHeaderRow: {
++    alignItems: 'baseline',
++    flexDirection: 'row',
++    justifyContent: 'space-between',
++    gap: 8,
++  },
++  skillSpacing: {
++    marginTop: 6,
++  },
++});
+diff --git a/src/features/resumes/mapApiResumeToValues.ts b/src/features/resumes/mapApiResumeToValues.ts
+new file mode 100644
+index 0000000..1a42f05
+--- /dev/null
++++ b/src/features/resumes/mapApiResumeToValues.ts
+@@ -0,0 +1,224 @@
++// Inverse of mapResumeValuesToApi. Hydrates the builder form state from the
++// resume document returned by GET /api/v1/resumes/{resume_id}.
++//
++// The backend uses camelCase wire names (personalInfo.fullname,
++// workExperience[], education[].school, skills.programmingLanguages, …) which
++// differ from the builder's field keys (personal.fullName, experience[],
++// education[].institution, skills.programming, …).
++//
++// Defensive throughout: every field falls back to '' / [] so a partial or
++// unexpected payload still yields a valid builder state. TS port of POC
++// src/screens/resumeBuilder/mapApiResumeToValues.js.
++
++import { buildInitialResumeValues, type ResumeBuilderValues } from './resumeBuilderConfig';
++
++function str(value: unknown): string {
++  if (typeof value === 'string') return value;
++  return value === null || value === undefined ? '' : String(value);
++}
++
++function arr<T = unknown>(value: unknown): T[] {
++  return Array.isArray(value) ? (value as T[]) : [];
++}
++
++interface EducationApi {
++  school?: unknown;
++  institution?: unknown;
++  degree?: unknown;
++  startDate?: unknown;
++  start_date?: unknown;
++  endDate?: unknown;
++  end_date?: unknown;
++  scoreType?: unknown;
++  score_type?: unknown;
++  scoreValue?: unknown;
++  cgpa?: unknown;
++}
++
++function mapEducation(list: unknown) {
++  return arr<EducationApi>(list).map((e) => ({
++    institution: str(e.school ?? e.institution),
++    degree: str(e.degree),
++    start_date: str(e.startDate ?? e.start_date),
++    end_date: str(e.endDate ?? e.end_date),
++    score_type: str(e.scoreType ?? e.score_type),
++    cgpa: str(e.scoreValue ?? e.cgpa),
++  }));
++}
++
++interface ExperienceApi {
++  company?: unknown;
++  jobTitle?: unknown;
++  job_title?: unknown;
++  location?: unknown;
++  startDate?: unknown;
++  start_date?: unknown;
++  endDate?: unknown;
++  end_date?: unknown;
++  currentlyWorking?: unknown;
++  description?: unknown;
++}
++
++function mapExperience(list: unknown) {
++  return arr<ExperienceApi>(list).map((e) => {
++    const end = str(e.endDate ?? e.end_date);
++    const currentlyWorking = Boolean(e.currentlyWorking) || end.toLowerCase() === 'present';
++    return {
++      company: str(e.company),
++      job_title: str(e.jobTitle ?? e.job_title),
++      location: str(e.location),
++      start_date: str(e.startDate ?? e.start_date),
++      end_date: currentlyWorking ? '' : end,
++      currentlyWorking,
++      description: str(e.description),
++    };
++  });
++}
++
++interface ProjectApi {
++  name?: unknown;
++  project_name?: unknown;
++  technologies?: unknown;
++  startDate?: unknown;
++  start_date?: unknown;
++  endDate?: unknown;
++  end_date?: unknown;
++  link?: unknown;
++  project_link?: unknown;
++  description?: unknown;
++}
++
++function mapProjects(list: unknown) {
++  return arr<ProjectApi>(list).map((p) => ({
++    project_name: str(p.name ?? p.project_name),
++    technologies: str(p.technologies),
++    start_date: str(p.startDate ?? p.start_date),
++    end_date: str(p.endDate ?? p.end_date),
++    project_link: str(p.link ?? p.project_link),
++    description: str(p.description),
++  }));
++}
++
++interface CertificationApi {
++  name?: unknown;
++  certification_name?: unknown;
++  issuer?: unknown;
++  issueDate?: unknown;
++  start_date?: unknown;
++  expiryDate?: unknown;
++  end_date?: unknown;
++  credentialId?: unknown;
++  credential_id?: unknown;
++}
++
++function mapCertifications(list: unknown) {
++  return arr<CertificationApi>(list).map((c) => ({
++    certification_name: str(c.name ?? c.certification_name),
++    issuer: str(c.issuer),
++    start_date: str(c.issueDate ?? c.start_date),
++    end_date: str(c.expiryDate ?? c.end_date),
++    credential_id: str(c.credentialId ?? c.credential_id),
++  }));
++}
++
++// API skills key → builder skills key.
++const SKILL_KEY_MAP: Record<string, string> = {
++  programmingLanguages: 'programming',
++  frameworks: 'frameworks',
++  databases: 'databases',
++  tools: 'tools',
++  cloudPlatforms: 'cloud',
++  softSkills: 'soft',
++};
++
++interface SkillsApi {
++  programmingLanguages?: unknown;
++  frameworks?: unknown;
++  databases?: unknown;
++  tools?: unknown;
++  cloudPlatforms?: unknown;
++  softSkills?: unknown;
++  customSkills?: { name?: unknown; skills?: unknown }[];
++}
++
++function mapSkills(apiSkills: unknown, base: ResumeBuilderValues['skills']): ResumeBuilderValues['skills'] {
++  const skills: ResumeBuilderValues['skills'] = { ...base };
++  if (apiSkills && typeof apiSkills === 'object') {
++    const src = apiSkills as Record<string, unknown>;
++    for (const [apiKey, builderKey] of Object.entries(SKILL_KEY_MAP)) {
++      if (Array.isArray(src[apiKey])) {
++        skills[builderKey] = (src[apiKey] as unknown[]).map(str).filter(Boolean);
++      }
++    }
++    const custom = (src as SkillsApi).customSkills;
++    if (Array.isArray(custom) && custom.length) {
++      skills.custom = custom.map((c) => ({
++        name: str(c?.name),
++        skills: arr<unknown>(c?.skills).map(str).filter(Boolean),
++      }));
++    }
++  }
++  return skills;
++}
++
++function mapHobbies(hobbies: unknown): { items: string } {
++  if (Array.isArray(hobbies)) {
++    return { items: hobbies.map(str).filter(Boolean).join(', ') };
++  }
++  if (hobbies && typeof hobbies === 'object') {
++    return { items: str((hobbies as { items?: unknown }).items) };
++  }
++  return { items: str(hobbies) };
++}
++
++export interface ApiResumeShape {
++  personalInfo?: Record<string, unknown>;
++  education?: unknown;
++  workExperience?: unknown;
++  experience?: unknown;
++  internships?: unknown;
++  projects?: unknown;
++  certifications?: unknown;
++  skills?: unknown;
++  languages?: unknown;
++  awards?: unknown;
++  achievements?: unknown;
++  references?: unknown;
++  volunteering?: unknown;
++  hobbies?: unknown;
++  [extra: string]: unknown;
++}
++
++export function mapApiResumeToValues(resume: ApiResumeShape = {}): ResumeBuilderValues {
++  const base = buildInitialResumeValues();
++  const personalInfo = (resume.personalInfo ?? {}) as Record<string, unknown>;
++
++  return {
++    ...base,
++    personal: {
++      fullName: str(personalInfo.fullname ?? personalInfo.fullName ?? personalInfo.name),
++      email: str(personalInfo.email),
++      phone: str(personalInfo.phone),
++      location: str(personalInfo.location),
++      linkedin: str(personalInfo.linkedin),
++      github: str(personalInfo.github),
++      portfolio: str(personalInfo.portfolio),
++      headline: str(personalInfo.headline),
++      summary: str(personalInfo.summary),
++    },
++    education: mapEducation(resume.education),
++    experience: mapExperience(resume.workExperience ?? resume.experience),
++    internships: mapExperience(resume.internships),
++    projects: mapProjects(resume.projects),
++    certifications: mapCertifications(resume.certifications),
++    skills: mapSkills(resume.skills, base.skills),
++    languages: arr(resume.languages),
++    awards: arr(resume.awards),
++    achievements: arr(resume.achievements),
++    references: arr(resume.references),
++    volunteering: arr(resume.volunteering),
++    hobbies: mapHobbies(resume.hobbies),
++  };
++}
++
++export default mapApiResumeToValues;
+diff --git a/src/features/resumes/mapResumeValuesToApi.ts b/src/features/resumes/mapResumeValuesToApi.ts
+new file mode 100644
+index 0000000..b39b171
+--- /dev/null
++++ b/src/features/resumes/mapResumeValuesToApi.ts
+@@ -0,0 +1,152 @@
++// Maps the Resume Builder form state into the PATCH /api/v1/resumes/{resume_id}
++// wire body. PATCH is partial: sections with no data are omitted so we never
++// overwrite a stored value with an empty array/object.
++//
++// Documented schema (from backend):
++//   {
++//     personalInfo: { fullname, email, phone, location, ... },
++//     education:    [ { school, degree, startDate, endDate, scoreType, scoreValue } ],
++//     workExperience / projects / certifications / ... (camelCase fields)
++//   }
++//
++// Skills are intentionally NOT sent through this PATCH — backend manages
++// skills as a separate object. TS port of POC mapResumeValuesToApi.js.
++
++import type { ResumeBuilderValues } from './resumeBuilderConfig';
++
++function trimStr(value: unknown): string {
++  return typeof value === 'string' ? value.trim() : value ? String(value) : '';
++}
++
++/** Drops keys whose value is empty so payload only carries filled-in fields. */
++function compact<T extends Record<string, unknown>>(obj: T): Partial<T> {
++  const out: Partial<T> = {};
++  for (const [key, value] of Object.entries(obj)) {
++    if (value === '' || value === null || value === undefined) continue;
++    (out as Record<string, unknown>)[key] = value;
++  }
++  return out;
++}
++
++function mapPersonalInfo(personal: Partial<ResumeBuilderValues['personal']> = {}) {
++  return compact({
++    fullname: trimStr(personal.fullName),
++    email: trimStr(personal.email),
++    phone: trimStr(personal.phone),
++    location: trimStr(personal.location),
++    headline: trimStr(personal.headline),
++    summary: trimStr(personal.summary),
++    linkedin: trimStr(personal.linkedin),
++    github: trimStr(personal.github),
++    portfolio: trimStr(personal.portfolio),
++  });
++}
++
++function mapEducation(list: ResumeBuilderValues['education'] = []) {
++  return list.map((e) =>
++    compact({
++      school: trimStr(e.institution),
++      degree: trimStr(e.degree),
++      startDate: trimStr(e.start_date),
++      endDate: trimStr(e.end_date),
++      scoreType: trimStr(e.score_type),
++      scoreValue: trimStr(e.cgpa),
++    }),
++  );
++}
++
++function mapExperience(list: ResumeBuilderValues['experience'] = []) {
++  return list.map((e) =>
++    compact({
++      company: trimStr(e.company),
++      jobTitle: trimStr(e.job_title),
++      location: trimStr(e.location),
++      startDate: trimStr(e.start_date),
++      endDate: e.currentlyWorking ? 'Present' : trimStr(e.end_date),
++      currentlyWorking: Boolean(e.currentlyWorking),
++      description: trimStr(e.description),
++    }),
++  );
++}
++
++function mapProjects(list: ResumeBuilderValues['projects'] = []) {
++  return list.map((p) =>
++    compact({
++      name: trimStr(p.project_name),
++      technologies: trimStr(p.technologies),
++      startDate: trimStr(p.start_date),
++      endDate: trimStr(p.end_date),
++      link: trimStr(p.project_link),
++      description: trimStr(p.description),
++    }),
++  );
++}
++
++function mapCertifications(list: ResumeBuilderValues['certifications'] = []) {
++  return list.map((c) =>
++    compact({
++      name: trimStr(c.certification_name),
++      issuer: trimStr(c.issuer),
++      issueDate: trimStr(c.start_date),
++      expiryDate: trimStr(c.end_date),
++      credentialId: trimStr(c.credential_id),
++    }),
++  );
++}
++
++/** Generic passthrough for optional/extra sections — preserves their keys. */
++function mapGenericList(list: Record<string, unknown>[] = []) {
++  return list.map((entry) => compact({ ...entry }));
++}
++
++export interface ResumeApiPayload {
++  personalInfo?: Record<string, unknown>;
++  education?: Record<string, unknown>[];
++  experience?: Record<string, unknown>[];
++  internships?: Record<string, unknown>[];
++  projects?: Record<string, unknown>[];
++  certifications?: Record<string, unknown>[];
++  languages?: Record<string, unknown>[];
++  awards?: Record<string, unknown>[];
++  achievements?: Record<string, unknown>[];
++  references?: Record<string, unknown>[];
++  volunteering?: Record<string, unknown>[];
++  hobbies?: string;
++  [extra: string]: unknown;
++}
++
++export function mapResumeValuesToApi(values: Partial<ResumeBuilderValues> = {}): ResumeApiPayload {
++  const payload: ResumeApiPayload = {};
++
++  const personalInfo = mapPersonalInfo(values.personal);
++  if (Object.keys(personalInfo).length) payload.personalInfo = personalInfo as Record<string, unknown>;
++
++  const sectionMappers: Record<string, (list: unknown[]) => Record<string, unknown>[]> = {
++    education: (l) => mapEducation(l as ResumeBuilderValues['education']) as Record<string, unknown>[],
++    experience: (l) => mapExperience(l as ResumeBuilderValues['experience']) as Record<string, unknown>[],
++    internships: (l) => mapExperience(l as ResumeBuilderValues['experience']) as Record<string, unknown>[],
++    projects: (l) => mapProjects(l as ResumeBuilderValues['projects']) as Record<string, unknown>[],
++    certifications: (l) => mapCertifications(l as ResumeBuilderValues['certifications']) as Record<string, unknown>[],
++    languages: (l) => mapGenericList(l as Record<string, unknown>[]) as Record<string, unknown>[],
++    awards: (l) => mapGenericList(l as Record<string, unknown>[]) as Record<string, unknown>[],
++    achievements: (l) => mapGenericList(l as Record<string, unknown>[]) as Record<string, unknown>[],
++    references: (l) => mapGenericList(l as Record<string, unknown>[]) as Record<string, unknown>[],
++    volunteering: (l) => mapGenericList(l as Record<string, unknown>[]) as Record<string, unknown>[],
++  };
++
++  for (const [key, mapper] of Object.entries(sectionMappers)) {
++    const list = (values as Record<string, unknown>)[key];
++    if (Array.isArray(list) && list.length) {
++      const mapped = mapper(list).filter((entry) => Object.keys(entry).length);
++      if (mapped.length) payload[key] = mapped;
++    }
++  }
++
++  // Hobbies is a single record ({ items }) rather than a list.
++  const hobbies = trimStr(values.hobbies?.items);
++  if (hobbies) payload.hobbies = hobbies;
++
++  return payload;
++}
++
++export default mapResumeValuesToApi;
+diff --git a/src/features/resumes/resumeBuilderConfig.ts b/src/features/resumes/resumeBuilderConfig.ts
+new file mode 100644
+index 0000000..3c71b1f
+--- /dev/null
++++ b/src/features/resumes/resumeBuilderConfig.ts
+@@ -0,0 +1,599 @@
++// Resume Builder — section + field definitions.
++//
++// Each section drives one form behind a card on the builder list. Field `key`s
++// deliberately mirror the backend profile wire schema (institution, degree,
++// job_title, company, project_name, certification_name, …) so the real
++// save/load endpoints can consume this state with little to no translation.
++//
++// Section `kind`:
++//   - 'record'  one object (Personal Info, Professional Summary). Personal and
++//               Summary intentionally share `dataKey: 'personal'` so they edit
++//               the same underlying record (full name + summary in one place).
++//   - 'list'    an array of entries (Education, Work, Projects, …). `summary`
++//               builds the saved-card text; `addLabel` is the add button text.
++//   - 'skills'  the custom categorised skills editor.
++//
++// `required: true` on a field renders a red asterisk and is enforced on Save.
++// `ai: true` on a section/field shows the (coming-soon) AI Writer button.
++//
++// TS port of POC src/screens/resumeBuilder/resumeBuilderConfig.js.
++
++// ── Types ───────────────────────────────────────────────────────────────────
++
++export type SectionKind = 'record' | 'list' | 'skills';
++
++export interface FieldOption {
++  label: string;
++  value: string;
++}
++
++export interface SectionField {
++  key: string;
++  label: string;
++  placeholder?: string;
++  width?: 'full' | 'half';
++  required?: boolean;
++  multiline?: boolean;
++  ai?: boolean;
++  type?: 'date' | 'phone' | 'checkbox' | 'dropdown';
++  keyboardType?: 'email-address' | 'decimal-pad' | 'phone-pad' | 'default' | 'numeric';
++  options?: FieldOption[];
++  hideWhenCurrent?: boolean;
++  optionalLabel?: string;
++}
++
++export interface SectionSummaryView {
++  title: string;
++  subtitle?: string;
++  meta: string[];
++}
++
++export interface Section {
++  key: string;
++  title: string;
++  icon: string;
++  kind: SectionKind;
++  dataKey: string;
++  ai?: boolean;
++  addLabel?: string;
++  addAnother?: boolean;
++  fields?: SectionField[];
++  tips?: string[];
++  tipsNote?: string;
++  summary?: (entry: Record<string, unknown>) => SectionSummaryView;
++}
++
++export interface SkillCategory {
++  key: string;
++  label: string;
++  placeholder: string;
++}
++
++export interface CustomSkillGroup {
++  name: string;
++  skills: string[];
++}
++
++export interface ResumeSkillsState {
++  custom: CustomSkillGroup[];
++  // Predefined SKILL_CATEGORIES keys map to string arrays of skill names.
++  [category: string]: string[] | CustomSkillGroup[];
++}
++
++export interface PersonalInfoState {
++  fullName: string;
++  email: string;
++  phone: string;
++  location: string;
++  linkedin: string;
++  github: string;
++  portfolio: string;
++  headline: string;
++  summary: string;
++}
++
++export interface EducationEntry {
++  institution: string;
++  degree: string;
++  start_date: string;
++  end_date: string;
++  score_type: string;
++  cgpa: string;
++}
++
++export interface ExperienceEntry {
++  company: string;
++  job_title: string;
++  location: string;
++  start_date: string;
++  end_date: string;
++  currentlyWorking: boolean;
++  description: string;
++}
++
++export interface ProjectEntry {
++  project_name: string;
++  technologies: string;
++  start_date: string;
++  end_date: string;
++  project_link: string;
++  description: string;
++}
++
++export interface CertificationEntry {
++  certification_name: string;
++  issuer: string;
++  start_date: string;
++  end_date: string;
++  credential_id: string;
++}
++
++export interface ResumeBuilderValues {
++  personal: PersonalInfoState;
++  education: EducationEntry[];
++  experience: ExperienceEntry[];
++  internships: ExperienceEntry[];
++  projects: ProjectEntry[];
++  certifications: CertificationEntry[];
++  skills: ResumeSkillsState;
++  languages?: Record<string, unknown>[];
++  awards?: Record<string, unknown>[];
++  achievements?: Record<string, unknown>[];
++  references?: Record<string, unknown>[];
++  volunteering?: Record<string, unknown>[];
++  hobbies?: { items: string };
++  [extra: string]: unknown;
++}
++
++// ── Constants ───────────────────────────────────────────────────────────────
++
++export const SKILL_CATEGORIES: SkillCategory[] = [
++  { key: 'programming', label: 'Programming Languages', placeholder: 'e.g., Python, JavaScript, Java...' },
++  { key: 'frameworks', label: 'Frameworks & Libraries', placeholder: 'e.g., React, Django, FastAPI...' },
++  { key: 'databases', label: 'Databases', placeholder: 'e.g., PostgreSQL, MongoDB...' },
++  { key: 'tools', label: 'Tools & Technologies', placeholder: 'e.g., Docker, Git, Jenkins...' },
++  { key: 'cloud', label: 'Cloud Platforms', placeholder: 'e.g., AWS, Azure, Google Cloud...' },
++  { key: 'soft', label: 'Soft Skills', placeholder: 'e.g., Leadership, Communication...' },
++];
++
++const SCORE_TYPE_OPTIONS: FieldOption[] = [
++  { label: 'GPA', value: 'gpa' },
++  { label: 'CGPA', value: 'cgpa' },
++  { label: 'Percentage', value: 'percentage' },
++];
++
++const PROFICIENCY_OPTIONS: FieldOption[] = [
++  { label: 'Native', value: 'native' },
++  { label: 'Fluent', value: 'fluent' },
++  { label: 'Professional', value: 'professional' },
++  { label: 'Intermediate', value: 'intermediate' },
++  { label: 'Basic', value: 'basic' },
++];
++
++// ── Primary sections (in screenshot order) ──────────────────────────────────
++
++export const RESUME_SECTIONS: Section[] = [
++  {
++    key: 'personal',
++    title: 'Personal Info',
++    icon: 'person-circle-outline',
++    kind: 'record',
++    dataKey: 'personal',
++    tips: [
++      'Always include your full name, professional email address, current phone number, and city-state location to help recruiters contact you for interviews easily.',
++      'Add LinkedIn profile and portfolio links only when they are current, professional, relevant to your industry, and showcase your work effectively.',
++    ],
++    fields: [
++      { key: 'fullName', label: 'Full Name', placeholder: 'Enter Full Name', width: 'half', required: true },
++      { key: 'email', label: 'Email', placeholder: 'you@example.com', width: 'half', required: true, keyboardType: 'email-address' },
++      { key: 'phone', label: 'Phone Number', placeholder: 'Enter phone number', width: 'half', required: true, type: 'phone' },
++      { key: 'location', label: 'Location', placeholder: 'Enter Location', width: 'half', required: true },
++      { key: 'linkedin', label: 'LinkedIn URL', placeholder: 'Enter LinkedIn URL', width: 'half' },
++      { key: 'github', label: 'GitHub URL', placeholder: 'Enter GitHub URL', width: 'half' },
++      { key: 'portfolio', label: 'Portfolio URL', placeholder: 'Enter Portfolio URL', width: 'full' },
++    ],
++  },
++  {
++    key: 'summary',
++    title: 'Professional Summary',
++    icon: 'document-text-outline',
++    ai: true,
++    kind: 'record',
++    dataKey: 'personal',
++    tips: [
++      'Your professional summary is a brief overview highlighting your experience, skills, and career achievements. Keep it concise, focused, and tailored to your target role.',
++      'Include years of experience, key competencies, measurable achievements, and industry-specific keywords. Start with a strong professional descriptor and emphasize your unique value proposition.',
++    ],
++    tipsNote: 'Recruiters spend an average of 6 seconds reviewing a resume — make your summary count.',
++    fields: [
++      { key: 'headline', label: 'Target Role', placeholder: 'e.g., Frontend Developer, Data Analyst', width: 'full', required: true },
++      {
++        key: 'summary',
++        label: 'Professional Summary',
++        placeholder: 'Write a brief overview highlighting your experience, skills, and achievements.',
++        width: 'full',
++        multiline: true,
++        ai: true,
++      },
++    ],
++  },
++  {
++    key: 'education',
++    title: 'Education',
++    icon: 'school-outline',
++    kind: 'list',
++    dataKey: 'education',
++    addLabel: '+ Add Education',
++    addAnother: true,
++    summary: (e) => ({
++      title: (e.institution as string) || 'Education',
++      subtitle: e.degree as string,
++      meta: [
++        [e.start_date as string, e.end_date as string].filter(Boolean).join(' - '),
++        e.cgpa ? `Score: ${e.cgpa}` : '',
++      ].filter(Boolean) as string[],
++    }),
++    tips: [
++      'Education credentials validate your qualifications and academic foundation. List your most recent and relevant educational achievements in reverse chronological order.',
++      'Include the institution name, degree earned, and dates attended. Highlight honors, relevant coursework, or academic achievements that strengthen your candidacy.',
++    ],
++    tipsNote: '95% of employers verify education credentials during the hiring process.',
++    fields: [
++      { key: 'institution', label: 'School', placeholder: 'School Name', width: 'half', required: true },
++      { key: 'degree', label: 'Degree', placeholder: "Bachelor's, Master's, etc.", width: 'half', required: true },
++      { key: 'start_date', label: 'Start date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'end_date', label: 'End date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'cgpa', label: 'Score', placeholder: 'e.g., 3.8', width: 'half', keyboardType: 'decimal-pad' },
++      { key: 'score_type', label: 'Type', placeholder: 'Type', width: 'half', type: 'dropdown', options: SCORE_TYPE_OPTIONS },
++    ],
++  },
++  {
++    key: 'skills',
++    title: 'Skills',
++    icon: 'star-outline',
++    kind: 'skills',
++    dataKey: 'skills',
++    tips: [
++      'Categorize your skills to make them easy to scan. Group them by Programming Languages, Frameworks, Databases, Tools, Cloud Platforms, and Soft Skills.',
++      'Use Add Custom Category to create your own skill groups like "Architecture Patterns", "DevOps Tools", or any domain-specific set.',
++      'Use specific, searchable keywords that ATS systems recognize. Include both hard skills (technical) and soft skills (communication, leadership).',
++    ],
++    tipsNote: '70% of recruiters use ATS to filter candidates based on skills matching.',
++  },
++  {
++    key: 'experience',
++    title: 'Work Experience',
++    icon: 'briefcase-outline',
++    ai: true,
++    kind: 'list',
++    dataKey: 'experience',
++    addLabel: '+ Add Work Experience',
++    summary: (e) => ({
++      title: (e.job_title as string) || 'Work Experience',
++      subtitle: e.company as string,
++      meta: [
++        [e.start_date as string, e.currentlyWorking ? 'Present' : (e.end_date as string)].filter(Boolean).join(' - '),
++        e.location as string,
++      ].filter(Boolean) as string[],
++    }),
++    tips: [
++      'Details can differentiate your resume. More than three out of four employers think that descriptions of experience must always be present on a resume.',
++      'Show that you create value with your work by listing your responsibilities and quantifiable achievements to help you catch their eye.',
++    ],
++    fields: [
++      { key: 'company', label: 'Company', placeholder: 'Company', width: 'half', required: true },
++      { key: 'job_title', label: 'Role or job title', placeholder: 'Role', width: 'half', required: true },
++      { key: 'start_date', label: 'Start date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'end_date', label: 'End date', placeholder: 'Pick a date', width: 'half', type: 'date', hideWhenCurrent: true },
++      { key: 'location', label: 'Location', placeholder: 'City, State', width: 'half' },
++      { key: 'currentlyWorking', label: 'Currently Working Here', type: 'checkbox', width: 'full' },
++      { key: 'description', label: 'Work description at the company', placeholder: 'Describe your role and responsibilities', width: 'full', multiline: true, ai: true },
++    ],
++  },
++  {
++    key: 'projects',
++    title: 'Projects',
++    icon: 'folder-outline',
++    ai: true,
++    kind: 'list',
++    dataKey: 'projects',
++    addLabel: '+ Add Project',
++    summary: (e) => ({
++      title: (e.project_name as string) || 'Project',
++      subtitle: e.technologies as string,
++      meta: [[e.start_date as string, e.end_date as string].filter(Boolean).join(' - ')].filter(Boolean) as string[],
++    }),
++    tips: [
++      'Projects showcase your practical skills and initiative. Highlight technical challenges solved, technologies used, and measurable outcomes achieved.',
++      'Include relevant metrics like performance improvements, user engagement, or code efficiency. Link to live demos or GitHub repositories when possible.',
++    ],
++    tipsNote: 'Personal projects are valued by 75% of employers when evaluating candidates.',
++    fields: [
++      { key: 'project_name', label: 'Project Title', placeholder: 'Project Title', width: 'full', required: true },
++      { key: 'technologies', label: 'Technologies Used', placeholder: 'Type to add technologies...', width: 'full' },
++      { key: 'start_date', label: 'Start date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'end_date', label: 'End date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'project_link', label: 'Project Link', placeholder: 'https://github.com/...', width: 'full' },
++      { key: 'description', label: 'Project description', placeholder: 'What the project does and your contribution', width: 'full', multiline: true, ai: true },
++    ],
++  },
++  {
++    key: 'certifications',
++    title: 'Certifications',
++    icon: 'ribbon-outline',
++    kind: 'list',
++    dataKey: 'certifications',
++    addLabel: '+ Add Certification',
++    addAnother: true,
++    summary: (e) => ({
++      title: (e.certification_name as string) || 'Certification',
++      subtitle: e.issuer as string,
++      meta: [[e.start_date as string, e.end_date as string].filter(Boolean).join(' - ')].filter(Boolean) as string[],
++    }),
++    tips: [
++      'Certifications validate your expertise and commitment to professional development. List relevant certifications that align with your career goals and industry standards.',
++      'Include the full certification name, issuing organization, and year obtained. Add credential IDs and expiry dates when applicable to verify authenticity.',
++      'Prioritize recent and industry-recognized certifications that demonstrate your qualifications and keep your credentials current.',
++    ],
++    tipsNote: '80% of hiring managers consider certifications when evaluating candidates.',
++    fields: [
++      { key: 'certification_name', label: 'Certification Name', placeholder: 'Certification Name', width: 'half', required: true },
++      { key: 'issuer', label: 'Issued By', placeholder: 'Organization Name', width: 'half' },
++      { key: 'start_date', label: 'Issue Date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'end_date', label: 'Expiry Date', placeholder: 'Pick a date', width: 'half', type: 'date', optionalLabel: '(Optional)' },
++      { key: 'credential_id', label: 'Credential ID', placeholder: 'Certificate or License Number', width: 'full', optionalLabel: '(Optional)' },
++    ],
++  },
++  {
++    key: 'internships',
++    title: 'Internships',
++    icon: 'business-outline',
++    ai: true,
++    kind: 'list',
++    dataKey: 'internships',
++    addLabel: '+ Add Internship',
++    summary: (e) => ({
++      title: (e.job_title as string) || 'Internship',
++      subtitle: e.company as string,
++      meta: [
++        [e.start_date as string, e.currentlyWorking ? 'Present' : (e.end_date as string)].filter(Boolean).join(' - '),
++        e.location as string,
++      ].filter(Boolean) as string[],
++    }),
++    tips: [
++      'Internship experiences demonstrate initiative and practical skills. Highlight specific contributions, projects completed, and skills gained during your internship.',
++      'Emphasize measurable achievements and how you added value to the organization, even in a learning capacity. Use action verbs and quantify results whenever possible.',
++    ],
++    tipsNote: 'Internships are valued by 85% of employers as relevant work experience.',
++    fields: [
++      { key: 'company', label: 'Company', placeholder: 'Company', width: 'half', required: true },
++      { key: 'job_title', label: 'Role or job title', placeholder: 'Role', width: 'half', required: true },
++      { key: 'start_date', label: 'Start date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'end_date', label: 'End date', placeholder: 'Pick a date', width: 'half', type: 'date', hideWhenCurrent: true },
++      { key: 'location', label: 'Location', placeholder: 'City, State', width: 'half' },
++      { key: 'currentlyWorking', label: 'Currently Working Here', type: 'checkbox', width: 'full' },
++      { key: 'description', label: 'Internship description at the company', placeholder: 'Describe your responsibilities and contributions', width: 'full', multiline: true, ai: true },
++    ],
++  },
++];
++
++// ── Optional / extra sections ───────────────────────────────────────────────
++
++export const EXTRA_SECTIONS: Section[] = [
++  {
++    key: 'hobbies',
++    title: 'Hobbies',
++    icon: 'happy-outline',
++    kind: 'record',
++    dataKey: 'hobbies',
++    tips: ['Hobbies can show personality and culture fit. Keep them genuine, relevant, and brief.'],
++    fields: [
++      { key: 'items', label: 'Hobbies & Interests', placeholder: 'e.g., Photography, Hiking, Open-source contributions', width: 'full', multiline: true },
++    ],
++  },
++  {
++    key: 'languages',
++    title: 'Languages',
++    icon: 'language-outline',
++    kind: 'list',
++    dataKey: 'languages',
++    addLabel: '+ Add Language',
++    summary: (e) => ({ title: (e.language as string) || 'Language', subtitle: e.proficiency as string, meta: [] }),
++    tips: ['List languages you can work in, with an honest proficiency level. Useful for roles with global or multilingual teams.'],
++    fields: [
++      { key: 'language', label: 'Language', placeholder: 'e.g., English', width: 'half', required: true },
++      { key: 'proficiency', label: 'Proficiency', placeholder: 'Select', width: 'half', type: 'dropdown', options: PROFICIENCY_OPTIONS },
++    ],
++  },
++  {
++    key: 'awards',
++    title: 'Awards',
++    icon: 'trophy-outline',
++    kind: 'list',
++    dataKey: 'awards',
++    addLabel: '+ Add Award',
++    summary: (e) => ({ title: (e.title as string) || 'Award', subtitle: e.issuer as string, meta: [e.date as string].filter(Boolean) as string[] }),
++    tips: ['Highlight awards that recognize measurable impact or standout performance.'],
++    fields: [
++      { key: 'title', label: 'Award Title', placeholder: 'e.g., Employee of the Year', width: 'full', required: true },
++      { key: 'issuer', label: 'Issued By', placeholder: 'Organization Name', width: 'half' },
++      { key: 'date', label: 'Date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'description', label: 'Description', placeholder: 'What the award was for', width: 'full', multiline: true },
++    ],
++  },
++  {
++    key: 'achievements',
++    title: 'Achievements',
++    icon: 'medal-outline',
++    kind: 'list',
++    dataKey: 'achievements',
++    addLabel: '+ Add Achievement',
++    summary: (e) => ({ title: (e.title as string) || 'Achievement', subtitle: '', meta: [] }),
++    tips: ['Quantify achievements where possible — numbers make impact concrete.'],
++    fields: [
++      { key: 'title', label: 'Achievement', placeholder: 'e.g., Grew signups 40% in one quarter', width: 'full', required: true },
++      { key: 'description', label: 'Description', placeholder: 'Add context or how you did it', width: 'full', multiline: true },
++    ],
++  },
++  {
++    key: 'references',
++    title: 'References',
++    icon: 'people-outline',
++    kind: 'list',
++    dataKey: 'references',
++    addLabel: '+ Add Reference',
++    summary: (e) => ({
++      title: (e.name as string) || 'Reference',
++      subtitle: e.relationship as string,
++      meta: [e.contact as string].filter(Boolean) as string[],
++    }),
++    tips: ['Only list references who have agreed to be contacted. "Available on request" is also acceptable.'],
++    fields: [
++      { key: 'name', label: 'Name', placeholder: 'Full name', width: 'half', required: true },
++      { key: 'relationship', label: 'Relationship', placeholder: 'e.g., Former Manager', width: 'half' },
++      { key: 'contact', label: 'Contact', placeholder: 'Email or phone', width: 'full' },
++    ],
++  },
++  {
++    key: 'volunteering',
++    title: 'Volunteering',
++    icon: 'heart-outline',
++    kind: 'list',
++    dataKey: 'volunteering',
++    addLabel: '+ Add Volunteering',
++    summary: (e) => ({
++      title: (e.organization as string) || 'Volunteering',
++      subtitle: e.role as string,
++      meta: [[e.start_date as string, e.end_date as string].filter(Boolean).join(' - ')].filter(Boolean) as string[],
++    }),
++    tips: ['Volunteering shows initiative and values. Treat it like work experience — focus on contribution and impact.'],
++    fields: [
++      { key: 'organization', label: 'Organization', placeholder: 'Organization Name', width: 'half', required: true },
++      { key: 'role', label: 'Role', placeholder: 'Your role', width: 'half' },
++      { key: 'start_date', label: 'Start date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'end_date', label: 'End date', placeholder: 'Pick a date', width: 'half', type: 'date' },
++      { key: 'description', label: 'Description', placeholder: 'What you did and the impact', width: 'full', multiline: true },
++    ],
++  },
++];
++
++// ── Helpers ─────────────────────────────────────────────────────────────────
++
++export function findSection(key: string): Section | null {
++  return RESUME_SECTIONS.find((s) => s.key === key) || EXTRA_SECTIONS.find((s) => s.key === key) || null;
++}
++
++/** Builds an empty entry/record: '' for text/date/dropdown, false for checkbox. */
++export function buildEmptyEntry(section: Section): Record<string, unknown> {
++  const entry: Record<string, unknown> = {};
++  for (const field of section.fields ?? []) {
++    entry[field.key] = field.type === 'checkbox' ? false : '';
++  }
++  return entry;
++}
++
++/**
++ * Each predefined category holds an array of skill name strings; `custom` is
++ * an array of `{ name, skills: [] }`. Storing individual skills (rather than
++ * one comma string) lets each skill be removed on its own with a swipe.
++ */
++export function buildEmptySkills(): ResumeSkillsState {
++  const skills: ResumeSkillsState = { custom: [] };
++  for (const category of SKILL_CATEGORIES) {
++    skills[category.key] = [];
++  }
++  return skills;
++}
++
++/**
++ * Initial local state for the whole builder. Personal + Summary share the
++ * `personal` record; list sections start empty; skills gets its category map.
++ * Extra-section data is created lazily when the section is added.
++ */
++export function buildInitialResumeValues(): ResumeBuilderValues {
++  return {
++    personal: {
++      fullName: '',
++      email: '',
++      phone: '',
++      location: '',
++      linkedin: '',
++      github: '',
++      portfolio: '',
++      headline: '',
++      summary: '',
++    },
++    education: [],
++    experience: [],
++    internships: [],
++    projects: [],
++    certifications: [],
++    skills: buildEmptySkills(),
++  };
++}
++
++/**
++ * Returns a `{ fieldKey: message }` map of validation errors. Enforces
++ * required fields, a sane phone length, and start/end ordering.
++ */
++export function validateFields(
++  fields: SectionField[] | undefined,
++  data: Record<string, unknown> | undefined,
++): Record<string, string> {
++  const errors: Record<string, string> = {};
++
++  for (const field of fields ?? []) {
++    const raw = data?.[field.key];
++    const value = typeof raw === 'string' ? raw.trim() : raw;
++
++    if (field.required && (value === '' || value === undefined || value === null || value === false)) {
++      errors[field.key] = `${field.label} is required`;
++      continue;
++    }
++
++    if (field.type === 'phone' && field.required) {
++      const digits = String(raw ?? '').replace(/\D/g, '');
++      if (digits.length < 8) {
++        errors[field.key] = 'Enter a valid phone number with country code';
++      }
++    }
++  }
++
++  const start = String(data?.start_date ?? '').trim();
++  const end = String(data?.end_date ?? '').trim();
++  if (start && end && !data?.currentlyWorking && end < start) {
++    errors.end_date = 'End date must be on or after the start date';
++  }
++
++  return errors;
++}
++
++/**
++ * True when a section has at least one meaningful value — drives the builder
++ * progress ring and the per-card "completed" tick.
++ */
++export function isSectionComplete(
++  section: Section | null | undefined,
++  values: Partial<ResumeBuilderValues> | undefined,
++): boolean {
++  if (!section) return false;
++
++  if (section.kind === 'skills') {
++    const skills = (values?.skills ?? {}) as ResumeSkillsState;
++    const hasCategory = SKILL_CATEGORIES.some((c) => ((skills[c.key] as string[]) ?? []).length > 0);
++    const hasCustom = Array.isArray(skills.custom) ? skills.custom.some((c) => (c?.skills ?? []).length > 0) : false;
++    return hasCategory || hasCustom;
++  }
++
++  if (section.kind === 'list') {
++    const list = (values as Record<string, unknown>)?.[section.dataKey];
++    return Array.isArray(list) && list.length > 0;
++  }
++
++  // record
++  const record = ((values as Record<string, unknown>)?.[section.dataKey] ?? {}) as Record<string, unknown>;
++  return (section.fields ?? []).some((f) => {
++    const v = record[f.key];
++    return typeof v === 'string' ? v.trim() !== '' : Boolean(v);
++  });
++}
+diff --git a/src/features/resumes/resumesApi.ts b/src/features/resumes/resumesApi.ts
+new file mode 100644
+index 0000000..82b41e9
+--- /dev/null
++++ b/src/features/resumes/resumesApi.ts
+@@ -0,0 +1,186 @@
++// Resume Builder — draft-resume lifecycle. TS port of POC src/API/resumes/resumesApi.js.
++//
++//   POST  /api/v1/resumes/              create an empty draft → { resume_id }
++//   GET   /api/v1/resumes/              list user's resumes
++//   PATCH /api/v1/resumes/{resume_id}   update resume sections (partial)
++//
++// Uses our production axios httpClient (NOT raw fetch like POC) so:
++//   - Token attach/refresh happens via http.ts interceptor + refreshSession single-flight
++//   - HTTPS-only guard, tenant header, correlation handling all centralized
++//   - Sign-out on hard refresh failure flows through registerSignOutHandler hook
++//
++// Reviewed disposition: PORT-TS per DEEP_REVIEW_DEV_RESUME_BUILDER_2026-06-05.txt §3.3.
++
++import { useMutation, useQuery } from '@tanstack/react-query';
++
++import { httpClient } from '@/api/client/http';
++import { resumeBuilderEndpoints } from '@/types/contracts/endpoints';
++import { logger } from '@/utils/logger';
++
++// ── Type definitions ────────────────────────────────────────────────────────
++
++export interface ResumeSummary {
++  id: string;
++  // backend may include various other fields; preserve them via spread elsewhere
++  [extra: string]: unknown;
++}
++
++/** Partial PATCH payload. See mapResumeValuesToApi for the contract shape. */
++export interface ResumePatchPayload {
++  personalInfo?: Record<string, unknown>;
++  education?: unknown[];
++  experience?: unknown[];
++  internships?: unknown[];
++  projects?: unknown[];
++  certifications?: unknown[];
++  languages?: unknown[];
++  awards?: unknown[];
++  achievements?: unknown[];
++  references?: unknown[];
++  volunteering?: unknown[];
++  hobbies?: string;
++  [extra: string]: unknown;
++}
++
++// ── Helpers ─────────────────────────────────────────────────────────────────
++
++interface BackendResumeEnvelope {
++  resume_id?: string;
++  id?: string;
++  _id?: string;
++  data?: { resume_id?: string; id?: string; _id?: string };
++}
++
++/**
++ * Envelope-tolerant id extraction. Accepts `resume_id`, `id`, `_id`, or a
++ * `{ data: {...} }` wrapper. Ported from POC — handles the "what is the id
++ * field this week" class of bugs across backend revisions.
++ */
++function extractResumeId(data: unknown): string {
++  if (!data || typeof data !== 'object') return '';
++  const env = data as BackendResumeEnvelope;
++  return env.resume_id ?? env.id ?? env._id ?? env.data?.resume_id ?? env.data?.id ?? env.data?._id ?? '';
++}
++
++// ── createResume ────────────────────────────────────────────────────────────
++
++/**
++ * POST /api/v1/resumes/ — create an empty draft. Returns the new resume_id.
++ * Throws if the response doesn't include one. No request body required.
++ */
++export async function createResume(): Promise<string> {
++  try {
++    const { data } = await httpClient.post<unknown>(resumeBuilderEndpoints.create, {});
++    const resumeId = extractResumeId(data);
++    if (!resumeId) {
++      throw new Error('Resume created but no resume_id was returned.');
++    }
++    return resumeId;
++  } catch (error) {
++    const message = error instanceof Error ? error.message : 'createResume failed';
++    logger.error('[createResume] Failed:', message);
++    throw error;
++  }
++}
++
++export function useCreateResume() {
++  return useMutation({ mutationFn: createResume });
++}
++
++// ── listResumes ─────────────────────────────────────────────────────────────
++
++interface ListResumesEnvelope {
++  items?: unknown[];
++  results?: unknown[];
++  resumes?: unknown[];
++  data?: unknown[];
++}
++
++/**
++ * GET /api/v1/resumes/ — user's resumes. Returns [] on 404. Accepts a bare
++ * array OR `.items` / `.results` / `.resumes` / `.data` wrappers.
++ * Each returned item has its id extracted into a normalised `id` field.
++ */
++export async function listResumes(): Promise<ResumeSummary[]> {
++  try {
++    const { data } = await httpClient.get<unknown>(resumeBuilderEndpoints.create);
++
++    const rawList: unknown[] = Array.isArray(data)
++      ? data
++      : (data as ListResumesEnvelope)?.items ??
++        (data as ListResumesEnvelope)?.results ??
++        (data as ListResumesEnvelope)?.resumes ??
++        (data as ListResumesEnvelope)?.data ??
++        [];
++
++    return rawList
++      .map((item) => {
++        const id = extractResumeId(item);
++        return { ...(item as Record<string, unknown>), id } as ResumeSummary;
++      })
++      .filter((item) => item.id);
++  } catch (error) {
++    // axios surfaces 404 as a rejection — treat as empty list (POC convention).
++    if (error && typeof error === 'object' && 'response' in error) {
++      const status = (error as { response?: { status?: number } }).response?.status;
++      if (status === 404) return [];
++    }
++    const message = error instanceof Error ? error.message : 'listResumes failed';
++    logger.error('[listResumes] Failed:', message);
++    throw error;
++  }
++}
++
++export function useListResumes() {
++  return useQuery({ queryKey: ['resumes', 'list'], queryFn: listResumes });
++}
++
++// ── getExistingResumeId ─────────────────────────────────────────────────────
++
++/**
++ * Recover the user's existing resume id. The backend enforces "one resume per
++ * user", so after a reinstall / fresh login a POST would 400 with "already
++ * exists". This reuses the existing resume instead. Best-effort: returns '' on
++ * any failure so callers can fall back to createResume() without a hard error.
++ */
++export async function getExistingResumeId(): Promise<string> {
++  try {
++    const resumes = await listResumes();
++    return resumes[0]?.id ?? '';
++  } catch (error) {
++    const message = error instanceof Error ? error.message : 'getExistingResumeId failed';
++    logger.warn('[getExistingResumeId] Failed (non-fatal):', message);
++    return '';
++  }
++}
++
++// ── updateResume ────────────────────────────────────────────────────────────
++
++export interface UpdateResumeVariables {
++  resumeId: string;
++  payload: ResumePatchPayload;
++}
++
++/**
++ * PATCH /api/v1/resumes/{resume_id} — partial update of resume sections.
++ * `payload` shape comes from mapResumeValuesToApi. Returns the updated resume
++ * document (or `null` if the backend returns no body / 204).
++ */
++export async function updateResume({ resumeId, payload }: UpdateResumeVariables): Promise<unknown> {
++  if (!resumeId) {
++    throw new Error('resume_id is required to update a resume.');
++  }
++  try {
++    const url = `${resumeBuilderEndpoints.base}${encodeURIComponent(resumeId)}`;
++    const { data, status } = await httpClient.patch<unknown>(url, payload ?? {});
++    return status === 204 ? null : data;
++  } catch (error) {
++    const message = error instanceof Error ? error.message : 'updateResume failed';
++    logger.error('[updateResume] Failed:', message);
++    throw error;
++  }
++}
++
++export function useUpdateResume() {
++  return useMutation({ mutationFn: updateResume });
++}
+diff --git a/src/features/resumes/templatesApi.ts b/src/features/resumes/templatesApi.ts
+new file mode 100644
+index 0000000..67a1111
+--- /dev/null
++++ b/src/features/resumes/templatesApi.ts
+@@ -0,0 +1,320 @@
++// Resume Builder — template catalogue + apply. TS port of POC src/API/templates/templatesApi.js.
++//
++//   GET  /api/v1/templates/categories          → [ "professional", ... ]
++//   GET  /api/v1/templates?category=...        → [ { id, name, ... } ]
++//   POST /api/v1/templates/{resume_id}/apply   body { template_id }
++//   GET  /api/v1/templates/{template_id}       → template configuration JSON
++//
++// Notable robustness inherited from POC:
++//   - Multi-shape URL fallback (4 candidate URLs, FastAPI trailing-slash aware)
++//   - Two-id model: `id` (MongoDB ObjectID for POST /apply) vs `templateId`
++//     (backend slug for GET /templates/{template_id})
++//   - snake_case + camelCase field-name tolerance
++//   - resolveImageUrl handles absolute, relative, and "starts with /" cases
++//
++// `isPremium` is rendered as a display-only badge. Backend MUST enforce premium
++// gating on POST /apply per ADR-0009 (server-side authz). See A8b in the
++// backend coordination doc.
++//
++// Reviewed disposition: PORT-TS per DEEP_REVIEW_DEV_RESUME_BUILDER_2026-06-05.txt §3.4.
++
++import { useMutation, useQuery } from '@tanstack/react-query';
++
++import { baseUrl, httpClient } from '@/api/client/http';
++import { templateEndpoints } from '@/types/contracts/endpoints';
++import { logger } from '@/utils/logger';
++
++// ── Types ───────────────────────────────────────────────────────────────────
++
++export interface TemplateCard {
++  /** MongoDB ObjectID used by POST /api/v1/templates/{resume_id}/apply */
++  id: string;
++  /** Backend slug used by GET /api/v1/templates/{template_id} (config endpoint) */
++  templateId: string;
++  name: string;
++  category: string;
++  previewImage: string;
++  isPremium: boolean;
++  // Preserve any extra fields the backend includes.
++  [extra: string]: unknown;
++}
++
++export interface TemplateConfig {
++  colors?: Record<string, unknown>;
++  typography?: Record<string, unknown>;
++  layout?: Record<string, unknown>;
++  styling?: Record<string, unknown>;
++  sections?: Record<string, { order?: number; enabled?: boolean; label?: string }> | unknown;
++  [extra: string]: unknown;
++}
++
++// ── getTemplateCategories ───────────────────────────────────────────────────
++
++interface CategoryItem {
++  slug?: string;
++  name?: string;
++}
++
++export async function getTemplateCategories(): Promise<string[]> {
++  try {
++    const { data } = await httpClient.get<unknown>(templateEndpoints.categories);
++    const list = normalizeListPayload(data);
++    return list
++      .map((item) =>
++        typeof item === 'string' ? item : ((item as CategoryItem)?.slug ?? (item as CategoryItem)?.name ?? ''),
++      )
++      .filter(Boolean) as string[];
++  } catch (error) {
++    if (statusOf(error) === 404) return [];
++    const message = error instanceof Error ? error.message : 'getTemplateCategories failed';
++    logger.error('[getTemplateCategories] Failed:', message);
++    throw error;
++  }
++}
++
++export function useTemplateCategories() {
++  return useQuery({ queryKey: ['templates', 'categories'], queryFn: getTemplateCategories });
++}
++
++// ── getTemplatesByCategory ──────────────────────────────────────────────────
++
++interface TemplateListEnvelope {
++  templates?: unknown[];
++  items?: unknown[];
++  results?: unknown[];
++  data?: unknown[] | { items?: unknown[]; templates?: unknown[] };
++  docs?: unknown[];
++}
++
++/**
++ * Pulls the array of templates out of whatever envelope the backend uses.
++ * Extends the shared list normaliser with the keys a template API commonly
++ * uses ({ templates: [...] }, nested data.items, ...).
++ */
++function normalizeTemplateList(payload: unknown): unknown[] {
++  if (Array.isArray(payload)) return payload;
++  const env = payload as TemplateListEnvelope;
++  for (const key of ['templates', 'items', 'results', 'data', 'docs'] as const) {
++    if (Array.isArray(env?.[key])) return env[key] as unknown[];
++  }
++  if (Array.isArray((env?.data as { items?: unknown[] })?.items)) {
++    return (env.data as { items: unknown[] }).items;
++  }
++  if (Array.isArray((env?.data as { templates?: unknown[] })?.templates)) {
++    return (env.data as { templates: unknown[] }).templates;
++  }
++  return [];
++}
++
++async function fetchTemplatesPayload(url: string): Promise<unknown> {
++  try {
++    const { data } = await httpClient.get<unknown>(url);
++    return data;
++  } catch (error) {
++    if (statusOf(error) === 404) return null;
++    throw error;
++  }
++}
++
++/**
++ * Robust to backends that ignore `category` or expose only the full collection:
++ * if the filtered request yields nothing, falls back to the full catalogue and
++ * filters client-side by each item's `category` field. Tries 4 URL shapes.
++ */
++export async function getTemplatesByCategory(category: string): Promise<TemplateCard[]> {
++  try {
++    // Use raw path (no baseUrl prefix since httpClient.get sends just the path).
++    const base = templateEndpoints.list;
++    const query = category ? `?category=${encodeURIComponent(category)}` : '';
++
++    const candidates = [
++      query ? `${base}${query}` : '',
++      query ? `${base}/${query}` : '',
++      base,
++      `${base}/`,
++    ].filter(Boolean);
++
++    let rawList: unknown[] = [];
++    let usedUrl = '';
++    for (const url of candidates) {
++      const payload = await fetchTemplatesPayload(url);
++      const parsed = normalizeTemplateList(payload);
++      if (parsed.length) {
++        rawList = parsed;
++        usedUrl = url;
++        break;
++      }
++    }
++
++    let list = rawList;
++    if (category && rawList.some((t) => (t as { category?: string })?.category)) {
++      list = rawList.filter((t) => {
++        const cat = (t as { category?: string })?.category;
++        return !cat || String(cat).toLowerCase() === String(category).toLowerCase();
++      });
++    }
++
++    const cards = list.map(normalizeTemplateCard).filter((t) => t.id);
++
++    logger.info('[getTemplatesByCategory]', category, '→ url:', usedUrl || '(none)', 'raw:', rawList.length, 'cards:', cards.length);
++
++    if (rawList.length && !cards.length) {
++      logger.warn(
++        '[getTemplatesByCategory] templates returned but no id field recognised. Sample item keys:',
++        Object.keys((rawList[0] as Record<string, unknown>) ?? {}).join(', '),
++      );
++    }
++
++    return cards;
++  } catch (error) {
++    const message = error instanceof Error ? error.message : 'getTemplatesByCategory failed';
++    logger.error('[getTemplatesByCategory] Failed:', message);
++    throw error;
++  }
++}
++
++export function useTemplatesByCategory(category: string) {
++  return useQuery({
++    queryKey: ['templates', 'byCategory', category],
++    queryFn: () => getTemplatesByCategory(category),
++    enabled: Boolean(category),
++  });
++}
++
++// ── applyTemplate ───────────────────────────────────────────────────────────
++
++export interface ApplyTemplateVariables {
++  resumeId: string;
++  templateId: string;
++}
++
++export async function applyTemplate({ resumeId, templateId }: ApplyTemplateVariables): Promise<unknown> {
++  if (!resumeId) throw new Error('resume_id is required to apply a template.');
++  if (!templateId) throw new Error('template_id is required to apply a template.');
++
++  try {
++    const url = `${templateEndpoints.base}${encodeURIComponent(resumeId)}/apply`;
++    const { data } = await httpClient.post<unknown>(url, { template_id: templateId });
++    return data;
++  } catch (error) {
++    const message = error instanceof Error ? error.message : 'applyTemplate failed';
++    logger.error('[applyTemplate] Failed:', message);
++    throw error;
++  }
++}
++
++export function useApplyTemplate() {
++  return useMutation({ mutationFn: applyTemplate });
++}
++
++// ── getTemplateConfig ───────────────────────────────────────────────────────
++
++interface ConfigEnvelope {
++  config?: TemplateConfig;
++  data?: TemplateConfig;
++}
++
++export async function getTemplateConfig(templateId: string): Promise<TemplateConfig> {
++  if (!templateId) throw new Error('template_id is required to load a template config.');
++
++  try {
++    const url = `${templateEndpoints.base}${encodeURIComponent(templateId)}`;
++    const { data } = await httpClient.get<unknown>(url);
++    const env = data as ConfigEnvelope;
++    return env?.config ?? env?.data ?? (data as TemplateConfig);
++  } catch (error) {
++    const message = error instanceof Error ? error.message : 'getTemplateConfig failed';
++    logger.error('[getTemplateConfig] Failed:', message);
++    throw error;
++  }
++}
++
++export function useTemplateConfig(templateId: string) {
++  return useQuery({
++    queryKey: ['templates', 'config', templateId],
++    queryFn: () => getTemplateConfig(templateId),
++    enabled: Boolean(templateId),
++  });
++}
++
++// ── Helpers ─────────────────────────────────────────────────────────────────
++
++function statusOf(error: unknown): number | undefined {
++  return error && typeof error === 'object' && 'response' in error
++    ? (error as { response?: { status?: number } }).response?.status
++    : undefined;
++}
++
++function normalizeListPayload(payload: unknown): unknown[] {
++  if (Array.isArray(payload)) return payload;
++  if (Array.isArray((payload as { items?: unknown[] })?.items)) return (payload as { items: unknown[] }).items;
++  if (Array.isArray((payload as { results?: unknown[] })?.results)) return (payload as { results: unknown[] }).results;
++  if (Array.isArray((payload as { data?: unknown[] })?.data)) return (payload as { data: unknown[] }).data;
++  return [];
++}
++
++/** Resolves a raw image path into a full URL the RN Image component can load. */
++function resolveImageUrl(rawUrl: unknown): string {
++  if (typeof rawUrl !== 'string' || !rawUrl) return '';
++  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) return rawUrl;
++  if (rawUrl.startsWith('/')) return `${baseUrl}${rawUrl}`;
++  return rawUrl;
++}
++
++interface RawTemplate {
++  id?: string;
++  _id?: string;
++  template_id?: string;
++  templateId?: string;
++  slug?: string;
++  code?: string;
++  key?: string;
++  name?: string;
++  title?: string;
++  label?: string;
++  category?: string;
++  category_name?: string;
++  type?: string;
++  previewImage?: string;
++  preview_image?: string;
++  previewUrl?: string;
++  preview_url?: string;
++  thumbnail?: string;
++  thumbnail_url?: string;
++  image?: string;
++  image_url?: string;
++  isPremium?: boolean;
++  is_premium?: boolean;
++  premium?: boolean;
++  [extra: string]: unknown;
++}
++
++function normalizeTemplateCard(item: unknown): TemplateCard {
++  if (!item || typeof item !== 'object') {
++    return {
++      id: '',
++      templateId: '',
++      name: 'Template',
++      category: '',
++      previewImage: '',
++      isPremium: false,
++    };
++  }
++  const t = item as RawTemplate;
++
++  const rawPreviewUrl =
++    t.previewImage ?? t.preview_image ?? t.previewUrl ?? t.preview_url ??
++    t.thumbnail ?? t.thumbnail_url ?? t.image ?? t.image_url ?? '';
++
++  const templateId = t.template_id ?? t.templateId ?? t.slug ?? t.code ?? t.key ?? '';
++
++  return {
++    ...t,
++    id: t.id ?? t._id ?? templateId ?? '',
++    templateId,
++    name: t.name ?? t.title ?? t.label ?? 'Template',
++    category: t.category ?? t.category_name ?? t.type ?? '',
++    previewImage: resolveImageUrl(rawPreviewUrl),
++    isPremium: Boolean(t.isPremium ?? t.is_premium ?? t.premium ?? false),
++  };
++}
+diff --git a/src/types/contracts/endpoints.ts b/src/types/contracts/endpoints.ts
+index b1006ad..bf3058d 100644
+--- a/src/types/contracts/endpoints.ts
++++ b/src/types/contracts/endpoints.ts
+@@ -59,6 +59,29 @@ export const atsEndpoints = {
+   deleteFix: '/api/v1/resume/enhance/delete-fix',
+ } as const;
+ 
++// Resume Builder endpoints (ported from POC `src/uri/uri.js`).
++// Per A8 backend coordination — Resume CRUD on careerbot-api.
++export const resumeBuilderEndpoints = {
++  // POST — creates an empty draft resume; returns `{ resume_id }`. No body.
++  create: '/api/v1/resumes/',
++  // PATCH base — `${base}${resume_id}` updates resume sections.
++  // GET base/(empty) — lists user's resumes.
++  base: '/api/v1/resumes/',
++} as const;
++
++// Template catalogue + apply (ported from POC).
++// Per A9 backend coordination.
++export const templateEndpoints = {
++  // GET — list of category slugs, e.g. ["professional", "modern", ...].
++  categories: '/api/v1/templates/categories',
++  // GET — template catalogue. Filtered by query: `${list}?category=...`.
++  list: '/api/v1/templates',
++  // Shared base for per-resume / per-template operations:
++  //   POST `${base}${resume_id}/apply`  body { template_id }  → apply template
++  //   GET  `${base}${template_id}`                            → template config JSON
++  base: '/api/v1/templates/',
++} as const;
++
+ // Cross-repo dependencies (per A0..A6 backend coordination doc):
+ export const meEndpoints = {
+   // A2 / A5 — list + revoke devices (NEW on api)

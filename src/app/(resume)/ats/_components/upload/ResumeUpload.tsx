@@ -13,14 +13,21 @@ import {
   Trash2,
 } from "lucide-react";
 import { FaFileUpload } from "react-icons/fa";
-import { formatFileSize } from "../../utils/helpers";
+import { formatFileSize, clearAtsUploadStorage, validateResumeFile } from "../../utils/helpers";
 import { processResumeComplete } from "@/api/resumeatsapi";
+import { buildAtsReportRoute, normalizeResumeScanError } from "../../utils/scanFlow";
+import { useAuth } from "@/hooks/useAuth";
+import SignUpModal from "@/components/SignUpModal";
 
 const PRIMARY_COLOR = "#0275dd";
 
 const ResumeUpload: React.FC = () => {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingReportRoute, setPendingReportRoute] = useState<string | null>(null);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [step, setStep] = useState<number>(0);
@@ -30,6 +37,8 @@ const ResumeUpload: React.FC = () => {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isImageBased, setIsImageBased] = useState<boolean>(false);
+  const [scanErrorKind, setScanErrorKind] = useState<"auth" | "credits" | "generic" | null>(null);
+  const [scanErrorMessage, setScanErrorMessage] = useState<string | null>(null);
 
   const radius = 50;
   const strokeWidth = 8;
@@ -89,15 +98,14 @@ const ResumeUpload: React.FC = () => {
   const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-    const allowed = ["pdf", "docx"];
-    if (!allowed.includes(ext)) {
-      setError("Invalid file type. Only .pdf, .docx are allowed.");
-      return;
-    }
+    const extErr = validateResumeFile(f);
+    if (extErr) { setError(extErr); return; }
 
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
     setError(null);
     setIsImageBased(false);
+    setScanErrorKind(null);
+    setScanErrorMessage(null);
 
     const valid = await validateFileContent(f, ext);
     if (!valid) {
@@ -129,7 +137,25 @@ const ResumeUpload: React.FC = () => {
       clearInterval(progInt);
       setIsProcessing(false);
 
-      if (result.parsed_data?.error || result.parsed_data?.ocr_needed || !result.success) {
+      if (!result.success) {
+        const msg = result.error ?? "Something went wrong while analyzing your resume.";
+        const lower = msg.toLowerCase();
+        const kind: "auth" | "credits" | "generic" =
+          lower.includes("not authenticated") ? "auth" :
+          lower.includes("credit") || lower.includes("upgrade your plan") ? "credits" :
+          "generic";
+
+        setScanErrorKind(kind);
+        setScanErrorMessage(msg);
+        setCurrentScore(0);
+        setProgress(100);
+        setStep(3);
+        localStorage.setItem("isImageBased", "false");
+        localStorage.setItem("currentScore", "0");
+        return;
+      }
+
+      if (result.parsed_data?.ocr_needed) {
         setIsImageBased(true);
         setCurrentScore(0);
         setProgress(100);
@@ -139,37 +165,30 @@ const ResumeUpload: React.FC = () => {
         return;
       }
 
-      if (result.success) {
-        setCurrentScore(result.finalWeightedScore ?? 0);
+      setCurrentScore(result.finalWeightedScore ?? 0);
 
-        localStorage.setItem(
-          "atsAnalysisData",
-          JSON.stringify({
-            ...result,
-            file_name: f.name,
-            file_size: f.size,
-            file_type: f.type,
-            upload_time: new Date().toISOString(),
-            missingFields: result.missingFields ?? [],
-          })
-        );
-        localStorage.setItem("currentScore", String(result.finalWeightedScore ?? 0));
-        localStorage.setItem("isImageBased", "false");
-        setProgress(100);
-        setTimeout(() => setStep(3), 500);
-      } else {
-        throw new Error(result.error ?? "Unknown error");
-      }
+      localStorage.setItem(
+        "atsAnalysisData",
+        JSON.stringify({
+          ...result,
+          file_name: f.name,
+          file_size: f.size,
+          file_type: f.type,
+          upload_time: new Date().toISOString(),
+          missingFields: result.missingFields ?? [],
+        })
+      );
+      localStorage.setItem("currentScore", String(result.finalWeightedScore ?? 0));
+      localStorage.setItem("isImageBased", "false");
+      setProgress(100);
+      setTimeout(() => setStep(3), 500);
     } catch (err: unknown) {
       clearInterval(progInt);
-      let message = "Processing failed. Try again.";
-      if (err instanceof Error && err.message) message = err.message;
-      else if (typeof err === "string") message = err;
-      setError(message);
+      setError(normalizeResumeScanError(err, "Processing failed. Try again."));
       setStep(0);
       setUploadedFile(null);
       setIsProcessing(false);
-      localStorage.clear();
+      clearAtsUploadStorage();
     }
   };
 
@@ -181,34 +200,40 @@ const ResumeUpload: React.FC = () => {
     setCurrentScore(0);
     setIsProcessing(false);
     setIsImageBased(false);
-    localStorage.clear();
+    setScanErrorKind(null);
+    setScanErrorMessage(null);
+    clearAtsUploadStorage();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const viewReport = () => {
-    if (step === 3) {
-      if (isImageBased) {
-        // For image-based resumes, redirect to resume enhancer with parsed data
-        router.push(`/enhancer/builder`);
-      } else {
-        router.push(`/ats/report?score=${currentScore}`);
-      }
+    if (step !== 3) return;
+
+    const cached = localStorage.getItem("atsAnalysisData");
+    const resumeId = cached ? JSON.parse(cached)?.resume_id : undefined;
+    const reportRoute = buildAtsReportRoute(resumeId);
+
+    if (isAuthenticated) {
+      router.push(reportRoute);
+    } else {
+      setPendingReportRoute(reportRoute);
+      setShowAuthModal(true);
     }
   };
 
   return (
     <div className="w-full bg-white">
-      <div className="flex flex-col items-center justify-start font-sans py-6 px-4">
-        <div className="text-center mb-6 max-w-2xl">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-2">
+      <div className="flex flex-col items-center justify-start font-sans py-4 px-4">
+        <div className="text-center mb-4 max-w-lg">
+          <h1 className="text-xl md:text-2xl font-extrabold text-gray-900 mb-1.5">
             Get Your Free ATS Resume Score
           </h1>
-          <p className="text-sm text-gray-600">
+          <p className="text-xs text-gray-600">
             Get instant AI analysis and discover your resume&apos;s compatibility with employer ATS systems.
           </p>
         </div>
 
-        <div className="relative w-full max-w-3xl mx-auto mb-8 px-4">
+        <div className="relative w-full max-w-lg mx-auto mb-5 px-4">
           <div className="grid grid-cols-3 items-center" style={{ height: 90 }}>
             {[
               { icon: Upload, label: "Upload Resume", minStep: 1 },
@@ -265,8 +290,8 @@ const ResumeUpload: React.FC = () => {
           </div>
         </div>
 
-        <div className="w-full max-w-xl mx-auto">
-          <div className="bg-white p-6 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#0275dd] relative transition-all duration-300 h-[26rem] flex flex-col items-center justify-center text-center">
+        <div className="w-full max-w-lg mx-auto">
+          <div className="bg-white p-6 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#0275dd] relative transition-all duration-300 min-h-80 flex flex-col items-center justify-center text-center">
             {error && (
               <div className="absolute top-3 left-3 right-3 bg-red-50 border border-red-200 rounded-lg p-2 animate-pulse z-10">
                 <p className="text-red-600 font-semibold text-xs flex items-center gap-2 justify-center">
@@ -347,71 +372,183 @@ const ResumeUpload: React.FC = () => {
 
             {step >= 1 && step < 3 && (
               <div className="flex flex-col items-center w-full">
-                <div className="relative w-28 h-28 mb-4">
-                  <div className="absolute inset-0 rounded-full bg-blue-50 animate-pulse opacity-40"></div>
-                  <div
-                    className="absolute inset-2 rounded-full bg-blue-100/50 animate-pulse opacity-30"
-                    style={{ animationDelay: "150ms" }}
-                  ></div>
-                  <svg className="w-full h-full relative z-10" viewBox="0 0 120 120">
+
+                {/* Gradient arc ring + pulse */}
+                <div style={{ position: "relative", width: 148, height: 148, marginBottom: 18, flexShrink: 0 }}>
+
+                  {/* Expanding pulse rings */}
+                  <div style={{
+                    position: "absolute", inset: 8, borderRadius: "50%",
+                    border: "1.5px solid rgba(2,117,221,0.35)",
+                    animation: "ats-pulse 2.2s ease-out infinite",
+                  }} />
+                  <div style={{
+                    position: "absolute", inset: 8, borderRadius: "50%",
+                    border: "1.5px solid rgba(2,117,221,0.2)",
+                    animation: "ats-pulse 2.2s ease-out 0.75s infinite",
+                  }} />
+
+                  {/* Gradient progress arc */}
+                  <svg
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}
+                    viewBox="0 0 148 148"
+                  >
+                    <defs>
+                      <linearGradient id="atsArcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#0275dd" />
+                        <stop offset="100%" stopColor="#06b6d4" />
+                      </linearGradient>
+                    </defs>
+                    {/* Track */}
+                    <circle cx="74" cy="74" r="58" fill="none" stroke="#EFF6FF" strokeWidth="10" />
+                    {/* Progress */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r={radius}
+                      cx="74" cy="74" r="58"
                       fill="none"
-                      stroke="#e5e7eb"
-                      strokeWidth={strokeWidth}
-                    />
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r={radius}
-                      fill="none"
-                      stroke={PRIMARY_COLOR}
-                      strokeWidth={strokeWidth}
+                      stroke="url(#atsArcGrad)"
+                      strokeWidth="10"
                       strokeLinecap="round"
-                      transform="rotate(-90 60 60)"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={progressOffset}
-                      className="transition-all duration-700 ease-out"
+                      strokeDasharray={2 * Math.PI * 58}
+                      strokeDashoffset={2 * Math.PI * 58 * (1 - progress / 100)}
+                      style={{ transition: "stroke-dashoffset 0.7s ease-out" }}
                     />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center z-20">
-                    <span className="text-xl font-bold text-gray-900">
-                      {Math.round(progress)}%
+
+                  {/* Center % */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", lineHeight: 1 }}>
+                      {Math.round(progress)}
                     </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8" }}>%</span>
                   </div>
                 </div>
-                <div className="text-center space-y-2 max-w-md">
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 text-[#0275dd] animate-spin" />
-                    <p className="text-sm font-semibold text-gray-900">
+
+                {/* Status message + timer */}
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 4 }}>
+                    <Loader2 className="animate-spin" style={{ width: 13, height: 13, color: "#0275dd" }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", margin: 0 }}>
                       {getStatusMessage(elapsedTime)}
                     </p>
                   </div>
-                  <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
-                    <Clock className="w-3 h-3" />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 11, color: "#94A3B8" }}>
+                    <Clock style={{ width: 11, height: 11 }} />
                     <span>{formatTime(elapsedTime)}</span>
                   </div>
-                  {elapsedTime > 60 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mt-2 animate-fade-in">
-                      <p className="text-xs text-yellow-800">
-                        <strong>Deep Analysis in Progress</strong>
-                        <br />
-                        AI is performing comprehensive analysis.
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-center gap-1.5 pt-2">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <div
-                        key={i}
-                        className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-                          progress > (i + 1) * 19 ? "bg-[#0275dd] scale-110" : "bg-gray-300"
-                        }`}
-                      ></div>
-                    ))}
+                </div>
+
+                {/* Stage tracker */}
+                <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  {[
+                    { label: "Upload",  pct: 8  },
+                    { label: "Parse",   pct: 35 },
+                    { label: "Analyze", pct: 65 },
+                    { label: "Score",   pct: 90 },
+                  ].map(({ label, pct }, i) => (
+                    <React.Fragment key={label}>
+                      {i > 0 && (
+                        <div style={{
+                          width: 22, height: 2, borderRadius: 2,
+                          background: progress >= pct ? "linear-gradient(90deg,#0275dd,#06b6d4)" : "#E2E8F0",
+                          transition: "background 0.3s",
+                          flexShrink: 0,
+                        }} />
+                      )}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                        <div style={{
+                          width: 9, height: 9, borderRadius: "50%",
+                          background: progress >= pct ? "#0275dd" : "#E2E8F0",
+                          boxShadow: progress >= pct ? "0 0 8px rgba(2,117,221,0.55)" : "none",
+                          transition: "all 0.35s ease",
+                        }} />
+                        <span style={{
+                          fontSize: 10, fontWeight: 600,
+                          color: progress >= pct ? "#0275dd" : "#CBD5E1",
+                          transition: "color 0.35s",
+                        }}>
+                          {label}
+                        </span>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                {elapsedTime > 60 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mt-3 animate-fade-in">
+                    <p className="text-xs text-yellow-800 text-center">
+                      <strong>Deep Analysis in Progress</strong><br />
+                      AI is performing comprehensive analysis.
+                    </p>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* SCAN FAILED — auth / credits / generic error (distinct from image-based) */}
+            {step === 3 && uploadedFile && scanErrorKind && (
+              <div className="w-full animate-fade-in flex flex-col h-full justify-center">
+                <div className="flex items-center p-2.5 bg-gradient-to-r from-amber-50 to-white rounded-lg border border-amber-100 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <X className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="ml-2 text-left overflow-hidden flex-1">
+                    <p className="font-semibold text-gray-900 truncate text-xs">
+                      {uploadedFile.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFileSize(uploadedFile.size)} • {formatTime(elapsedTime)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={removeFile}
+                    className="ml-auto p-1.5 text-gray-400 hover:text-red-600 transition-all hover:scale-110 hover:bg-red-50 rounded-lg flex-shrink-0"
+                    title="Delete resume"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col items-center mb-3 px-2">
+                  <h3 className="text-base font-bold text-amber-700 mb-2 text-center">
+                    {scanErrorKind === "auth"
+                      ? "Sign in to finish scanning"
+                      : scanErrorKind === "credits"
+                      ? "Out of credits"
+                      : "Couldn't analyze this resume"}
+                  </h3>
+                  <p className="text-xs text-gray-500 text-center max-w-xs mb-3">
+                    {scanErrorKind === "auth"
+                      ? "Your file uploaded fine — sign in or create a free account to complete the ATS scan."
+                      : scanErrorMessage}
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-center gap-2 mt-auto">
+                  {scanErrorKind === "auth" ? (
+                    <button
+                      onClick={() => setShowAuthModal(true)}
+                      className="px-6 py-2.5 bg-[#0275dd] text-white font-semibold rounded-xl hover:bg-[#0261b8] transition-all shadow-lg hover:scale-105 text-sm"
+                    >
+                      Sign In / Sign Up
+                    </button>
+                  ) : (
+                    <button
+                      onClick={removeFile}
+                      className="px-6 py-2.5 bg-[#0275dd] text-white font-semibold rounded-xl hover:bg-[#0261b8] transition-all shadow-lg hover:scale-105 text-sm"
+                    >
+                      Try Again
+                    </button>
+                  )}
+                  <button
+                    onClick={removeFile}
+                    className="px-6 py-2.5 bg-white text-gray-700 font-semibold border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all hover:scale-105 text-sm"
+                  >
+                    Upload & Rescan
+                  </button>
                 </div>
               </div>
             )}
@@ -621,20 +758,26 @@ const ResumeUpload: React.FC = () => {
 
         <style jsx>{`
           @keyframes fade-in {
-            from {
-              opacity: 0;
-              transform: translateY(10px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
           }
           .animate-fade-in {
             animation: fade-in 0.4s ease-out;
           }
+          @keyframes ats-pulse {
+            0%   { transform: scale(1);   opacity: 0.7; }
+            100% { transform: scale(1.6); opacity: 0; }
+          }
         `}</style>
       </div>
+
+      <SignUpModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialFormType="signup"
+        redirectTo={pendingReportRoute ?? undefined}
+        hideOverlay
+      />
     </div>
   );
 };

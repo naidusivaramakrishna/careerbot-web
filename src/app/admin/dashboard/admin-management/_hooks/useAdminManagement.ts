@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getAdminList, AdminListItem, deleteAdmin } from "@/api/adminManagementApi";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
+import { extractApiError } from "@/app/admin/_utils/apiError";
 
 interface FilterState {
   search: string;
@@ -63,6 +64,7 @@ export const useAdminManagement = () => {
       setTotalAdmins(response.total);
     } catch (error: unknown) {
       logger.error("Error fetching admins:", error);
+      toast.error(extractApiError(error, 'Failed to load admins'));
     } finally {
       setLoading(false);
     }
@@ -71,16 +73,12 @@ export const useAdminManagement = () => {
   // Fetch admins on mount and when dependencies change
   useEffect(() => {
     fetchAdmins();
-  }, [currentPage, pageSize, filters.role, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order]);
+  }, [currentPage, pageSize, filters.role, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order, fetchAdmins]);
 
-  // Handle search with debounce
+  // Handle search with debounce and reset to page 1
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (currentPage === 1) {
-        fetchAdmins();
-      } else {
-        setCurrentPage(1);
-      }
+      setCurrentPage(1);
     }, 500);
 
     return () => clearTimeout(debounceTimer);
@@ -137,7 +135,7 @@ export const useAdminManagement = () => {
       fetchAdmins();
     } catch (error) {
       logger.error('Delete error:', error);
-      toast.error('Failed to delete admin');
+      toast.error(extractApiError(error, 'Failed to delete admin'));
     } finally {
       setIsDeleting(false);
     }

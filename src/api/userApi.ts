@@ -48,11 +48,11 @@ export interface Certification {
 export interface EmploymentInfo {
     id?: string;
     authorized_to_work?: boolean;
-    disability_status?: string;
-    gender?: string;
+    disability_status?: "yes" | "no" | "prefer_not_to_say";
+    gender?: "male" | "female" | "non_binary" | "prefer_not_to_say";
     willing_to_relocate?: boolean;
-    employment_status?: string;
-    work_mode?: string;
+    employment_status?: "student" | "employed" | "unemployed" | "freelancer";
+    work_mode?: "onsite" | "remote" | "hybrid";
     preferred_job_type?: string;
     notice_period_days?: number | string;
     preferred_industries?: string[];
@@ -92,10 +92,69 @@ export interface ProfilePictureResponse {
     source?: "google" | "linkedin" | "uploaded";
 }
 
+export interface ResumeUploadResponse {
+    message: string;
+    resume_url: string;
+    filename: string;
+}
+
+export interface ResumeResponse {
+    resume_url: string;
+    resume_id?: string;
+    id?: string;
+    filename?: string;
+}
+
+export interface ResumeDeleteResponse {
+    message: string;
+}
+
 export interface ApiResponse<T> {
     data?: T;
     message?: string;
     status?: number;
+}
+
+// Auto-fill request types (all fields optional)
+export interface EducationAutoFillRequest {
+    degree?: string;
+    institution?: string;
+    stream?: string;
+    cgpa?: number;
+    start_date?: string;
+    end_date?: string;
+}
+
+export interface ExperienceAutoFillRequest {
+    job_title?: string;
+    company?: string;
+    job_type?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string;
+    description?: string;
+}
+
+export interface SkillAutoFillRequest {
+    name?: string;
+}
+
+export interface CertificationAutoFillRequest {
+    certification_name?: string;
+    issuer?: string;
+    start_date?: string;
+    end_date?: string;
+    credential_id?: string;
+}
+
+export interface ProjectAutoFillRequest {
+    project_name?: string;
+    role?: string;
+    technologies?: string;
+    start_date?: string;
+    end_date?: string;
+    project_link?: string;
+    description?: string;
 }
 
 // ==================== PROFILE API FUNCTIONS ====================
@@ -104,10 +163,21 @@ export interface ApiResponse<T> {
  * Get user profile
  */
 
-export const getProfile = async (): Promise<UserProfile> => {
+export const getProfile = async (options?: { skipAuthRedirect?: boolean; skipRefresh?: boolean }): Promise<UserProfile> => {
     try {
         // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
-        const response = await httpClient.get<ApiResponse<UserProfile>>('/profile');
+        // skipRefresh: sends X-Skip-Auth-Redirect which short-circuits on 401 without
+        // attempting a token refresh — use this for "am I logged in?" checks where
+        // silently re-minting the token via refresh_token is undesired (e.g. post-logout).
+        const headers = options?.skipRefresh
+            ? { 'X-Skip-Auth-Redirect': 'true' }
+            : options?.skipAuthRedirect
+            ? { 'X-Skip-Login-Redirect': 'true' }
+            : undefined;
+        const response = await httpClient.get<ApiResponse<UserProfile>>(
+            '/profile/',
+            headers ? { headers } : undefined
+        );
 
         let profileData: UserProfile;
 
@@ -595,7 +665,7 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 
         const response = await httpClient.post<ProfilePictureResponse>(
             "/profile/picture/upload",
-            formData as unknown as Record<string, unknown>,
+            formData,
             {
                 headers: {
                     "Content-Type": "multipart/form-data"
@@ -613,12 +683,20 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 /**
  * Get current user's profile picture
  */
-export const getProfilePicture = async (): Promise<ProfilePictureResponse> => {
+export const getProfilePicture = async (
+    options?: { skipAuthRedirect?: boolean }
+): Promise<ProfilePictureResponse> => {
     try {
-        const response = await httpClient.get<ProfilePictureResponse>("/profile/picture");
+        const response = await httpClient.get<ProfilePictureResponse>(
+            "/profile/picture",
+            options?.skipAuthRedirect ? { headers: { 'X-Skip-Login-Redirect': 'true' } } : undefined
+        );
         return response.data;
-    } catch (error) {
-        logger.error("Error fetching profile picture:", error);
+    } catch (error: unknown) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError?.response?.status !== 404) {
+            logger.error("Error fetching profile picture:", error);
+        }
         throw error;
     }
 };
@@ -634,4 +712,142 @@ export const deleteProfilePicture = async (): Promise<{ message: string }> => {
         logger.error("Error deleting profile picture:", error);
         throw error;
     }
-}
+};
+
+// ==================== AUTO-FILL API FUNCTIONS ====================
+
+/**
+ * Add education from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addEducationAutoFill = async (educationData: EducationAutoFillRequest): Promise<Education> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Education>>(
+            '/profile/education/auto-fill',
+            educationData        );
+        return response.data.data || response.data as unknown as Education;
+    } catch (error) {
+        logger.error('Error adding education via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add experience from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addExperienceAutoFill = async (experienceData: ExperienceAutoFillRequest): Promise<Experience> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Experience>>(
+            '/profile/experience/auto-fill',
+            experienceData        );
+        return response.data.data || response.data as unknown as Experience;
+    } catch (error) {
+        logger.error('Error adding experience via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add skill from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addSkillAutoFill = async (skillData: SkillAutoFillRequest): Promise<Skill> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Skill>>(
+            '/profile/skills/auto-fill',
+            skillData        );
+        return response.data.data || response.data as unknown as Skill;
+    } catch (error) {
+        logger.error('Error adding skill via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add certification from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addCertificationAutoFill = async (certificationData: CertificationAutoFillRequest): Promise<Certification> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Certification>>(
+            '/profile/certifications/auto-fill',
+            certificationData        );
+        return response.data.data || response.data as unknown as Certification;
+    } catch (error) {
+        logger.error('Error adding certification via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add project from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addProjectAutoFill = async (projectData: ProjectAutoFillRequest): Promise<Projects> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Projects>>(
+            '/profile/projects/auto-fill',
+            projectData        );
+        return response.data.data || response.data as unknown as Projects;
+    } catch (error) {
+        logger.error('Error adding project via auto-fill:', error);
+        throw error;
+    }
+};
+
+// ==================== RESUME API FUNCTIONS ====================
+
+/**
+ * Upload or replace user's resume (PDF, DOCX, or DOC)
+ */
+export const uploadResume = async (file: File): Promise<ResumeUploadResponse> => {
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await httpClient.post<ResumeUploadResponse>(
+            "/profile/resume/upload",
+            formData,
+            {
+                headers: {
+                    "Content-Type": "multipart/form-data"
+                }
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        logger.error("Error uploading resume:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get current user's resume URL
+ */
+export const getResume = async (): Promise<ResumeResponse> => {
+    try {
+        const response = await httpClient.get<ResumeResponse>("/profile/resume");
+        return response.data;
+    } catch (error: unknown) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError?.response?.status !== 404) {
+            logger.error("Error fetching resume:", error);
+        }
+        throw error;
+    }
+};
+
+/**
+ * Delete current user's resume
+ */
+export const deleteResume = async (): Promise<ResumeDeleteResponse> => {
+    try {
+        const response = await httpClient.delete<ResumeDeleteResponse>("/profile/resume");
+        return response.data;
+    } catch (error) {
+        logger.error("Error deleting resume:", error);
+        throw error;
+    }
+};

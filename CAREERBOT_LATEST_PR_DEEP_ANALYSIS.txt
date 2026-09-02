@@ -1,0 +1,1352 @@
+=====================================================================
+  CAREERBOT-WEB — SENIOR FRONTEND DEVELOPER DEEP ANALYSIS
+  Full Codebase Review | feature/all-updated-features -> master
+  Date     : 2026-03-23
+  Reviewer : Top 1% Senior Frontend Engineer Standard
+  Scope    : 688 files | 144,419 insertions | 782 deletions
+=====================================================================
+
+READING THIS FILE
+-----------------
+Every issue in this report follows this exact structure:
+
+  [BUG-ID]  Short title
+  Priority  : P1 / P2 / P3
+  File      : exact/path/to/file.tsx
+  Line      : exact line number(s)
+  Category  : Bug | Performance | Security | Architecture | Quality
+  Problem   : What is wrong and why it matters
+  Evidence  : Exact bad code from the file
+  Solution  : Exact fixed code to paste in
+  Impact    : What breaks if not fixed
+
+Priority scale:
+  P1 = Ship blocker. Do NOT merge without this fix.
+  P2 = Functional defect. Fix this sprint.
+  P3 = Code quality / polish. Fix before public launch.
+
+=====================================================================
+SECTION A — P1 CRITICAL BUGS (5 issues)
+These break production. User-visible, data-corrupting, or build-breaking.
+=====================================================================
+
+----------------------------------------------------------------------
+[BUG-001]  Sidebar displays hardcoded fake credits to every user
+----------------------------------------------------------------------
+Priority  : P1
+File      : src/components/layout/Sidebar.tsx
+Line      : 21, 103-113
+Category  : Bug — Wrong Data Shown to User
+
+Problem:
+  The Sidebar imports getMockQuotaBalance() from the __mocks__ folder
+  and uses it as the source of credit data. This means every single
+  user on the platform — regardless of their actual plan — sees the
+  same hardcoded fake credit numbers. The real useCreditsBalance hook
+  exists, is wired into Header.tsx correctly, but was never connected
+  to the Sidebar. This is the most impactful bug in the entire codebase
+  because it affects the UI element visible on every authenticated page.
+
+Evidence:
+  Line 21:
+    import { getMockQuotaBalance } from "@/__mocks__/quotaMock";
+
+  Lines 103-113:
+    useEffect(() => {
+      const mock = getMockQuotaBalance();
+      setCredits({ remaining: mock.credits_remaining, total: mock.credits_total });
+      setLoadingCredits(false);
+
+      const onCreditUpdate = (e: CustomEvent) => {
+        setCredits({ remaining: e.detail.remaining, total: e.detail.total });
+      };
+      window.addEventListener("credits-updated", onCreditUpdate as EventListener);
+      return () => window.removeEventListener("credits-updated", onCreditUpdate as EventListener);
+    }, []);
+
+Solution:
+  STEP 1 — Delete line 21:
+    REMOVE: import { getMockQuotaBalance } from "@/__mocks__/quotaMock";
+
+  STEP 2 — Add real hook import at top of file:
+    ADD: import { useCreditsBalance } from "@/hooks/useCreditsBalance";
+
+  STEP 3 — Replace lines 86-113 with:
+    const { data: creditsData, loading: loadingCredits } = useCreditsBalance({
+      autoRefresh: true,
+      refreshInterval: 60_000,
+    });
+
+    const credits = creditsData
+      ? {
+          remaining: creditsData.credits_remaining,
+          total:     creditsData.credits_total,
+        }
+      : null;
+
+  STEP 4 — Remove the now-unused state declarations:
+    DELETE: const [credits, setCredits] = useState<...>(null);
+    DELETE: const [loadingCredits, setLoadingCredits] = useState(true);
+
+  STEP 5 — Fix TrendingUp icon in collapsed sidebar (~line 181):
+    WRONG: style={{ color: "#0f172a" }}   // near-black on blue = invisible
+    FIX:   style={{ color: "#ffffff" }}
+
+Impact:
+  Without fix — every user sees wrong credit numbers. Users who have
+  upgraded to Pro/Max still see Free plan limits. Low-credit warnings
+  trigger at wrong thresholds. Business trust erodes.
+
+----------------------------------------------------------------------
+[BUG-002]  startSession silently returns undefined session_id
+----------------------------------------------------------------------
+Priority  : P1
+File      : src/api/communicationApi.ts
+Line      : ~180-220 (inside startSession function)
+Category  : Bug — Silent Failure, Assessment Unusable
+
+Problem:
+  startSession() has 8+ chained fallback paths to extract session_id
+  from different response shapes. This itself signals backend API
+  inconsistency — but the deeper problem is: when ALL fallbacks return
+  undefined, the function does not throw an error. It silently returns
+  { session_id: undefined }. Every downstream call (getCurrentQuestion,
+  uploadAudio, completeSession) then receives undefined as the sessionId,
+  produces malformed URLs like "/sessions/undefined/current-question",
+  and returns 404s. The user sees a generic error with zero ability to
+  diagnose the root cause.
+
+Evidence:
+  const sessionId =
+    responseData?.session_id ||
+    responseData?.sessionId ||
+    responseData?.session?.session_id ||
+    responseData?.session?.sessionId ||
+    responseData?.data?.session_id ||
+    responseData?.result?.session_id ||
+    responseData?.id ||
+    responseData?.sessionId;
+  // NO validation after this. If all undefined, code continues silently.
+
+Solution:
+  After the fallback chain, add explicit guard:
+
+    const sessionId =
+      responseData?.session_id ??
+      responseData?.sessionId ??
+      responseData?.session?.session_id ??
+      responseData?.data?.session_id;
+
+    if (!sessionId) {
+      throw new Error(
+        `[communicationApi.startSession] session_id missing in response. ` +
+        `Response keys: ${Object.keys(responseData ?? {}).join(', ')}. ` +
+        `Full response: ${JSON.stringify(responseData)}`
+      );
+    }
+
+  Also remove the 20+ console.log lines with emoji in this function:
+    DELETE all lines like:
+      console.log('🚀 startSession called with:', data);
+      console.log('📡 Raw axios response:', response);
+      console.log('✅ Session started successfully:', sessionId);
+    These expose full API response structure in browser DevTools in prod.
+
+Impact:
+  Without fix — entire assessment flow breaks silently when backend
+  response format changes. No error message reaches the user or Sentry.
+  Developer cannot debug without manually adding console logs.
+
+----------------------------------------------------------------------
+[BUG-003]  Assessment completion tracked with hardcoded question ID 44
+----------------------------------------------------------------------
+Priority  : P1
+File      : src/app/(interview)/communication/describe-situation/page.tsx
+Line      : ~171
+Category  : Bug — Incorrect State, User Progress Lost
+
+Problem:
+  After completing Section 7 (Describe Situation), the code marks
+  completion in sessionStorage using a hardcoded key: q_44_completed.
+  Question 44 is the question ID that existed during development.
+  Every new test generation assigns different question IDs. The
+  sessionStorage key never matches. The section progress indicator
+  always shows this section as incomplete, even after the user has
+  correctly answered and submitted the audio. Users believe they need
+  to redo the section.
+
+Evidence:
+  sessionStorage.setItem(`q_44_completed`, 'true');
+
+Solution:
+  Replace with dynamic key using the actual fetched question ID:
+
+    // Use the question_id from the API response, not a hardcoded number
+    if (currentQuestion?.question_id) {
+      sessionStorage.setItem(
+        `q_${currentQuestion.question_id}_completed`,
+        'true'
+      );
+    }
+
+  Also audit ALL other section pages for the same pattern:
+    grep -r "q_[0-9]*_completed" src/
+  Replace any other hardcoded question IDs the same way.
+
+Impact:
+  Without fix — users complete Section 7 but it always appears
+  incomplete. Users retry, waste time, and lose confidence in the
+  platform. Section navigation logic breaks downstream.
+
+----------------------------------------------------------------------
+[BUG-004]  Settings subscription retry triggers full page reload
+----------------------------------------------------------------------
+Priority  : P1
+File      : src/app/settings/subscription/page.tsx
+Line      : ~62
+Category  : Bug — Broken UX, State Destruction
+
+Problem:
+  When the subscription API fails, the error state shows a "Try Again"
+  button. The onClick handler calls window.location.reload(). This is
+  the wrong approach in Next.js App Router for three reasons:
+  (1) Full reload destroys all React state and context
+  (2) Next.js prefetch cache is invalidated, making next navigation slow
+  (3) There is a visible flash of unauthenticated state before httpOnly
+      cookies are validated, causing a layout shift
+
+Evidence:
+  <button onClick={() => window.location.reload()}>
+    Try Again
+  </button>
+
+Solution:
+  The useCurrentSubscription hook already returns a refetch function.
+  Use it:
+
+    // In page component:
+    const { subscription, loading, error, refetch } = useCurrentSubscription();
+
+    // In JSX:
+    <button
+      onClick={() => refetch()}
+      className="px-4 py-2 text-sm font-semibold text-white bg-[#2557a7]
+                 rounded-lg hover:opacity-90 transition-opacity"
+    >
+      Try Again
+    </button>
+
+Impact:
+  Without fix — retry on the subscription page causes a disorienting
+  full page flash. Users see the unauthenticated landing page briefly
+  before redirecting back. Feels broken.
+
+----------------------------------------------------------------------
+[BUG-005]  Binary .zip file committed to source control
+----------------------------------------------------------------------
+Priority  : P1
+File      : src/app/(employer)/recruiter/posted-jobs.zip
+Line      : N/A
+Category  : Security + Build — Wrong Artifact in Repo
+
+Problem:
+  A binary zip file is tracked in git. This is wrong for three reasons:
+  (1) Binary files bloat git history permanently (cannot be undone easily)
+  (2) If the zip contains any sensitive data (credentials, PII, API keys)
+      it is now in version history even if deleted later
+  (3) If deployed, this file is served as a static asset from the
+      Next.js public or app directory — a potential path traversal risk
+
+Evidence:
+  src/app/(employer)/recruiter/posted-jobs.zip  (binary, tracked in git)
+
+Solution:
+  STEP 1 — Remove from git tracking (does NOT delete from disk):
+    git rm --cached "src/app/(employer)/recruiter/posted-jobs.zip"
+
+  STEP 2 — Add to .gitignore:
+    *.zip
+    *.tar.gz
+    *.rar
+
+  STEP 3 — Commit the removal:
+    git commit -m "chore(security): remove binary zip from version control"
+
+  STEP 4 — If file is needed as static asset, serve it from a CDN
+  (S3, Cloudflare R2) and reference via URL, not file system.
+
+Impact:
+  Without fix — git repo grows with binary history. Potential security
+  exposure if zip contains sensitive data. Fails security audits.
+
+
+=====================================================================
+SECTION B — P2 FUNCTIONAL DEFECTS (11 issues)
+These cause incorrect behavior. Fix this sprint before next release.
+=====================================================================
+
+----------------------------------------------------------------------
+[BUG-006]  localStorage keys are inconsistent across pages
+----------------------------------------------------------------------
+Priority  : P2
+File      : Multiple files (see list below)
+Line      : Various
+Category  : Bug — Silent Data Loss, Blank Form Fields
+
+Problem:
+  The same logical data is stored and read under different key names
+  across different pages. JavaScript's localStorage returns null for a
+  key that doesn't exist — silently, with no error. This causes form
+  fields to appear blank on first load, test IDs to be missing when
+  a section loads, and session IDs to be lost between page navigations.
+
+Evidence — three different key names for user email:
+  src/app/(interview)/communication/page.tsx line ~40:
+    localStorage.getItem('user_email')
+
+  src/app/(interview)/communication/describe-situation/page.tsx line ~58:
+    localStorage.getItem('userEmail')
+
+  Other files:
+    localStorage.getItem('test_id')    // some files
+    localStorage.getItem('testId')     // other files
+    localStorage.getItem('session_id') // some files
+    localStorage.getItem('sessionId')  // other files
+
+Solution:
+  CREATE new file: src/lib/storageKeys.ts
+
+    /**
+     * Single source of truth for all localStorage / sessionStorage keys.
+     * Never use raw string literals for storage keys outside this file.
+     */
+    export const STORAGE_KEYS = {
+      USER_EMAIL:  'cb_user_email',
+      TEST_ID:     'cb_test_id',
+      SESSION_ID:  'cb_session_id',
+      VIDEO_BLOB:  'cb_video_blob',
+    } as const;
+
+    export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS];
+
+  Then across all communication pages, replace:
+    localStorage.getItem('user_email')  =>  localStorage.getItem(STORAGE_KEYS.USER_EMAIL)
+    localStorage.getItem('userEmail')   =>  localStorage.getItem(STORAGE_KEYS.USER_EMAIL)
+    localStorage.getItem('test_id')     =>  localStorage.getItem(STORAGE_KEYS.TEST_ID)
+    localStorage.getItem('testId')      =>  localStorage.getItem(STORAGE_KEYS.TEST_ID)
+    sessionStorage.getItem('session_id') => sessionStorage.getItem(STORAGE_KEYS.SESSION_ID)
+
+  Find all occurrences:
+    grep -r "localStorage\." src/ --include="*.tsx" --include="*.ts"
+
+Impact:
+  Without fix — email field randomly blank. Test ID lost between page
+  loads in certain browsers/tab-restore scenarios. Assessment sessions
+  break on page refresh.
+
+----------------------------------------------------------------------
+[BUG-007]  BroadcastChannel created on every render — memory leak
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/contexts/DashboardContext.tsx
+Line      : ~80-100 (inside component body, not useEffect)
+Category  : Bug — Memory Leak, Duplicate Event Handlers
+
+Problem:
+  BroadcastChannel is instantiated inside the component function body,
+  not inside a useEffect. This means a new BroadcastChannel is created
+  on EVERY render. The old channels are never closed. Over the lifecycle
+  of a typical session (many renders), hundreds of channels accumulate.
+  When a credit update fires, every accumulated channel's onmessage
+  handler triggers — meaning setCreditsRemaining is called hundreds of
+  times in rapid succession, causing excessive re-renders of the entire
+  context consumer tree.
+
+Evidence:
+  // WRONG — runs on every render:
+  const channel = new BroadcastChannel('careerbot_credits');
+  channel.onmessage = (event) => {
+    if (mountedRef.current) {
+      setCreditsRemaining(event.data.remaining);
+    }
+  };
+
+Solution:
+  Move entirely into useEffect with useRef:
+
+    const channelRef = useRef<BroadcastChannel | null>(null);
+
+    useEffect(() => {
+      try {
+        channelRef.current = new BroadcastChannel('careerbot_credits');
+        channelRef.current.onmessage = (event) => {
+          if (mountedRef.current) {
+            setCreditsRemaining(event.data.remaining);
+          }
+        };
+      } catch {
+        // Safari / older browsers that don't support BroadcastChannel
+        // Fall through to the window focus fallback below
+      }
+
+      return () => {
+        channelRef.current?.close();
+        channelRef.current = null;
+      };
+    }, []); // intentionally empty — run exactly once on mount
+
+Impact:
+  Without fix — progressive memory leak on long sessions. Users who
+  stay logged in for hours experience increasing UI lag. Credit updates
+  trigger dozens of state updates simultaneously.
+
+----------------------------------------------------------------------
+[BUG-008]  3 components independently poll credits API
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/components/layout/Header.tsx
+           src/components/layout/Sidebar.tsx (post BUG-001 fix)
+           src/contexts/DashboardContext.tsx
+Category  : Architecture — Redundant Network Traffic
+
+Problem:
+  After BUG-001 is fixed, all three layout components will call
+  useCreditsBalance() independently with their own polling intervals.
+  In a single browser tab, this generates 3 separate API calls every
+  60 seconds. With 3 tabs open, that is 9 requests/min for identical
+  data. At scale with 10,000 DAU this becomes significant server load
+  from pure frontend architecture inefficiency.
+
+Evidence:
+  Header.tsx:
+    const { balance } = useCreditsBalance({ autoRefresh: true, refreshInterval: 30_000 });
+
+  Sidebar.tsx (after BUG-001 fix):
+    const { data: creditsData } = useCreditsBalance({ autoRefresh: true, refreshInterval: 60_000 });
+
+  DashboardContext.tsx:
+    // Also fetches quota independently via getQuotaBalance()
+
+Solution:
+  Lift credits into DashboardContext as the single source of truth:
+
+  In src/contexts/DashboardContext.tsx — add to the context:
+    import { useCreditsBalance } from '@/hooks/useCreditsBalance';
+
+    // Inside DashboardProvider:
+    const {
+      data: creditsData,
+      loading: creditsLoading,
+      refetch: refetchCredits,
+    } = useCreditsBalance({ autoRefresh: true, refreshInterval: 60_000 });
+
+    // Add to context value:
+    const value = {
+      data,
+      loading,
+      error,
+      creditsData,       // <-- expose here
+      creditsLoading,    // <-- expose here
+      refetchCredits,    // <-- expose here
+      refreshDashboard,
+    };
+
+  In Header.tsx — remove independent useCreditsBalance call:
+    REMOVE: const { balance } = useCreditsBalance(...);
+    ADD:    const { creditsData } = useDashboard();
+
+  In Sidebar.tsx — same:
+    REMOVE: const { data: creditsData } = useCreditsBalance(...);
+    ADD:    const { creditsData } = useDashboard();
+
+  Result: 1 API call per interval instead of 3.
+
+Impact:
+  Without fix — 3x unnecessary API calls. At 10K users = backend
+  receives 30K/min credits polling requests from frontend waste alone.
+
+----------------------------------------------------------------------
+[BUG-009]  useCreditCheck promise hangs forever if modal is dismissed
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/hooks/useCreditCheck.ts
+Line      : ~120-160 (promise creation)
+Category  : Bug — UI Freeze, Promise Never Resolves
+
+Problem:
+  checkCreditsAction() returns a Promise<boolean> that resolves ONLY
+  when the user clicks Confirm or Cancel in the modal. If the user:
+  (a) navigates away from the page while modal is open
+  (b) closes the browser tab
+  (c) the modal unmounts due to a parent re-render
+  ...the promise NEVER resolves or rejects. Any async function that
+  awaits checkCreditsAction() is permanently suspended. The feature
+  that called it (e.g., ATS scan, resume enhancement) never executes
+  or errors. The user sees a loading spinner indefinitely.
+
+Evidence:
+  return new Promise<boolean>((resolve) => {
+    setOnConfirm(() => () => {
+      closeModals();
+      resolve(true);
+    });
+    setOnCancel(() => () => {
+      closeModals();
+      resolve(false);
+    });
+    // No timeout. Promise hangs if neither callback fires.
+  });
+
+Solution:
+  Add a timeout and cleanup on unmount:
+
+    const CREDIT_MODAL_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+    return new Promise<boolean>((resolve) => {
+      let resolved = false;
+
+      const safeResolve = (value: boolean) => {
+        if (!resolved) {
+          resolved = true;
+          closeModals();
+          resolve(value);
+        }
+      };
+
+      // Auto-reject if user does nothing for 5 minutes
+      const timeout = setTimeout(() => safeResolve(false), CREDIT_MODAL_TIMEOUT);
+
+      setOnConfirm(() => () => {
+        clearTimeout(timeout);
+        safeResolve(true);
+      });
+
+      setOnCancel(() => () => {
+        clearTimeout(timeout);
+        safeResolve(false);
+      });
+    });
+
+Impact:
+  Without fix — any feature using credit check can get stuck in a
+  loading state that never ends. User must hard-refresh to recover.
+
+----------------------------------------------------------------------
+[BUG-010]  getDaysRemaining() returns negative numbers for expired plans
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/hooks/useCurrentSubscription.ts
+Line      : ~85-95
+Category  : Bug — Wrong Data Displayed in UI
+
+Problem:
+  getDaysRemaining() calculates days until expires_at. If the plan has
+  already expired, it returns a negative number. The UI then shows
+  "-3 days remaining" in CurrentPlanCard. This is confusing to users
+  and also breaks any conditional logic that checks if days > 0.
+
+Evidence:
+  getDaysRemaining: useCallback(() => {
+    if (!subscription?.expires_at) return null;
+    const diff = new Date(subscription.expires_at).getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    // returns -3 for an expired plan — no floor guard
+  }, [subscription])
+
+Solution:
+  getDaysRemaining: useCallback((): number | null => {
+    if (!subscription?.expires_at) return null;
+    const diff = new Date(subscription.expires_at).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    //     ^^^^^^^^^^ never return negative — show 0 for expired
+  }, [subscription])
+
+Impact:
+  Without fix — expired plan users see "-N days remaining". Looks like
+  a bug to users. Any conditional UI (e.g., show renewal CTA when < 7
+  days) breaks for already-expired accounts.
+
+----------------------------------------------------------------------
+[BUG-011]  Profile completeness shows 75% for every user (hardcoded)
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/components/layout/Sidebar.tsx
+Line      : 88
+Category  : Bug — Wrong Data Shown to User
+
+Problem:
+  profileCompleteness is hardcoded to 75. Every user — whether they
+  have a 10% or 100% complete profile — sees the same amber badge
+  showing "75%". The dashboard summary API already returns
+  profile_completeness as a field. The data exists. It is just not
+  being used.
+
+Evidence:
+  const profileCompleteness = 75; // hardcoded
+
+Solution:
+  Import useDashboard and read the real value:
+
+    import { useDashboard } from '@/contexts/DashboardContext';
+
+    // Inside Sidebar component:
+    const { data: dashData } = useDashboard();
+    const profileCompleteness = dashData?.profile_completeness ?? 0;
+
+Impact:
+  Without fix — profile badge is meaningless. Users who have
+  completed their profile still see the "incomplete" amber badge.
+  Users who have 0% complete see 75% and feel no urgency to complete.
+
+----------------------------------------------------------------------
+[BUG-012]  Deleted route /parser has no redirect — causes 404
+----------------------------------------------------------------------
+Priority  : P2
+File      : next.config.ts (fix goes here)
+           Deleted: src/app/(jobs)/parser/page.tsx
+           Added:   src/app/(jobs)/job-parser/page.tsx
+Category  : Bug — Broken Navigation, 404 for Users
+
+Problem:
+  The route /parser was renamed to /job-parser. The old file was
+  deleted but no HTTP redirect was added. Any user who has:
+  (a) bookmarked /parser
+  (b) followed an email link to /parser
+  (c) landed from a search engine result pointing to /parser
+  ...gets a 404 page. Also, any internal <Link href="/parser"> that
+  was not updated still navigates to a dead route.
+
+Evidence:
+  git diff shows:
+    D  src/app/(jobs)/parser/page.tsx      (deleted)
+    A  src/app/(jobs)/job-parser/page.tsx  (added)
+  No redirect added in next.config.ts.
+
+Solution:
+  STEP 1 — Add redirect in next.config.ts:
+
+    const nextConfig: NextConfig = {
+      // ...existing config...
+      async redirects() {
+        return [
+          {
+            source: '/parser',
+            destination: '/job-parser',
+            permanent: true,  // 308 — tells search engines old URL moved
+          },
+        ];
+      },
+    };
+
+  STEP 2 — Find and fix all stale internal links:
+    grep -rn '"/parser"' src/ --include="*.tsx" --include="*.ts"
+    grep -rn "href.*['\"/]parser['\"/]" src/ --include="*.tsx"
+  Replace any matches with "/job-parser"
+
+  STEP 3 — Also check deleted components for lingering imports:
+    grep -rn "ResumeEditor" src/ --include="*.tsx" --include="*.ts"
+    grep -rn "useResumeBuilder" src/ --include="*.tsx" --include="*.ts"
+  Any remaining import will cause build failure in production.
+
+Impact:
+  Without fix — existing bookmarks and links to /parser serve a 404.
+  SEO juice from any indexed /parser pages is lost permanently.
+
+----------------------------------------------------------------------
+[BUG-013]  Root page.tsx uses "use client" — breaks SSR and SEO
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/app/page.tsx
+Line      : 1
+Category  : Architecture — SEO Regression, Performance Regression
+
+Problem:
+  "use client" was added to the root page (/) to manage AuthModal
+  state. This converts the entire landing page into a client component.
+  Consequences:
+  (1) Page cannot be statically generated or server-rendered
+  (2) All content is loaded via JavaScript — search engine crawlers
+      may not index it correctly
+  (3) No metadata export is possible from a client component
+  (4) First Contentful Paint is slower — user sees blank page until
+      JS bundle downloads and executes
+
+Evidence:
+  "use client"    // line 1 of src/app/page.tsx
+  import { useState } from "react";
+  import AuthModal from "@/components/SignUpModal";
+  // Only reason for "use client" is useState for modal visibility
+
+Solution:
+  Split into server shell + client island pattern:
+
+  // src/app/page.tsx  (SERVER component — remove "use client")
+  import type { Metadata } from 'next';
+  import LandingPageClient from './_components/LandingPageClient';
+
+  export const metadata: Metadata = {
+    title: 'CareerBot — AI-Powered Career Development Platform',
+    description: 'Build your career with AI-powered resume builder, ATS scanner, and interview prep.',
+    openGraph: {
+      title: 'CareerBot',
+      description: 'AI career development platform',
+      type: 'website',
+    },
+  };
+
+  export default function Home() {
+    return <LandingPageClient />;
+  }
+
+  // src/app/_components/LandingPageClient.tsx  (CLIENT component)
+  "use client";
+  import { useState } from 'react';
+  import AuthModal from '@/components/SignUpModal';
+
+  export default function LandingPageClient() {
+    const [showAuth, setShowAuth] = useState(false);
+    return (
+      <>
+        {/* all landing page JSX */}
+        {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      </>
+    );
+  }
+
+Impact:
+  Without fix — landing page cannot be indexed by Google. Every user
+  visiting / for the first time sees a blank screen briefly before
+  hydration. No open graph tags = poor link previews on social.
+
+----------------------------------------------------------------------
+[BUG-014]  Google Fonts loaded via CSS @import — render blocking
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/app/globals.css
+Line      : 1
+Category  : Performance — Render Blocking, FOUT
+
+Problem:
+  The Montserrat font is loaded via a CSS @import at line 1 of
+  globals.css. CSS @import is render-blocking: the browser must
+  download, parse, and complete the Google Fonts stylesheet before
+  it can paint anything. Next.js provides next/font/google which:
+  (1) Self-hosts the font — no external request at all
+  (2) Injects a preload link tag in <head> for zero-FOUT
+  (3) Uses font-display:swap automatically
+  This is a Lighthouse performance regression vs using next/font.
+
+Evidence:
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&display=swap');
+  // line 1 of globals.css — render-blocking external request
+
+Solution:
+  STEP 1 — Remove line 1 from globals.css:
+    DELETE: @import url('https://fonts.googleapis.com/...')
+
+  STEP 2 — Add to src/app/layout.tsx:
+    import { Montserrat } from 'next/font/google';
+
+    const montserrat = Montserrat({
+      subsets: ['latin'],
+      weight: ['400', '500', '700', '900'],
+      variable: '--font-montserrat',
+      display: 'swap',
+    });
+
+    export default function RootLayout({ children }) {
+      return (
+        <html lang="en" className={montserrat.variable}>
+          <body>{children}</body>
+        </html>
+      );
+    }
+
+  The CSS variable --font-montserrat is already referenced in globals.css
+  so no other changes needed.
+
+Impact:
+  Without fix — Lighthouse performance score penalized. Users on slow
+  connections see unstyled text flash before Montserrat loads.
+
+----------------------------------------------------------------------
+[BUG-015]  Two drag-and-drop libraries installed — +60KB bundle waste
+----------------------------------------------------------------------
+Priority  : P2
+File      : package.json
+Line      : dependencies
+Category  : Performance — Bundle Bloat
+
+Problem:
+  Both @dnd-kit and @hello-pangea/dnd are installed. They do exactly
+  the same thing. The combined bundle cost is ~60KB gzipped. Only one
+  is needed. Shipping both means every user downloads 30KB of dead code.
+
+Evidence:
+  "@dnd-kit/core":        "^6.3.1",
+  "@dnd-kit/sortable":    "^10.0.0",
+  "@hello-pangea/dnd":    "^16.5.0",   // <-- duplicate of above
+
+Solution:
+  STEP 1 — Find which is actually used in source:
+    grep -r "hello-pangea" src/ --include="*.tsx" --include="*.ts" -l
+    grep -r "@dnd-kit" src/ --include="*.tsx" --include="*.ts" -l
+
+  STEP 2 — Remove whichever has fewer usages. If equal, keep @dnd-kit
+  (more actively maintained, tree-shakeable, lighter).
+
+  STEP 3 — Update package.json, run npm install, fix any import errors.
+
+Impact:
+  Without fix — every page load downloads 30KB extra for nothing.
+  Initial JS bundle is larger than it needs to be.
+
+----------------------------------------------------------------------
+[BUG-016]  handleToggle in Sidebar has stale closure — toggle breaks
+----------------------------------------------------------------------
+Priority  : P2
+File      : src/components/layout/Sidebar.tsx
+Line      : 78-84
+Category  : Bug — Incorrect State Updates After First Interaction
+
+Problem:
+  handleToggle is defined as a plain function inside the component.
+  The useEffect that registers it as a window event listener has an
+  empty dependency array, so it captures the initial reference to
+  handleToggle. After the first render, if handleToggle is recreated
+  (e.g., after any state update causes a re-render), the event listener
+  still holds the OLD reference. The toggle can get out of sync — the
+  icon in Header fires the event but Sidebar's state doesn't update.
+
+Evidence:
+  const handleToggle = () => setIsExpanded((v) => !v);  // recreated every render
+
+  useEffect(() => {
+    window.addEventListener("toggle-sidebar", handleToggle);
+    return () => window.removeEventListener("toggle-sidebar", handleToggle);
+  }, []); // stale — handleToggle not in deps
+
+Solution:
+  const handleToggle = useCallback(() => setIsExpanded((v) => !v), []);
+  // useCallback with empty deps is correct here because the functional
+  // updater (v) => !v doesn't read external state
+
+  useEffect(() => {
+    window.addEventListener("toggle-sidebar", handleToggle);
+    return () => window.removeEventListener("toggle-sidebar", handleToggle);
+  }, [handleToggle]); // correct dependency
+
+Impact:
+  Without fix — sidebar toggle from Header can become unresponsive
+  after several state changes, requiring page refresh to fix.
+
+
+=====================================================================
+SECTION C — P3 CODE QUALITY (10 issues)
+Polish before public launch or before code review passes.
+=====================================================================
+
+----------------------------------------------------------------------
+[BUG-017]  All custom hooks use console.error instead of logger
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/hooks/useCreditsBalance.ts       line ~29
+           src/hooks/useCurrentSubscription.ts   line ~49
+           src/hooks/useSubscriptionPlans.ts      various
+Category  : Quality — Production Log Pollution, Security
+
+Problem:
+  console.error() is used in catch blocks across all hooks.
+  In production this exposes internal error messages and stack traces
+  in browser DevTools. Any user can open DevTools and see API error
+  details, endpoint paths, and token-related error messages.
+  The app already has src/lib/logger.ts — it is just not being used.
+
+Evidence:
+  // useCreditsBalance.ts:
+  console.error('Failed to fetch credits balance:', err);
+
+  // useCurrentSubscription.ts:
+  console.error('Failed to fetch subscription:', err);
+
+Solution:
+  In each hook, replace console.error with logger:
+
+    import { logger } from '@/lib/logger';
+
+    // Replace:
+    console.error('Failed to fetch credits balance:', err);
+    // With:
+    logger.error('useCreditsBalance: fetch failed', { error: err });
+
+  To find all remaining console statements:
+    grep -rn "console\." src/hooks/ --include="*.ts"
+    grep -rn "console\." src/api/ --include="*.ts"
+
+----------------------------------------------------------------------
+[BUG-018]  20+ emoji debug console.log lines in communicationApi
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/api/communicationApi.ts
+Line      : Throughout startSession(), uploadAudio(), evaluateAudio()
+Category  : Security + Quality — Internal Data Exposed in Prod
+
+Problem:
+  The communicationApi has extensive debug logging using emoji-prefixed
+  console.log statements that print full API request and response
+  objects. In production, any user opening DevTools can see session IDs,
+  audio upload URLs, evaluation scores, and internal API response shapes.
+
+Evidence:
+  console.log('🚀 startSession called with:', data);
+  console.log('📡 Raw axios response:', response);
+  console.log('✅ Session started successfully:', sessionId);
+  console.log('❌ Error in startSession:', error);
+  // ...20+ more similar lines
+
+Solution:
+  Delete ALL emoji console.log lines from this file.
+  If debug logging is needed during development only:
+
+    if (process.env.NODE_ENV === 'development') {
+      logger.debug('[communicationApi] startSession', { sessionId });
+    }
+
+  Find all occurrences:
+    grep -n "console\.log" src/api/communicationApi.ts
+
+----------------------------------------------------------------------
+[BUG-019]  AssessmentSidebar not memoized — re-renders on every keystroke
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/app/(interview)/communication/components/AssessmentSidebar.tsx
+Line      : 24 (component definition)
+Category  : Performance — Unnecessary Re-renders
+
+Problem:
+  AssessmentSidebar is a pure function of a single number prop
+  (currentSectionId). It contains SVG calculations, 7 element style
+  evaluations, and DOM diffing on every render. Because it is not
+  wrapped in React.memo(), any state change in any parent component
+  (audio recording state, timer ticks, input changes) causes a full
+  re-render of this sidebar — which is visually static during those
+  state changes.
+
+Evidence:
+  export default function AssessmentSidebar({ currentSectionId }: AssessmentSidebarProps) {
+  // no memo wrapper
+
+  Also: magic numbers in SVG calculation:
+    const circumference = 2 * Math.PI * radius;  // 28 is a magic number
+
+Solution:
+  import { memo } from 'react';
+
+  // Extract constants outside component:
+  const SIDEBAR_SECTIONS_COUNT = 7;
+  const SIDEBAR_RADIUS = 28;
+  const SIDEBAR_CIRCUMFERENCE = 2 * Math.PI * SIDEBAR_RADIUS;
+
+  // Wrap component:
+  const AssessmentSidebar = memo(function AssessmentSidebar({
+    currentSectionId,
+  }: AssessmentSidebarProps) {
+    // all existing code unchanged, use SIDEBAR_RADIUS, SIDEBAR_CIRCUMFERENCE
+  });
+
+  export default AssessmentSidebar;
+
+----------------------------------------------------------------------
+[BUG-020]  Communication layout has no error boundary
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/app/(interview)/communication/layout.tsx
+Line      : entire file
+Category  : Reliability — User Loses Assessment Progress on Error
+
+Problem:
+  The communication layout wraps children in DashboardProvider and
+  VideoRecordingProvider but has no error boundary. If any child
+  component throws an unhandled error during render (malformed API
+  response, null pointer, missing prop), the entire assessment UI goes
+  blank. The user loses their current question, audio recordings, and
+  session state. They must start over from the beginning.
+  ErrorBoundary component already exists at src/components/ErrorBoundary.tsx
+
+Solution:
+  import { ErrorBoundary } from '@/components/ErrorBoundary';
+
+  export default function CommunicationLayout({ children }) {
+    return (
+      <DashboardProvider>
+        <VideoRecordingProvider>
+          <ErrorBoundary
+            fallback={
+              <div className="flex items-center justify-center h-screen bg-gray-50">
+                <div className="text-center max-w-md px-6">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-red-600 text-xl">!</span>
+                  </div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    Assessment Error
+                  </h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Something went wrong. Your progress has been saved.
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-[#2557a7] text-white text-sm
+                               font-semibold rounded-lg"
+                  >
+                    Continue Assessment
+                  </button>
+                </div>
+              </div>
+            }
+          >
+            <div className="h-screen flex flex-col overflow-hidden">
+              <CommunicationHeader />
+              <div className="flex-1 overflow-y-auto">{children}</div>
+            </div>
+          </ErrorBoundary>
+        </VideoRecordingProvider>
+      </DashboardProvider>
+    );
+  }
+
+----------------------------------------------------------------------
+[BUG-021]  SVG gradient ID "sb-cred" is a global collision risk
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/components/layout/Sidebar.tsx
+Line      : ~271
+Category  : Bug — Visual Defect in Specific Render Scenarios
+
+Problem:
+  SVG id attributes are global to the HTML document. The gradient
+  <linearGradient id="sb-cred"> uses a fixed string ID. If the sidebar
+  ever renders in a portal, is server-rendered and hydrated alongside
+  another SVG using the same ID, or appears twice during concurrent
+  rendering, the second definition overwrites the first. The circle
+  stroke references url(#sb-cred) which then points to the wrong
+  gradient, showing the wrong color.
+
+Evidence:
+  <linearGradient id="sb-cred" ...>
+  <circle stroke="url(#sb-cred)" ...>
+
+Solution:
+  Use React 18 useId() hook for guaranteed unique IDs:
+
+    import { useId } from 'react';
+
+    // Inside Sidebar component:
+    const gradientId = useId();
+
+    // In JSX:
+    <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+    <circle stroke={`url(#${gradientId})`} ...>
+
+----------------------------------------------------------------------
+[BUG-022]  Admin page shows blank screen during RBAC check
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/app/admin/dashboard/user-management/page.tsx
+Line      : ~15-17
+Category  : UX — Content Flash, Blank Screen
+
+Problem:
+  While the RBAC access check loads, the component returns null.
+  This causes a visible blank white screen flash between the page
+  navigating and the content appearing. For an admin dashboard this
+  looks broken and unprofessional.
+
+Evidence:
+  const { hasAccess, isLoading: accessLoading } = useAdminAccess('user-management');
+  if (accessLoading) return null; // blank white flash
+
+Solution:
+  if (accessLoading) return (
+    <div className="flex items-center justify-center h-96">
+      <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent
+                      rounded-full animate-spin" />
+    </div>
+  );
+
+----------------------------------------------------------------------
+[BUG-023]  CurrentPlanCard features list is hardcoded — breaks on plan change
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/app/settings/subscription/_components/CurrentPlanCard.tsx
+Line      : 126-131
+Category  : Maintenance — Manual Update Required on Every Plan Change
+
+Problem:
+  Plan features are hardcoded as conditional strings inside the
+  component. When the product team changes plan limits (e.g., Free
+  plan gets 10 ATS scans instead of 5), a developer must manually
+  find and edit this file. The subscription plans API already returns
+  full feature lists per plan. The data exists — it is just not used.
+
+Evidence:
+  isPro || isMax ? 'Unlimited resumes & exports' : 'Up to 3 resumes',
+  isPro || isMax ? 'Unlimited ATS scans'         : '5 ATS scans',
+  isMax ? 'Dedicated support + API access' : isPro ? 'Priority support' : 'Community support',
+
+Solution:
+  import { useSubscriptionPlans } from '@/hooks/useSubscriptionPlans';
+
+  // Inside component:
+  const { getPlanById } = useSubscriptionPlans({ autoFetch: true });
+  const planDetails = getPlanById(subscription.plan_id);
+
+  const features: string[] = planDetails?.features?.length
+    ? planDetails.features
+    : [
+        `${subscription.credits_total} credits / cycle`,
+        `Plan: ${subscription.plan_name}`,
+      ];
+
+  // In JSX:
+  {features.map((feat) => (
+    <div key={feat} className="flex items-center gap-2 text-xs text-gray-600">
+      <CheckCircle className="w-3.5 h-3.5 shrink-0 text-green-500" />
+      {feat}
+    </div>
+  ))}
+
+----------------------------------------------------------------------
+[BUG-024]  middleware.ts has unresolved TODO — authenticated users stuck on /
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/middleware.ts
+Line      : ~20
+Category  : UX — Bad Authenticated User Journey
+
+Problem:
+  A TODO comment acknowledges that logged-in users who visit / should
+  be redirected to /dashboard. This has never been implemented. Any
+  user who has bookmarked the root URL, or whose session is restored
+  after a tab reopen, lands on the marketing/auth page instead of
+  their dashboard. They must manually navigate or re-login.
+
+Evidence:
+  // TODO: redirect authenticated users from / to /dashboard
+
+Solution:
+  In src/middleware.ts, before the protected route check:
+
+    const isAuthenticated =
+      request.cookies.has('access_token') ||
+      request.cookies.has('refresh_token');
+
+    const isRootPath = pathname === '/';
+
+    // Redirect logged-in users away from landing page
+    if (isAuthenticated && isRootPath) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+----------------------------------------------------------------------
+[BUG-025]  Admin dashboard imports unused mock data constants
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/app/admin/dashboard/page.tsx
+Line      : ~8-10
+Category  : Quality — Dead Code, Bundle Pollution
+
+Problem:
+  userGrowthData and revenueData are imported from the mockData
+  constants file but are never used in the component JSX or logic.
+  Dead imports increase the JavaScript module graph size and confuse
+  developers who assume these values are used somewhere.
+
+Evidence:
+  import { userGrowthData, revenueData } from './_constants/mockData';
+  // Neither variable appears anywhere in the component
+
+Solution:
+  Delete the unused imports:
+    REMOVE: import { userGrowthData, revenueData } from './_constants/mockData';
+
+  Verify with:
+    grep -n "userGrowthData\|revenueData" src/app/admin/dashboard/page.tsx
+
+----------------------------------------------------------------------
+[BUG-026]  Commented-out old layout code left in communication/layout.tsx
+----------------------------------------------------------------------
+Priority  : P3
+File      : src/app/(interview)/communication/layout.tsx
+Line      : ~30-52 (the large commented block)
+Category  : Quality — Dead Code Confuses Future Developers
+
+Problem:
+  The old layout using global Sidebar + Header is left as a commented
+  block. Future developers cannot tell whether this is intentional,
+  a work in progress, or a mistake. Git history preserves every deleted
+  line — commented code in production files is pure noise.
+
+Evidence:
+  {/* OLD LAYOUT — do not use
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex flex-col flex-1">
+        <Header />
+        ...
+  */}
+
+Solution:
+  Delete the entire commented block. The new layout is correct.
+  If you need to reference the old structure: git log -p layout.tsx
+
+
+=====================================================================
+SECTION D — ARCHITECTURE GAPS (not bugs, but ship risks)
+=====================================================================
+
+GAP-01: No test files added in 688 file PR
+  Not a single .test.ts or .spec.tsx file was added in this entire PR.
+  Critical flows — audio upload, session creation, credit deduction,
+  RBAC access — have zero test coverage.
+  Recommendation: At minimum add integration tests for:
+    - communicationApi.startSession() error path
+    - useCreditsBalance hook auto-refresh behavior
+    - RBAC: LockedPageOverlay renders for unauthorized roles
+
+GAP-02: No error.tsx route segment error pages
+  Next.js App Router supports error.tsx at each route segment.
+  Currently missing for:
+    src/app/(interview)/communication/error.tsx
+    src/app/admin/dashboard/error.tsx
+    src/app/(employer)/recruiter/error.tsx
+  Without these, any unhandled error shows Next.js default error page
+  (black screen in production) instead of a branded recovery UI.
+
+GAP-03: No NEXT_PUBLIC_BASE_URL validation for production
+  If deployed without setting NEXT_PUBLIC_BASE_URL, the app silently
+  falls back to localhost:8000 in production. All API calls fail.
+  Add to src/lib/http.ts:
+    if (
+      !process.env.NEXT_PUBLIC_BASE_URL &&
+      process.env.NODE_ENV === 'production'
+    ) {
+      throw new Error('NEXT_PUBLIC_BASE_URL must be set in production');
+    }
+
+GAP-04: WebSocket in live interview has no reconnect limit
+  src/app/(interview)/live/_hooks/useWebsocketInterview.ts
+  Verify this hook has:
+    - Maximum retry count (e.g., 5 attempts)
+    - Exponential backoff between retries
+    - User-visible "Disconnected — reconnecting..." state
+    - Proper cleanup on component unmount (ws.close())
+  Without a retry limit, a bad network connection causes infinite
+  reconnect loops that drain battery and show no user feedback.
+
+
+=====================================================================
+COMPLETE ISSUE INDEX — SORTED BY PRIORITY
+=====================================================================
+
+ID       Priority  Category      File
+------   --------  ------------  -----------------------------------------------
+BUG-001  P1        Wrong Data    src/components/layout/Sidebar.tsx
+BUG-002  P1        Silent Fail   src/api/communicationApi.ts
+BUG-003  P1        Wrong State   src/app/(interview)/communication/describe-situation/page.tsx
+BUG-004  P1        Broken UX     src/app/settings/subscription/page.tsx
+BUG-005  P1        Security      src/app/(employer)/recruiter/posted-jobs.zip
+BUG-006  P2        Data Loss     Multiple communication pages (storageKeys)
+BUG-007  P2        Memory Leak   src/contexts/DashboardContext.tsx
+BUG-008  P2        Redundant Net src/components/layout/Header.tsx + Sidebar.tsx + DashboardContext
+BUG-009  P2        UI Freeze     src/hooks/useCreditCheck.ts
+BUG-010  P2        Wrong Data    src/hooks/useCurrentSubscription.ts
+BUG-011  P2        Wrong Data    src/components/layout/Sidebar.tsx
+BUG-012  P2        404 Error     next.config.ts (fix) + deleted parser route
+BUG-013  P2        SEO/Perf      src/app/page.tsx
+BUG-014  P2        Perf/FOUT     src/app/globals.css
+BUG-015  P2        Bundle Bloat  package.json
+BUG-016  P2        Stale Closure src/components/layout/Sidebar.tsx
+BUG-017  P3        Log Security  src/hooks/useCreditsBalance.ts + useCurrentSubscription.ts
+BUG-018  P3        Log Security  src/api/communicationApi.ts
+BUG-019  P3        Performance   src/app/(interview)/communication/components/AssessmentSidebar.tsx
+BUG-020  P3        Reliability   src/app/(interview)/communication/layout.tsx
+BUG-021  P3        Visual Bug    src/components/layout/Sidebar.tsx
+BUG-022  P3        UX Flash      src/app/admin/dashboard/user-management/page.tsx
+BUG-023  P3        Maintenance   src/app/settings/subscription/_components/CurrentPlanCard.tsx
+BUG-024  P3        UX Gap        src/middleware.ts
+BUG-025  P3        Dead Code     src/app/admin/dashboard/page.tsx
+BUG-026  P3        Dead Code     src/app/(interview)/communication/layout.tsx
+
+
+=====================================================================
+FIX TIME ESTIMATES
+=====================================================================
+
+P1 Blockers (5 issues)  — Total ~35 minutes
+  BUG-001  10 min   Replace mock with useCreditsBalance in Sidebar
+  BUG-002  10 min   Add session_id validation + remove emoji logs
+  BUG-003   5 min   Replace q_44 with dynamic currentQuestion.question_id
+  BUG-004   5 min   Replace window.reload() with refetch()
+  BUG-005   5 min   git rm zip file, add *.zip to .gitignore
+
+P2 Functional (11 issues) — Total ~170 minutes
+  BUG-006  20 min   Create storageKeys.ts + replace all raw strings
+  BUG-007  15 min   Move BroadcastChannel into useRef + useEffect
+  BUG-008  30 min   Consolidate credits into DashboardContext
+  BUG-009  15 min   Add promise timeout to useCreditCheck
+  BUG-010   5 min   Add Math.max(0, ...) to getDaysRemaining
+  BUG-011  10 min   Replace hardcoded 75 with dashData.profile_completeness
+  BUG-012  10 min   Add redirect in next.config.ts + audit stale links
+  BUG-013  20 min   Split page.tsx into server shell + client island
+  BUG-014  15 min   Replace @import with next/font in layout.tsx
+  BUG-015  10 min   Remove duplicate DnD library from package.json
+  BUG-016  10 min   Wrap handleToggle in useCallback + fix deps
+
+P3 Polish (10 issues) — Total ~60 minutes
+  BUG-017   5 min   Replace console.error with logger in hooks
+  BUG-018   5 min   Delete all emoji console.log from communicationApi
+  BUG-019   5 min   Wrap AssessmentSidebar in React.memo
+  BUG-020  15 min   Add ErrorBoundary to communication layout
+  BUG-021   5 min   Use useId() for SVG gradient ID in Sidebar
+  BUG-022   5 min   Replace return null with skeleton loader in admin
+  BUG-023  10 min   Replace hardcoded features with API data in CurrentPlanCard
+  BUG-024   5 min   Implement authenticated user redirect in middleware
+  BUG-025   2 min   Delete unused mock imports from admin dashboard page
+  BUG-026   2 min   Delete commented-out old layout from communication layout
+
+TOTAL ESTIMATED FIX TIME: ~265 minutes (4.5 hours)
+
+
+=====================================================================
+FINAL VERDICT
+=====================================================================
+
+Code Quality Score  : 6.5 / 10
+Architecture Score  : 8.0 / 10   (patterns are good)
+Bug Density Score   : 5.0 / 10   (26 issues in 688 files)
+Security Score      : 7.0 / 10   (after zip removal and log cleanup)
+Performance Score   : 6.0 / 10   (before font + SSR + memo fixes)
+
+STRENGTHS:
+  + Strong custom hook pattern — useCreditsBalance, useCreditCheck etc.
+  + Clean feature-based folder organization
+  + Token refresh queue in http.ts is production-grade
+  + Correlation ID on every request — excellent for debugging
+  + BroadcastChannel with fallback — thoughtful cross-tab sync
+  + RBAC with LockedPageOverlay — correct access control pattern
+  + Skeleton loaders present throughout — good loading UX
+
+MUST FIX BEFORE MERGE:
+  BUG-001 (mock credits), BUG-002 (silent session failure),
+  BUG-003 (hardcoded question ID), BUG-004 (page reload retry),
+  BUG-005 (binary in git)
+
+RECOMMENDATION:
+  Fix the 5 P1 blockers (~35 min) -> merge.
+  Address P2 issues (~170 min) -> release to production.
+  Address P3 issues (~60 min) -> code review passes cleanly.
+
+=====================================================================
+Generated: 2026-03-23 | CareerBot-Web Deep Analysis
+Top 1% Senior Frontend Developer Standard
+=====================================================================

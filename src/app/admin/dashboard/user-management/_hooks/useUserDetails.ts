@@ -11,6 +11,7 @@ import {
     type UserActivityLog
 } from '@/api/userManagementApi'
 import { logger } from '@/lib/logger'
+import { extractApiError } from '@/app/admin/_utils/apiError'
 
 export const useUserDetails = (userId: string) => {
     const [user, setUser] = useState<UserDetailsResponse | null>(null)
@@ -27,8 +28,7 @@ export const useUserDetails = (userId: string) => {
             setUser(details)
         } catch (error: unknown) {
             logger.error('Error fetching user details:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to load user details'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to load user details'))
         } finally {
             setLoading(false)
         }
@@ -52,12 +52,16 @@ export const useUserDetails = (userId: string) => {
         fetchUserDetails()
     }, [fetchUserDetails])
 
-    // Fetch activity when tab is opened
+    // Fetch activity when the Activity tab is opened.
+    // Intentionally independent of the user-details fetch: fetchUserActivity only
+    // needs userId (not the loaded user object), so activity loads even if user
+    // details are still in flight. Dep changed from user→userId to avoid re-fetching
+    // on every user-object identity change.
     useEffect(() => {
-        if (activeTab === 'Activity' && user) {
+        if (activeTab === 'Activity') {
             fetchUserActivity()
         }
-    }, [activeTab, user, fetchUserActivity])
+    }, [activeTab, userId, fetchUserActivity])
 
     // Update user
     const handleUpdateUser = useCallback(async (data: Record<string, unknown>) => {
@@ -69,8 +73,7 @@ export const useUserDetails = (userId: string) => {
             return true
         } catch (error: unknown) {
             logger.error('Error updating user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to update user'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to update user'))
             return false
         } finally {
             setActionLoading(false)
@@ -90,8 +93,7 @@ export const useUserDetails = (userId: string) => {
             return true
         } catch (error: unknown) {
             logger.error('Error suspending user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to suspend user'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to suspend user'))
             return false
         } finally {
             setActionLoading(false)
@@ -107,8 +109,7 @@ export const useUserDetails = (userId: string) => {
             await fetchUserDetails()
         } catch (error: unknown) {
             logger.error('Error unsuspending user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to unsuspend user'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to unsuspend user'))
         } finally {
             setActionLoading(false)
         }
@@ -125,7 +126,6 @@ export const useUserDetails = (userId: string) => {
             await deleteUser(
                 userId,
                 {
-                    delete_type: isPermanent ? 'permanent' : 'soft',
                     reason,
                     confirm: confirmed,
                 },
@@ -135,8 +135,7 @@ export const useUserDetails = (userId: string) => {
             return true
         } catch (error: unknown) {
             logger.error('Error deleting user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to delete user'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to delete user'))
             return false
         } finally {
             setActionLoading(false)

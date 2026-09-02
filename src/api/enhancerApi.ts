@@ -53,6 +53,7 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
   }
 }
 
+
 async function safePatch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   try {
     logApiRequest('PATCH', url, data);
@@ -94,6 +95,7 @@ async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig)
 
 export interface EnhanceResumeRequest {
   resume_id?: string;
+  ats_breakdown?: string;
   resume?: Record<string, unknown>;
   target_jd?: string | string[];
   job_description?: string;
@@ -235,6 +237,30 @@ export async function updateEnhancedResume(
 }
 
 /**
+ * Auto-save Enhanced Resume (partial section update)
+ * PATCH /api/v1/resume/enhance/{enhanced_id}/autosave
+ *
+ * @param enhanced_id - ID of enhanced resume
+ * @param sections - camelCase section payload (e.g. { personalInfo: {...} })
+ */
+export async function autoSaveEnhancedResume(
+  enhanced_id: string,
+  sections: Record<string, unknown>
+): Promise<void> {
+  try {
+    logApiRequest('PATCH', `/resume/enhance/${enhanced_id}/autosave`, sections);
+    const response = await httpClient.patch(
+      `/resume/enhance/${enhanced_id}/autosave`,
+      sections
+    );
+    logApiResponse('PATCH', `/resume/enhance/${enhanced_id}/autosave`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('PATCH', `/resume/enhance/${enhanced_id}/autosave`, err);
+    throw err;
+  }
+}
+
+/**
  * STEP 5: Delete Enhanced Resume
  * DELETE /api/v1/resume/enhance/{enhanced_id}
  *
@@ -243,6 +269,107 @@ export async function updateEnhancedResume(
  */
 export async function deleteEnhancedResume(enhanced_id: string): Promise<void> {
   await safeDelete(`/resume/enhance/${enhanced_id}`);
+}
+
+/**
+ * Add skill to enhanced resume category
+ * POST /api/v1/resume/enhance/{enhanced_id}/skills/{category}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Skill category key (e.g. programmingLanguages, frameworks)
+ * @param skillName - Name of the skill to add
+ */
+export async function addSkillToEnhancedResume(
+  enhanced_id: string,
+  category: string,
+  skillName: string
+): Promise<{ id?: string }> {
+  try {
+    logApiRequest('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, { name: skillName });
+    const response = await httpClient.post<{ id?: string; _id?: string }>(
+      `/resume/enhance/${enhanced_id}/skills/${category}`,
+      { name: skillName }
+    );
+    logApiResponse('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, response.status, response.headers['x-trace-id']);
+    const id = response.data?.id ?? response.data?._id;
+    return { id };
+  } catch (err: unknown) {
+    logApiError('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete section item by ID from enhanced resume
+ * DELETE /api/v1/resume/enhance/{enhanced_id}/sections/{section}/items/{item_id}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param section - Section name (e.g. workExperience, education, projects)
+ * @param itemId - ID of the item to delete
+ */
+export async function deleteSectionItemFromEnhancedResume(
+  enhanced_id: string,
+  section: string,
+  itemId: string
+): Promise<void> {
+  try {
+    logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, {});
+    const response = await httpClient.delete(
+      `/resume/enhance/${enhanced_id}/sections/${section}/items/${encodeURIComponent(itemId)}`
+    );
+    logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete skill by ID from enhanced resume
+ * DELETE /api/v1/resume/enhance/{enhanced_id}/skills/{category}/{skill_id}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Skill category key (e.g. programmingLanguages, frameworks)
+ * @param skillId - ID or name of the skill to delete
+ */
+export async function deleteSkillFromEnhancedResume(
+  enhanced_id: string,
+  category: string,
+  skillId: string
+): Promise<void> {
+  try {
+    logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, {});
+    const response = await httpClient.delete(
+      `/resume/enhance/${enhanced_id}/skills/${category}/${encodeURIComponent(skillId)}`
+    );
+    logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete skill category from enhanced resume
+ * DELETE /api/v1/resume/enhance/{enhanced_id}/skills/categories/{category}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Skill category key to delete (e.g. programmingLanguages, frameworks)
+ */
+export async function deleteSkillCategoryFromEnhancedResume(
+  enhanced_id: string,
+  category: string
+): Promise<void> {
+  try {
+    logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, {});
+    const response = await httpClient.delete(
+      `/resume/enhance/${enhanced_id}/skills/categories/${category}`
+    );
+    logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, err);
+    throw err;
+  }
 }
 
 /**
@@ -270,10 +397,17 @@ export async function getEnhancementHistory(limit: number = 20): Promise<Enhance
  */
 export async function downloadEnhancedResume(
   enhanced_id: string,
-  format: "pdf" | "docx" = "pdf"
+  format: "pdf" | "docx" = "pdf",
+  template?: string
 ): Promise<Blob> {
   try {
-    const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/download?format=${format}`, {
+    // When a template is selected, set preserve_template=false so backend uses the chosen template
+    const preserveTemplate = template ? "false" : "true";
+    const params = new URLSearchParams({ format, preserve_template: preserveTemplate });
+    if (template) {
+      params.set("template_id", template);
+    }
+    const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/download?${params.toString()}`, {
       responseType: 'blob',
     });
     return response.data as Blob;
@@ -347,15 +481,63 @@ export async function previewEnhancedResumePDFOnly(enhanced_id: string): Promise
   }
 }
 
+/* ========== APPLY FIX ========== */
+
+export interface ApplyFixRequest {
+  enhancer_state: string; // enhanced_resume_id — the backend uses this to look up current state
+  suggestion_id: string;
+  fix_type?: 'auto' | 'manual' | 'info';
+  value?: string; // required for manual fixes (e.g. the phone number / email the user typed)
+}
+
+/**
+ * Apply a suggestion fix to an enhanced resume.
+ * POST /api/v1/resume/enhance/apply
+ *
+ * @param request - { enhancer_state, suggestion_id, fix_type, value }
+ * @returns Updated enhancer response with fix applied and refreshed ATS score
+ */
+export async function applyFix(request: ApplyFixRequest): Promise<EnhanceResumeResponse> {
+  logger.api.request('POST', '/resume/enhance/apply', {
+    suggestion_id: request.suggestion_id,
+    fix_type: request.fix_type,
+  });
+  const response = await safePost<EnhanceResumeResponse>('/resume/enhance/apply', request);
+  logger.debug('Fix applied', { suggestion_id: request.suggestion_id });
+  return response;
+}
+
+/* ========== DELETE FIX ========== */
+
+export interface DeleteFixRequest {
+  enhancer_state: string; // enhanced_resume_id
+  suggestion_id: string;
+}
+
+/**
+ * Undo a previously applied fix (e.g. user clears an added field).
+ * POST /api/v1/resume/enhance/delete-fix
+ *
+ * @param request - { enhancer_state, suggestion_id }
+ * @returns Updated enhancer response with fix removed and refreshed ATS score
+ */
+export async function deleteFix(request: DeleteFixRequest): Promise<EnhanceResumeResponse> {
+  logger.api.request('POST', '/resume/enhance/delete-fix', {
+    suggestion_id: request.suggestion_id,
+  });
+  const response = await safePost<EnhanceResumeResponse>('/resume/enhance/delete-fix', request);
+  logger.debug('Fix deleted', { suggestion_id: request.suggestion_id });
+  return response;
+}
+
 /* ========== COMPLETE WORKFLOW HELPER ========== */
 
 /**
  * Complete Enhancement Workflow
  *
- * This helper function combines all steps:
- * 1. Parse the resume file
- * 2. Enhance the resume with AI
- * 3. Return the enhanced data
+ * Two-step: parse file → POST /api/v1/resume/enhance with resume_id
+ * Used by both Resume Enhancer and ATS Scan flows.
+ * Normalises the response so downstream code using `enhanced_resume` still works.
  *
  * @param file - Resume file to enhance
  * @param jobDescription - Optional job description for tailoring
@@ -369,35 +551,32 @@ export async function processResumeEnhancement(
   parseResult: ParseResumeResponse;
   enhanceResult: EnhanceResumeResponse;
 }> {
-  try {
-    // Step 1: Parse Resume
-    const parseResult = await parseResumeForEnhancer(file);
-    const resumeId = parseResult.resume_id;
-
-    if (!resumeId) {
-      throw new Error("Failed to parse resume: No resume_id returned");
-    }
-
-    // Step 2: Enhance Resume
-    const enhanceRequest: EnhanceResumeRequest = {
-      resume_id: resumeId,
-      region,
-    };
-
-    // Add job description if provided
-    if (jobDescription) {
-      enhanceRequest.job_description = jobDescription;
-    }
-
-    const enhanceResult = await enhanceResume(enhanceRequest);
-
-    return {
-      parseResult,
-      enhanceResult,
-    };
-  } catch (error: unknown) {
-    throw error;
+  // Step 1: Parse Resume
+  const parseResult = await parseResumeForEnhancer(file);
+  const resumeId = parseResult.resume_id;
+  if (!resumeId) {
+    throw new Error("Failed to parse resume: No resume_id returned");
   }
+
+  // Step 2: Enhance (also computes ATS breakdown)
+  const enhanceRequest: EnhanceResumeRequest = { resume_id: resumeId, region };
+  if (jobDescription) enhanceRequest.job_description = jobDescription;
+
+  const enhanceResult = await enhanceResume(enhanceRequest);
+
+  // Normalise new response shape → backward-compat with EnhancerPage
+  // enhancer_state.resume replaces the old enhanced_resume field
+  const resumeData = enhanceResult.enhancer_state?.resume;
+  if (resumeData && !enhanceResult.enhanced_resume) {
+    (enhanceResult as unknown as Record<string, unknown>).enhanced_resume = resumeData;
+  }
+
+  // Set parsed_data from enhancer_state.resume if not already present
+  if (resumeData && !parseResult.parsed_data) {
+    parseResult.parsed_data = resumeData as import('@/types/api.types').ResumeData;
+  }
+
+  return { parseResult, enhanceResult };
 }
 
 /* ========== EXPORT ========== */
@@ -405,13 +584,14 @@ export const enhancerApi = {
   // Core enhancement functions
   parseResumeForEnhancer,
   enhanceResume,
+  applyFix,
+  deleteFix,
   getEnhancedResume,
   updateEnhancedResume,
   deleteEnhancedResume,
   getEnhancementHistory,
   downloadEnhancedResume,
-  previewEnhancedResume, // Returns full data + PDF
-  previewEnhancedResumePDFOnly, // Legacy: PDF only
+  previewEnhancedResume,
 
   // Helper workflow
   processResumeEnhancement,

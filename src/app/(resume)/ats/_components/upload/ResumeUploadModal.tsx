@@ -53,7 +53,7 @@ const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         <div className="min-h-full flex items-center justify-center py-8">
           <div
             ref={modalRef}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl relative animate-slideUp"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative animate-slideUp"
             onClick={(e) => e.stopPropagation()}
           >
             <button

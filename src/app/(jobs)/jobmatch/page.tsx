@@ -1,10 +1,5 @@
-import React from "react";
-import Overview from "./_components/Overview";
+import JobMatchHomePage from "./_components/JobMatchHomePage";
 
 export default function JobMatchPage() {
-  return (
-    <div className="w-full">
-      <Overview />
-    </div>
-  );
+  return <JobMatchHomePage />;
 }

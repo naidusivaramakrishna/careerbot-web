@@ -1,0 +1,659 @@
+ATS SCAN -> ENHANCER FEATURE SPECIFICATION
+==========================================
+Project    : CareerBot-Web
+Updated    : 2026-03-16
+Status     : Frontend Ready | Backend endpoints to verify/implement
+
+
+==========================================================
+1. PRODUCT VISION
+==========================================================
+
+Feature         | What it shows                                          | Data source
+----------------|--------------------------------------------------------|----------------------------------------
+ATS Scan        | ATS score + section breakdown + missing items (issues)  | parse_resume + calculate_ats_score
+Enhancer        | Same score + same missing items + enhanced resume        | resume/enhance (uses same resume_id
+                | sections + editing + export                             | + ats_id)
+
+Both pages share the same underlying parsed resume data.
+The score and missing items are IDENTICAL because they come from the same ATS analysis.
+The Enhancer ADDITIONALLY shows AI-improved content and section editors.
+
+
+==========================================================
+2. USER JOURNEY
+==========================================================
+
+Upload Resume (PDF/DOCX)
+        |
+        v
+POST /parser/parse_resume/
+  -> resume_id
+  -> parsed_data
+  -> ats_score (inline, includes SectionBreakdown + Suggestions)
+        |
+        v
+POST /parser/calculate_ats_score/{resume_id}
+  -> ats_id          <-- CRITICAL: needed for Enhancer
+  -> ats_score       <-- authoritative score for ATS report
+        |
+        |--------------------------------------+
+        v                                      v
+  ATS Report Page                     [User clicks "Fix Now"]
+  /atslogin/report                             |
+  Shows:                                       v
+  - Overall score gauge            POST /resume/enhance
+  - Section breakdown              { resume_id, ats_breakdown: ats_id }
+  - Issues (Critical/Urgent/Optional)          |
+  - "Fix Now with AI" button                   v
+                                      Enhancer Builder Page
+                                      /enhancer/builder
+                                      Shows:
+                                      - Same ATS score
+                                      - Same missing items
+                                      - Editable sections (16 sections)
+                                      - AI-enhanced content
+                                      - Export PDF/DOCX
+
+
+==========================================================
+3. API ENDPOINTS
+==========================================================
+
+----------------------------------------------------------
+3.1  STEP 1 - Parse Resume
+----------------------------------------------------------
+POST /api/v1/parser/parse_resume/
+Content-Type: multipart/form-data
+
+Body:
+  file        : <PDF|DOCX binary>
+  template_id : (optional, leave empty)
+
+Response (201):
+{
+  "resume_id": "69b4e4d84271d6c3e0a2ad48",
+  "file_name": "resume.pdf",
+  "parsed_data": {
+    "contact": { "name": "...", "email": null, "phone": null },
+    "llm_data": {
+      "experience": [...],
+      "education": [...],
+      "projects": [...],
+      "technical_skills": [...]
+    },
+    "summary": "...",
+    "certifications": [...],
+    "languages": [...]
+  },
+  "ats_score": { ... }   // inline -- NOT used for ats_id
+}
+
+NOTE: The inline ats_score does NOT include ats_id.
+      Always call calculate_ats_score separately to get the ats_id.
+
+
+----------------------------------------------------------
+3.2  STEP 2 - Calculate ATS Score
+----------------------------------------------------------
+POST /api/v1/parser/calculate_ats_score/{resume_id}
+Content-Type: application/json
+
+Body:
+{
+  "user_tier": "basic"
+}
+
+Response (200):
+{
+  "resume_id": "69b4e4d84271d6c3e0a2ad48",
+  "ats_id": "69b79788b5ec0c584e8d2f97",    <-- save this as ats_breakdown_id
+  "ats_score": {
+    "FinalScore": 52.72,
+    "MaxScore": 100,
+    "Percentage": 52.72,
+    "Profile": "Fresher",
+    "SectionBreakdown": {
+      "Contact": {
+        "raw_score": 0,
+        "max_raw_score": 10,
+        "percentage": 0,
+        "weight": 5,
+        "weighted_contribution": 0,
+        "deductions": [
+          { "id": "contact_issue_0", "penalty": -1, "message": "Missing email" },
+          { "id": "contact_issue_1", "penalty": -1, "message": "Missing phone" }
+        ]
+      },
+      "Education"      : { ... },
+      "Experience"     : { ... },
+      "Projects"       : { ... },
+      "Skills"         : { ... },
+      "Certifications" : { ... },
+      "Summary"        : { ... },
+      "Internships"    : { ... },
+      "Keywords"       : { ... },
+      "ContentQuality" : { ... },
+      "Formatting"     : { ... },
+      "ATSCompatibility": { ... }
+    },
+    "Suggestions": [
+      {
+        "id"      : "contact_issue_0",
+        "section" : "Contact",
+        "message" : "Missing email",
+        "fix_type": "info"     // "info" | "auto" | "manual"
+      },
+      {
+        "id"      : "projects_star_weak_bullet_0",
+        "section" : "Projects",
+        "message" : "Replace '...' with '...'",
+        "fix_type": "auto"
+      }
+    ],
+    "score_components": {
+      "Contact"  : -5,
+      "Education": -4.4,
+      "Projects" : -6.6,
+      "Skills"   : -3.6
+    }
+  }
+}
+
+What to store in localStorage key "atsAnalysisData":
+{
+  "resume_id"        : "69b4e4d84271d6c3e0a2ad48",
+  "ats_breakdown_id" : "69b79788b5ec0c584e8d2f97",
+  "parsed_data"      : { ... },
+  "ats_score"        : { ... },
+  "finalWeightedScore": 52.72,
+  "scanned_pdf"      : false
+}
+
+
+----------------------------------------------------------
+3.3  STEP 3 - Enhance Resume
+----------------------------------------------------------
+POST /api/v1/resume/enhance
+Content-Type: application/json
+
+Body:
+{
+  "resume_id"    : "69b4e4d84271d6c3e0a2ad48",
+  "ats_breakdown": "69b79788b5ec0c584e8d2f97"   <-- from ats_id
+}
+
+Response (200/201):
+{
+  "enhanced_resume_id": "abc123...",
+  "resume_id"         : "69b4e4d84271d6c3e0a2ad48",
+  "success"           : true,
+
+  "enhanced_resume": {
+    "contact"    : { "name": "...", "email": "...", "phone": "...", "location": "..." },
+    "summary"    : "Enhanced professional summary...",
+    "summary_variants": [
+      { "summary": "Variant 1 text..." },
+      { "summary": "Variant 2 text..." }
+    ],
+    "experience"       : [...],
+    "education"        : [...],
+    "skills"           : [...],
+    "technical_skills" : [...],
+    "soft_skills"      : [...],
+    "projects"         : [...],
+    "certifications"   : [...],
+    "newly_added_skills"      : ["TypeScript", "Webpack"],
+    "newly_added_soft_skills" : ["Communication"]
+  },
+
+  "enhancement_report": {
+    "summary": "Resume enhanced with AI improvements",
+    "details": {
+      "gaps": {
+        "missing_keywords" : ["TypeScript", "Webpack", "Cross-Browser Compatibility"],
+        "missing_skills"   : ["TypeScript", "Jest"],
+        "experience_gaps"  : ["No measurable results in project bullets"],
+        "strength_keywords": ["React.js", "Tailwind CSS"]
+      },
+      "validation_results": {
+        "total_issues"    : 8,
+        "critical_count"  : 2,
+        "warning_count"   : 4,
+        "info_count"      : 2,
+        "all_issues": [
+          {
+            "id"           : "issue_001",
+            "category"     : "keyword",
+            "section"      : "Skills",
+            "title"        : "Missing TypeScript",
+            "description"  : "TypeScript is commonly expected for this role",
+            "impact"       : "High",
+            "impact_points": 15,
+            "before"       : "",
+            "after"        : "Add TypeScript to Skills section"
+          }
+        ]
+      }
+    }
+  }
+}
+
+
+----------------------------------------------------------
+3.4  STEP 4 - Get Enhanced Resume (on builder load)
+----------------------------------------------------------
+GET /api/v1/resume/enhance/{enhanced_id}
+
+Returns same shape as POST /resume/enhance response above.
+
+
+----------------------------------------------------------
+3.5  STEP 5 - Update Single Section
+----------------------------------------------------------
+PATCH /api/v1/resume/enhance/{enhanced_id}
+Content-Type: application/json
+
+Body:
+{
+  "enhanced_sections": {
+    "template_id": "compact_professional",
+    "experience" : [...updated experience array...],
+    "skills"     : [...updated skills...],
+    "summary"    : "Updated summary text"
+  }
+}
+
+Returns full EnhanceResumeResponse.
+
+
+----------------------------------------------------------
+3.6  STEP 6 - Bulk Update  (NEW - to be implemented)
+----------------------------------------------------------
+This endpoint is needed for the builder's "Save All" action --
+when the user edits multiple sections and wants to persist all
+changes in one call.
+
+POST /api/v1/resume/enhance/{enhanced_id}/bulk-update
+Content-Type: application/json
+
+Request body:
+{
+  "sections": {
+    "PersonalInfo": {
+      "name"      : "John Doe",
+      "email"     : "john@example.com",
+      "phone"     : "+91-9999999999",
+      "location"  : "Hyderabad, India",
+      "linkedin"  : "https://linkedin.com/in/johndoe",
+      "github"    : "https://github.com/johndoe",
+      "portfolio" : "https://johndoe.dev"
+    },
+    "Summary": {
+      "text": "Frontend Developer with 2 years of experience..."
+    },
+    "Experience": [
+      {
+        "role"    : "Frontend Developer",
+        "company" : "Acme Corp",
+        "duration": "Jan 2024 - Present",
+        "location": "Hyderabad",
+        "key_contributions": [
+          "Built responsive dashboards using React.js, improving load time by 40%",
+          "Implemented reusable component library used across 3 products"
+        ]
+      }
+    ],
+    "Skills": {
+      "technical": ["React.js", "TypeScript", "Tailwind CSS", "Next.js"],
+      "soft"     : ["Communication", "Problem Solving", "Teamwork"]
+    },
+    "Education": [
+      {
+        "degree"      : "Bachelor of Technology",
+        "branch"      : "Civil Engineering",
+        "college"     : "LBRCE",
+        "passed_out"  : "2023",
+        "grade"       : "7.8",
+        "grade_type"  : "CGPA"
+      }
+    ],
+    "Projects": [
+      {
+        "title"      : "Portfolio Website",
+        "technologies": ["React", "Tailwind CSS"],
+        "key_contributions": [
+          "Built personal portfolio with responsive design, achieving 95 Lighthouse score",
+          "Implemented dark mode toggle and smooth animations"
+        ]
+      }
+    ],
+    "Certifications": [
+      {
+        "name"     : "Frontend Development Fundamentals",
+        "issued_by": "Coursera",
+        "year"     : "2023"
+      }
+    ],
+    "Languages": [
+      { "language": "English", "proficiency": "Fluent" },
+      { "language": "Telugu",  "proficiency": "Native" }
+    ],
+    "Internships"  : [...],
+    "Awards"       : [...],
+    "Achievements" : [...],
+    "Volunteering" : [...],
+    "Hobbies"      : [...],
+    "Publications" : [...],
+    "References"   : [...]
+  },
+  "template_id": "compact_professional",
+  "metadata": {
+    "edited_sections": ["PersonalInfo", "Experience", "Skills"],
+    "updated_at"     : "2026-03-16T10:00:00Z"
+  }
+}
+
+Expected Response (200):
+{
+  "enhanced_resume_id": "abc123...",
+  "resume_id"         : "69b4e4d84271d6c3e0a2ad48",
+  "success"           : true,
+  "updated_sections"  : ["PersonalInfo", "Experience", "Skills"],
+  "enhanced_resume"   : { ...full updated resume... }
+}
+
+
+----------------------------------------------------------
+3.7  STEP 7 - Export Resume
+----------------------------------------------------------
+GET /api/v1/resume/enhance/{enhanced_id}/download?format=pdf&template=compact_professional
+
+Returns: Blob (PDF or DOCX binary)
+
+Template ID mapping (frontend -> backend):
+  apollo               -> compact_professional
+  atlas                -> professional_classic
+  terra                -> minimalist_classic
+  tempe                -> clean_simple
+  classic_professional -> classic_professional
+
+
+==========================================================
+4. DATA SHARED BETWEEN ATS AND ENHANCER
+==========================================================
+
+Data                          | ATS Page                        | Enhancer Page
+------------------------------|----------------------------------|----------------------------------
+Overall score                 | Gauge with %                     | Score badge / header
+Section breakdown             | Bar chart per section            | Score summary panel
+Missing issues (deductions)   | Issue cards (Critical/Urgent/    | "Missing Items" sidebar panel
+                              | Optional)                        |
+Suggestions                   | Fix type: auto / manual / info   | AI applied + remaining manual
+Missing keywords              | Listed under Keywords section    | newly_added_skills shows added
+
+Frontend implementation:
+  Read from localStorage.atsAnalysisData.ats_score on BOTH pages.
+  Do NOT re-call the ATS endpoint from the Enhancer -- reuse what was already fetched.
+
+
+==========================================================
+5. WHAT EACH PAGE DISPLAYS
+==========================================================
+
+ATS Report Page  (/atslogin/report)
+-------------------------------------
++---------------------------------------+
+|  ATS Score: 52.7 / 100                |
+|  [Gauge Chart]                         |
++---------------------------------------+
+|  Section Scores                        |
+|  Contact     ||||.....  0%             |
+|  Education   ||||||...  60%            |
+|  Skills      |||||||..  70%            |
+|  Keywords    |||||....  54%            |
+|  Formatting  ||||||...  65%            |
++---------------------------------------+
+|  Issues (12 total)                     |
+|  [CRITICAL] Missing email              |
+|  [CRITICAL] Missing phone              |
+|  [URGENT]   No soft skills             |
+|  [URGENT]   No internships listed      |
+|  [OPTIONAL] Add TypeScript             |
++---------------------------------------+
+|  [Fix with AI Enhancer ->]             |
++---------------------------------------+
+
+Data source:
+  Score     : ats_score.FinalScore
+  Breakdown : ats_score.SectionBreakdown[section].percentage
+  Issues    : ats_score.Suggestions[] filtered by fix_type and deduction severity
+
+
+Enhancer Builder Page  (/enhancer/builder)
+-------------------------------------------
++--------------+----------------------------+
+|  Score Panel |  Section Editor             |
+|              |                             |
+|  ATS: 52.7   |  [Personal Info]   [Edit]   |
+|              |  Name: John Doe             |
+|  Missing:    |  Email: <- add this         |
+|  - Email     |  Phone: <- add this         |
+|  - Phone     |                             |
+|  - TypeScript|  [Experience]      [Edit]   |
+|  - Webpack   |  Frontend Developer         |
+|              |  - Built dashboards...      |
+|  Templates:  |  - Integrated APIs...       |
+|  ( ) Apollo  |                             |
+|  (*) Atlas   |  [Skills]          [Edit]   |
+|  ( ) Terra   |  React, TypeScript...       |
+|              |                             |
+|              |  [Export PDF / DOCX]        |
++--------------+----------------------------+
+
+Data source:
+  Score display : localStorage.atsAnalysisData.ats_score.FinalScore
+  Missing items : localStorage.atsAnalysisData.ats_score.Suggestions
+                  + enhancement_report.details.gaps
+  Editable content   : enhanced_resume from POST /resume/enhance response
+  Newly added skills : enhanced_resume.newly_added_skills
+
+
+==========================================================
+6. FRONTEND STATE ARCHITECTURE
+==========================================================
+
+localStorage  (cross-route, survives navigation)
+-------------------------------------------------
+Key: atsAnalysisData
+{
+  resume_id         : string    <- from parse_resume
+  ats_breakdown_id  : string    <- from calculate_ats_score (ats_id)
+  parsed_data       : {...}
+  ats_score         : {...}     <- full SectionBreakdown + Suggestions
+  finalWeightedScore: number
+  scanned_pdf       : boolean
+}
+
+sessionStorage  (within browser session)
+-----------------------------------------
+resume_id           : string
+enhanced_id         : string    <- from POST /resume/enhance
+original_resume_id  : string
+ctx_resumeData      : {...}     <- ResumeContext state
+ctx_enabledSections : [...]
+ctx_selectedTemplate: string
+
+React Context  (ResumeContext)
+-------------------------------
+resumeData       : ResumeData    <- live editable state
+selectedTemplate : TemplateId
+enabledSections  : Set<SectionName>
+editedSections   : Map<SectionName, SectionData>
+
+
+==========================================================
+7. API CALL SEQUENCE  (Complete Flow)
+==========================================================
+
+1.  User uploads file
+    -> POST /parser/parse_resume/
+    <- resume_id, parsed_data, ats_score (inline, no ats_id)
+
+2.  Calculate ATS score
+    -> POST /parser/calculate_ats_score/{resume_id}
+    <- ats_id, ats_score (authoritative)
+
+3.  Save to localStorage: atsAnalysisData
+    (resume_id + ats_breakdown_id + ats_score + parsed_data)
+
+4.  Redirect to /atslogin/report
+    -> Read from localStorage
+    -> Display score, breakdown, issues
+
+5.  User clicks "Fix Now"
+    -> Read resume_id, ats_breakdown_id from localStorage
+    -> Navigate to /enhancer?resume_id=X&ats_breakdown=Y&from_ats=true
+
+6.  Enhancer auto-processes
+    -> POST /resume/enhance { resume_id, ats_breakdown }
+    <- enhanced_resume_id, enhanced_resume, enhancement_report
+
+7.  Read ats_score from localStorage for display in enhancer
+    -> No extra API call needed for score / missing items
+
+8.  Render builder
+    -> Display: same ATS score + same missing items + AI-enhanced sections
+
+9.  User edits sections
+
+10. User saves all changes
+    -> POST /resume/enhance/{enhanced_id}/bulk-update  (NEW)
+    <- updated enhanced_resume
+
+11. User exports
+    -> GET /resume/enhance/{enhanced_id}/download?format=pdf&template=X
+    <- PDF/DOCX blob
+
+
+==========================================================
+8. SECTION DATA STRUCTURES
+==========================================================
+
+All 16 Editable Sections:
+  PersonalInfo | Summary     | Experience | Skills
+  Education    | Projects    | Languages  | Certificates
+  Awards       | Achievements| Internships| Volunteering
+  Hobbies      | Interests   | Publications| References
+
+PersonalInfo:
+  fullName    : string
+  email       : string
+  phone       : string
+  location    : string (optional)
+  linkedinUrl : string (optional)
+  githubUrl   : string (optional)
+  portfolioUrl: string (optional)
+
+WorkExperience (Experience / Internships / Volunteering):
+  role             : string
+  company          : string
+  duration         : string     // "Jan 2024 - Present"
+  location         : string
+  client           : string (optional)
+  description      : string     // bullet points joined with \n
+  currentlyWorking : boolean (optional)
+
+Education:
+  college    : string
+  degree     : string
+  branch     : string
+  duration   : string
+  grade      : string
+  gradeType  : string    // "CGPA", "Percentage"
+  achievements: string (optional)
+
+Project:
+  title    : string
+  link     : string (optional)
+  client   : string (optional)
+  startDate: string (optional)
+  endDate  : string (optional)
+  description: string   // bullet points
+
+Certification / Certificate:
+  name    : string
+  issuedBy: string
+  year    : string
+
+Language:
+  language   : string
+  proficiency: string   // "Fluent", "Native", "Intermediate"
+
+
+==========================================================
+9. BULK UPDATE ENDPOINT - BACKEND IMPLEMENTATION GUIDE
+==========================================================
+
+Route:
+  POST /api/v1/resume/enhance/{enhanced_id}/bulk-update
+
+What the handler must do:
+  1. Find existing enhanced_data document by enhanced_id
+  2. For each key in sections{}, deep-merge the value into
+     enhanced_data.enhanced_resume
+  3. Update template_id if provided
+  4. Update updated_at timestamp
+  5. Record edited_sections list for audit
+  6. Return full updated EnhanceResumeResponse
+
+Validation rules:
+  - enhanced_id must exist and belong to the requesting user
+  - Only allow known section keys (whitelist validation)
+  - PersonalInfo.email must pass format validation
+  - Array sections: REPLACE entirely (do not append)
+
+Why a separate endpoint from PATCH:
+  PATCH /resume/enhance/{id}  ->  update one or a few fields (single section save)
+  POST  /bulk-update          ->  replace all edited sections in one atomic write
+                                  (builder "Save All" / pre-export save)
+
+  If the backend already supports full replacement via PATCH, the bulk-update
+  endpoint can be a route alias pointing to the same handler.
+
+
+==========================================================
+10. KNOWN ISSUES (CURRENT STATE)
+==========================================================
+
+Issue                             | Impact                              | Fix
+----------------------------------|-------------------------------------|-----------------------------------
+ats_id was null when inline score | "Fix Now" sent no ats_breakdown     | FIXED: always call
+was used                          | -> enhance API failed               | calculate_ats_score for ats_id
+                                  |                                     |
+Enhancer error shows generic      | Real backend error hidden from      | Show err.__raw.detail in
+"Error uploading file"            | developer and user                  | error display
+                                  |                                     |
+Duplicate file EnhancerPage.tsx   | Dead code, confusion                | Delete enchancepage.tsx
+and enchancepage.tsx              |                                     |
+                                  |                                     |
+LoadingModal steps hardcoded      | Steps never update to reflect       | Pass currentStep index as prop
+(isDone = i === 0 always)         | real progress                       |
+                                  |                                     |
+No credit check before            | Credits not gated on enhancement    | Wire useCreditCheck hook before
+enhancement                       |                                     | enhanceResume call
+
+
+==========================================================
+11. FILES TO MODIFY
+==========================================================
+
+File                                                          | Change needed
+--------------------------------------------------------------|--------------------------------------------------
+src/api/resumeatsapi.ts                                       | DONE - always calls calculate_ats_score for ats_id
+src/app/(resume)/enhancer/_components/EnhancerPage.tsx        | Read ATS score from localStorage, pass to builder
+src/app/(resume)/enhancer/builder/page.tsx                    | Display ATS score panel + missing items sidebar
+src/app/(resume)/enhancer/_components/ResumeContext.tsx       | Add atsScore and missingItems to context
+src/app/(resume)/enhancer/_components/LoadingModal.tsx        | Accept currentStep prop for real progress
+src/api/enhancerApi.ts                                        | Add bulkUpdateEnhancedResume() function
+src/app/(resume)/enhancer/_components/enchancepage.tsx        | Delete (duplicate of EnhancerPage.tsx)

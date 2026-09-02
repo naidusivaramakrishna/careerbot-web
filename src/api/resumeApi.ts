@@ -1,14 +1,14 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
 import { getProfile } from './userApi';
+import type { CustomSection, CustomField } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 
 export interface CategorizedSkills {
   programming_languages: string[];
   frameworks: string[];
-  databases: string[];
-  tools: string[];
-  cloud_platforms: string[];
   soft_skills: string[];
+  project_management: string[];
+  marketing_sales: string[];
 }
 
 export interface ResumeResponse {
@@ -19,20 +19,24 @@ export interface ResumeResponse {
     phone?: string;
     location?: string;
     linkedinUrl?: string;
-    portfolioUrl?: string; // Correct spelling
-    // portifolioUrl?: string; // Backward compatibility for typo
+    githubUrl?: string;
+    portfolioUrl?: string;
   };
   professionalSummary?: {
     summary: string;
     targetRole: string;
   } | string; // Support both old string format and new object format for backward compatibility
   education?: Array<{
+    id?: string;
     school: string;
     degree: string;
     startDate: string;
     endDate: string;
+    scoreType?: "CGPA" | "Marks" | "GPA" | "Percentage";
+    scoreValue?: string;
   }>;
   workExperience?: Array<{
+    id?: string;
     company: string;
     role: string;
     location: string;
@@ -42,34 +46,39 @@ export interface ResumeResponse {
     description: string;
   }>;
   projects?: Array<{
+    id?: string;
     title: string;
     description: string;
     technologies: string[];
     startDate: string;
     endDate: string;
-    link: string;
+    projectUrl: string;
   }>;
   skills?: string[];
   categorizedSkills?: CategorizedSkills;
   certifications?: Array<{
+    id?: string;
     name: string;
-    issuedBy: string;
-    year: string;
+    issuer: string;
+    issueDate: string;
     expiryDate?: string;
     credentialId?: string;
   }>;
   achievements?: Array<{
+    id?: string;
     title: string;
-    date: string;
     description: string;
   }>;
   volunteering?: Array<{
+    id?: string;
     organization: string;
     role: string;
     startDate: string;
     endDate: string;
+    description: string;
   }>;
   internships?: Array<{
+    id?: string;
     company: string;
     role: string;
     location: string;
@@ -77,48 +86,72 @@ export interface ResumeResponse {
     endDate: string;
     currentlyWorking: boolean;
     description: string;
+    technologies?: string[];
   }>;
   awards?: Array<{
+    id?: string;
     title: string;
-    issuedBy: string;
-    year: string;
+    issuer: string;
+    date: string;
+    description: string;
   }>;
   hobbies?: Array<{
+    id?: string;
     name: string;
-    description: string;
-    proficiencyLevel?: string;
-    achievement?: string;
   }>;
   interests?: Array<{
+    id?: string;
     name: string;
-    description: string;
-    category?: string;
   }>;
   languages?: Array<{
-    language: string;
+    id?: string;
+    name: string;
     proficiency: string;
   }>;
   publications?: Array<{
+    id?: string;
     title: string;
-    authors: string;
-    publicationName: string;
+    publisher: string;
     date: string;
     url: string;
+    description: string;
   }>;
   references?: Array<{
+    id?: string;
     name: string;
-    relation: string;
-    contact: string;
+    position: string;
+    company: string;
+    email: string;
+    phone: string;
   }>;
   work_experience?: Array<{
-    role?: string;
+    id?: string;
+    company: string;
+    role: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    currentlyWorking: boolean;
+    description: string;
+    technologies?: string[];
   }>;
   builder_score?: {
     score?: number;
   };
+  patents?: Array<{
+    id?: string;
+    title: string;
+    patentNumber: string;
+    status: string;
+    date: string;
+    description?: string;
+  }>;
+  declaration?: string | { text: string };
+  declarationDate?: string;
+  declarationPlace?: string;
   updatedAt: string;
   createdAt: string;
-  // customSections?: CustomSection[];
+  customSections?: CustomSection[];
 }
 
 export interface TemplateResponse {
@@ -150,8 +183,8 @@ export interface TemplateResponse {
     body_size: number;
     line_height: number;
   };
-  sections?: Record<string, any>;
-  styling?: Record<string, any>;
+  sections?: Record<string, unknown>;
+  styling?: Record<string, unknown>;
   is_premium?: boolean;
   is_active?: boolean;
   is_default?: boolean;
@@ -208,7 +241,7 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
       resumeData
     );
 
-    const resumeId = response.data.id || (response.data as any)._id;
+    const resumeId = response.data.id || (response.data as unknown as Record<string, unknown>)._id as string;
 
     logger.info("✅ Resume created with ID:", resumeId);
 
@@ -235,6 +268,57 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
     logger.error("❌ Error creating resume:", error);
     throw error;
   }
+};
+
+// ==================== CREATE RESUME FROM PARSED DATA ====================
+// Used by Upload flow: parser output mapped → builder format → saved to MongoDB.
+// POST /resumes/ only accepts personalInfo at creation time; all other sections
+// are written via a PATCH immediately after so the builder opens with data pre-filled.
+export const createResumeFromParsed = async (
+  data: Partial<ResumeResponse>
+): Promise<ResumeResponse> => {
+  try {
+    logger.debug("📤 Creating resume from parsed data...");
+
+    // Step 1 — create with the minimal payload the backend accepts on POST
+    const createResponse = await httpClient.post<ResumeResponse>('/resumes/', {
+      personalInfo: data.personalInfo,
+    });
+
+    const resumeId =
+      createResponse.data.id ||
+      (createResponse.data as unknown as Record<string, unknown>)._id as string;
+
+    if (!resumeId) throw new Error("Resume created but no ID returned");
+
+    localStorage.setItem("current_resume_id", resumeId);
+    logger.info("✅ Resume created, ID:", resumeId);
+
+    // Step 2 — patch all parsed sections onto the new resume
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { personalInfo: _pi, ...sections } = data;
+    if (Object.keys(sections).length > 0) {
+      await httpClient.patch(`/resumes/${resumeId}`, sections);
+      logger.info("✅ Parsed sections patched onto resume");
+    }
+
+    return { ...createResponse.data, id: resumeId };
+  } catch (error) {
+    logger.error("❌ Error creating resume from parsed data:", error);
+    throw error;
+  }
+};
+
+// ==================== GET ALL RESUMES (UNIFIED) ====================
+export const getAllResumesUnified = async (
+  options: { skipAuthRedirect?: boolean } = {}
+): Promise<import('@/types/api.types').AllResumesResponse> => {
+  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all', {
+    headers: {
+      ...(options.skipAuthRedirect && { 'X-Skip-Auth-Redirect': 'true' }),
+    },
+  });
+  return response.data;
 };
 
 // ==================== GET ALL RESUMES ====================
@@ -271,7 +355,7 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
         logger.debug("🔍 First resume personalInfo:", response.data[0]?.personalInfo);
       }
 
-      const transformedResumes = response.data.map((resume: any) => {
+      const transformedResumes = response.data.map((resume: ResumeResponse & { _id?: string }) => {
         const resumeId = resume.id || resume._id;
 
         if (!resumeId) {
@@ -299,7 +383,7 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
     }
     
     if (response.data && typeof response.data === 'object') {
-      const resumeId = (response.data as any).id || (response.data as any)._id;
+      const resumeId = (response.data as ResumeResponse & { _id?: string }).id || (response.data as ResumeResponse & { _id?: string })._id;
 
       if (resumeId) {
         logger.info("✅ Single resume received");
@@ -322,16 +406,249 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
 };
 
 // ==================== HELPER FUNCTIONS ====================
+
+// Type for backend custom section item
+interface BackendCustomSectionItem {
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  url?: string;
+  tags?: string[];
+  location?: string;
+  [key: string]: string | string[] | undefined;
+}
+
+// Type for backend custom section
+interface BackendCustomSection {
+  id?: string;
+  sectionName: string;
+  icon: string;
+  items: BackendCustomSectionItem[];
+}
+
 /**
- * Transform professionalSummary from object to string for backward compatibility
- * TODO: Remove this once backend is updated to handle object format
+ * Transform frontend customSections (fields-based) to backend format (items-based)
+ */
+const transformCustomSectionsForBackend = (customSections: CustomSection[]): BackendCustomSection[] => {
+  return customSections
+    .filter(section => {
+      // Skip sections with no fields — they have no content to render
+      if (!section.fields || section.fields.length === 0) return false;
+      // Skip sections where every field is empty
+      return section.fields.some(f => {
+        const v = f.value;
+        if (typeof v === 'string') return v.trim() !== '';
+        if (Array.isArray(v)) return v.length > 0;
+        return !!v;
+      });
+    })
+    .map((section) => {
+    // Create an item from the fields
+    const item: BackendCustomSectionItem = {
+      title: '',
+      subtitle: '',
+      description: '',
+      startDate: '',
+      endDate: '',
+      url: '',
+      tags: [],
+      location: '',
+    };
+
+    // Map fields to backend structure
+    section.fields?.forEach((field) => {
+      const fieldValue = field.value;
+
+      // Smart mapping based on field name and type
+      if (field.fieldType === 'text') {
+        // First text field → title, others → subtitle or custom fields
+        if (!item.title && (field.fieldName.toLowerCase().includes('title') || field.fieldName.toLowerCase().includes('name'))) {
+          item.title = fieldValue as string;
+        } else if (!item.subtitle && field.fieldName.toLowerCase().includes('subtitle')) {
+          item.subtitle = fieldValue as string;
+        } else if (!item.location && field.fieldName.toLowerCase().includes('location')) {
+          item.location = fieldValue as string;
+        } else if (!item.title) {
+          item.title = fieldValue as string;
+        } else if (!item.subtitle) {
+          item.subtitle = fieldValue as string;
+        }
+      } else if (field.fieldType === 'textarea') {
+        // Textarea → description
+        item.description = fieldValue as string;
+      } else if (field.fieldType === 'date') {
+        // Date fields
+        if (field.fieldName.toLowerCase().includes('start')) {
+          item.startDate = fieldValue as string;
+        } else if (field.fieldName.toLowerCase().includes('end')) {
+          item.endDate = fieldValue as string;
+        } else if (!item.startDate) {
+          item.startDate = fieldValue as string;
+        }
+      } else if (field.fieldType === 'url') {
+        // URL field
+        item.url = fieldValue as string;
+      } else if (field.fieldType === 'list') {
+        // List → tags
+        item.tags = (fieldValue as string[]).filter(v => v.trim() !== '');
+      }
+    });
+
+    // ✅ FIXED: Remove empty fields to avoid backend validation errors
+    // Only include fields that have actual values
+    const cleanedItem: BackendCustomSectionItem = {};
+    Object.keys(item).forEach((key) => {
+      const value = item[key];
+      // Include field if it has a non-empty value
+      if (value !== '' && !(Array.isArray(value) && value.length === 0)) {
+        cleanedItem[key] = value;
+      }
+    });
+
+    return {
+      // Include backend ID when it's a real UUID (not a frontend-generated `custom_*` id)
+      // This allows the backend to UPDATE the existing record instead of INSERTing a new one
+      ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
+      sectionName: section.sectionName,
+      icon: 'custom', // Default icon
+      items: [cleanedItem], // Single item per section for now
+    };
+  }); // end .map
+};
+
+/**
+ * Transform backend customSections (items-based) to frontend format (fields-based)
+ */
+const transformCustomSectionsFromBackend = (backendSections: BackendCustomSection[]): CustomSection[] => {
+  if (!backendSections || backendSections.length === 0) return [];
+
+  return backendSections.map((section, sectionIndex) => {
+    const fields: CustomField[] = [];
+
+    // If section has items, convert first item to fields
+    if (section.items && section.items.length > 0) {
+      const item = section.items[0]; // Take first item
+
+      // Map backend item fields to frontend fields
+      if (item.title) {
+        fields.push({
+          id: `field_title_${sectionIndex}`,
+          fieldName: 'Title',
+          fieldType: 'text',
+          value: item.title,
+        });
+      }
+
+      if (item.subtitle) {
+        fields.push({
+          id: `field_subtitle_${sectionIndex}`,
+          fieldName: 'Subtitle',
+          fieldType: 'text',
+          value: item.subtitle,
+        });
+      }
+
+      if (item.description) {
+        fields.push({
+          id: `field_description_${sectionIndex}`,
+          fieldName: 'Description',
+          fieldType: 'textarea',
+          value: item.description,
+        });
+      }
+
+      if (item.startDate) {
+        fields.push({
+          id: `field_startDate_${sectionIndex}`,
+          fieldName: 'Start Date',
+          fieldType: 'date',
+          value: item.startDate,
+        });
+      }
+
+      if (item.endDate) {
+        fields.push({
+          id: `field_endDate_${sectionIndex}`,
+          fieldName: 'End Date',
+          fieldType: 'date',
+          value: item.endDate,
+        });
+      }
+
+      if (item.url) {
+        fields.push({
+          id: `field_url_${sectionIndex}`,
+          fieldName: 'URL',
+          fieldType: 'url',
+          value: item.url,
+        });
+      }
+
+      if (item.location) {
+        fields.push({
+          id: `field_location_${sectionIndex}`,
+          fieldName: 'Location',
+          fieldType: 'text',
+          value: item.location,
+        });
+      }
+
+      if (item.tags && item.tags.length > 0) {
+        fields.push({
+          id: `field_tags_${sectionIndex}`,
+          fieldName: 'Tags',
+          fieldType: 'list',
+          value: item.tags,
+        });
+      }
+    }
+
+    return {
+      id: section.id || `custom_${Date.now()}_${sectionIndex}`,
+      sectionName: section.sectionName,
+      fields,
+    };
+  });
+};
+
+/**
+ * Transform professionalSummary to include both summary and targetRole
+ * ✅ Backend now accepts object format with summary and targetRole
  */
 const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Partial<ResumeResponse> => {
   const transformed = { ...resumeData };
 
-  // If professionalSummary is an object, extract just the summary string
+  // Skills are managed exclusively via individual skill endpoints (POST/DELETE).
+  // Sending them through PATCH causes a backend error, so strip them here.
+  delete transformed.skills;
+  delete transformed.categorizedSkills;
+
+  // ✅ Send full professionalSummary object (summary + targetRole) to backend
   if (transformed.professionalSummary && typeof transformed.professionalSummary === 'object') {
-    transformed.professionalSummary = transformed.professionalSummary.summary || '';
+    transformed.professionalSummary = {
+      summary: transformed.professionalSummary.summary || '',
+      targetRole: transformed.professionalSummary.targetRole || ''
+    };
+  }
+
+  // Strip the snake_case alias — backend PATCH accepts personalInfo and normalizes
+  // internally; sending both risks divergence if values ever differ.
+  const raw = transformed as Record<string, unknown>;
+  if (raw['personal_info'] && !transformed.personalInfo) {
+    raw['personalInfo'] = raw['personal_info'];
+  }
+  delete raw['personal_info'];
+
+  // Transform customSections from fields-based to items-based structure
+  if (transformed.customSections && Array.isArray(transformed.customSections) && transformed.customSections.length > 0) {
+    logger.info("🔄 Transforming customSections from fields to items format...");
+    const backendFormatted = transformCustomSectionsForBackend(transformed.customSections);
+    transformed.customSections = backendFormatted as unknown as CustomSection[];
+    // Also populate snake_case field — backend PDF generator reads custom_sections
+    (transformed as Record<string, unknown>).custom_sections = backendFormatted;
+    logger.info("✅ Transformed customSections:", transformed.customSections);
   }
 
   return transformed;
@@ -359,9 +676,15 @@ export const updateResume = async (
       transformedData
     );
 
+    // Transform response customSections back to frontend format (same as getResumeById)
+    // so callers can sync the real backend UUIDs back into React context
+    if (response.data.customSections && Array.isArray(response.data.customSections) && response.data.customSections.length > 0) {
+      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections as unknown as BackendCustomSection[]);
+    }
+
     logger.info("✅ Resume updated successfully");
     return response.data;
-    
+
   } catch (error) {
     logger.error("❌ Error updating resume:", error);
     throw error;
@@ -375,6 +698,13 @@ export const getResumeById = async (resumeId: string): Promise<ResumeResponse> =
     logger.debug("📥 Fetching resume by ID:", resumeId);
 
     const response = await httpClient.get<ResumeResponse>(`/resumes/${resumeId}`);
+
+    // Transform backend customSections (items) to frontend format (fields)
+    if (response.data.customSections && Array.isArray(response.data.customSections) && response.data.customSections.length > 0) {
+      logger.info("🔄 Transforming backend customSections to frontend format...");
+      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections as unknown as BackendCustomSection[]);
+      logger.info("✅ Transformed customSections:", response.data.customSections);
+    }
 
     logger.info("✅ Resume fetched successfully");
     return response.data;
@@ -424,6 +754,58 @@ export const deleteResumeSectionItem = async (
   }
 };
 
+// ==================== ADD SKILL TO CATEGORY ====================
+export const addSkillToCategory = async (
+  resumeId: string,
+  category: string,
+  skillName: string
+): Promise<{ id?: string }> => {
+  try {
+    logger.debug("➕ Adding skill to category:", { category, skillName });
+    const response = await httpClient.post<{ id?: string; _id?: string }>(
+      `/resumes/${resumeId}/skills/${category}`,
+      { name: skillName }
+    );
+    const id = response.data?.id ?? response.data?._id ?? response.data?.skill?.id;
+    logger.info("✅ Skill added successfully, id:", id);
+    return { id };
+  } catch (error) {
+    logger.error("❌ Error adding skill:", error);
+    throw error;
+  }
+};
+
+// ==================== DELETE SKILL BY ID ====================
+export const deleteSkillById = async (
+  resumeId: string,
+  category: string,
+  skillId: string
+): Promise<void> => {
+  try {
+    logger.debug("🗑️ Deleting skill:", { category, skillId });
+    await httpClient.delete(`/resumes/${resumeId}/skills/${category}/${encodeURIComponent(skillId)}`);
+    logger.info("✅ Skill deleted successfully");
+  } catch (error) {
+    logger.error("❌ Error deleting skill:", error);
+    throw error;
+  }
+};
+
+// ==================== DELETE SKILL CATEGORY ====================
+export const deleteSkillCategory = async (
+  resumeId: string,
+  category: string
+): Promise<void> => {
+  try {
+    logger.debug("🗑️ Deleting skill category:", category);
+    await httpClient.delete(`/resumes/${resumeId}/skills/categories/${category}`);
+    logger.info("✅ Skill category deleted successfully");
+  } catch (error) {
+    logger.error("❌ Error deleting skill category:", error);
+    throw error;
+  }
+};
+
 // ==================== TRIGGER SCORE CALCULATION ====================
 export const triggerScoreCalculation = async (resumeId: string): Promise<void> => {
   
@@ -459,19 +841,25 @@ export const getBuilderScore = async (resumeId: string): Promise<BuilderScoreRes
   }
 };
 
-// ==================== GET RESUME SCORE WITH POLLING ====================
-export const getResumeScore = async (resumeId: string): Promise<ResumeScoreResponse> => {
-  
+// ==================== GET RESUME SCORE WITH POLLING (DEPRECATED) ====================
+// @deprecated Use triggerScoreCalculation + getBuilderScore directly instead.
+// Do not use this function - it fabricates fake metrics.
+export const getResumeScore = async (
+  resumeId: string,
+  onProgress?: (attempt: number, max: number) => void
+): Promise<ResumeScoreResponse> => {
+
   try {
     logger.debug("⭐ Starting score calculation flow for resume:", resumeId);
 
     await triggerScoreCalculation(resumeId);
 
-    const maxAttempts = 10;
+    const maxAttempts = 30;
     const pollInterval = 2000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       logger.debug(`📊 Polling attempt ${attempt}/${maxAttempts}...`);
+      onProgress?.(attempt, maxAttempts);
 
       await new Promise(resolve => setTimeout(resolve, pollInterval));
 
@@ -486,14 +874,10 @@ export const getResumeScore = async (resumeId: string): Promise<ResumeScoreRespo
           return {
             overall_score: builderScore.score,
             details: {
-              keywords_score: Math.floor(builderScore.score * 0.9),
-              grammar_score: Math.floor(builderScore.score * 0.95),
-              skills_match: Math.floor(builderScore.score * 0.85),
-              improvement_suggestions: builderScore.score < 70
-                ? ["Add more keywords", "Improve formatting", "Add more skills"]
-                : builderScore.score < 90
-                ? ["Fine-tune your summary", "Add certifications"]
-                : ["Your resume looks great!"]
+              keywords_score: 0,
+              grammar_score: 0,
+              skills_match: 0,
+              improvement_suggestions: []
             }
           };
         }
@@ -532,10 +916,12 @@ export const deleteResume = async (resumeId: string): Promise<void> => {
 };
 
 // ==================== AUTO-SAVE RESUME ====================
+export type AutoSaveResumeResponse = ResumeResponse & { warnings?: Array<string | { field?: string; message?: string; severity?: string; type?: string }> };
+
 export const autoSaveResume = async (
   resumeId: string,
   resumeData: Partial<ResumeResponse>
-): Promise<ResumeResponse> => {
+): Promise<AutoSaveResumeResponse | null> => {
 
   try {
     logger.debug("💾 Auto-saving resume:", resumeId);
@@ -543,12 +929,27 @@ export const autoSaveResume = async (
     // ✅ Transform data for backward compatibility
     const transformedData = transformResumeDataForBackend(resumeData);
 
-    const response = await httpClient.patch<ResumeResponse>(
-      `/resumes/${resumeId}/autosave`,
-      transformedData
+    const response = await httpClient.patch<AutoSaveResumeResponse>(
+      `/resumes/${resumeId}`,
+      transformedData,
+      {
+        headers: {
+          'X-Save-Mode': 'autosave',
+        },
+      }
     );
 
-    logger.info("✅ Auto-save successful");
+    // 204 No Content = clean autosave, no body returned
+    if (response.status === 204) {
+      logger.info("✅ Auto-save successful (no content)");
+      return null;
+    }
+
+    if (response.data?.warnings?.length) {
+      logger.warn("⚠️ Auto-save completed with warnings:", response.data.warnings);
+    } else {
+      logger.info("✅ Auto-save successful");
+    }
     return response.data;
 
   } catch (error) {
@@ -610,18 +1011,35 @@ export const publishResume = async (resumeId: string): Promise<void> => {
 // ==================== DOWNLOAD RESUME ====================
 export const downloadResume = async (
   resumeId: string,
-  format: 'pdf' | 'doc' | 'docx'
+  format: 'pdf' | 'doc' | 'docx',
+  catalogueTemplateId?: string,
+  domainTemplateId?: string,
+  sectionBgColor?: string,
+  accentColor?: string,
+  sectionOrder?: string[],
+  fontFamily?: string,
+  lineSpacing?: string,
+  careerLevel?: string
 ): Promise<Blob> => {
-  
+
   try {
-    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format);
+    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format, "Catalogue:", catalogueTemplateId, "Domain:", domainTemplateId, "SectionBg:", sectionBgColor, "SectionOrder:", sectionOrder, "Font:", fontFamily, "LineSpacing:", lineSpacing, "CareerLevel:", careerLevel);
 
     const backendFormat = format === 'doc' ? 'docx' : format;
+    const params = new URLSearchParams({ format: backendFormat });
+    if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
+    if (domainTemplateId) params.append('template_id', domainTemplateId);
+    if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
+    if (accentColor) params.append('accent_color', accentColor);
+    if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
+    if (fontFamily) params.append('font_family', fontFamily);
+    if (lineSpacing) params.append('line_height', lineSpacing);
+    if (careerLevel) params.append('career_level', careerLevel);
 
-    logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?format=${backendFormat}`);
+    logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?${params.toString()}`);
 
-    const response = await httpClient.get(
-      `/resumes/${resumeId}/download?format=${backendFormat}`,
+    const response = await httpClient.get<Blob>(
+      `/resumes/${resumeId}/download?${params.toString()}`,
       {
         responseType: 'blob',
       }
@@ -711,7 +1129,7 @@ export const applyTemplateToResume = async (
     logger.debug("🔍 POST URL:", endpoint);
     logger.debug("🔍 Request payload:", JSON.stringify(payload));
 
-    const response = await httpClient.post(endpoint, payload, {
+    const response = await httpClient.post<{ message: string; resume_id: string; template_id: string }>(endpoint, payload, {
       headers: {
         'Content-Type': 'application/json'
       }
@@ -758,12 +1176,12 @@ export const getTemplateCategories = async (): Promise<string[]> => {
 /**
  * Get the default template
  */
-export const getDefaultTemplate = async (): Promise<unknown> => {
+export const getDefaultTemplate = async (): Promise<{ template_id?: string; id?: string }> => {
   
   try {
     logger.debug("📋 Fetching default template");
 
-    const response = await httpClient.get(
+    const response = await httpClient.get<{ template_id?: string; id?: string }>(
       `/templates/default`
     );
 

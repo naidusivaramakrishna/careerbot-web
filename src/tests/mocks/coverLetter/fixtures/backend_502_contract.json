@@ -1,0 +1,11 @@
+{
+  "success": false,
+  "error": {
+    "message": "Upstream contract error.",
+    "error_code": "UPSTREAM_CONTRACT_ERROR",
+    "error_id": "v1-fixture-502-contract",
+    "request_id": "fixture-502c",
+    "timestamp": "2026-05-25T11:00:00.000000+00:00",
+    "path": "/api/v1/cover-letter/generate"
+  }
+}

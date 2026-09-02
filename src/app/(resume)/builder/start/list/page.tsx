@@ -1,15 +1,19 @@
 "use client"
-import { Plus } from 'lucide-react'
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, Suspense } from 'react'
 import { toast } from 'sonner';
-import { getAllResumes, deleteResume as deleteResumeApi, downloadResume, getResumeScore, ResumeResponse } from '@/api/resumeApi';
+import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, ResumeResponse } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
+import { downloadEnhancedResume } from '@/api/enhancerApi';
+import type { EnhancedResumeSummary } from '@/types/api.types';
 import { formatDateResume } from '@/utils/formatDateResume';
-import AddResumeModal from '../_components/AddResumeModal';
 import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
 import ResumeTableRow from '../_components/ResumeTableRow';
+import AddResumeModal from '../_components/AddResumeModal';
+import UploadResumeModal from '../_components/UploadResumeModal';
 import { useRouter, useSearchParams } from 'next/navigation';
+import logger from "@/lib/logger";
+import { createResumeWithAuth } from '@/api/resumeApi';
 
 export interface Resume {
   id: string;
@@ -19,28 +23,37 @@ export interface Resume {
   score: number;
   modified: string;
   created: string;
-  createdAt: string; // ✅ Raw timestamp for dynamic formatting
-  updatedAt: string; // ✅ Raw timestamp for dynamic formatting
+  createdAt: string;
+  updatedAt: string;
   primary: boolean;
+  source?: 'enhanced' | 'builder';
 }
 
-const ResumeListPage = () => {
+const ResumeListContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDropdownOpen, setIsDropdownOpen] = useState<number | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const buildCreationUrl = useCallback((resumeId: string, source?: Resume["source"]) => {
+    const params = new URLSearchParams();
+    if (source === "enhanced") params.set("source", "enhanced");
+    const returnTo = searchParams.get("return_to");
+    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+      params.set("return_to", returnTo);
+    }
+    const query = params.toString();
+    return `/builder/creation/${encodeURIComponent(resumeId)}${query ? `?${query}` : ""}`;
+  }, [searchParams]);
 
-  // ✅ Track refresh parameter to force data refetch
-  const refreshParam = searchParams?.get('refresh');
 
   const getInitials = (name: string) => {
     return name
@@ -54,7 +67,7 @@ const ResumeListPage = () => {
   const transformResumeData = (backendData: ResumeResponse[], userProfileName?: string): Resume[] => {
     return backendData.map((item) => {
       // Debug: Log what we're getting from backend
-      console.log('📋 Resume data from backend:', {
+      logger.info('Resume data from backend:', {
         id: item.id,
         'personalInfo (full)': JSON.stringify(item.personalInfo, null, 2),
         fullname: item.personalInfo?.fullname,
@@ -68,13 +81,17 @@ const ResumeListPage = () => {
                    userProfileName ||  // ✅ Use user profile name if resume personalInfo is null
                    item.personalInfo?.email?.split('@')[0] ||
                    'Untitled Resume';
-      const role = item.work_experience?.[0]?.role || 'No Job Title';
+
+      // ✅ Get target role from professionalSummary
+      const targetRole = typeof item.professionalSummary === 'object'
+                         ? item.professionalSummary?.targetRole || 'No Target Role'
+                         : 'No Target Role';
 
       return {
         id: item.id,
         initials: getInitials(name),
         name: name,
-        job: role,
+        job: targetRole,
         score: 0,
         modified: formatDateResume(item.updatedAt),
         created: formatDateResume(item.createdAt),
@@ -89,68 +106,79 @@ const ResumeListPage = () => {
     try {
       setLoading(true);
 
-      // ✅ Fetch user profile to use as fallback for resume names
-      let userProfile;
-      try {
-        userProfile = await getProfile();
-        console.log('👤 User profile fetched:', userProfile?.full_name);
-      } catch (profileError) {
-        console.warn('⚠️ Could not fetch user profile:', profileError);
-      }
+      // Fetch profile and resumes in parallel — profile is only a name fallback
+      const [profileResult, resumesResult] = await Promise.allSettled([
+        getProfile(),
+        getAllResumesUnified(),
+      ]);
 
-      // ✅ No manual token check needed - httpClient sends cookies automatically
-      // ✅ If not authenticated, API will return 401 (handled in catch block)
-      const data = await getAllResumes();
+      const profileName = profileResult.status === 'fulfilled'
+        ? (profileResult.value.full_name || profileResult.value.username || '')
+        : '';
 
-      // If no resumes, redirect to start page
-      if (!data || data.length === 0) {
-        router.push('/builder/start');
-        return;
-      }
+      if (resumesResult.status === 'rejected') throw resumesResult.reason;
+      const { builder_resumes, enhanced_resumes } = resumesResult.value;
 
-      // ✅ Pass user profile to transform function for fallback
-      const transformedData = transformResumeData(data, userProfile?.full_name);
+      // Transform enhanced resumes (summary shape — no enhanced_data)
+      const transformedEnhanced: Resume[] = enhanced_resumes.map((item: EnhancedResumeSummary) => {
+        const name = item.display_name || 'Uploaded Resume';
+        const atsObj = typeof item.ats_score === 'object' ? item.ats_score : null;
+        const score = typeof item.ats_score === 'number'
+          ? item.ats_score
+          : atsObj?.final_score ?? atsObj?.Percentage ?? 0;
+        return {
+          id: item.id,
+          initials: name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2),
+          name,
+          job: '',
+          score,
+          modified: formatDateResume(item.updated_at),
+          created: formatDateResume(item.created_at),
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          primary: false,
+          source: 'enhanced' as const,
+        };
+      });
 
-      // Fetch scores for each resume
-      const resumesWithScores = await Promise.all(
-        transformedData.map(async (resume) => {
-          try {
-            const scoreData = await getResumeScore(resume.id);
-            return {
-              ...resume,
-              score: scoreData.overall_score,
-            };
-          } catch (error) {
-            return resume;
+      // Transform builder resumes and show list immediately
+      const transformedData = transformResumeData(builder_resumes as unknown as ResumeResponse[], profileName);
+      const merged = [...transformedData, ...transformedEnhanced];
+      setResumes(merged);
+      setLoading(false);
+
+      // Load scores in the background — update each card as its score arrives
+      transformedData.forEach(async (resume) => {
+        try {
+          const scoreData = await getBuilderScore(resume.id);
+          if (scoreData.score > 0) {
+            setResumes(prev =>
+              prev.map(r => r.id === resume.id ? { ...r, score: scoreData.score } : r)
+            );
           }
-        })
-      );
-
-      setResumes(resumesWithScores);
-
-      // ✅ Clean URL by removing refresh parameter after successful fetch
-      if (refreshParam) {
-        router.replace('/builder/start/list', { scroll: false });
-      }
-    } catch (err: any) {
-      if (err.response?.status === 401 || err.message?.includes("sign in")) {
+        } catch {
+          // leave score as 0
+        }
+      });
+    } catch (err) {
+      const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      if (error.response?.status === 401 || error.message?.includes("sign in")) {
         toast.error("Session expired. Please log in again");
-      } else if (err.message?.includes("not found")) {
+        router.push('/builder/start');
+      } else if (error.message?.includes("not found")) {
         toast.error("API endpoint not configured correctly");
       } else {
-        toast.error(err.response?.data?.detail || err.message || "Failed to fetch resumes");
+        toast.error(error.response?.data?.detail || error.message || "Failed to fetch resumes");
       }
-
-      router.push('/builder/start');
     } finally {
       setLoading(false);
     }
-  }, [router, refreshParam]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   useEffect(() => {
-    console.log('🔄 Fetching resumes... (refresh param:', refreshParam, ')');
     fetchResumes();
-  }, [fetchResumes, refreshParam]); // ✅ Refetch when refresh parameter changes
+  }, [fetchResumes]);
 
   const handleDeleteResume = async (resumeId: string) => {
     try {
@@ -161,24 +189,18 @@ const ResumeListPage = () => {
       const updatedResumes = resumes.filter(r => r.id !== resumeId);
       setResumes(updatedResumes);
       toast.success("Resume deleted successfully");
-
-      // If no resumes left, redirect to start page
-      if (updatedResumes.length === 0) {
-        router.push('/builder/start');
-      }
-
       setDeleteConfirmId(null);
-      setIsDropdownOpen(null);
 
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (err) {
+      const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      if (error.response?.status === 401) {
         toast.error("Session expired. Please log in again");
-      } else if (err.response?.status === 403) {
+      } else if (error.response?.status === 403) {
         toast.error("You don't have permission to delete this resume");
-      } else if (err.response?.status === 404) {
+      } else if (error.response?.status === 404) {
         toast.error("Resume not found");
       } else {
-        toast.error(err.response?.data?.detail || err.message || "Failed to delete resume");
+        toast.error(error.response?.data?.detail || error.message || "Failed to delete resume");
       }
     } finally {
       setDeleting(false);
@@ -190,7 +212,10 @@ const ResumeListPage = () => {
       setDownloading(true);
 
       // ✅ No manual token check needed - httpClient sends cookies automatically
-      const blob = await downloadResume(resumeId, format);
+      const isEnhanced = resumes.find(r => r.id === resumeId)?.source === 'enhanced';
+      const blob = isEnhanced
+        ? await downloadEnhancedResume(resumeId, format)
+        : await downloadResume(resumeId, format);
 
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -204,118 +229,174 @@ const ResumeListPage = () => {
 
       toast.success(`Resume downloaded as ${format.toUpperCase()}`);
       setDownloadModalOpen(false);
-      setIsDropdownOpen(null);
 
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (err) {
+      const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      if (error.response?.status === 401) {
         toast.error("Session expired. Please log in again");
-      } else if (err.response?.status === 403) {
+      } else if (error.response?.status === 403) {
         toast.error("You don't have permission to download this resume");
-      } else if (err.response?.status === 404) {
+      } else if (error.response?.status === 404) {
         toast.error("Resume not found");
       } else {
-        toast.error(err.response?.data?.detail || err.message || "Failed to download resume");
+        toast.error(error.response?.data?.detail || error.message || "Failed to download resume");
       }
     } finally {
       setDownloading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div>
-        <h1 className="text-2xl font-bold">RESUME</h1>
-        <div className="min-h-screen bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
-          <main className="flex-1 p-8">
-            <div className="rounded-2xl relative">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <span className="text-2xl font-bold">Resume Management</span>
-                  <p className="text-sm text-gray-600">
-                    Manage, analyze and optimize your resumes with AI
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white w-full rounded-2xl border border-gray-200 p-8 text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-gray-600">Loading resumes...</span>
-                </div>
-              </div>
-            </div>
-          </main>
+  const handleCreateWithAI = async () => {
+    setIsCreating(true);
+    try {
+      const newResume = await createResumeWithAuth();
+      localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
+      localStorage.setItem("current_resume_id", newResume.id);
+      router.push(buildCreationUrl(newResume.id));
+    } catch (err) {
+      const error = err as { response?: { status?: number } };
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        toast.error("Please sign in to create a resume");
+      } else {
+        toast.error("Failed to create resume. Please try again.");
+      }
+      setIsCreating(false);
+    }
+  };
+
+  const PageShell = ({ children }: { children: React.ReactNode }) => (
+    <div className="min-h-screen bg-[#f5f7fa]">
+      {/* Page header */}
+      <div className="px-8 pt-8 pb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Resumes</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Manage, analyze and optimize your resumes with AI</p>
+          </div>
+
+          {/* Add Resume button + dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setAddMenuOpen((v) => !v)}
+              disabled={isCreating}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 shadow-md"
+              style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)", boxShadow: "0 4px 14px rgba(37,87,167,0.35)" }}
+            >
+              {isCreating ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+              )}
+              Add Resume
+            </button>
+
+            <AddResumeModal
+              isOpen={addMenuOpen}
+              onClose={() => setAddMenuOpen(false)}
+              onCreateWithAI={handleCreateWithAI}
+              onUploadExisting={() => setShowUploadModal(true)}
+            />
+          </div>
         </div>
       </div>
+
+      <UploadResumeModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+      />
+
+      {children}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="px-8 pb-8">
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+            style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
+            <div className="px-6 py-4 border-b border-gray-50 flex gap-8">
+              {[180, 140, 80, 120, 120, 60].map((w, i) => (
+                <div key={i} className="h-2.5 rounded-full bg-gray-100 animate-pulse" style={{ width: w }} />
+              ))}
+            </div>
+            {[1, 2, 3].map((row) => (
+              <div key={row} className="flex items-center gap-6 px-6 py-4 border-b border-gray-50 last:border-0">
+                <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-36 rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-2 w-24 rounded-full bg-gray-100 animate-pulse" />
+                </div>
+                <div className="w-28 h-2.5 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-12 h-12 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-24 h-2.5 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-24 h-2.5 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-8 h-8 rounded-lg bg-gray-100 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold">RESUME</h1>
-      <div className="min-h-screen bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
-        <main className="flex-1 p-8">
-          <div className="rounded-2xl relative">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <span className="text-2xl font-bold">Resume Management</span>
-                <p className="text-sm text-gray-600">
-                  Manage, analyze and optimize your resumes with AI
-                </p>
-              </div>
-              <div className="relative">
-                <button
-                  ref={buttonRef}
-                  onClick={() => setIsModalOpen(!isModalOpen)}
-                  className="rounded-lg flex items-center gap-2 cursor-pointer bg-[#2200ff]/70 text-white px-4 py-2.5 hover:bg-[#2200ff]/90 text-sm"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Resume</span>
-                </button>
-
-                <AddResumeModal
-                  isOpen={isModalOpen}
-                  onClose={() => setIsModalOpen(false)}
-                />
-              </div>
-            </div>
-
-            <div className="bg-white w-full rounded-2xl border border-gray-200">
-              <table className="w-full rounded-lg">
-                <thead className="bg-white text-sm text-gray-600">
-                  <tr className="text-left">
-                    <th className="p-4">Resume</th>
-                    {/* <th className="p-4">Target Job Title</th> */}
-                    <th className="p-4">Resume Score</th>
-                    <th className="p-4">Last Modified</th>
-                    <th className="p-4">Created</th>
-                    <th className="p-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumes.map((resume, i) => (
-                    <ResumeTableRow
-                      key={resume.id}
-                      resume={resume}
-                      index={i}
-                      isDropdownOpen={isDropdownOpen === i}
-                      onToggleDropdown={() => setIsDropdownOpen(isDropdownOpen === i ? null : i)}
-                      onDelete={() => {
-                        setDeleteConfirmId(resume.id);
-                        setIsDropdownOpen(null);
-                      }}
-                      onDownload={() => {
-                        setSelectedResumeId(resume.id);
-                        setDownloadModalOpen(true);
-                        setIsDropdownOpen(null);
-                      }}
-                      downloading={downloading}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </main>
+    <PageShell>
+      <div className="px-8 pb-8">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+          style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Resume</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Target Role</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Score</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Last Modified</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Created</th>
+                <th className="px-6 py-3.5 bg-gray-50/50" />
+              </tr>
+            </thead>
+            <tbody>
+              {resumes.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                        style={{ background: "linear-gradient(135deg,#e8f0fb,#c7d9f5)" }}>
+                        <svg className="w-6 h-6 text-[#2557a7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-gray-500">No resumes yet</p>
+                      <p className="text-xs text-gray-400">Click <strong className="text-[#2557a7]">Add Resume</strong> to get started</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                resumes.map((resume, i) => (
+                  <ResumeTableRow
+                    key={resume.id}
+                    resume={resume}
+                    index={i}
+                    onDelete={() => setDeleteConfirmId(resume.id)}
+                    onDownload={() => {
+                      setSelectedResumeId(resume.id);
+                      setDownloadModalOpen(true);
+                    }}
+                    creationUrl={buildCreationUrl(resume.id, resume.source)}
+                    downloading={downloading}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <DeleteConfirmModal
@@ -334,7 +415,19 @@ const ResumeListPage = () => {
         onDownload={(format) => selectedResumeId && handleDownloadResume(selectedResumeId, format)}
         downloading={downloading}
       />
-    </div>
+    </PageShell>
+  );
+};
+
+const ResumeListPage = () => {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-[#2557a7]"></div>
+      </div>
+    }>
+      <ResumeListContent />
+    </Suspense>
   );
 };
 

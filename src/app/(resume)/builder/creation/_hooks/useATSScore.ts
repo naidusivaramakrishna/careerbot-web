@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import debounce from "lodash.debounce";
+import { logger } from "@/lib/logger";
 import { ResumeData } from "../_context/ResumeContext";
 
 interface ATSDetails {
@@ -32,7 +33,7 @@ export function useATSScore(resumeData: ResumeData) {
       setScore(json.score);
       setDetails(json.details);
     } catch (err) {
-      // // console.error("ATS Score error:", err);
+      logger.error("ATS Score error:", err);
     }
   };
 

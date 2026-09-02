@@ -59,6 +59,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       {/* Dropdown */}
       {open && (
         <div
+          role="listbox"
           className={`absolute z-10 mt-1 border border-gray-200 rounded-md shadow-lg ${bgColor} ${className}`}
         >
           {options.map((option, index) => {
@@ -68,7 +69,12 @@ const Dropdown: React.FC<DropdownProps> = ({
             return (
               <div
                 key={option}
+                role="option"
+                aria-selected={isSelected}
+                aria-disabled={isDisabled}
+                tabIndex={isDisabled ? -1 : 0}
                 onClick={() => !isDisabled && handleSelect(option, index)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !isDisabled && handleSelect(option, index)}
                 className={`
                   flex items-center justify-between px-3 py-2 border border-gray-200
                   ${isDisabled ? "cursor-not-allowed text-gray-400 bg-gray-50 font-semibold" : "cursor-pointer"}

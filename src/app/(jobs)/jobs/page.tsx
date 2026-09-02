@@ -1,21 +1,5 @@
-// import JobsContents from "./_components/JobsContents";
-
-// export default function JobsPage() {
-//   return <JobsContents />;
-// }
-
-
-import JobsContents from "./_components/JobsContents";
+import JobsHomePage from "./_components/JobsHomePage";
 
 export default function JobsPage() {
-
-  return <JobsContents />;
+  return <JobsHomePage />;
 }
-
-
-
-
-
-
-
-

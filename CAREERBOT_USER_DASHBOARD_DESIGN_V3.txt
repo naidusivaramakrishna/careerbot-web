@@ -1,0 +1,2107 @@
+================================================================================
+  CAREERBOT USER DASHBOARD - COMPLETE DESIGN, ARCHITECTURE & IMPLEMENTATION V3.1
+  Role: Top 1% Senior Architect + UI/UX Designer + Backend Developer
+  Date: February 14, 2026 (V3.1 patch: ChatGPT review fixes)
+  Scope: Architecture + Design + Blueprint + Implementation for ALL 3 Layers
+  Supersedes: CAREERBOT_USER_DASHBOARD_DESIGN_V2.txt
+================================================================================
+
+  V2.0 -> V3.0 CHANGELOG (All 16 Action Items Resolved):
+  -------------------------------------------------------
+  P0-1: FIXED  Cache invalidation strategy added (Section 8)
+  P0-2: FIXED  recommended_step + profile_completeness now BACKEND-computed (Section 5, 13)
+  P0-3: FIXED  Onboarding step persistence + resume-on-return (Section 4)
+  P0-4: FIXED  Credit vs Token unit reconciliation with explicit mapping (Section 9)
+  P1-1: FIXED  Adaptive CreditConfirmModal (first use + high cost) (Section 9)
+  P1-2: FIXED  STARTER tier added (INR 199, 100 credits) (Section 9)
+  P1-3: FIXED  Blueprint V1.1 cross-references throughout
+  P1-4: FIXED  Cross-tab credit sync via BroadcastChannel API (Section 9)
+  P1-5: FIXED  activity-feed merged into dashboard-summary (Section 13)
+  P1-6: FIXED  Explicit 402 handling in http.ts (Section 15)
+  P2-1: FIXED  Loading skeleton specs per dashboard row (Section 7)
+  P2-2: FIXED  Error state fallback UI per section (Section 7)
+  P2-3: FIXED  Accessibility requirements added (Section 18)
+  P2-4: FIXED  Mock API strategy for parallel development (Section 20)
+  P2-5: FIXED  AI Layer usage logging via backend capture (Section 14)
+  NEW:  FIXED  Encoding corrected (no mojibake characters)
+
+  V3.0 -> V3.1 CHANGELOG (ChatGPT Review - 4 Findings Fixed):
+  -------------------------------------------------------------
+  FIX-1: Quick Actions data sources explicitly defined (labels+costs=STATIC,
+         usage counts=API with "--" fallback on error) (Section 5 wireframe)
+  FIX-2: Credit balance source-of-truth rule: UI ALWAYS reads from
+         X-Quota-Remaining header, NEVER from cached JSON body (Section 8)
+  FIX-3: Onboarding persistence: MongoDB user record = source of truth,
+         Redis = optional accelerator (Section 4 + Appendix B)
+  FIX-4: Single-source-of-truth table for credit/token unit usage across
+         all contexts (user UI, admin, enforcement, logging) (Section 9)
+
+  REFERENCES:
+  - Blueprint V1.1: CAREERBOT_TOKEN_UTILIZATION_BLUEPRINT_V1.txt (credit atomicity, Lua scripts, refund)
+  - Architecture V1: CAREERBOT_TOKEN_UTILIZATION_ARCHITECTURE_V1.txt (RBAC, data flows)
+  - User Dashboard Architecture V1: CAREERBOT_USER_DASHBOARD_ARCHITECTURE_V1.txt (B2C + B2B2C)
+  - Claude Cross-Verification: CLAUDE_REVIEW_OF_CHATGPT_DASHBOARD_FEEDBACK.txt (16 action items)
+
+
+TABLE OF CONTENTS
+=================
+  PART 1: ARCHITECTURE
+    1.  System Architecture Overview
+    2.  Data Flow Diagrams (6 Flows)
+    3.  Current State Audit (What Exists Today)
+
+  PART 2: DESIGN
+    4.  First-Time User Journey (Onboarding with Persistence)
+    5.  Dashboard Home Page (Command Center)
+    6.  Profile Completeness System (Backend-Computed)
+    7.  Loading States, Error States & Skeleton Specs
+    8.  Cache Strategy & Invalidation Rules
+
+  PART 3: FEATURE JOURNEYS
+    9.  Credits & Quota System (Reconciled Units + Adaptive Modal)
+   10.  Resume Builder Journey
+   11.  Resume Enhancer Journey
+   12.  ATS Scan Journey
+   13.  Job Match & Apply Journey
+   14.  Data Available After Each Action (Complete Reference)
+
+  PART 4: IMPLEMENTATION BLUEPRINT
+   15.  Frontend Implementation (Files, Components, Props)
+   16.  Backend Implementation (Endpoints, Schemas, Services)
+   17.  AI Layer Expectations (What Exists + Backend Logging)
+   18.  Accessibility (A11y) Requirements
+   19.  Responsive & Mobile Strategy
+   20.  Implementation Plan (6-Week Schedule with Mock API Strategy)
+   21.  Testing Checklist (60+ Test Cases)
+
+  APPENDICES
+   A.  Credit-to-Token Mapping Table
+   B.  Redis Key Patterns (Complete)
+   C.  MongoDB Collection Schemas
+   D.  Sidebar & Navigation Redesign
+   E.  Page Wireframes
+
+
+================================================================================
+================================================================================
+                          PART 1: ARCHITECTURE
+================================================================================
+================================================================================
+
+
+================================================================================
+ 1. SYSTEM ARCHITECTURE OVERVIEW
+================================================================================
+
+                    CAREERBOT USER DASHBOARD - SYSTEM ARCHITECTURE
+  +--------------------------------------------------------------------------+
+  |                                                                          |
+  |  +------------------+     +-------------------+     +-----------------+  |
+  |  |   FRONTEND       |     |   BACKEND         |     |   AI LAYER      |  |
+  |  |   Next.js 15.5   | --> |   FastAPI          | --> |   FastAPI       |  |
+  |  |   Port 3000      |     |   Port 8000        |     |   Port 8001    |  |
+  |  |                  |     |                     |     |                |  |
+  |  | Dashboard Home   |     | Quota Middleware    |     | Resume Parse   |  |
+  |  | Onboarding       |     | Dashboard Service   |     | Enhancement    |  |
+  |  | Pricing          |     | Credit Service      |     | ATS Scoring    |  |
+  |  | Credit UI        |     | Subscription Service|     | Job Matching   |  |
+  |  | Settings         |     | Usage Logging       |     | Audio/Video    |  |
+  |  +--------+---------+     +---------+-----------+     +-------+--------+  |
+  |           |                         |                         |           |
+  |           |    API Calls            |   Internal Calls        |           |
+  |           +----------->             +----------->             |           |
+  |                                     |                         |           |
+  |                       +-------------+-------------+           |           |
+  |                       |             |             |           |           |
+  |                       v             v             v           |           |
+  |                  +--------+    +--------+    +--------+      |           |
+  |                  |MongoDB |    | Redis  |    | Azure  | <----+           |
+  |                  |        |    | Cache  |    | OpenAI |                  |
+  |                  +--------+    +--------+    +--------+                  |
+  |                                                                          |
+  +--------------------------------------------------------------------------+
+
+  CRITICAL RULE: Frontend NEVER calls AI Layer directly.
+                 All AI calls go through Backend.
+
+  LAYER RESPONSIBILITIES FOR DASHBOARD:
+
+  FRONTEND:
+    - Render dashboard UI (components, layouts, navigation)
+    - Display credit balance from X-Quota-Remaining headers
+    - Show confirm modal before credit-consuming actions
+    - Handle 402 responses (show upgrade modal)
+    - Sync credit balance across tabs (BroadcastChannel API)
+    - Display loading skeletons and error states
+
+  BACKEND:
+    - Compute recommended_step and profile_completeness (NOT frontend)
+    - Enforce quota (atomic Lua script: check + deduct)
+    - Refund credits on AI call failure (INCRBY on 5xx)
+    - Cache dashboard summary (Redis, 5 min TTL)
+    - Invalidate cache after credit-consuming actions
+    - Log usage from AI Layer responses (backend captures tokens_used)
+    - Return X-Quota-Remaining header in every response
+    - Compute onboarding state and persist steps
+
+  AI LAYER:
+    - Process AI requests (parse, enhance, score, match)
+    - Return tokens_used, cost_inr, from_cache in every response
+    - NO changes needed for dashboard (zero modifications)
+
+
+================================================================================
+ 2. DATA FLOW DIAGRAMS (6 Flows)
+================================================================================
+
+FLOW 1: CREDIT-CONSUMING ACTION (e.g., ATS Scan)
+-------------------------------------------------
+  User clicks "Scan" (5 credits)
+    |
+    v
+  [Frontend] CreditConfirmModal (adaptive: show if first-use or >= 10 credits)
+    |  User confirms
+    v
+  [Frontend] POST /ats/score  (with httpOnly cookie)
+    |
+    v
+  [Backend] Auth Middleware --> extract user_id from cookie
+    |
+    v
+  [Backend] QuotaEnforcement Middleware
+    |  Redis Lua Script (ATOMIC):
+    |    1. Check feature limit (ats_scan < plan.ats_limit)
+    |    2. Check credit balance (balance >= 5)
+    |    3. Deduct credits (DECRBY 5)
+    |    4. Increment feature count (INCR ats_scan)
+    |  Returns: { allowed: true, remaining: 40 }
+    |
+    |  If insufficient: Return 402 + { error: "quota_exhausted", ... }
+    v
+  [Backend] ATS Endpoint --> calls AI Layer POST /api/v1/scoring/ats
+    |
+    v
+  [AI Layer] Processes resume --> returns score + tokens_used
+    |
+    v
+  [Backend] On SUCCESS:
+    |  1. Log to usage_logs collection (feature, credits, tokens, cost)
+    |  2. Log to activity in user record
+    |  3. DELETE Redis key dashboard:{user_id} (CACHE INVALIDATION)
+    |  4. Set header X-Quota-Remaining: 40
+    |  5. Return AI response + credit info to frontend
+    |
+    |  On AI FAILURE (5xx):
+    |  1. INCRBY quota:{user_id}:balance 5 (REFUND)
+    |  2. DECR quota:{user_id}:feature:ats_scan (UNDO count)
+    |  3. Return 502 with error to frontend
+    v
+  [Frontend] On SUCCESS:
+    |  1. Update credit state from X-Quota-Remaining header
+    |  2. Broadcast new balance via BroadcastChannel
+    |  3. Show result + "5 credits used, 40 remaining"
+    |
+    |  On 402 (quota exhausted):
+    |  Show InsufficientCreditsModal --> link to /pricing
+    |
+    |  On 5xx (AI failure):
+    |  Show error toast: "Something went wrong. Credits not deducted."
+
+
+FLOW 2: DASHBOARD LOAD (Every Login)
+-------------------------------------
+  User navigates to /dashboard
+    |
+    v
+  [Frontend] GET /users/me/dashboard-summary (with cookie)
+    |
+    v
+  [Backend] Check Redis: dashboard:{user_id}
+    |
+    |  CACHE HIT (< 5 min old):
+    |    Return cached summary + header X-Quota-Remaining
+    |
+    |  CACHE MISS:
+    |    Aggregate from MongoDB:
+    |      - users (plan, credits, onboarding)
+    |      - user_profiles (completeness fields)
+    |      - resumes (count, best score)
+    |      - match_results (best match)
+    |      - assessment_sessions (interview score)
+    |      - usage_logs (recent activity, usage by feature)
+    |    Compute: profile_completeness (weighted formula)
+    |    Compute: recommended_step (state machine)
+    |    Store in Redis: dashboard:{user_id} (TTL: 5 min)
+    |    Return summary
+    v
+  [Frontend] Render dashboard:
+    - WelcomeBanner (name, plan)
+    - PlanStatusCard (plan name, credits remaining/total)
+    - CreditBalanceCard (progress bar)
+    - ProfileCompletenessCard (% from backend)
+    - RecommendedNextStep (from backend recommended_step)
+    - ProgressStepper (completed_steps from backend)
+    - QuickActionGrid (8 cards with costs)
+    - RecentActivity (from dashboard-summary.recent_activity)
+    - ScoreSummary (best ATS, match, interview scores)
+
+
+FLOW 3: ONBOARDING (First-Time User)
+--------------------------------------
+  User registers (POST /auth/register)
+    |
+    v
+  [Backend] Create user:
+    - role: USER
+    - plan_id: FREE
+    - credits_remaining: 50
+    - onboarding_step: 0  (not started)
+    - onboarding_completed: false
+    |
+    v
+  [Frontend] Redirect to /onboarding
+    |
+    v
+  Screen 1/3: Personal Info (name, phone, location, career_stage)
+    |  User fills form, clicks "Continue"
+    v
+  [Frontend] PUT /profile/update (save immediately)
+  [Frontend] POST /users/me/onboarding-progress { step: 1 }
+    |
+    v
+  [Backend] Save profile fields + set onboarding_step: 1 in user record
+    |
+    v
+  Screen 2/3: Resume Upload (optional)
+    |  User uploads PDF (or clicks "Skip")
+    v
+  IF UPLOADED:
+    [Frontend] POST /parser/parse_resume
+    [Backend] Deduct 5 credits --> call AI Layer --> return parsed data
+    [Frontend] PUT /profile/import/resume (auto-fill profile)
+    [Frontend] POST /users/me/onboarding-progress { step: 2 }
+
+  IF SKIPPED:
+    [Frontend] POST /users/me/onboarding-progress { step: 2 }
+    |
+    v
+  Screen 3/3: Welcome Summary
+    |  User clicks "Go to Dashboard"
+    v
+  [Frontend] POST /users/me/onboarding-complete
+  [Backend] Set onboarding_completed: true, onboarding_step: 3
+  [Frontend] Navigate to /dashboard
+
+  ABANDONMENT RECOVERY:
+    Next login: Backend returns onboarding_step in user profile.
+    If onboarding_step < 3 AND onboarding_completed == false:
+      Frontend redirects to /onboarding?step={onboarding_step}
+      Wizard resumes from saved step (previous data already persisted).
+
+
+FLOW 4: CACHE INVALIDATION (After Any Credit-Consuming Action)
+---------------------------------------------------------------
+  After ATS scan / enhance / parse / match / assessment:
+    |
+    v
+  [Backend] DELETE Redis key: dashboard:{user_id}
+  [Backend] DELETE Redis key: quota:{user_id}:summary (if exists)
+    |
+    v
+  Next dashboard load: CACHE MISS --> fresh aggregation from MongoDB
+
+
+FLOW 5: CROSS-TAB CREDIT SYNC
+-------------------------------
+  Tab A: User does ATS scan (5 credits deducted)
+    |
+    v
+  [Frontend Tab A] Receives X-Quota-Remaining: 40
+    |
+    v
+  [Frontend Tab A] BroadcastChannel.postMessage({ type: 'CREDIT_UPDATE', remaining: 40 })
+    |
+    v
+  [Frontend Tab B] BroadcastChannel.onmessage --> updates DashboardContext.credits = 40
+    |
+    v
+  Tab B shows updated balance without page refresh.
+
+  FALLBACK (BroadcastChannel not supported):
+    On window focus event: GET /users/me/quota (lightweight endpoint, no cache)
+
+
+FLOW 6: PLAN UPGRADE
+---------------------
+  User clicks "Upgrade" on pricing page
+    |
+    v
+  [Frontend] POST /subscription/upgrade { plan_id: "BASIC" }
+    |
+    v
+  [Backend] Create Razorpay checkout session
+    |  Return: { checkout_url, order_id }
+    v
+  [Frontend] Redirect to Razorpay payment page
+    |  User completes payment
+    v
+  [Razorpay] POST /subscription/webhook { order_id, payment_status }
+    |
+    v
+  [Backend] On payment_success:
+    1. Update user.plan_id = "BASIC"
+    2. SET Redis quota:{user_id}:balance = 200 (new plan credits)
+    3. SET Redis quota:{user_id}:plan = "BASIC"
+    4. DELETE Redis dashboard:{user_id} (invalidate cache)
+    5. Log to billing_history collection
+    6. Send confirmation email
+    |
+    v
+  [Frontend] Redirect to /dashboard (shows new plan + credits)
+
+
+================================================================================
+ 3. CURRENT STATE AUDIT (What Exists Today)
+================================================================================
+
++-----------------------------------------------------------------------------+
+| FRONTEND (careerbot-web) -- 331 TSX, 18 API clients, 12 route groups        |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  EXISTING (can reuse):                                                      |
+|  [Y] /dashboard/profile      -- Full profile CRUD (60+ components)         |
+|  [Y] /builder/start          -- Resume list, create/edit                    |
+|  [Y] /builder/creation/[id]  -- 3-panel editor (sidebar + editor + preview) |
+|  [Y] /enhancer               -- Upload, parse, enhance, export             |
+|  [Y] /ats                    -- ATS scan page                              |
+|  [Y] /jobmatch               -- Resume-to-JD matching                      |
+|  [Y] /jobs                   -- Job listings + search + filters            |
+|  [Y] /jobs/[id]              -- Individual job detail                      |
+|  [Y] /tracker                -- Application status tracker                 |
+|  [Y] /communication          -- English assessment (7 sections)            |
+|  [Y] /admin/dashboard/*      -- Admin panel (6 pages)                      |
+|  [Y] Sidebar.tsx (298 lines) -- 6 nav items, responsive, profile dropdown  |
+|  [Y] Header.tsx              -- Minimal (just "CareerBot" text)            |
+|  [Y] ErrorBoundary.tsx       -- Error fallback UI (PR #11)                 |
+|  [Y] logger.ts               -- Centralized logging (PR #11)              |
+|  [Y] storage.ts              -- IndexedDB wrapper with SSR guard (PR #11)  |
+|  [Y] http.ts                 -- Axios with cookie auth, 401 refresh, corr ID|
+|  [Y] middleware.ts            -- Route protection (8 protected routes)      |
+|  [Y] 18 API clients          -- auth, user, resume, parser, enhancer, etc. |
+|                                                                             |
+|  MISSING (must build):                                                      |
+|  [N] /dashboard page.tsx     -- EXISTS but EMPTY (just <div></div>)        |
+|  [N] /onboarding             -- No first-time wizard                       |
+|  [N] /pricing                -- No user-facing pricing page                |
+|  [N] /settings               -- No settings/subscription management        |
+|  [N] Dashboard components    -- No WelcomeBanner, QuickActions, etc.       |
+|  [N] Credit UI components    -- No CreditBadge, CreditConfirmModal, etc.   |
+|  [N] DashboardContext        -- No dashboard state management              |
+|  [N] dashboardApi.ts         -- No dashboard API client                    |
+|  [N] quotaApi.ts             -- No quota API client                        |
+|  [N] 402 interceptor         -- http.ts has no quota-exhaustion handling   |
+|  [N] BroadcastChannel sync   -- No cross-tab credit sync                  |
+|                                                                             |
++-----------------------------------------------------------------------------+
+| BACKEND (careerbot-api) -- 18 services, 40+ endpoints                       |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  EXISTING (foundation ready):                                               |
+|  [Y] Profile CRUD            -- 33 endpoints (profile.py, 1,490 lines)    |
+|  [Y] Resume CRUD             -- 10 endpoints (resume.py, 2,000+ lines)    |
+|  [Y] Auth                    -- login, register, refresh, logout, OAuth    |
+|  [Y] AI-calling endpoints    -- parse, enhance, ATS, match, assessment     |
+|  [Y] Admin Plans CRUD        -- 4 subscription plans seeded               |
+|  [Y] Token Analytics (admin) -- 7 routes (token_analytics.py, 405 lines)  |
+|  [Y] Token Service           -- Full models, schemas, service, repository  |
+|  [Y] Rate Limiting           -- Redis-backed, 9 endpoint presets           |
+|  [Y] RBAC                    -- 7 user roles, 4 admin roles, permissions   |
+|  [Y] Middleware chain         -- CORS, Audit, CorrID, RequestID, Timing   |
+|  [Y] Circuit Breaker         -- Implemented (circuit_breaker.py)          |
+|  [Y] Retry w/ backoff        -- Implemented (retry.py)                    |
+|  [Y] Startup/Shutdown hooks  -- 8 startup + 4 shutdown steps              |
+|  [Y] dashboard.py            -- EXISTS but EMPTY (0 endpoints)            |
+|                                                                             |
+|  MISSING (must build):                                                      |
+|  [N] Dashboard summary endpoint  -- Aggregate stats, backend computation  |
+|  [N] Quota endpoint              -- User credit balance                   |
+|  [N] Usage history endpoint      -- Paginated usage log                   |
+|  [N] Onboarding endpoints        -- Progress save, completion             |
+|  [N] Subscription endpoints      -- Plans list, upgrade, webhook          |
+|  [N] Profile import endpoint     -- Bulk-import from parsed resume        |
+|  [N] QuotaEnforcement middleware -- Atomic Lua check + deduct             |
+|  [N] Credit service              -- Check, deduct, refund, balance        |
+|  [N] Usage log service           -- Capture AI response tokens to Mongo   |
+|  [N] Dashboard service           -- Aggregate + compute + cache           |
+|  [N] usage_logs collection       -- MongoDB                               |
+|  [N] Redis quota keys            -- Per-user balance, plan, feature counts|
+|                                                                             |
+|  TOKEN SERVICE (exists, needs reconciliation):                              |
+|  [Y] Token costs defined:  Resume Scan=50tok, AI Opt=30tok, Job Match=10tok|
+|  [!] Dashboard design uses CREDITS: Parse=5cr, ATS=5cr, Enhance=10cr      |
+|  [!] These are DIFFERENT units -- see Section 9 for reconciliation         |
+|                                                                             |
++-----------------------------------------------------------------------------+
+| AI LAYER (careerbot-ai) -- 11 services, ALL endpoints exist                 |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  [Y] ALL 7 AI endpoints exist and return tokens_used + cost_inr            |
+|  [Y] Token tracking built into every LLM call (llm_client.py)             |
+|  [Y] Cost calculation per call ($0.71 / 1M tokens, INR conversion)        |
+|  [Y] Cache hit indicator (from_cache: true/false)                          |
+|                                                                             |
+|  NO CHANGES NEEDED IN AI LAYER FOR DASHBOARD                               |
+|                                                                             |
+|  IMPORTANT: AI Layer cost_records are IN-MEMORY ONLY (cleared per request).|
+|  Backend MUST capture tokens_used from AI HTTP responses and log durably.  |
+|  See Section 17 for backend logging strategy.                               |
+|                                                                             |
++-----------------------------------------------------------------------------+
+
+
+================================================================================
+================================================================================
+                          PART 2: DESIGN
+================================================================================
+================================================================================
+
+
+================================================================================
+ 4. FIRST-TIME USER JOURNEY (Onboarding with Step Persistence)
+================================================================================
+
+DESIGN PRINCIPLE: Every onboarding step saves data IMMEDIATELY.
+If user closes browser at Step 2, they resume at Step 2 on next login.
+No data is lost. No wizard restart.
+
++-----------------------------------------------------------------------------+
+|                     FIRST-TIME USER FLOW (7 STEPS)                          |
+|                                                                             |
+|  STEP 1: SIGNUP / LOGIN                                                     |
+|  +------------------------------------------+                               |
+|  |  Landing Page (/) --> Click "Get Started" |                               |
+|  |  --> SignUpModal opens                    |                               |
+|  |  --> Email/Password OR Google OR LinkedIn |                               |
+|  |  --> Backend creates user:                |                               |
+|  |      role: USER                           |                               |
+|  |      plan_id: FREE                        |                               |
+|  |      credits_remaining: 50                |                               |
+|  |      onboarding_step: 0                   |                               |
+|  |      onboarding_completed: false          |                               |
+|  |  --> Sets httpOnly cookie                 |                               |
+|  |  --> Redirect to /onboarding              |                               |
+|  +------------------------------------------+                               |
+|                      |                                                      |
+|                      v                                                      |
+|  STEP 2: ONBOARDING WIZARD (3 screens, ~60 seconds)                        |
+|                                                                             |
+|  Screen 1/3: "Tell us about yourself"                                       |
+|  +------------------------------------------+                               |
+|  |  Full Name:     [________________]        |                               |
+|  |  Phone:         [+91 __________]          |                               |
+|  |  Location:      [Dropdown: City]          |                               |
+|  |  I am a:                                  |                               |
+|  |    ( ) Fresh Graduate (0-1 years)         |                               |
+|  |    ( ) Working Professional (1+ years)    |                               |
+|  |    ( ) Career Switcher                    |                               |
+|  |                    [Continue -->]          |                               |
+|  +------------------------------------------+                               |
+|  On "Continue":                                                             |
+|    --> PUT /profile/update { name, phone, location, career_stage }          |
+|    --> POST /users/me/onboarding-progress { step: 1 }                       |
+|    --> Backend saves IMMEDIATELY (not on wizard completion)                  |
+|                      |                                                      |
+|                      v                                                      |
+|  Screen 2/3: "Upload your resume" (OPTIONAL)                                |
+|  +------------------------------------------+                               |
+|  |  Drag & drop your resume here             |                               |
+|  |  or click to browse                       |                               |
+|  |  (PDF, DOCX -- Max 5MB)                   |                               |
+|  |                                           |                               |
+|  |  This costs 5 credits (you have           |                               |
+|  |  50 FREE credits to start)                |                               |
+|  |                                           |                               |
+|  |  [Upload & Parse]   [Skip for now]        |                               |
+|  +------------------------------------------+                               |
+|                                                                             |
+|  IF UPLOADED:                                                                |
+|    --> POST /parser/parse_resume (deducts 5 credits)                        |
+|    --> Loading spinner (5-15 seconds)                                       |
+|    --> On success: PUT /profile/import/resume (auto-fill profile)           |
+|    --> Show: "Found 12 skills, 2 jobs, 1 degree -- added to profile"        |
+|    --> POST /users/me/onboarding-progress { step: 2 }                       |
+|                                                                             |
+|  IF SKIPPED:                                                                 |
+|    --> POST /users/me/onboarding-progress { step: 2 }                       |
+|    --> Dashboard will show "Upload Resume" as primary CTA                   |
+|                      |                                                      |
+|                      v                                                      |
+|  Screen 3/3: "You're all set!"                                              |
+|  +------------------------------------------+                               |
+|  |  [check] Account created                  |                               |
+|  |  [check] FREE plan activated (50 credits) |                               |
+|  |  [check] Profile 35% complete             |  (or 65% if parsed)          |
+|  |                                           |                               |
+|  |  Here's what you can do:                  |                               |
+|  |  [Build Resume] [ATS Scan]                |                               |
+|  |  [Enhance]      [Find Jobs]               |                               |
+|  |                                           |                               |
+|  |        [Go to Dashboard -->]              |                               |
+|  +------------------------------------------+                               |
+|  On "Go to Dashboard":                                                      |
+|    --> POST /users/me/onboarding-complete                                   |
+|    --> Backend: onboarding_completed = true, onboarding_step = 3            |
+|    --> Navigate to /dashboard                                               |
+|                                                                             |
+|  STEP 3-7: (Same as V2 -- Dashboard, Explore, Credits Low, Upgrade)        |
++-----------------------------------------------------------------------------+
+
+ONBOARDING STATE SOURCE-OF-TRUTH:
+  MongoDB user document (onboarding_step, onboarding_completed) is the
+  SINGLE SOURCE OF TRUTH. Redis key onboarding:{user_id} is an optional
+  read-through accelerator only.
+    - On POST /onboarding-progress: write to BOTH MongoDB + Redis
+    - On read: check Redis first; if missing/expired, read from MongoDB
+    - If Redis is down: onboarding still works (reads from MongoDB)
+    - Redis TTL = 24 hours; user record has no TTL (permanent)
+
+ABANDONMENT RECOVERY LOGIC:
+  On every login (in middleware.ts or layout.tsx):
+    1. Fetch user profile (already happens for auth)
+    2. Check: onboarding_completed == false?
+    3. If false: redirect to /onboarding?step={onboarding_step}
+    4. Wizard reads step from URL param and resumes from that screen
+    5. Previous steps' data already saved (name, phone, etc.)
+    6. User sees their data pre-filled, continues from where they left off
+
+  EDGE CASES:
+    - User registered via OAuth but never visited onboarding:
+      onboarding_step=0, redirect to Step 1
+    - User filled Step 1, closed browser:
+      onboarding_step=1, redirect to Step 2 (name/phone pre-filled)
+    - User uploaded resume in Step 2, closed before Step 3:
+      onboarding_step=2, redirect to Step 3 (resume already parsed)
+
+
+================================================================================
+ 5. DASHBOARD HOME PAGE (Command Center)
+================================================================================
+
+WHAT THE USER SEES EVERY TIME THEY LOG IN (after onboarding):
+
++-----------------------------------------------------------------------------+
+| DASHBOARD HOME -- LAYOUT (Desktop, 1280px+)                                 |
+|                                                                             |
+| +----------+ +------------------------------------------------------------+ |
+| |          | | HEADER BAR                                                 | |
+| |          | | [CareerBot Logo]          [CreditBadge: 45cr] [Bell] [Av] | |
+| |          | +------------------------------------------------------------+ |
+| |          | |                                                            | |
+| | SIDEBAR  | | ROW 1: WELCOME + STATS (3 cards, 4 cols each)             | |
+| |          | | +----------------+ +----------------+ +--------------+    | |
+| | Dashboard| | | PLAN: FREE     | | CREDITS        | | PROFILE      |    | |
+| | Profile  | | | 50 credits     | | 45 / 50        | | 65%          |    | |
+| | -------- | | | total          | | remaining      | | complete     |    | |
+| | Resume   | | | [Upgrade]      | | [=======---]   | | [===----]    |    | |
+| | ATS Scan | | +----------------+ +----------------+ +--------------+    | |
+| | Enhancer | | |   SKELETON STATE: 3 gray rectangles, pulse animation    | |
+| | -------- | | |   ERROR STATE: "Could not load stats" + [Retry]         | |
+| | Job Match| | +----------------------------------------------------------+ |
+| | Jobs     | |                                                            | |
+| | Tracker  | | ROW 2: RECOMMENDED NEXT STEP (backend-computed)            | |
+| | -------- | | +----------------------------------------------------------+ |
+| | Interview| | | What to do next:                                         | |
+| | -------- | | |                                                          | |
+| | Settings | | | Step 1  *------*------o------o------o  Step 5            | |
+| | Logout   | | |                                                          | |
+| | -------- | | | +-- CURRENT STEP -----------------------------------+    | |
+| | 45 cr    | | | | Upload & Parse Your Resume                        |    | |
+| | FREE Plan| | | | Upload your resume to auto-fill your profile.     |    | |
+| | [Upgrade]| | | | Cost: 5 credits  |  Time: ~15 seconds             |    | |
+| |          | | | |                           [Upload Resume -->]      |    | |
+| |          | | | +----------------------------------------------------+    | |
+| |          | | |   SKELETON STATE: Progress bar placeholder + text block  | |
+| |          | | |   ERROR STATE: "Couldn't determine next step" + [Retry] | |
+| |          | | +----------------------------------------------------------+ |
+| |          | |                                                            | |
+| |          | | ROW 3: QUICK ACTIONS (8 cards, 3 cols each, 2 rows)       | |
+| |          | | +--------+ +--------+ +--------+ +--------+              | |
+| |          | | | Build  | | ATS    | | Enhance| | Job    |              | |
+| |          | | | Resume | | Scan   | | Resume | | Match  |              | |
+| |          | | | FREE   | | 5 cr   | | 10 cr  | | 8 cr   |              | |
+| |          | | | 3 made | | 2 scans| | 1 done | | 0 done |              | |
+| |          | | +--------+ +--------+ +--------+ +--------+              | |
+| |          | | +--------+ +--------+ +--------+ +--------+              | |
+| |          | | | Browse | | Interv.| | Track  | | Upgrade|              | |
+| |          | | | Jobs   | | Prep   | | Apps   | | Plan   |              | |
+| |          | | | FREE   | | 15 cr  | | FREE   | |        |              | |
+| |          | | | 150+   | | --     | | 0 apps | | See -> |              | |
+| |          | | +--------+ +--------+ +--------+ +--------+              | |
+| |          | |   DATA SOURCE RULE:                                        | |
+| |          | |     - Labels ("ATS Scan", "Enhance Resume"): STATIC        | |
+| |          | |     - Credit costs ("5 cr", "10 cr"): STATIC (from config) | |
+| |          | |     - Usage counts ("2 scans", "1 done"): from API         | |
+| |          | |     - On API error: costs stay, counts become "--"          | |
+| |          | |   SKELETON: 8 card-shaped gray rectangles, pulse            | |
+| |          | |   ERROR: Cards always render. Counts show "--" on failure.  | |
+| |          | |          No "Could not load actions" banner needed.         | |
+| |          | |                                                            | |
+| |          | | ROW 4: ACTIVITY + SCORES (8 cols + 4 cols)                | |
+| |          | | +---------------------------+ +------------------------+  | |
+| |          | | | RECENT ACTIVITY            | | YOUR SCORES            |  | |
+| |          | | | Today                      | | Resume ATS: 72/100     |  | |
+| |          | | |  * Parsed resume (5 cr)    | | [=======---]           |  | |
+| |          | | |  * Profile updated         | |                        |  | |
+| |          | | | Yesterday                  | | Job Match: 78%         |  | |
+| |          | | |  * ATS scan (5 cr) - 72    | | [========--]           |  | |
+| |          | | |  * Enhanced resume (10 cr) | |                        |  | |
+| |          | | |                            | | Interview: --          |  | |
+| |          | | | [View All Activity -->]    | | (Not taken yet)        |  | |
+| |          | | +---------------------------+ +------------------------+  | |
+| |          | |   SKELETON: 2 panels with line placeholders               | |
+| |          | |   ERROR: "Activity unavailable" (degrade: hide section)   | |
+| |          | |                                                            | |
+| +----------+ +------------------------------------------------------------+ |
++-----------------------------------------------------------------------------+
+
+RECOMMENDED NEXT STEP ENGINE (BACKEND-COMPUTED):
+  The backend computes the recommended step based on user state.
+  Frontend ONLY renders what backend returns. No client-side calculation.
+
+  BACKEND STATE MACHINE:
+  +-------------------------------------+--------------------------------------+
+  | USER STATE                          | recommended_step                     |
+  +-------------------------------------+--------------------------------------+
+  | No resume uploaded                  | "Upload & Parse Your Resume" (5 cr)  |
+  | Resume parsed, profile < 60%        | "Complete Your Profile" (FREE)       |
+  | Profile >= 60%, no ATS scan         | "Check Your ATS Score" (5 cr)        |
+  | ATS score < 70                      | "Enhance Your Resume" (10 cr)        |
+  | ATS score >= 70, no job match       | "Match with a Job Description" (8cr) |
+  | Job match done, 0 applications      | "Browse & Apply to Jobs" (FREE)      |
+  | Has applications, no interview      | "Prepare for Interviews" (15 cr)     |
+  | Credits < 25% of plan total         | "Upgrade for More Credits"           |
+  | All done + credits available        | "Enhance Another Resume" OR          |
+  |                                     | "Try a Different Job Match"          |
+  +-------------------------------------+--------------------------------------+
+
+  ALTERNATE PATHS:
+  The recommended step is a SUGGESTION, not a gate.
+  Users can always click any Quick Action card regardless of step.
+  The step engine provides guidance, not enforcement.
+
+  5-STEP PROGRESS BAR:
+    Step 1: Upload Resume       --> filled when resume parsed
+    Step 2: Complete Profile    --> filled when profile >= 60%
+    Step 3: ATS Scan            --> filled when first scan done
+    Step 4: Enhance Resume      --> filled when first enhancement done
+    Step 5: Apply to Jobs       --> filled when first application sent
+
+
+================================================================================
+ 6. PROFILE COMPLETENESS SYSTEM (Backend-Computed)
+================================================================================
+
+CRITICAL CHANGE FROM V2: Profile completeness is now BACKEND-COMPUTED.
+  - Returned in GET /users/me/dashboard-summary as profile_completeness: 65
+  - Also returned in GET /profile as profile_completeness: 65
+  - Prevents client-side manipulation
+  - Consistent across devices, tabs, admin views
+  - Enables SSR rendering in Next.js server components
+
+CALCULATION FORMULA (Backend: dashboard_service/service.py):
++--------------------------------+--------+-----------+------------------+
+| FIELD                          | WEIGHT | FILLED?   | POINTS           |
++--------------------------------+--------+-----------+------------------+
+| Full Name                      |  10%   | Required  | 0 or 10          |
+| Email                          |   5%   | Auto-fill | 5 (always)       |
+| Phone                          |   5%   | Required  | 0 or 5           |
+| Location                       |   5%   | Required  | 0 or 5           |
+| Summary/Headline               |   5%   | Optional  | 0 or 5           |
+| LinkedIn URL                   |   5%   | Optional  | 0 or 5           |
+| Skills (at least 5)            |  15%   | Required  | 0/5/10/15        |
+|   (1-2 skills = 5, 3-4 = 10, 5+ = 15)                                |
+| Education (at least 1)         |  10%   | Required  | 0 or 10          |
+| Experience (at least 1)        |  15%   | Situational| 0 or 15         |
+|   OR Internships (if fresher)  |        |           |                  |
+| Projects (at least 1)          |  10%   | Optional  | 0 or 10          |
+| Certifications (at least 1)    |   5%   | Optional  | 0 or 5           |
+| Employment Preferences         |   5%   | Optional  | 0 or 5           |
+| Profile Picture                |   5%   | Optional  | 0 or 5           |
++--------------------------------+--------+-----------+------------------+
+| TOTAL                          | 100%   |           | Sum of points    |
++--------------------------------+--------+-----------+------------------+
+
+  FRESHER ADAPTATION:
+  If career_stage == "fresh_graduate":
+    Experience weight shifts: Experience(0%) + Internships(10%) + Projects(15%)
+    This prevents freshers from being penalized for no work experience.
+
+VISUAL DISPLAY:
+  < 30%  --> Red circle    + "Just getting started"
+  30-59% --> Orange circle + "Good progress"
+  60-79% --> Yellow circle + "Almost there"
+  80-99% --> Green circle  + "Looking great!"
+  100%   --> Green check   + "Profile complete!"
+
+WHERE SHOWN:
+  1. Dashboard Home --> Row 1 (ProfileCompletenessCard)
+  2. Profile Page --> RightSection (existing, needs update)
+  3. Sidebar --> Small percentage badge next to "Profile" nav item
+
+
+================================================================================
+ 7. LOADING STATES, ERROR STATES & SKELETON SPECS
+================================================================================
+
+PRINCIPLE: Every dashboard section has 3 states: Loading, Loaded, Error.
+No blank screens. No spinners without context. No silent failures.
+
+ROW 1: WELCOME + STATS (PlanStatusCard, CreditBalanceCard, ProfileCompletenessCard)
+  LOADING SKELETON:
+    3 cards, each 200px x 120px, with:
+    - Gray header bar (40% width, 16px height)
+    - Gray body bar (60% width, 24px height)
+    - Gray progress bar (100% width, 8px height)
+    - Pulse animation (opacity 0.4 to 0.7, 1.5s cycle)
+
+  ERROR STATE:
+    Single card spanning full row:
+    "Could not load your account info."
+    [Retry] button (calls GET /users/me/dashboard-summary again)
+    Muted gray background with red-left-border.
+
+ROW 2: RECOMMENDED NEXT STEP
+  LOADING SKELETON:
+    - Gray progress stepper (5 circles connected by lines)
+    - Gray text block (3 lines, varying widths: 80%, 60%, 40%)
+    - Gray button placeholder (120px x 40px)
+    - Pulse animation
+
+  ERROR STATE:
+    "We couldn't determine your next step."
+    Below: "In the meantime, explore Quick Actions below."
+    No retry button (Row 3 is always available as fallback).
+
+ROW 3: QUICK ACTIONS
+  LOADING SKELETON:
+    8 card placeholders (same size as real cards):
+    - Gray icon circle (48px)
+    - Gray title bar (60% width)
+    - Gray cost bar (40% width)
+    - Gray count bar (50% width)
+    - Pulse animation
+
+  ERROR STATE:
+    Quick Actions are STATIC data (hardcoded in frontend).
+    They should NEVER fail to render. Feature counts may show "--"
+    if dashboard-summary failed. Cards are always clickable.
+    Feature count fallback: show "--" instead of "2 scans".
+
+ROW 4: RECENT ACTIVITY + SCORES
+  LOADING SKELETON:
+    Left panel (Activity):
+    - 5 line items: Gray circle (8px) + gray bar (70% width) per line
+    Right panel (Scores):
+    - 3 score rows: Gray label (40%) + gray progress bar (60%)
+    - Pulse animation
+
+  ERROR STATE:
+    Left: "Activity unavailable. [Retry]"
+    Right: Show "--/100" for each score. No error message needed
+    (scores naturally show "--" when no actions taken yet).
+
+GLOBAL ERROR FALLBACK:
+  If dashboard-summary returns 5xx:
+    Show all 5 rows in error/fallback state.
+    Toast notification: "Dashboard data couldn't be loaded. Please try again."
+    [Retry All] button at top of page.
+    Quick Actions row still renders (static data) so user can navigate.
+
+CSS SKELETON COMPONENT:
+  Create src/components/ui/Skeleton.tsx:
+    - Props: width, height, variant ("line" | "circle" | "card"), className
+    - Uses Tailwind: animate-pulse bg-gray-200 rounded
+
+
+================================================================================
+ 8. CACHE STRATEGY & INVALIDATION RULES
+================================================================================
+
+REDIS CACHE FOR DASHBOARD:
+
+  KEY: dashboard:{user_id}
+  TYPE: STRING (JSON-serialized dashboard summary)
+  TTL: 5 minutes (300 seconds)
+  SIZE: ~2-5 KB per user
+
+CACHE WRITE (on dashboard-summary request, cache miss):
+  1. Backend aggregates data from MongoDB (6+ collections)
+  2. Backend computes profile_completeness + recommended_step
+  3. Backend serializes to JSON, stores in Redis with 5-min TTL
+  4. Returns response to frontend
+
+CACHE INVALIDATION (MANDATORY after these events):
+  After any of these backend actions, execute:
+    redis.delete(f"dashboard:{user_id}")
+
+  INVALIDATION TRIGGERS:
+  +-------------------------------+------------------------------------------+
+  | EVENT                         | WHY INVALIDATE                           |
+  +-------------------------------+------------------------------------------+
+  | Resume parsed (5 credits)     | stats.resumes_parsed changes             |
+  | Resume enhanced (10 credits)  | stats.resumes_enhanced changes           |
+  | ATS scan (5 credits)          | stats.ats_scans + best_scores.ats_score  |
+  | Job match (8 credits)         | stats.job_matches + best_scores.match    |
+  | Assessment (15 credits)       | stats.assessments + interview_score      |
+  | JD parsed (3 credits)         | usage log changes                        |
+  | AI review (5 credits)         | usage log changes                        |
+  | Profile updated               | profile_completeness changes             |
+  | Resume created                | stats.resumes_created changes            |
+  | Plan upgraded                 | credits + plan_name change               |
+  | Onboarding completed          | onboarding_completed flag changes        |
+  +-------------------------------+------------------------------------------+
+
+  IMPLEMENTATION: In QuotaEnforcement middleware (after successful AI call):
+    async def _invalidate_dashboard_cache(self, user_id: str):
+        await self.redis.delete(f"dashboard:{user_id}")
+
+  ALSO: Profile update endpoint should call this function.
+
+FRONTEND CACHE BEHAVIOR:
+  - Dashboard page does NOT cache locally (always fetches from backend)
+  - Credit balance updated in real-time via X-Quota-Remaining headers
+  - If dashboard-summary returns stale data (before Redis invalidation
+    propagates), the X-Quota-Remaining header has the REAL-TIME balance
+
+  CREDIT BALANCE SOURCE-OF-TRUTH RULE:
+  The UI credit balance ALWAYS comes from X-Quota-Remaining header,
+  NEVER from the cached dashboard-summary JSON body.
+
+  Why: dashboard-summary is cached for 5 minutes. If user spends credits
+  between cache refreshes, the JSON body has stale credits. The header
+  is computed per-request by QuotaEnforcement middleware from Redis
+  (real-time, never cached).
+
+  Implementation:
+    - CreditBadge reads from CreditContext.balance
+    - CreditContext.balance is set ONLY by X-Quota-Remaining header
+    - dashboard-summary JSON may include credits.remaining for reference
+      but frontend IGNORES it for display -- header always wins
+    - On responses without X-Quota-Remaining (non-quota endpoints):
+      CreditContext retains last known value (no update)
+
+THUNDERING HERD PREVENTION:
+  - 5-min TTL is short enough that stale data is acceptable briefly
+  - Only 1 user hits their own dashboard (no shared cache)
+  - MongoDB aggregation is fast (~50-100ms for a single user)
+  - No need for lock/mutex on dashboard cache
+
+
+================================================================================
+================================================================================
+                       PART 3: FEATURE JOURNEYS
+================================================================================
+================================================================================
+
+
+================================================================================
+ 9. CREDITS & QUOTA SYSTEM (Reconciled Units + Adaptive Modal)
+================================================================================
+
+CREDIT-TO-TOKEN RECONCILIATION:
+  The backend has TWO unit systems that must be aligned:
+    - "Tokens" (from token_service): actual LLM token consumption
+    - "Credits" (from dashboard design): user-facing abstraction
+
+  DECISION: Credits are the USER-FACING unit. Tokens are INTERNAL.
+  Users never see "tokens." They only see "credits."
+
+  MAPPING TABLE (See Appendix A for full table):
+  +----------------------------+----------+-----------+---------------------+
+  | FEATURE                    | CREDITS  | ~TOKENS   | NOTES               |
+  +----------------------------+----------+-----------+---------------------+
+  | Create Resume (Builder)    | FREE     | 0         | No AI call          |
+  | Export Resume (PDF/DOCX)   | FREE     | 0         | No AI call          |
+  | Parse Resume (Upload)      | 5 cr     | ~450 tok  | 1 LLM call          |
+  | ATS Scan                   | 5 cr     | ~350 tok  | 1 LLM call          |
+  | Enhance Resume             | 10 cr    | ~1200 tok | Multiple LLM calls  |
+  | Job Match (Resume vs JD)   | 8 cr     | ~1200 tok | 3 LLM + 6 rule      |
+  | Parse JD                   | 3 cr     | ~300 tok  | 1 LLM call          |
+  | AI Resume Review           | 5 cr     | ~500 tok  | 1 LLM call          |
+  | English Assessment         | 15 cr    | ~2000 tok | Multiple LLM calls  |
+  | Browse Jobs                | FREE     | 0         | No AI call          |
+  | Track Applications         | FREE     | 0         | No AI call          |
+  | Update Profile             | FREE     | 0         | No AI call          |
+  | View Past Results          | FREE     | 0         | No AI call          |
+  +----------------------------+----------+-----------+---------------------+
+
+  TOKEN SERVICE ALIGNMENT:
+  Backend token_service has different costs (Resume Scan=50tok, etc.).
+  These are INTERNAL metrics for cost tracking.
+  The CREDIT system is a SEPARATE abstraction layer:
+    - 1 credit != 1 token
+    - Credits are a business unit; tokens are a cost unit
+    - Backend deducts CREDITS (via Lua script), logs TOKENS (from AI response)
+    - Admin sees both: credits consumed + actual tokens used + cost in INR
+
+  SINGLE-SOURCE-OF-TRUTH RULE:
+  +---------------------+-------------------------------+-------------------+
+  | Context             | Unit Used                     | Source             |
+  +---------------------+-------------------------------+-------------------+
+  | User-facing UI      | CREDITS only                  | quota Redis keys   |
+  | Quota enforcement   | CREDITS only                  | Lua script (Redis) |
+  | Usage logging       | BOTH (credits + tokens)       | usage_logs (Mongo) |
+  | Admin analytics     | BOTH (credits + tokens + INR) | token_analytics    |
+  | AI Layer responses  | TOKENS only (tokens_used)     | LLM client         |
+  | Cost calculations   | TOKENS -> INR conversion      | cost_tracker       |
+  +---------------------+-------------------------------+-------------------+
+
+  RULE: When displaying data to users, ALWAYS use "credits."
+  When displaying data to admins, show credits AND tokens AND cost.
+  The credit_cost_map (Appendix A) is the SINGLE CONFIG that defines
+  the mapping. All frontend, backend, and admin code reads from this
+  single config -- never hardcode credit costs in multiple places.
+
+SUBSCRIPTION PLANS (5 tiers -- STARTER added):
++----------+----------+----------+-----------+----------+--------------+
+|          | FREE     | STARTER  | BASIC     | PRO      | ENTERPRISE   |
++----------+----------+----------+-----------+----------+--------------+
+| Price    | Rs.0     | Rs.199/mo| Rs.499/mo | Rs.999/mo| Contact us   |
+| Credits  | 50       | 100      | 200       | 500      | Custom       |
+| Resumes  | 3        | 5        | 10        | Unlimited| Unlimited    |
+| Exports  | 1        | 3        | 5/month   | Unlimited| Unlimited    |
+| AI Feats | Limited  | Basic AI | Basic AI  | Full AI  | Full AI+API  |
+| Matches  | 5        | 10       | 20        | Unlimited| Unlimited    |
+| Assess.  | 1        | 3        | Unlimited | Unlimited| Unlimited    |
+| Support  | Community| Email    | Email     | Priority | Dedicated    |
++----------+----------+----------+-----------+----------+--------------+
+
+  WHY STARTER EXISTS:
+  FREE (50 credits) to BASIC (Rs.499) is a big jump for Indian students.
+  STARTER (Rs.199, 100 credits) provides a stepping stone.
+  Expected conversion: FREE --> STARTER (15-20%) --> BASIC/PRO (5-10%).
+
+ADAPTIVE CREDIT CONFIRM MODAL:
+  V2 showed confirm modal for EVERY credit-consuming action. This is friction.
+
+  V3 ADAPTIVE RULES:
+  +-------------------------------------------+-------------------------------+
+  | CONDITION                                 | BEHAVIOR                      |
+  +-------------------------------------------+-------------------------------+
+  | First time using ANY credit feature       | ALWAYS show confirm modal     |
+  | Action costs < 5 credits                  | Inline confirmation only      |
+  |   (small text: "3 credits will be used")  |   (no modal popup)            |
+  | Action costs 5-9 credits                  | Show modal (unless dismissed) |
+  | Action costs >= 10 credits                | ALWAYS show confirm modal     |
+  | Remaining balance < 2x action cost        | ALWAYS show confirm modal     |
+  |   (e.g., 12 credits left, action costs 8) |   (warns: "Only 4 left after")|
+  | User checked "Don't ask for small actions"| Skip modal for < 10 credits   |
+  +-------------------------------------------+-------------------------------+
+
+  MODAL CONTENT:
+  +-------------------------------------------+
+  |  This action uses [X] credits              |
+  |                                            |
+  |  [Feature name]: [description]             |
+  |  Cost: [X] credits                         |
+  |  Your balance: [Y] credits                 |
+  |  After this: [Y-X] credits remaining       |
+  |                                            |
+  |  [ ] Don't ask again for small actions     |
+  |                                            |
+  |  [Cancel]              [Confirm & Continue]|
+  +-------------------------------------------+
+
+  INSUFFICIENT CREDITS (balance < cost):
+  +-------------------------------------------+
+  |  Not enough credits                        |
+  |                                            |
+  |  [Feature] requires [X] credits            |
+  |  You have [Y] credits remaining            |
+  |                                            |
+  |  [View Pricing]           [Cancel]         |
+  +-------------------------------------------+
+
+CROSS-TAB CREDIT SYNC:
+  When credits change in one tab, all tabs update:
+
+  IMPLEMENTATION (in DashboardContext.tsx):
+    const channel = new BroadcastChannel('careerbot-credits');
+
+    // After any credit change (from X-Quota-Remaining header):
+    channel.postMessage({ type: 'CREDIT_UPDATE', remaining: newBalance });
+
+    // Listen for changes from other tabs:
+    channel.onmessage = (event) => {
+      if (event.data.type === 'CREDIT_UPDATE') {
+        setCreditsRemaining(event.data.remaining);
+      }
+    };
+
+  FALLBACK (BroadcastChannel not supported, e.g., Safari < 15.4):
+    On window 'focus' event: call GET /users/me/quota (lightweight, no cache)
+    This is a polling fallback, not real-time, but sufficient.
+
+CREDIT BALANCE DISPLAY (always visible):
+  1. Header: CreditBadge component -- "45 cr" with diamond icon
+  2. Sidebar bottom: Plan name + credits + [Upgrade] button
+  3. Dashboard Row 1: CreditBalanceCard with progress bar
+  4. Feature buttons: CreditCostLabel inline -- "5 credits"
+
+
+================================================================================
+10. RESUME BUILDER JOURNEY
+================================================================================
+
+WHAT EXISTS: Full 3-panel editor with 4 templates and 17 section types.
+
+CREDIT COST: FREE (Builder itself is free; AI Review costs 5 credits)
+
+USER FLOW:
+  /builder/start --> List of resumes (or empty state)
+  --> Click "Create New Resume"
+  --> Choose template (TemplateOne through TemplateFour)
+  --> AddResumeModal --> Enter title --> Create
+  --> /builder/creation/[id] --> 3-panel editor
+  --> Edit sections --> Live preview updates
+  --> (Optional) Click "AI Review" --> 5 credits --> Gets suggestions
+  --> (Optional) Click "Score" --> FREE --> Section-by-section score
+  --> Export PDF/DOCX
+
+DATA FOR DASHBOARD (from MongoDB resumes collection):
+  - resumes_created: count of user's resumes
+  - best_resume_score: highest overall_score
+  - last_edited: resume_title + updated_at
+  - section_completeness: per-section scores
+
+
+================================================================================
+11. RESUME ENHANCER JOURNEY
+================================================================================
+
+CREDIT COST: 10 credits (5 parse + 5 enhance, or 5 if already parsed)
+
+USER FLOW:
+  /enhancer --> Upload resume (PDF/DOCX)
+  --> Click "Parse & Enhance" --> 10 credits
+  --> Loading state (10-20 seconds)
+  --> Shows BEFORE (original) vs AFTER (enhanced) side by side
+  --> User can edit enhanced sections
+  --> Export enhanced version as PDF/DOCX
+
+DATA FOR DASHBOARD (from AI Layer response):
+  - enhancement_count: number of enhancements done
+  - validators_applied: ["grammar", "duplicate", "timeline", ...]
+  - fixers_applied: ["weak_verbs", "spelling", "first_person", ...]
+  - gaps_detected: ["missing certifications", ...]
+  - recommendations: ["Add quantifiable achievements", ...]
+
+
+================================================================================
+12. ATS SCAN JOURNEY
+================================================================================
+
+CREDIT COST: 5 credits
+
+USER FLOW:
+  /ats --> Select resume (from list) + Paste JD (optional)
+  --> Click "Scan" --> 5 credits
+  --> Loading state (5-10 seconds)
+  --> Shows: Overall ATS score (0-100) with circular gauge
+  --> Section-by-section breakdown
+  --> Strengths list + Weaknesses list
+  --> Recommendations for improvement
+  --> CTA: "Enhance Resume" if score < 80
+
+DATA FOR DASHBOARD (from AI Layer response):
+  - best_ats_score: highest overall_score across all scans
+  - section_scores: per-section breakdown
+  - weakest_section: lowest scoring section
+  - scan_count: total scans done
+
+
+================================================================================
+13. JOB MATCH & Apply Journey
+================================================================================
+
+CREDIT COST: Job Match = 8 credits, Browse Jobs = FREE, Job Apply = FREE
+
+USER FLOW (JOB MATCH):
+  /jobmatch --> Select resume + Paste JD
+  --> Click "Match" --> 8 credits
+  --> Loading state (5-15 seconds)
+  --> Shows: Overall match % with grade (EXCELLENT/GOOD/FAIR/POOR)
+  --> 9 strategy scores
+  --> Gap analysis (missing skills, experience gaps)
+  --> Career recommendations (upskilling suggestions)
+
+DATA FOR DASHBOARD (from AI Layer response):
+  - best_match_score: highest overall_match_score
+  - match_count: total matches done
+  - critical_gaps: most common missing skills
+  - salary_expectation: from career_recommendations
+
+NOTE: V2 had separate GET /users/me/activity-feed endpoint.
+V3 MERGES this into GET /users/me/dashboard-summary.recent_activity[].
+One endpoint, one cache key, one source of truth. No duplication.
+
+
+================================================================================
+14. DATA AVAILABLE AFTER EACH ACTION (Complete Reference)
+================================================================================
+
+This is the SINGLE REFERENCE for what data exists after each user action.
+Frontend developers: use this to know EXACTLY what you can display.
+
+ACTION 1: RESUME PARSED
+  Trigger: POST /parser/parse_resume
+  Credits: 5
+  Time: 5-15 seconds
+  AI Response Fields:
+    contact: { email, phone, location }
+    social_links: { linkedIn, github }
+    summary: "Professional summary text"
+    technical_skills: ["Python", "AWS", ...]
+    soft_skills: ["Leadership", ...]
+    education: [{ institution, degree, year }]
+    experience: [{ company, title, duration, bullets[] }]
+    projects: [{ name, description, technologies[] }]
+    certifications: ["AWS Solutions Architect", ...]
+    achievements: ["Led team of 10", ...]
+    structure_score: { score: 85, message: "Good structure" }
+    tokens_used: { total: 450, cost_inr: 2.25 }
+    from_cache: false
+  Dashboard Shows: "Resume parsed: Found N skills, N jobs, N degrees"
+
+ACTION 2: RESUME ENHANCED
+  Trigger: POST /resume/enhance
+  Credits: 10
+  Time: 10-20 seconds
+  AI Response Fields:
+    enhanced_resume: { improved sections }
+    enhancement_report: { validators, fixers, gaps, recommendations }
+    suggestions: [{ field, type, suggestion }]
+    Tokens_Used: { total: 1200, cost_inr: 5.0 }
+  Dashboard Shows: "N validators passed, N fixes applied"
+
+ACTION 3: ATS SCAN
+  Trigger: POST /ats/score
+  Credits: 5
+  Time: 5-10 seconds
+  AI Response Fields:
+    overall_score: 72.5
+    section_scores: { Contact_Info: 90, Summary: 65, ... }
+    strengths: ["Strong tech skills", ...]
+    weaknesses: ["Weak verbs", ...]
+    token_usage: { total: 350, cost_inr: 1.75 }
+  Dashboard Shows: Circular gauge "ATS Score: 72/100"
+
+ACTION 4: JOB MATCH
+  Trigger: POST /matcher/match
+  Credits: 8
+  Time: 5-15 seconds
+  AI Response Fields:
+    overall_match_score: 78
+    match_grade: "GOOD"
+    strategy_scores: { Technical_Skills: 85, Experience: 75, ... }
+    gap_analysis: { critical_gaps, nice_to_have, effort_to_bridge }
+    career_recommendations: { fit_assessment, salary_expectation, next_steps }
+    tokens_breakdown: { total: 1200, cost_inr: 6.0 }
+  Dashboard Shows: "Best Match: 78% (GOOD)" + critical gap badge
+
+ACTION 5: JOB APPLIED
+  Trigger: User clicks "Apply" on job listing
+  Credits: FREE
+  Data: job_title, company, applied_date, status, match_score
+  Dashboard Shows: "N applications this month"
+
+ACTION 6: ENGLISH ASSESSMENT
+  Trigger: User completes 7-section assessment
+  Credits: 15
+  Time: 20-45 min (test) + 20s (evaluation)
+  AI Response Fields:
+    overall_score: 72
+    section_scores: { fluency, grammar, vocabulary, pronunciation, content }
+    feedback: { strengths, improvements }
+  Dashboard Shows: "Interview Readiness: 72/100"
+
+BACKEND LOGGING (for ALL credit-consuming actions):
+  After EVERY successful AI call, backend MUST:
+    1. Extract tokens_used from AI Layer HTTP response body
+    2. Insert into usage_logs collection:
+       { user_id, feature, credits_used, tokens_used, cost_inr, timestamp }
+    3. This is the DURABLE LOG (AI Layer cost_records are in-memory only)
+
+
+================================================================================
+================================================================================
+                    PART 4: IMPLEMENTATION BLUEPRINT
+================================================================================
+================================================================================
+
+
+================================================================================
+15. FRONTEND IMPLEMENTATION (Files, Components, Props)
+================================================================================
+
+COMPLETE FILE LIST (organized by priority):
+
+-- P0: CRITICAL (Week 1-2) -----------------------------------------------
+
+FILE                                              | TYPE   | LINES | PURPOSE
+--------------------------------------------------|--------|-------|------------------
+src/app/(user)/onboarding/page.tsx                | NEW    | 280   | 3-screen wizard with step persistence
+src/app/(user)/onboarding/layout.tsx              | NEW    | 20    | Full-screen, no sidebar
+src/app/(user)/onboarding/_components/
+  StepPersonalInfo.tsx                            | NEW    | 130   | Step 1: Name/Phone/Location/Career
+  StepResumeUpload.tsx                            | NEW    | 200   | Step 2: Upload + Parse + Skip
+  StepWelcome.tsx                                 | NEW    | 110   | Step 3: Summary + Feature cards
+  OnboardingProgress.tsx                          | NEW    | 50    | Progress dots (1/3, 2/3, 3/3)
+src/app/(user)/dashboard/page.tsx                 | MODIFY | 350   | Dashboard Home (currently empty)
+src/app/(user)/dashboard/_components/
+  WelcomeBanner.tsx                               | NEW    | 80    | "Good morning, Name" + greeting
+  PlanStatusCard.tsx                              | NEW    | 70    | Plan name + total credits
+  CreditBalanceCard.tsx                           | NEW    | 80    | Credits remaining/total + bar
+  ProfileCompletenessCard.tsx                     | NEW    | 90    | % from backend + missing fields
+  RecommendedNextStep.tsx                         | NEW    | 160   | Backend-computed step + CTA
+  ProgressStepper.tsx                             | NEW    | 90    | 5-step progress bar
+  QuickActionGrid.tsx                             | NEW    | 130   | 8 feature cards grid
+  QuickActionCard.tsx                             | NEW    | 70    | Card: icon + cost + count + link
+  RecentActivity.tsx                              | NEW    | 110   | Activity feed from summary
+  ScoreSummary.tsx                                | NEW    | 90    | ATS + Match + Interview scores
+  DashboardSkeleton.tsx                           | NEW    | 120   | All 4 rows skeleton state
+  DashboardError.tsx                              | NEW    | 60    | Global error fallback + retry
+src/contexts/DashboardContext.tsx                  | NEW    | 150   | Dashboard state + BroadcastChannel
+src/api/dashboardApi.ts                           | NEW    | 70    | GET /users/me/dashboard-summary
+src/api/quotaApi.ts                               | NEW    | 90    | GET quota + usage-history
+src/components/ui/Skeleton.tsx                     | NEW    | 40    | Reusable skeleton component
+
+-- P1: HIGH (Week 2-3) ---------------------------------------------------
+
+FILE                                              | TYPE   | LINES | PURPOSE
+--------------------------------------------------|--------|-------|------------------
+src/components/CreditBadge.tsx                    | NEW    | 45    | Header credit display (diamond + count)
+src/components/CreditCostLabel.tsx                | NEW    | 35    | "5 credits" / "FREE" label
+src/components/CreditConfirmModal.tsx             | NEW    | 120   | Adaptive confirm modal
+src/components/InsufficientCreditsModal.tsx        | NEW    | 100   | "Not enough credits" + pricing link
+src/components/UpgradePrompt.tsx                  | NEW    | 80    | Banner "Credits running low"
+src/app/(saas)/pricing/page.tsx                   | NEW    | 280   | Pricing page (5 tiers)
+src/app/(saas)/pricing/_components/
+  PlanCard.tsx                                    | NEW    | 110   | Individual plan card
+  PlanComparisonTable.tsx                         | NEW    | 160   | Feature comparison table
+  PlanFAQ.tsx                                     | NEW    | 90    | Pricing FAQ accordion
+src/components/layout/Header.tsx                  | MODIFY | +50   | Add CreditBadge + notification bell
+src/lib/http.ts                                   | MODIFY | +30   | 402 interceptor: show upgrade modal
+                                                  |        |       | Extract X-Quota-Remaining header
+                                                  |        |       | NOTE: 402 = quota exhaustion,
+                                                  |        |       | NOT payment failure. Show
+                                                  |        |       | InsufficientCreditsModal.
+src/middleware.ts                                  | MODIFY | +15   | Add /onboarding to protected routes
+                                                  |        |       | Add onboarding redirect logic
+
+-- P2: MEDIUM (Week 3-4) -------------------------------------------------
+
+FILE                                              | TYPE   | LINES | PURPOSE
+--------------------------------------------------|--------|-------|------------------
+src/app/(user)/settings/page.tsx                  | NEW    | 80    | Settings page shell
+src/app/(user)/settings/subscription/page.tsx     | NEW    | 220   | Plan management + history
+src/app/(user)/settings/subscription/_components/
+  CurrentPlanCard.tsx                             | NEW    | 90    | Current plan details + change CTA
+  UsageHistoryTable.tsx                           | NEW    | 130   | Usage log table (sortable, paginated)
+  BillingHistory.tsx                              | NEW    | 110   | Payment receipts + download
+src/components/layout/Sidebar.tsx                 | MODIFY | +50   | Groups + credit display + profile %
+src/components/ProfileCompleteness.tsx            | NEW    | 70    | Reusable completeness display
+
+-- P3: NICE-TO-HAVE (Week 5+) --------------------------------------------
+
+FILE                                              | TYPE   | LINES | PURPOSE
+--------------------------------------------------|--------|-------|------------------
+src/components/FeatureTour.tsx                    | NEW    | 150   | First-visit tooltip tour
+src/components/Notification.tsx                   | NEW    | 80    | Bell icon + notification list
+src/app/(user)/activity/page.tsx                  | NEW    | 160   | Full activity log page
+
+TOTAL FRONTEND:
+  NEW files:      ~40
+  MODIFIED files:  ~5
+  Total lines:    ~4,500-5,000
+  Duration:       4-5 weeks (1 developer)
+
+
+KEY COMPONENT INTERFACES:
+
+// DashboardContext (state management + cross-tab sync)
+interface DashboardState {
+  summary: DashboardSummary | null;
+  isLoading: boolean;
+  error: Error | null;
+  creditsRemaining: number;
+  refreshDashboard: () => Promise<void>;
+}
+
+// CreditBadge (in Header)
+interface CreditBadgeProps {
+  remaining: number;       // 45
+  total: number;           // 50
+  planName: string;        // "FREE"
+}
+
+// QuickActionCard
+interface QuickActionCardProps {
+  icon: ReactNode;
+  title: string;
+  creditCost: number;      // 0 = shows "FREE"
+  usageCount: number | null; // null = show "--"
+  usageLabel: string;
+  href: string;
+  disabled: boolean;
+}
+
+// RecommendedNextStep (renders backend-computed step)
+interface RecommendedNextStepProps {
+  step: {
+    step_number: number;
+    title: string;
+    description: string;
+    cost: number;
+    action_url: string;
+    total_steps: number;
+    completed_steps: number[];
+  } | null;                // null = show fallback
+}
+
+// CreditConfirmModal (adaptive)
+interface CreditConfirmModalProps {
+  isOpen: boolean;
+  feature: string;
+  cost: number;
+  remaining: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+  showDontAskAgain: boolean; // true if cost < 10
+}
+
+
+================================================================================
+16. BACKEND IMPLEMENTATION (Endpoints, Schemas, Services)
+================================================================================
+
+-- NEW ENDPOINTS ---------------------------------------------------------------
+
+ENDPOINT                                | METHOD | AUTH    | CACHE  | PURPOSE
+----------------------------------------|--------|---------|--------|------------------
+/users/me/dashboard-summary             | GET    | User    | 5 min  | Aggregated dashboard data
+/users/me/quota                         | GET    | User    | None   | Real-time credit balance
+/users/me/usage-history?page&limit      | GET    | User    | None   | Paginated usage log
+/users/me/onboarding-progress           | POST   | User    | None   | Save onboarding step
+/users/me/onboarding-complete           | POST   | User    | None   | Mark onboarding done
+/profile/import/resume                  | PUT    | User    | None   | Bulk-import parsed resume
+/subscription/plans                     | GET    | Public  | 1 hour | Available plans list
+/subscription/upgrade                   | POST   | User    | None   | Initiate plan upgrade
+/subscription/webhook                   | POST   | Webhook | None   | Razorpay payment callback
+
+NOTE: V2 had separate GET /users/me/activity-feed.
+V3 REMOVES this endpoint. Activity is included in dashboard-summary.recent_activity[].
+One endpoint, one cache, one source of truth.
+
+
+ENDPOINT SCHEMAS:
+
+GET /users/me/dashboard-summary
+Response:
+{
+  "user": {
+    "name": "Praveen",
+    "email": "praveen@example.com",
+    "plan": "FREE",
+    "role": "USER"
+  },
+  "credits": {
+    "remaining": 45,
+    "total": 50,
+    "expires_at": "2026-03-13T00:00:00Z"
+  },
+  "profile_completeness": 65,           // <-- BACKEND-COMPUTED (not frontend)
+  "onboarding_completed": true,
+  "onboarding_step": 3,
+  "stats": {
+    "resumes_created": 3,
+    "resumes_parsed": 2,
+    "resumes_enhanced": 1,
+    "ats_scans": 2,
+    "job_matches": 0,
+    "applications_sent": 5,
+    "assessments_taken": 0
+  },
+  "best_scores": {
+    "ats_score": 72,
+    "match_score": 78,
+    "interview_score": null
+  },
+  "recent_activity": [                   // <-- MERGED from V2's activity-feed
+    {
+      "type": "resume_parse",
+      "title": "Parsed resume.pdf",
+      "credits": 5,
+      "timestamp": "2026-02-13T10:30:00Z",
+      "result_summary": "Found 12 skills"
+    },
+    {
+      "type": "ats_scan",
+      "title": "ATS Scan - 72/100",
+      "credits": 5,
+      "timestamp": "2026-02-12T15:00:00Z",
+      "result_summary": "Certifications weak"
+    }
+  ],
+  "recommended_step": {                  // <-- BACKEND-COMPUTED (not frontend)
+    "step_number": 3,
+    "title": "Check Your ATS Score",
+    "description": "See how your resume scores against ATS systems",
+    "cost": 5,
+    "action_url": "/ats",
+    "total_steps": 5,
+    "completed_steps": [1, 2]
+  },
+  "credit_usage_by_feature": {
+    "resume_parse": 5,
+    "ats_scan": 10,
+    "enhancement": 10,
+    "job_match": 0,
+    "assessment": 0
+  }
+}
+
+GET /users/me/quota
+Response:
+{
+  "plan": { "name": "FREE", "price": 0, "currency": "INR" },
+  "credits": {
+    "remaining": 45,
+    "total": 50,
+    "used": 5,
+    "expires_at": "2026-03-13T00:00:00Z"
+  },
+  "limits": {
+    "resume_limit": 3,
+    "resumes_used": 1,
+    "export_limit": 1,
+    "exports_used": 0,
+    "job_match_limit": 5,
+    "matches_used": 0,
+    "assessment_limit": 1,
+    "assessments_used": 0
+  }
+}
+
+POST /users/me/onboarding-progress
+Request: { "step": 1 }
+Response: { "success": true, "onboarding_step": 1 }
+
+POST /users/me/onboarding-complete
+Response: { "success": true, "onboarding_completed": true }
+
+
+-- NEW BACKEND FILES -----------------------------------------------------------
+
+FILE                                              | PURPOSE
+--------------------------------------------------|------------------------------------
+app/api/v1/endpoints/dashboard.py                 | Dashboard summary + onboarding endpoints
+app/api/v1/endpoints/quota.py                     | Quota + usage-history endpoints
+app/api/v1/endpoints/subscription.py              | Plans list + upgrade + webhook
+app/services/dashboard_service/service.py         | Aggregate data + compute fields
+app/services/dashboard_service/schemas.py         | Response schemas (Pydantic)
+app/services/credit_service/service.py            | Credit check, deduct, refund, balance
+app/services/credit_service/lua_scripts.py        | Redis Lua atomic operations
+app/services/subscription_service/service.py      | Plan listing + Razorpay integration
+app/services/usage_log_service/service.py         | Log AI response tokens to MongoDB
+app/api/middleware/quota_enforcement.py            | Check credits before AI calls
+
+-- MODIFIED BACKEND FILES -----------------------------------------------------
+
+FILE                                              | CHANGE
+--------------------------------------------------|------------------------------------
+app/main.py                                       | Add QuotaEnforcement middleware
+app/api/v1/endpoints/auth.py                      | Add onboarding fields to register
+app/api/v1/endpoints/profile.py                   | Add profile_completeness to GET
+                                                  | Add import/resume endpoint
+                                                  | Invalidate dashboard cache on update
+All AI-calling endpoints                          | Add X-Quota-Remaining header
+                                                  | Add usage logging after success
+                                                  | Add cache invalidation
+
+-- MONGODB COLLECTIONS ---------------------------------------------------------
+
+COLLECTION: users (MODIFY -- add fields)
+  plan_id: str              (reference to subscription_plans, default: "FREE")
+  credits_remaining: int    (default: 50)
+  credits_total: int        (default: 50)
+  plan_expires_at: datetime
+  onboarding_completed: bool (default: false)
+  onboarding_step: int      (default: 0, range: 0-3)
+  career_stage: str         ("fresh_graduate" | "working" | "switcher")
+  confirm_modal_preference: str ("always" | "high_cost_only" | default: "always")
+
+COLLECTION: usage_logs (NEW)
+  INDEX: { user_id: 1, timestamp: -1 }
+  INDEX: { user_id: 1, feature: 1 }
+  {
+    user_id: str,
+    feature: str,          // "resume_parse" | "ats_scan" | "enhancement" | ...
+    credits_used: int,
+    tokens_used: int,      // From AI Layer response
+    cost_inr: float,       // From AI Layer response
+    timestamp: datetime,
+    details: dict,         // Feature-specific metadata
+    from_cache: bool       // Was AI response cached?
+  }
+
+-- REDIS KEY PATTERNS ----------------------------------------------------------
+
+KEY                                | TYPE   | TTL     | PURPOSE
+-----------------------------------|--------|---------|------------------------
+quota:{user_id}:balance            | STRING | 30 days | Credit balance (real-time)
+quota:{user_id}:plan               | STRING | 30 days | Plan name
+quota:{user_id}:feature:{name}     | STRING | 30 days | Feature usage count
+dashboard:{user_id}                | STRING | 5 min   | Cached dashboard summary
+onboarding:{user_id}               | STRING | 24 hours| Onboarding step state
+
+TOTAL BACKEND:
+  NEW files:       ~10
+  MODIFIED files:   ~8
+  NEW collections:  1 (usage_logs)
+  NEW Redis keys:   5 patterns
+  Duration:         3-4 weeks (1 developer)
+
+
+================================================================================
+17. AI LAYER EXPECTATIONS (What Exists + Backend Logging)
+================================================================================
+
+AI LAYER REQUIRES ZERO CODE CHANGES FOR THE DASHBOARD.
+
+All 7 AI endpoints already return:
+  - tokens_used: { total, prompt, completion }
+  - cost_inr / cost_usd
+  - from_cache: true/false
+  - user_id, correlation_id
+
+BACKEND LOGGING STRATEGY:
+  AI Layer cost_records are IN-MEMORY ONLY (cleared per request lifecycle).
+  There is NO persistent callback or webhook from AI Layer to Backend.
+
+  SOLUTION: Backend captures token data from AI Layer HTTP responses.
+
+  In every AI-calling backend endpoint:
+    1. Call AI Layer (e.g., POST /api/v1/scoring/ats)
+    2. Parse response body
+    3. Extract: tokens_used, cost_inr, from_cache
+    4. Insert into usage_logs collection (MongoDB)
+    5. This is the durable usage record
+
+  PSEUDO-CODE (in each AI-calling endpoint or shared utility):
+    async def log_ai_usage(user_id, feature, credits, ai_response):
+        tokens = ai_response.get("tokens_used", {}).get("total", 0)
+        cost = ai_response.get("cost_inr", 0.0)
+        cached = ai_response.get("from_cache", False)
+        await usage_log_service.create({
+            "user_id": user_id,
+            "feature": feature,
+            "credits_used": credits,
+            "tokens_used": tokens,
+            "cost_inr": cost,
+            "from_cache": cached,
+            "timestamp": datetime.utcnow()
+        })
+
+  REFUND ON AI FAILURE:
+    If AI Layer returns 5xx or times out:
+    1. Backend does NOT log usage (no entry in usage_logs)
+    2. Backend refunds credits: INCRBY quota:{user_id}:balance {cost}
+    3. Backend decrements feature count: DECR quota:{user_id}:feature:{name}
+    4. Returns error to frontend with message "Credits not deducted"
+    Reference: Blueprint V1.1 Section 9 (lines 963-970)
+
+
+================================================================================
+18. ACCESSIBILITY (A11y) REQUIREMENTS
+================================================================================
+
+WCAG 2.1 AA COMPLIANCE TARGETS:
+
+1. COLOR CONTRAST:
+   - All text: >= 4.5:1 contrast ratio (AA standard)
+   - Large text (18px+ or 14px+ bold): >= 3:1
+   - Use Tailwind's default colors which meet contrast requirements
+   - Credit balance colors: Green (sufficient), Orange (low), Red (exhausted)
+     must all pass contrast check against white/gray backgrounds
+
+2. KEYBOARD NAVIGATION:
+   - All interactive elements focusable via Tab key
+   - Onboarding wizard: Tab through form fields, Enter to submit
+   - Dashboard cards: Tab to each card, Enter to navigate
+   - Modal dialogs: Focus trapped inside modal, Escape to close
+   - Sidebar: Arrow keys to navigate items, Enter to select
+   - Progress stepper: Aria-current for active step
+
+3. FOCUS INDICATORS:
+   - Visible focus ring on all focusable elements (2px solid blue)
+   - No outline:none without replacement focus style
+   - Use Tailwind: focus-visible:ring-2 focus-visible:ring-blue-500
+
+4. ARIA LABELS:
+   - CreditBadge: aria-label="45 credits remaining out of 50"
+   - ProgressStepper: role="progressbar" aria-valuenow aria-valuemax
+   - ProfileCompleteness: role="progressbar" aria-valuenow="65" aria-label="Profile 65% complete"
+   - QuickActionCard: aria-label="ATS Scan, costs 5 credits, 2 scans done"
+   - ScoreSummary: aria-label="ATS Score 72 out of 100"
+   - Modal: role="dialog" aria-modal="true" aria-labelledby
+
+5. SCREEN READER SUPPORT:
+   - Score gauges: Include sr-only text with numeric value
+   - Loading skeletons: aria-busy="true" aria-label="Loading dashboard"
+   - Error states: role="alert" for error messages
+   - Activity feed: Use semantic list elements (ul/li)
+   - Timestamp: Use <time> element with datetime attribute
+
+6. REDUCED MOTION:
+   - Skeleton pulse animation: respect prefers-reduced-motion
+   - @media (prefers-reduced-motion: reduce) { .animate-pulse { animation: none; } }
+   - Onboarding slide transitions: disable for reduced-motion users
+
+
+================================================================================
+19. RESPONSIVE & MOBILE STRATEGY
+================================================================================
+
+BREAKPOINTS (Tailwind defaults):
+  sm:  640px   (mobile landscape)
+  md:  768px   (tablet portrait)
+  lg:  1024px  (tablet landscape / small laptop)
+  xl:  1280px  (desktop)
+  2xl: 1536px  (large desktop)
+
+DASHBOARD HOME:
+  Desktop (xl+):  3 cols top, 4-col grid actions, 2-col bottom
+  Tablet (md-lg): 2 cols top, 2-col grid actions, 1-col bottom
+  Mobile (< md):  1 col everything, full-width cards stacked
+
+  MOBILE-SPECIFIC:
+    - Quick Actions: 2 cards per row (2x4 grid)
+    - Credit balance prominently at top
+    - "Recommended Next Step" card expanded (full width)
+    - Recent Activity: last 3 items only (not 5)
+    - Scores: horizontal scroll if needed
+
+SIDEBAR:
+  Desktop: Fixed left sidebar (240px width)
+  Tablet: Collapsible (icon-only = 64px, expanded = 240px)
+  Mobile: Hidden, hamburger menu (overlay from left)
+
+ONBOARDING:
+  Desktop: Centered card (600px max-width)
+  Mobile: Full-width card, padding 16px
+  Step 2 (upload): Full-width drop zone on mobile
+
+PRICING PAGE:
+  Desktop: 5 cards side-by-side
+  Tablet: 3 + 2 layout (top row 3, bottom row 2)
+  Mobile: Full-width cards stacked vertically, swipeable
+
+INDIA-SPECIFIC (3G/4G users):
+  - Dashboard summary response: < 5 KB (optimized JSON)
+  - Images: Use next/image with lazy loading
+  - Skeletons: Show immediately (no delayed spinner)
+  - Critical CSS: Inline above-fold styles
+
+
+================================================================================
+20. IMPLEMENTATION PLAN (6-Week Schedule with Mock API Strategy)
+================================================================================
+
+PARALLEL DEVELOPMENT STRATEGY:
+  Frontend and Backend developers work in PARALLEL.
+  Frontend uses MOCK API responses during Weeks 1-2.
+  Backend delivers real endpoints by end of Week 2.
+  Integration testing in Weeks 3-4.
+
+MOCK API STRATEGY:
+  Create src/api/mocks/ directory with:
+    - dashboardMock.ts: Returns hardcoded dashboard-summary JSON
+    - quotaMock.ts: Returns hardcoded quota JSON
+    - usageMock.ts: Returns hardcoded usage-history JSON
+
+  In dashboardApi.ts:
+    const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
+    export async function getDashboardSummary() {
+      if (USE_MOCKS) return dashboardMock;
+      return httpClient.get('/users/me/dashboard-summary');
+    }
+
+  Remove mocks when backend is ready (set USE_MOCKS=false).
+
+
+WEEK 1: FOUNDATION
+-------------------
+  BACKEND (Day 1-3):
+    - Create dashboard_service/service.py (aggregation + compute)
+    - Create dashboard.py endpoints (summary, onboarding progress/complete)
+    - Create credit_service with Lua scripts (check + deduct + refund)
+    - Add onboarding fields to user model
+    - Create usage_logs collection with indexes
+
+  FRONTEND (Day 1-5):
+    - Create DashboardContext with BroadcastChannel sync
+    - Create dashboardApi.ts + quotaApi.ts (with mocks)
+    - Create /onboarding page (3 screens with step persistence)
+    - Create Skeleton.tsx component
+    - Create Dashboard Home (WelcomeBanner, PlanStatus, CreditBalance, Profile%)
+    - Add onboarding redirect logic to middleware.ts
+
+WEEK 2: DASHBOARD COMPLETE + CREDITS UI
+-----------------------------------------
+  BACKEND (Day 1-3):
+    - Create quota.py endpoints (balance, usage-history)
+    - Create quota_enforcement.py middleware
+    - Add X-Quota-Remaining header to all responses
+    - Add usage logging to all AI-calling endpoints
+    - Add cache invalidation after credit-consuming actions
+
+  FRONTEND (Day 1-5):
+    - Complete Dashboard Home (RecommendedNextStep, QuickActions, Activity, Scores)
+    - Create DashboardSkeleton + DashboardError components
+    - Create CreditBadge, CreditCostLabel, CreditConfirmModal (adaptive)
+    - Create InsufficientCreditsModal, UpgradePrompt
+    - Add 402 interceptor to http.ts
+    - Add X-Quota-Remaining extraction to http.ts
+    - Update Header.tsx with CreditBadge
+
+WEEK 3: PRICING + SETTINGS + SIDEBAR
+--------------------------------------
+  BACKEND (Day 1-3):
+    - Create subscription.py endpoints (plans list, upgrade, webhook)
+    - Razorpay integration (checkout session, payment verification)
+    - Create profile/import/resume endpoint
+    - Add profile_completeness to GET /profile response
+
+  FRONTEND (Day 1-5):
+    - Create /pricing page (5 plan cards, comparison table, FAQ)
+    - Create /settings/subscription page (current plan, usage, billing)
+    - Update Sidebar.tsx (groups, credit display, profile badge)
+    - Remove mock API flag (switch to real endpoints)
+
+WEEK 4: INTEGRATION + EDGE CASES
+----------------------------------
+  FULL STACK:
+    - End-to-end: Signup --> Onboarding --> Dashboard --> Feature --> Credits
+    - Credit deduction --> refund on AI failure
+    - Plan upgrade --> Razorpay --> credits top-up
+    - Onboarding abandonment --> resume on next login
+    - 0 credits --> blocked features --> upgrade prompt
+    - Cross-tab credit sync testing
+    - Mobile responsive testing (375px, 768px, 1280px)
+    - Network failure handling (offline, slow 3G)
+
+WEEK 5: ACCESSIBILITY + POLISH
+--------------------------------
+  FRONTEND:
+    - A11y audit (keyboard nav, focus rings, ARIA labels, contrast)
+    - Screen reader testing (VoiceOver, NVDA)
+    - Loading skeleton tuning (timing, animation)
+    - Error state testing (forced API failures)
+    - Performance audit (Lighthouse, bundle size)
+    - Analytics events (page views, feature usage, conversion funnels)
+
+WEEK 6: FINAL QA + DEPLOYMENT
+-------------------------------
+  - Full regression testing
+  - Load testing (50 concurrent users)
+  - Security review (OWASP top 10 for new endpoints)
+  - Staging deployment + smoke tests
+  - Production deployment
+  - Monitor: Error rates, latency, credit deduction accuracy
+
+
+================================================================================
+21. TESTING CHECKLIST (60+ Test Cases)
+================================================================================
+
+ONBOARDING (12 tests):
+  [ ] New user redirected to /onboarding (not /dashboard)
+  [ ] Step 1: validates name (required), phone (optional but recommended)
+  [ ] Step 1: saves data immediately on Continue (PUT /profile)
+  [ ] Step 1: onboarding_step updated to 1
+  [ ] Step 2: file upload works (PDF, DOCX, max 5MB)
+  [ ] Step 2: shows loading during parse (5-15 seconds)
+  [ ] Step 2: parsed data auto-fills profile
+  [ ] Step 2: credits deducted (50 --> 45)
+  [ ] Step 2: "Skip" works, proceeds to Step 3
+  [ ] Step 3: shows correct summary and feature cards
+  [ ] Step 3: "Go to Dashboard" completes onboarding
+  [ ] ABANDONMENT: Close at Step 2, reopen = resume at Step 2
+
+DASHBOARD HOME (14 tests):
+  [ ] Shows correct user name and greeting
+  [ ] Plan name and credit count match backend
+  [ ] Profile completeness % matches backend calculation
+  [ ] Recommended Next Step changes based on user state (9 states)
+  [ ] Progress stepper shows correct filled/unfilled steps
+  [ ] Quick Action cards show correct credit costs
+  [ ] Quick Action cards show correct usage counts (or "--" if unavailable)
+  [ ] Recent Activity shows last 5 actions
+  [ ] Score Summary shows best ATS/Match/Interview scores
+  [ ] Loading skeletons render during API call
+  [ ] Error state renders when API returns 5xx
+  [ ] Retry button re-fetches dashboard summary
+  [ ] Dashboard refreshes after credit-consuming action (cache invalidated)
+  [ ] Quick Actions always render (labels + costs are static, never fail)
+  [ ] Quick Action usage counts show "--" when dashboard-summary errors
+
+CREDITS (14 tests):
+  [ ] CreditBadge in header shows correct balance
+  [ ] CreditCostLabel shows "FREE" for free features
+  [ ] CreditConfirmModal appears on first use of any credit feature
+  [ ] CreditConfirmModal skipped for < 5 credit actions (after first use)
+  [ ] CreditConfirmModal ALWAYS appears for >= 10 credit actions
+  [ ] CreditConfirmModal ALWAYS appears when balance < 2x cost
+  [ ] "Don't ask again" checkbox works (persisted in localStorage)
+  [ ] Credits deducted after successful AI call
+  [ ] Credits refunded after failed AI call (5xx from AI Layer)
+  [ ] InsufficientCreditsModal shows when balance < cost
+  [ ] 402 response from backend triggers upgrade modal
+  [ ] X-Quota-Remaining header updates local credit state
+  [ ] BroadcastChannel syncs credits across tabs
+  [ ] Focus event refreshes credits (BroadcastChannel fallback)
+
+PRICING (8 tests):
+  [ ] All 5 plans displayed correctly (FREE, STARTER, BASIC, PRO, ENTERPRISE)
+  [ ] Current plan highlighted with badge
+  [ ] "Upgrade" button works for higher plans only
+  [ ] Feature comparison table accurate and complete
+  [ ] FAQ accordion expands/collapses correctly
+  [ ] Razorpay checkout opens on upgrade click
+  [ ] After successful payment: credits updated, plan changed
+  [ ] Mobile: cards stack vertically
+
+PROFILE COMPLETENESS (6 tests):
+  [ ] 5% for brand new user (email only)
+  [ ] Increases correctly as fields are added
+  [ ] Fresher adaptation: no penalty for missing experience
+  [ ] 100% shows green check
+  [ ] Sidebar badge shows correct percentage
+  [ ] Profile page shows missing fields as clickable links
+
+RESPONSIVE (5 tests):
+  [ ] Dashboard: desktop (3-col), tablet (2-col), mobile (1-col)
+  [ ] Sidebar: desktop fixed, tablet collapsible, mobile hamburger
+  [ ] Onboarding: centered desktop, full-width mobile
+  [ ] Pricing: 5 columns, 3+2 tablet, 1 column mobile
+  [ ] Quick Actions: 4 per row desktop, 2 per row mobile
+
+EDGE CASES (8 tests):
+  [ ] User with no resume: "Upload Resume" as primary CTA
+  [ ] User with 0 credits: features disabled, upgrade prompt shown
+  [ ] Network error during dashboard load: error state with retry
+  [ ] Network error during credit deduction: credits not deducted
+  [ ] Very long user name: truncated with ellipsis (max 25 chars)
+  [ ] Multiple tabs: credit balance syncs via BroadcastChannel
+  [ ] Browser back on onboarding: doesn't duplicate steps
+  [ ] OAuth user: same onboarding flow (onboarding_step=0 initially)
+
+ACCESSIBILITY (5 tests):
+  [ ] All interactive elements keyboard-focusable
+  [ ] Focus trapped in modals (Tab cycling)
+  [ ] Screen reader announces credit balance correctly
+  [ ] Progress stepper has correct ARIA attributes
+  [ ] Reduced motion: animations disabled when preferred
+
+
+================================================================================
+================================================================================
+                          APPENDICES
+================================================================================
+================================================================================
+
+
+================================================================================
+ APPENDIX A: CREDIT-TO-TOKEN MAPPING TABLE
+================================================================================
+
+This table reconciles the USER-FACING credit system with INTERNAL token costs.
+
++----------------------------+----------+----------+----------+----------------+
+| FEATURE                    | CREDITS  | ~TOKENS  | ~INR     | PLAN LIMIT     |
+|                            | (user)   | (actual) | (cost)   | (FREE plan)    |
++----------------------------+----------+----------+----------+----------------+
+| Create Resume              | FREE     | 0        | 0.00     | 3 resumes      |
+| Export Resume              | FREE     | 0        | 0.00     | 1 export       |
+| Parse Resume               | 5 cr     | 450      | 2.25     | Unlimited      |
+| ATS Scan                   | 5 cr     | 350      | 1.75     | Unlimited      |
+| Enhance Resume             | 10 cr    | 1200     | 5.00     | Via credits    |
+| Job Match                  | 8 cr     | 1200     | 6.00     | 5 matches      |
+| Parse JD                   | 3 cr     | 300      | 1.50     | Unlimited      |
+| AI Resume Review           | 5 cr     | 500      | 2.50     | Via credits    |
+| English Assessment         | 15 cr    | 2000     | 10.00    | 1 assessment   |
+| Browse Jobs                | FREE     | 0        | 0.00     | Unlimited      |
+| Track Applications         | FREE     | 0        | 0.00     | Unlimited      |
+| Update Profile             | FREE     | 0        | 0.00     | Unlimited      |
++----------------------------+----------+----------+----------+----------------+
+
+TOKEN SERVICE ALIGNMENT:
+  Existing token_service uses DIFFERENT token costs for admin analytics:
+    Resume Scan = 50 tokens, AI Optimization = 30, Job Match = 10
+  These are for ADMIN cost tracking, NOT user-facing credits.
+  The credit system is a SEPARATE business layer on top.
+  Both systems coexist: admin sees tokens + INR, user sees credits.
+
+
+================================================================================
+ APPENDIX B: REDIS KEY PATTERNS (Complete)
+================================================================================
+
+KEY                                | TYPE   | TTL     | PURPOSE
+-----------------------------------|--------|---------|---------------------------
+quota:{user_id}:balance            | STRING | 30 days | Credit balance (int)
+quota:{user_id}:plan               | STRING | 30 days | Plan name ("FREE", etc.)
+quota:{user_id}:feature:{name}     | STRING | 30 days | Feature usage count (int)
+quota:{user_id}:expires            | STRING | 30 days | Plan expiration timestamp
+dashboard:{user_id}                | STRING | 5 min   | Cached JSON (dashboard-summary)
+onboarding:{user_id}               | STRING | 24 hours| Current onboarding step (0-3)
+                                   |        |         | NOTE: Optional accelerator only.
+                                   |        |         | Source of truth = user record
+                                   |        |         | (onboarding_step field in MongoDB).
+                                   |        |         | If Redis key expires or is missing,
+                                   |        |         | backend reads from user document.
+rate_limit:{user_id}:{endpoint}    | STRING | 1 min   | Rate limiting counter (exists)
+
+
+================================================================================
+ APPENDIX C: MONGODB COLLECTION SCHEMAS
+================================================================================
+
+COLLECTION: usage_logs (NEW)
+  Indexes:
+    { user_id: 1, timestamp: -1 }  -- For user's usage history (most recent first)
+    { user_id: 1, feature: 1 }     -- For per-feature aggregation
+    { timestamp: 1 }               -- For TTL/cleanup and admin analytics
+
+  Document:
+  {
+    "_id": ObjectId,
+    "user_id": "string",
+    "feature": "resume_parse" | "ats_scan" | "enhancement" | "job_match" |
+               "jd_parse" | "ai_review" | "assessment",
+    "credits_used": 5,
+    "tokens_used": 450,            // From AI Layer response
+    "cost_inr": 2.25,             // From AI Layer response
+    "from_cache": false,           // Was AI response cached?
+    "timestamp": ISODate,
+    "details": {                   // Feature-specific metadata
+      "file_name": "resume.pdf",
+      "result": "success",
+      "score": 72                  // For ATS scans
+    }
+  }
+
+
+================================================================================
+ APPENDIX D: SIDEBAR & NAVIGATION REDESIGN
+================================================================================
+
+CURRENT (6 items, no groups):
+  Profile | Resume | ATS Scan | Enhancer | Job Match | Jobs | Communication
+
+PROPOSED (11 items, 5 groups):
++----------------------------+
+|  [CareerBot Logo]          |
+|  ________________________  |
+|                            |
+|  MAIN                      |
+|  * Dashboard               |  <-- NEW (default active after login)
+|  * Profile    (65%)        |  <-- Shows completeness %
+|                            |
+|  RESUME                    |
+|  o Resume Builder          |
+|  o ATS Scan                |
+|  o Enhance Resume          |
+|                            |
+|  CAREER                    |
+|  o Job Match               |
+|  o Browse Jobs             |
+|  o Track Apps              |
+|                            |
+|  PREPARE                   |
+|  o Interview Prep          |
+|                            |
+|  ________________________  |
+|  o Settings                |  <-- NEW
+|  o Logout                  |
+|                            |
+|  ________________________  |
+|  [diamond] 45 credits      |  <-- Credit balance always visible
+|  FREE Plan                 |
+|  [Upgrade -->]             |  <-- Only for FREE/STARTER/BASIC
+|                            |
++----------------------------+
+
+
+================================================================================
+ APPENDIX E: PAGE WIREFRAMES
+================================================================================
+
+PAGE 1: /onboarding (NEW -- First-time only)
+  Layout: Full-screen, NO sidebar, NO header
+  Background: Gradient (brand blue to white)
+  Content: Centered card (max-width: 600px)
+  Progress: 3 dots at top
+  Transitions: Slide left between screens
+  Validation: Name required, Phone optional
+  Persistence: Each step saves immediately
+
+PAGE 2: /dashboard (MODIFY -- Main landing)
+  Layout: Sidebar (left) + Header (top) + Main content (scrollable)
+  Grid: 12-column responsive grid
+  Row 1: 3 cards (Plan | Credits | Profile) -- 4 cols each
+  Row 2: Recommended Next Step with stepper -- 12 cols
+  Row 3: 8 Quick Action cards -- 3 cols each (4 per row)
+  Row 4: Recent Activity (8 cols) + Score Summary (4 cols)
+  Skeleton: All rows have loading state
+  Error: Per-row error with retry; Quick Actions always visible
+         (labels + costs static; usage counts become "--" on API error)
+
+PAGE 3: /pricing (NEW -- User-facing)
+  Layout: Full-width, Header only (NO sidebar)
+  Content: Centered, max-width: 1200px
+  Section 1: "Choose Your Plan" + monthly/annual toggle
+  Section 2: 5 plan cards (PRO highlighted "Most Popular")
+  Section 3: Feature comparison table
+  Section 4: FAQ accordion (8 questions)
+  Section 5: "Still have questions?"
+
+PAGE 4: /settings/subscription (NEW)
+  Layout: Sidebar + Header + Main content
+  Section 1: Current Plan card (name, credits, expiry, [Change Plan])
+  Section 2: Usage History table (sortable, paginated)
+  Section 3: Billing History (date, amount, receipt download)
+
+
+================================================================================
+  END OF DOCUMENT
+  Version: 3.0
+  Total Sections: 21 + 5 Appendices
+  Target: Frontend + Backend + AI Layer developers
+  Score Target: 9/10+ (addresses all 16 V2 action items)
+
+  DEPENDENCIES:
+  - CAREERBOT_TOKEN_UTILIZATION_BLUEPRINT_V1.txt (Lua scripts, refund, proration)
+  - CAREERBOT_TOKEN_UTILIZATION_ARCHITECTURE_V1.txt (RBAC, data flows)
+  - CAREERBOT_USER_DASHBOARD_ARCHITECTURE_V1.txt (B2C + B2B2C model)
+
+  V2 --> V3 SUMMARY:
+  - All 4 P0 issues RESOLVED (cache, backend-compute, onboarding, credits)
+  - All 6 P1 issues RESOLVED (adaptive modal, STARTER, refs, sync, merge, 402)
+  - All 5 P2 issues RESOLVED (skeletons, errors, a11y, mocks, logging)
+  - Encoding fixed (no mojibake)
+  - 6-week schedule (was 4 weeks, realistic now)
+  - 60+ test cases (was 40)
+  - Mock API strategy for parallel development
+================================================================================

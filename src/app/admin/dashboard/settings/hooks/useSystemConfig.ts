@@ -1,9 +1,10 @@
 "use client";
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import {getSystemConfig,updateSystemConfig,resetSystemConfig} from '@/api/adminSystemConfigApi';
+import { getSystemConfig, updateSystemConfig, resetSystemConfig } from '@/api/adminSystemConfigApi';
 import { SystemConfig } from '../types';
 import { logger } from '@/lib/logger';
+import { extractApiError } from '@/app/admin/_utils/apiError';
 
 interface UseSystemConfigReturn {
     systemConfig: SystemConfig | null;
@@ -35,6 +36,25 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
         }
     }, []);
 
+    const notifyMaintenanceCache = useCallback(async (enabled: boolean) => {
+        try {
+            const res = await fetch('/api/maintenance-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled }),
+            });
+            if (!res.ok) {
+                // fetch() resolves on 4xx/5xx — log so a silent 401 doesn't go unnoticed.
+                // Non-critical: GET re-probes the backend every 15 s for both states,
+                // so the cache self-corrects within one TTL window even if this POST fails.
+                logger.warn(`Maintenance cache notify failed: HTTP ${res.status}`);
+            }
+        } catch {
+            // Network error — same note as above applies.
+            logger.warn('Maintenance cache notify failed: network error');
+        }
+    }, []);
+
     const handleUpdateSystemConfig = useCallback(async () => {
         if (!systemConfig) return;
 
@@ -53,14 +73,15 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             });
 
             setSystemConfig(updatedConfig);
+            await notifyMaintenanceCache(updatedConfig.maintenance_mode);
             toast.success('System configuration updated successfully');
         } catch (error: unknown) {
             logger.error('Error updating system config:', error);
-            toast.error('Failed to update system configuration');
+            toast.error(extractApiError(error, 'Failed to update system configuration'));
         } finally {
             setLoading(false);
         }
-    }, [systemConfig]);
+    }, [systemConfig, notifyMaintenanceCache]);
 
     const handleResetSystemConfig = useCallback(async () => {
         if (!confirm('Are you sure you want to reset all settings to default values?')) {
@@ -71,14 +92,15 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             setLoading(true);
             const defaultConfig = await resetSystemConfig();
             setSystemConfig(defaultConfig);
+            await notifyMaintenanceCache(defaultConfig.maintenance_mode);
             toast.success('System configuration reset to defaults');
         } catch (error: unknown) {
             logger.error('Error resetting system config:', error);
-            toast.error('Failed to reset system configuration');
+            toast.error(extractApiError(error, 'Failed to reset system configuration'));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notifyMaintenanceCache]);
 
     const updateConfigField = useCallback(<K extends keyof SystemConfig>(
         field: K,

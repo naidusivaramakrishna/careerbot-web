@@ -3,6 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle, useResume } from "../../_context/ResumeContext";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
+import SafeHTML from "@/components/common/SafeHTML";
 
 interface Props {
   data: ResumeData;
@@ -29,6 +30,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
     interests,
     languages,
     publications,
+    customSections,
   } = data;
 
   const formatDate = (dateString?: string): string => {
@@ -93,10 +95,6 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
     fontWeight: "bold",
   };
 
-  const descriptionStyle: React.CSSProperties = {
-    ...baseTextStyle,
-  };
-
   const renderSection = (section: string) => {
     switch (section) {
       case "Personal Info":
@@ -110,7 +108,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               <div className="text-right flex flex-col gap-1">
                 {personalInfo.phone && (
                   <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
-                    <span>{personalInfo.phone}</span>
+                    <span>{personalInfo.countryCode}{personalInfo.phone}</span>
                   </div>
                 )}
                 {personalInfo.email && (
@@ -125,14 +123,27 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                 )}
                 {personalInfo.linkedinUrl && (
                   <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
-                    <a 
-                      href={personalInfo.linkedinUrl} 
-                      target="_blank" 
+                    <a
+                      href={personalInfo.linkedinUrl}
+                      target="_blank"
                       rel="noopener noreferrer"
                       style={linkStyle}
                       className="hover:underline"
                     >
                       LinkedIn
+                    </a>
+                  </div>
+                )}
+                {personalInfo.githubUrl && (
+                  <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
+                    <a
+                      href={personalInfo.githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={linkStyle}
+                      className="hover:underline"
+                    >
+                      GitHub
                     </a>
                   </div>
                 )}
@@ -161,11 +172,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
             <section className="mb-0">
               <h2 style={headingStyle}>SUMMARY</h2>
               {/* ✅ Changed to support HTML formatting */}
-              <div
-                className="text-justify resume-description"
-                style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: professionalSummary.summary }}
-              />
+              <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" />
               <hr className="border-t border-gray-800 mt-4" />
             </section>
           )
@@ -259,16 +266,44 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
 
       case "Skills":
         return (
-          skills.length > 0 && (
+          (skills.length > 0 || !!data.categorizedSkills) && (
             <section className="mb-4 page-break-inside-avoid" data-section="skills">
               <h3 className="mb-3.5 border-b border-gray-300" style={headingStyle}>
                 SKILLS
               </h3>
-              <ul className="list-disc pl-5 grid grid-cols-3 gap-x-4 gap-y-1" style={baseTextStyle}>
-                {skills.map((skill, idx) => (
-                  <li key={idx} className="text-sm">{skill}</li>
-                ))}
-              </ul>
+              {data.categorizedSkills ? (
+                <div className="space-y-0.5" style={baseTextStyle}>
+                  {(["programming_languages","frameworks","soft_skills","project_management","marketing_sales"] as const).map((key) => {
+                    const categorySkills = data.categorizedSkills![key];
+                    if (!categorySkills || categorySkills.length === 0) return null;
+                    const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                    return (
+                      <div key={key} className="flex items-start gap-1">
+                        <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                        <span><span className="font-semibold">{label}: </span>{categorySkills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                  {(data.categorizedSkills.custom_categories || []).map((custom) => {
+                    if (!custom.skills || custom.skills.length === 0) return null;
+                    return (
+                      <div key={custom.id} className="flex items-start gap-1">
+                        <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                        <span><span className="font-semibold">{custom.name || "Other"}: </span>{custom.skills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-0.5" style={baseTextStyle}>
+                  {skills.map((skill, idx) => (
+                    <div key={idx} className="flex items-start gap-1">
+                      <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                      <span>{skill}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )
         );
@@ -294,11 +329,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     {exp.location && <span className="text-sm"> • {exp.location}</span>}
                   </div>
                   {exp.description && (
-                    <div 
-                      className="resume-description"
-                      style={descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: exp.description }}
-                    />
+                    <SafeHTML content={exp.description} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -327,11 +358,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     {intern.location && <span className="text-sm"> • {intern.location}</span>}
                   </div>
                   {intern.description && (
-                    <div 
-                      className="resume-description"
-                      style={descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: intern.description }}
-                    />
+                    <SafeHTML content={intern.description} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -348,16 +375,21 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               {education.map((edu, idx) => (
                 <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline">
-                    <div>
+                    <div className="flex-1">
                       <h3 className="font-semibold" style={titleStyle}>
                         {edu.degree}
                       </h3>
                       <p className="text-sm" style={baseTextStyle}>
                         {edu.school}
                       </p>
+                      {edu.scoreType && edu.scoreValue && (
+                        <p className="text-xs mt-1" style={baseTextStyle}>
+                          {edu.scoreType}: {edu.scoreValue}{edu.scoreType === "Percentage" ? "%" : ""}
+                        </p>
+                      )}
                     </div>
-                    <span className="text-sm" style={baseTextStyle}>
-                      {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
+                    <span className="text-sm text-right ml-4" style={baseTextStyle}>
+                      {edu.startDate ? `${formatDate(edu.startDate)} – ${formatDate(edu.endDate)}` : formatDate(edu.endDate)}
                     </span>
                   </div>
                 </div>
@@ -397,11 +429,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     )}
                   </div>
                   {proj.description && (
-                    <div 
-                      className="mb-2 resume-description"
-                      style={descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: proj.description }}
-                    />
+                    <SafeHTML content={proj.description} className="mb-2 resume-description" />
                   )}
                   {proj.technologies.length > 0 && (
                     <p className="text-sm" style={baseTextStyle}>
@@ -426,10 +454,10 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      <span style={baseTextStyle}> - {cert.issuedBy}</span>
+                      {(cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      <span>Issued: {cert.year}</span>
+                      {(cert.year || cert.issueDate) && <span>Issued: {cert.year || cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}
@@ -459,7 +487,12 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <span className="mr-2" style={baseTextStyle}>•</span>
                   <div style={baseTextStyle}>
                     <span className="font-medium" style={titleStyle}>{award.title}</span>
-                    <span style={baseTextStyle}> - {award.issuedBy} ({award.year})</span>
+                    {(award.issuedBy || award.year) && (
+                      <span style={baseTextStyle}>
+                        {award.issuedBy && ` — ${award.issuedBy}`}
+                        {award.year && ` (${award.year})`}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -487,11 +520,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {achievement.description && (
-                    <div 
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: achievement.description }}
-                    />
+                    <SafeHTML content={achievement.description} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -526,7 +555,8 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     {pub.authors}
                   </p>
                   <p className="text-sm" style={baseTextStyle}>
-                    <span className="italic">{pub.publicationName}</span> • {formatDate(pub.date)}
+                    <span className="italic">{pub.publicationName}</span>
+                    {pub.date && <> • {formatDate(pub.date)}</>}
                   </p>
                 </div>
               ))}
@@ -545,7 +575,8 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div key={idx} className="flex items-start" style={baseTextStyle}>
                     <span className="mr-2">•</span>
                     <span>
-                      <span className="font-medium">{lang.language}</span> - {lang.proficiency}
+                      <span className="font-medium">{lang.name}</span>
+                      {lang.proficiency && <span style={baseTextStyle}> — {lang.proficiency}</span>}
                     </span>
                   </div>
                 ))}
@@ -565,11 +596,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <h3 className="font-medium inline" style={titleStyle}>{hobby.name}</h3>
                   {/* ✅ Changed to support HTML formatting */}
                   {hobby.description && (
-                    <span 
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: ` - ${hobby.description}` }}
-                    />
+                    <SafeHTML as="span" content={` - ${hobby.description}`} className="resume-description" />
                   )}
                   {hobby.proficiencyLevel && <span className="text-sm" style={baseTextStyle}> ({hobby.proficiencyLevel})</span>}
                 </div>
@@ -593,11 +620,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                       {interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
                       {/* ✅ Changed to support HTML formatting */}
                       {interest.description && (
-                        <div 
-                          className="text-sm resume-description"
-                          style={baseTextStyle}
-                          dangerouslySetInnerHTML={{ __html: interest.description }}
-                        />
+                        <SafeHTML content={interest.description} className="text-sm resume-description" />
                       )}
                     </div>
                   </div>
@@ -658,6 +681,53 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
         );
 
       default:
+        // Check if it's a custom section
+        const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
+        if (customSection && customSection.fields.length > 0) {
+          return (
+            <section className="">
+              <h2 style={headingStyle}>{customSection.sectionName.toUpperCase()}</h2>
+              <div className="space-y-3">
+                {customSection.fields.map((field) => {
+                  const hasValue = field.fieldType === "list"
+                    ? (field.value as string[]).some(v => v.trim() !== "")
+                    : field.value && field.value.toString().trim() !== "";
+
+                  if (!hasValue) return null;
+
+                  return (
+                    <div key={field.id} className="mb-2">
+                      {field.fieldType === "list" ? (
+                        <ul className="list-disc pl-5" style={baseTextStyle}>
+                          {(field.value as string[])
+                            .filter(v => v.trim() !== "")
+                            .map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                        </ul>
+                      ) : field.fieldType === "url" ? (
+                        <a
+                          href={field.value as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={linkStyle}
+                          className="hover:underline"
+                        >
+                          {field.value as string}
+                        </a>
+                      ) : field.fieldType === "textarea" ? (
+                        <SafeHTML content={field.value as string} className="resume-description" />
+                      ) : (
+                        <div style={baseTextStyle}>{field.value as string}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <hr className="border-t border-gray-800 mt-4" />
+            </section>
+          );
+        }
         return null;
     }
   };

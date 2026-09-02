@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# Claude Code internal files
+.claude/
+
 # dependencies
 /node_modules
 /.pnp
@@ -15,11 +18,13 @@
 !README.md
 # testing
 /coverage
-
+*.tar
+*.7z
 # next.js
 /.next/
 /out/
-
+!MSW_INTEGRATION_GUIDE.md
+!TESTING_GUIDE.md
 # production
 /build
 
@@ -27,6 +32,12 @@
 .DS_Store
 *.pem
 
+# binary artifacts — never commit archives
+*.zip
+*.tar.gz
+*.gz
+*.bin
+*.zip
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -34,6 +45,8 @@ yarn-error.log*
 .pnpm-debug.log*
 build-output.log
 *.log
+*.txt
+
 
 # env files (can opt-in for committing if needed)
 .env*
@@ -44,3 +57,13 @@ build-output.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor / scratch backups
+*.backup
+
+# local debug scripts / screenshots (never commit)
+verify-login.mjs
+verify-*.png
+
+# local browser audit captures (chrome profiles, cache, screenshots)
+/audit/

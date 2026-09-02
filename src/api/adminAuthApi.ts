@@ -1,6 +1,14 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
+import { clearAdminRoleCache } from '@/app/admin/_hooks/adminRoleCache';
 // ==================== INTERFACES ====================
+
+/** Status code only -- never the axios error object, which carries credentials. */
+function axiosStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const response = (err as { response?: { status?: number } }).response;
+  return response?.status;
+}
 
 export interface AdminBootstrapRequest {
   email: string;
@@ -135,7 +143,7 @@ export const bootstrapAdmin = async (
 
     const response = await httpClient.post<AdminBootstrapResponse>(
       '/admin/auth/bootstrap',
-      formData as unknown as Record<string, unknown>,
+      formData,
       { 
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -164,7 +172,7 @@ export const adminSignUp = async (
 
     const response = await httpClient.post<AdminSignUpResponse>(
       '/admin/auth/signup',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -199,11 +207,19 @@ export const adminLogin = async (
       formData.append('totp_code', data.totp_code);
     }
 
-    logger.info('🔐 Attempting admin login for:', data.email);
+    logger.info('🔐 Attempting admin login');
+
+    // Clear cached role before login to ensure fresh role on next page access.
+    // Reset the in-memory role cache too — SPA login (no full refresh) would
+    // otherwise let a previous admin's role gate the UI for up to the TTL.
+    clearAdminRoleCache();
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('admin_role');
+    }
 
     const response = await httpClient.post<AdminLoginResponse>(
       '/admin/auth/login',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -213,6 +229,13 @@ export const adminLogin = async (
 
     logger.info('✅ Login successful');
 
+    // Store the actual token expiry from backend for accurate refresh timing
+    // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+    if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+      const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+      localStorage.setItem('admin_token_expires_in_seconds', expirySeconds.toString());
+    }
+
     // ✅ Backend sets httpOnly cookies - tokens are automatically sent with requests
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('adminTokenUpdated'));
@@ -220,13 +243,15 @@ export const adminLogin = async (
 
     return response.data;
   } catch (error: unknown) {
-    logger.error('❌ Admin login error:', error);
+      // Do NOT log the axios error object: its `config.data` carries the
+      // submitted username, password and TOTP code, and logger.ts emits
+      // error arguments unredacted in production.
+      logger.error('[Admin Auth] Login failed', { status: axiosStatus(error) });
 
     // Provide more detailed error information
     const axiosError = error as { response?: { status?: number; data?: unknown }; request?: unknown; message?: string };
     if (axiosError.response) {
       logger.error('Response status:', axiosError.response.status);
-      logger.error('Response data:', axiosError.response.data);
     } else if (axiosError.request) {
       logger.error('No response received:', axiosError.request);
     } else if (axiosError.message) {
@@ -247,7 +272,7 @@ export const createAdmin = async (
   try {
     const response = await httpClient.post<CreateAdminResponse>(
       '/admin/auth/admins',
-      data as unknown as Record<string, unknown>,
+      data,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -272,7 +297,13 @@ export const adminLogout = async (): Promise<void> => {
   } catch (error) {
     logger.error('Error logging out admin:', error);
   } finally {
+    // Reset the in-memory role cache so a stale role can't survive logout.
+    clearAdminRoleCache();
     if (typeof window !== 'undefined') {
+      // Clear cached admin role from sessionStorage so next login uses fresh role
+      sessionStorage.removeItem('admin_role');
+      // Clear admin token expiry
+      localStorage.removeItem('admin_token_expires_in_seconds');
       // Force redirect to admin login
       window.location.href = '/admin/login';
     }
@@ -308,7 +339,7 @@ export const enable2FA = async (
   try {
     const response = await httpClient.post<Enable2FAResponse>(
       '/admin/auth/2fa/enable',
-      data as unknown as Record<string, unknown>,
+      data,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -325,11 +356,11 @@ export const enable2FA = async (
 /**
  * Disable 2FA for admin account
  */
-export const disable2FA = async (totp_code: string): Promise<{ success: boolean }> => {
+export const disable2FA = async (password: string): Promise<{ success: boolean }> => {
   try {
     const response = await httpClient.post<{ success: boolean }>(
       '/admin/auth/2fa/disable',
-      { totp_code },
+      { password },
       {
         headers: {
           'Content-Type': 'application/json',
@@ -385,6 +416,13 @@ export const refreshAdminToken = async (): Promise<AdminLoginResponse> => {
     const response = await httpClient.post<AdminLoginResponse>(
       '/admin/auth/refresh'
     );
+
+    // Store the actual token expiry from backend for accurate refresh timing
+    // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+    if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+      const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+      localStorage.setItem('admin_token_expires_in_seconds', expirySeconds.toString());
+    }
 
     // ✅ Backend handles httpOnly cookie setting automatically
     if (typeof window !== 'undefined') {

@@ -1,0 +1,22 @@
+{
+  "slug": "ultimate-ats-resume-guide-2026",
+  "title": "Ultimate ATS Resume Guide 2026",
+  "category": "ats",
+  "tag": "ATS",
+  "readTimeMinutes": 12,
+  "publishedAt": "2026-07-09T09:00:00.000Z",
+  "updatedAt": "2026-07-09T09:00:00.000Z",
+  "excerpt": "Optimize your resume, pass ATS scans, and get more interview calls.",
+  "illustration": "ats",
+  "featured": false,
+  "featuredGuide": true,
+  "author": "CareerBOT Team",
+  "body": [
+    "This guide walks through everything that affects whether your resume clears an ATS scan in 2026 — structure, keywords, formatting, and the export settings that quietly break parsing.",
+    "Structure first. Use a single-column layout with standard section headers: Summary, Experience, Skills, Education. Multi-column layouts and text boxes are still the most common cause of scrambled or dropped content during parsing.",
+    "Keyword coverage second. Pull the exact terms from the job description — tool names, certifications, methodologies — and make sure they appear in your resume in the same form. A scanner matching \"CI/CD\" won't reliably credit \"continuous integration\" as the same thing.",
+    "Quantify your impact. Bullets with numbers — percentages, time saved, revenue, team size — read as more credible to both the algorithm's ranking signals and the human reviewing the shortlist afterward.",
+    "Watch your file format and fonts. Export as PDF with standard fonts (Arial, Calibri, Helvetica). Decorative fonts and icons embedded as images are frequently unreadable to parsers, even when they look fine to you.",
+    "Finally, re-check after every edit. A resume that scores well against one job description can score poorly against another if the required keywords shift — treat ATS optimization as a per-application step, not a one-time setup."
+  ]
+}

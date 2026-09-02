@@ -1,0 +1,2114 @@
+================================================================================
+MOCK INTERVIEW SYSTEM - COMPLETE BLUEPRINT V3.1
+================================================================================
+Version: 3.1
+Date: 2026-02-24
+Authors: Claude (Architect) + ChatGPT (Reviewer x2)
+Supersedes: MOCK_INTERVIEW_DEVELOPER_BLUEPRINT.txt (V1), _V2.txt, V3.0
+Purpose: Single source of truth. Developer follows this TOP TO BOTTOM.
+         Share this document. Do NOT refer to V1, V2, or V3.0 documents.
+
+CHANGELOG V3.0 -> V3.1 (ChatGPT Review Round 2, 12 of 15 findings accepted):
+  FIX-1: Part 1.2  - Corrected misleading latency claim. End-to-end is 4-8s.
+  FIX-2: Part 4.3  - Added WS rate limits, 45-min session cap, max 3 sessions/user.
+  FIX-3: Part 5.1  - Added JWT expiry guard on WS connect + audio rate limits.
+  FIX-4: Part 5.2  - Added audio_buffer size cap (5MB), streaming rate limit.
+  FIX-5: Part 5.4  - Added reconnect token for WS session hijack prevention.
+  FIX-6: Part 5.5  - Added STT SDK reconnect strategy (2 retries mid-session).
+  FIX-7: Part 8    - Added Prompt Call Map table (which prompts per question).
+  FIX-8: Part 12   - Added VM concurrency limits (20-30 concurrent WS sessions).
+  FIX-9: Crit Rules- Added JWT expiry rule (#9) and streaming rate limit rule (#10).
+  REJECT-M3: STT fallback already documented in Part 5.5 (Whisper fallback).
+  REJECT-S4: Fast vs final scoring already done via P7_LIVE + P8.
+  REJECT-M4: Exhaustive per-endpoint error codes are out of scope for blueprint.
+================================================================================
+
+TOTAL SYSTEM SCOPE
+  V1 (Weeks 1-3): Notes + HR Practice + LIVE AI Mock Interview
+  V2 (Weeks 4-6): Technical Round + Video + Calibration + Analytics + PDF
+  Total new code:  ~9,000-10,000 lines (Backend + AI Layer + Frontend)
+  Total endpoints: 35 (32 REST + 1 WebSocket + 2 WebSocket sub-paths)
+  LLM prompts:     14 (P1-P14)
+  MongoDB:         9 collections
+  Cost per session: ~$0.08-0.12 (V1+V2 combined)
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+PART 1: ARCHITECTURE
+  1.1  System Philosophy
+  1.2  Two-System Design (Preparation vs Live AI Interview)
+  1.3  Full System Architecture (ASCII)
+  1.4  Preparation System Flow
+  1.5  Live AI Interview Flow
+  1.6  Technology Stack
+
+PART 2: PREREQUISITES (Day 0 - Before Any Code)
+  2.1  Fix Before Starting (3 mandatory pre-work items)
+  2.2  Azure Services to Activate
+  2.3  Day 0 Verification Checklist
+
+PART 3: DATA ARCHITECTURE
+  3.1  MongoDB Collections (9)
+  3.2  Redis Key Patterns (12)
+  3.3  Key Indexes
+
+PART 4: API CONTRACT (35 Endpoints)
+  4.1  Practice + Notes Endpoints (13)
+  4.2  Technical Round Endpoints (5)
+  4.3  Live Mock Endpoints (4 + 1 WebSocket)
+  4.4  Analytics + Calibration Endpoints (8)
+  4.5  Report + Share Endpoints (5)
+
+PART 5: WEBSOCKET PROTOCOL (Live AI Interview)
+  5.1  Connection Lifecycle
+  5.2  Message Schema (Client → Server)
+  5.3  Message Schema (Server → Client)
+  5.4  State Machine
+  5.5  Error Handling & Recovery
+
+PART 6: V1 IMPLEMENTATION - Weeks 1-3
+  Week 1: Foundation (Days 1-5)
+  Week 2: Practice Mode (Days 6-10)
+  Week 3: Live AI Mock Interview (Days 11-15)
+
+PART 7: V2 IMPLEMENTATION - Weeks 4-6
+  Week 4: Technical Round + Video (Days 16-20)
+  Week 5: Calibration + Analytics + PDF (Days 21-25)
+  Week 6: Polish + Deploy (Days 26-30)
+
+PART 8: ALL LLM PROMPTS (P1-P14)
+
+PART 9: SCORING ARCHITECTURE
+
+PART 10: PRIVACY & DPDP COMPLIANCE
+
+PART 11: TESTING CHECKLIST
+
+PART 12: COST MODEL & PERFORMANCE TARGETS
+
+PART 13: PRODUCTION DEPLOYMENT CHECKLIST
+
+
+################################################################################
+PART 1: ARCHITECTURE
+################################################################################
+
+================================================================================
+1.1  SYSTEM PHILOSOPHY
+================================================================================
+
+WHO IS THE USER:
+  - Indian, age 20-25, fresher (0-3 years experience)
+  - Can READ English, struggles to SPEAK it confidently in interviews
+  - Knows the answer in Hindi/regional language, can't express in English
+  - Goal: clear ONE interview THIS WEEK, not learn English over months
+
+WHAT THIS SYSTEM DOES:
+  PREPARATION SYSTEM (record-and-evaluate, Weeks 1-2):
+    1. Parse resume -> generate NOTES of what to say (self-intro, projects, HR)
+    2. Show 30 INTERVIEW PHRASES (not grammar, not vocabulary)
+    3. PRACTICE: record answer -> get transcript -> get feedback -> repeat
+    4. READINESS GATE: must score avg 6/10 before entering mock
+
+  LIVE AI MOCK INTERVIEW (real-time AI conversation, Week 3):
+    5. AI SPEAKS the question via Azure Neural TTS
+    6. Candidate SPEAKS the answer (streamed to Azure STT)
+    7. AI gets transcript in real-time -> chooses next question via LLM
+    8. Report generated at end with all scores
+
+CORE RULE: "Don't teach English. Teach INTERVIEW English."
+
+================================================================================
+1.2  TWO-SYSTEM DESIGN
+================================================================================
+
+SYSTEM A - PREPARATION (Record-and-Evaluate):
+  Used for: Notes generation, HR practice, Technical practice
+  Audio path: Browser records .webm -> POST to Backend -> ffmpeg -> Whisper -> LLM
+  Latency:   5-10 seconds per answer (acceptable for practice)
+  Cost:      ~$0.003-0.005 per answer
+
+SYSTEM B - LIVE AI INTERVIEW (Real-Time Conversation):
+  Used for: Mock HR Interview, Mock Technical Interview
+  Audio path: Browser streams raw PCM chunks -> WebSocket -> Azure STT (streaming)
+              Azure STT transcript -> Llama-3.3-70B -> decision -> Azure TTS -> Browser
+  Latency:   Per-component (NOT end-to-end):
+               STT final transcript: <1.5s after candidate stops speaking (silence detected)
+               LLM decision (P6_LIVE): 1-3s (150 tokens, fast path)
+               TTS generation: <1.5s for 30-word question
+               End-to-end (silence detected -> AI question audio plays): 4-8 seconds
+             Note: "4-8 seconds" is the realistic UX expectation. This is acceptable for
+             a live AI interview (human interviewers also take 3-5 seconds to respond).
+  Cost:      ~$0.004-0.006 per question exchange
+
+WHY TWO SYSTEMS:
+  - Practice mode needs DETAILED feedback (requires full transcript first)
+  - Mock interview needs REALISM (AI must feel like a human interviewer)
+  - Different latency requirements, different audio pipelines
+
+================================================================================
+1.3  FULL SYSTEM ARCHITECTURE
+================================================================================
+
++-------------------------------------------------------------------------+
+|                    MOCK INTERVIEW SYSTEM V3                             |
++-------------------------------------------------------------------------+
+
+  BROWSER (Next.js :3000)
+  +------------------------------------------------------------------+
+  |  PREPARATION PAGES                 |  LIVE INTERVIEW PAGE        |
+  |  /notes    -> Generate from resume |  /live    -> WebSocket UI   |
+  |  /english  -> Static phrases       |                             |
+  |  /practice -> Record + Evaluate    |  AudioContext API           |
+  |  /technical-> Tech questions       |  MediaRecorder (PCM/WebM)   |
+  |  /report   -> View results         |  WebSocket client           |
+  +------------------------------------------------------------------+
+            |  httpClient (axios)                  |  WebSocket
+            |  POST /mock-interview/...            |  WS /mock-interview/live/{id}
+            v                                      v
+  BACKEND (FastAPI :8000)
+  +------------------------------------------------------------------+
+  |  REST Endpoints                    |  WebSocket Handler          |
+  |  mock_interview.py                 |  mock_interview_live.py     |
+  |                                    |                             |
+  |  mock_interview_service/           |  live_service.py            |
+  |  +-- service.py (Orchestrator)     |  +-- ConversationManager    |
+  |  +-- repository.py (MongoDB CRUD)  |  +-- Azure STT client       |
+  |  +-- rule_checker.py (Pre-checks)  |  +-- Azure TTS client       |
+  |  +-- technical_generator.py        |  +-- Llama streaming call   |
+  |  +-- video_scorer.py (V2)          |                             |
+  |  +-- calibration.py (V2)           |  Redis (conversation state) |
+  |  +-- analytics.py (V2)             |                             |
+  +------------------------------------------------------------------+
+            |  httpx (timeout=20s)                 |  Azure SDK
+            |  POST /api/v1/...                    |  Azure Speech Services
+            v                                      v
+  AI LAYER (FastAPI :8001)            AZURE SERVICES
+  +---------------------------+        +---------------------------+
+  |  Whisper (STT, $0)        |        |  Azure STT (streaming)    |
+  |  Llama-3.3-70B (LLM)     |        |  Azure Neural TTS         |
+  |  FastSkillMatcher (V2)    |        |  Azure OpenAI (same acct) |
+  |  video_analyzer.py (V2)   |        +---------------------------+
+  +---------------------------+
+            |
+            v
+  DATA LAYER
+  +------------------------------------------------------------------+
+  |  MongoDB (9 collections)  |  Redis (12 key patterns)            |
+  |  mock_interview_notes     |  mock:notes:{uid}    TTL 24h        |
+  |  mock_interview_sessions  |  mock:live:{sid}     TTL 3h         |
+  |  mock_interview_answers   |  mock:analytics:...  TTL 5m         |
+  |  mock_interview_reports   |  ... (see Part 3.2)                 |
+  |  question_bank            |                                      |
+  |  technical_notes (V2)     |                                      |
+  |  calibration_samples (V2) |                                      |
+  |  calibration_profiles (V2)|                                      |
+  |  feedback_ratings (V2)    |                                      |
+  +------------------------------------------------------------------+
+
+================================================================================
+1.4  PREPARATION SYSTEM FLOW (Practice Mode)
+================================================================================
+
+USER:  Speaks answer (max 2 min)
+         |
+         | Browser: MediaRecorder -> .webm blob
+         v
+FRONTEND: POST /mock-interview/practice/answer
+          FormData: { audio: .webm, session_id, question_id }
+         |
+         v
+BACKEND:  1. Validate audio (file_security.py, max 10MB)
+          2. Save .webm to /tmp/{uuid}.webm
+          3. ffmpeg -i input.webm -ar 16000 -ac 1 output.mp3  (server-side)
+          4. DELETE original .webm immediately
+          5. Call AI Layer: POST /api/v1/audio/to-text
+         |
+         v
+AI LAYER: Whisper transcribes mp3 -> returns transcript (free, local)
+         |
+         v
+BACKEND:  6. DELETE mp3 after transcript received
+          7. rule_checker.check(transcript, question)
+             -> filler_count, key_points_hit, length_seconds
+          8. IF weighted_rule_score >= 7: SKIP LLM (save cost)
+             ELSE: Call AI Layer: LLM feedback (P5 / P10)
+          9. Save answer + score to MongoDB
+          10. Update Redis session state
+         |
+         v
+FRONTEND: Display: transcript + score (0-10) + feedback + improved_answer
+          Buttons: [Try Again] [Next Question]
+
+KEY DECISION: ffmpeg runs IN BACKEND, not in browser.
+              Browser sends raw .webm. Backend converts. Never trust browser conversion.
+
+================================================================================
+1.5  LIVE AI INTERVIEW FLOW (WebSocket)
+================================================================================
+
+  STEP 1: SETUP
+  Frontend: Opens WebSocket -> WS /mock-interview/live/{session_id}
+  Backend:  Validates JWT from query param
+  Backend:  Creates live session in Redis: mock:live:{session_id}:state
+  Backend:  Selects 8-10 questions from question bank (P6 logic)
+  Backend:  Generates FIRST QUESTION audio via Azure TTS
+  Backend:  Sends to Frontend: {type: "question_audio", data: base64_audio}
+  Frontend: Plays audio via AudioContext (Web Audio API)
+
+  STEP 2: PER-QUESTION LOOP
+  +--> Frontend:  User speaks -> MediaRecorder captures PCM chunks
+  |    Frontend:  Every 250ms: send {type: "audio_chunk", data: base64_pcm}
+  |    Backend:   Buffers chunks -> streams to Azure STT
+  |    Azure STT: Returns partial transcripts -> Backend sends {type: "transcript_partial"}
+  |    Frontend:  Shows live "You said: ..." caption
+  |
+  |    User stops (VAD detects silence > 1.5s):
+  |    Frontend:  sends {type: "end_answer"}
+  |    Azure STT: Returns final transcript
+  |    Backend:   1. Rule check (filler count, length < 10s = too short)
+  |               2. LLM: Should we ask a follow-up OR move to next Q? (P6-live)
+  |               3. If follow-up: generate follow-up question -> Azure TTS -> send
+  |               4. If next: evaluate answer via LLM (P7-live) -> store score
+  |               5. Select next question -> Azure TTS -> send
+  +--> Backend: sends {type: "question_audio"} -> loop repeats
+
+  STEP 3: COMPLETION
+  After all questions answered (or user sends {type: "end_interview"}):
+  Backend:  Run P8 prompt with all answers -> generate report
+  Backend:  Save report to MongoDB
+  Backend:  Send {type: "interview_complete", report: {...}}
+  Frontend: Navigate to /report?session={session_id}
+  Backend:  Close WebSocket connection
+
+================================================================================
+1.6  TECHNOLOGY STACK
+================================================================================
+
+  BACKEND (careerbot-api):
+    FastAPI          - REST + WebSocket endpoints
+    Motor (async)    - MongoDB driver
+    aioredis         - Redis async client
+    httpx            - AI Layer calls (timeout=20s)
+    ffmpeg           - Server-side audio conversion (system install)
+    azure-cognitiveservices-speech - STT + TTS SDK
+
+  AI LAYER (careerbot-ai):
+    FastAPI          - Endpoints
+    Whisper          - Local STT (practice mode, free)
+    Llama-3.3-70B    - LLM (via Azure AI Foundry, SAME endpoint, no change)
+    MediaPipe        - Video analysis (V2)
+    FastSkillMatcher - Technical skill matching (V2)
+
+  FRONTEND (careerbot-web):
+    Next.js 15.5     - Pages
+    AudioContext API  - PCM capture for WebSocket streaming
+    MediaRecorder    - .webm capture for practice mode
+    WebSocket        - Live interview connection
+    recharts         - Analytics charts (V2)
+
+  NEW AZURE SERVICES (same Azure account, enable in Portal):
+    Azure Speech Services:
+      - STT (Speech-to-Text) - streaming mode
+      - Neural TTS (Text-to-Speech) - en-IN-NeerjaNeural voice
+    Cost estimate: STT ~$1/hour audio, TTS ~$16/1M characters
+    Per session: STT ~$0.002, TTS ~$0.0002 (negligible vs LLM cost)
+
+
+################################################################################
+PART 2: PREREQUISITES (Day 0 - Before Any Code)
+################################################################################
+
+================================================================================
+2.1  MANDATORY PRE-WORK (Fix These Before Writing Any New Code)
+================================================================================
+
+PRE-WORK 1: Fix video_analyzer.py regression (from PR #37)
+  File: careerbot-ai/src/services/english_assessment/analyzers/video_analyzer.py
+  Problem: PR #37 removed 4 output fields + frame sampling + summarize_video() defaults to zeros
+  Impact: All V2 video scoring returns 0 silently without this fix
+  Fix:
+    - Restore frame sampling (sample every N frames, not all frames)
+    - Restore output fields: eye_contact_ratio, focus_ratio, emotion_distribution, dominant_emotion
+    - Restore summarize_video() to calculate actual averages (not hardcoded zeros)
+    - Restore 4 output fields to analyze_video_file() return dict
+  DO NOT start V2 Day 19 without verifying this is fixed.
+
+PRE-WORK 2: Verify ffmpeg is installed on Backend server/container
+  Command: ffmpeg -version
+  If not installed: apt-get install ffmpeg (Linux) or add to Dockerfile
+  Add to Dockerfile: RUN apt-get update && apt-get install -y ffmpeg
+  Test: run ffmpeg conversion on a .webm file manually before starting Week 2
+
+PRE-WORK 3: Enable Azure Speech Services in Azure Portal
+  Go to: Azure Portal -> Create Resource -> "Speech" -> Create
+  Region: Same region as Azure OpenAI (reduce latency)
+  Get: AZURE_SPEECH_KEY and AZURE_SPEECH_REGION
+  Add to careerbot-api/.env:
+    AZURE_SPEECH_KEY=<your_key>
+    AZURE_SPEECH_REGION=eastus   (or your region)
+  Test: Run a simple STT test with the SDK before starting Week 3
+
+================================================================================
+2.2  AZURE SERVICES REQUIRED
+================================================================================
+
+  EXISTING (no change):
+    Azure AI Foundry - Llama-3.3-70B-Instruct endpoint (used by AI Layer)
+    Same AZURE_OPENAI_KEY, same AZURE_OPENAI_ENDPOINT
+
+  NEW - Enable in Azure Portal (free tier to start):
+    Azure Speech Services:
+      Name: careerbot-speech
+      Tier: S0 Standard (free tier limited - use S0 for production)
+      Features needed: Speech-to-Text (streaming), Text-to-Speech (neural)
+      Voice: en-IN-NeerjaNeural (Indian English female - natural accent)
+      Env vars to add:
+        AZURE_SPEECH_KEY=...
+        AZURE_SPEECH_REGION=...
+        AZURE_TTS_VOICE=en-IN-NeerjaNeural
+
+================================================================================
+2.3  DAY 0 VERIFICATION CHECKLIST
+================================================================================
+
+  [ ] POST /api/v1/resume/parse with test PDF returns valid JSON
+  [ ] POST /api/v1/audio/to-text with test .webm returns transcript
+  [ ] AudioRecorder component renders and records in browser
+  [ ] redis_cache.set/get works (test with curl or Python script)
+  [ ] MongoDB connection works (get_database() returns client)
+  [ ] ffmpeg is installed: ffmpeg -version shows output
+  [ ] Azure Speech key works: run azure_speech_test.py (see Part 2.3a)
+  [ ] video_analyzer.py regression is FIXED (verify 4 output fields exist)
+  [ ] recharts is installed: npm list recharts
+  [ ] All .env variables from Part 2.1 are set
+
+  azure_speech_test.py (run before starting Week 3):
+  ```python
+  import azure.cognitiveservices.speech as speechsdk
+  import os
+
+  speech_config = speechsdk.SpeechConfig(
+      subscription=os.getenv("AZURE_SPEECH_KEY"),
+      region=os.getenv("AZURE_SPEECH_REGION")
+  )
+  speech_config.speech_synthesis_voice_name = "en-IN-NeerjaNeural"
+  synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
+  result = synthesizer.speak_text_async("Hello, I am your AI interviewer.").get()
+  print("TTS OK" if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted else "TTS FAILED")
+  ```
+
+
+################################################################################
+PART 3: DATA ARCHITECTURE
+################################################################################
+
+================================================================================
+3.1  MONGODB COLLECTIONS (9 total)
+================================================================================
+
+COLLECTION 1: mock_interview_notes
+  Purpose: Stores generated interview preparation notes per user
+  Fields:
+    _id:              ObjectId
+    user_id:          String (indexed)
+    resume_id:        String
+    self_introduction: String   (300-400 chars, 2 min spoken)
+    project_explanations: [
+      { project_name, script, key_points, time_target }
+    ]
+    hr_answers: [
+      { question_id, question_text, answer_script, key_phrases }
+    ]
+    additional_notes:  Object   (salary, strengths, weaknesses, location)
+    has_suggestions:   Boolean  (true if resume was thin)
+    created_at:        DateTime
+    updated_at:        DateTime
+  Indexes:
+    { user_id: 1 }
+
+COLLECTION 2: question_bank
+  Purpose: All HR + Technical questions (seed + generated)
+  Fields:
+    _id:                  ObjectId
+    question_id:          String (unique, e.g., "HR_001", "TECH_021")
+    category:             String  ("HR" | "Technical")
+    subcategory:          String  ("behavioral", "python", "sql", ...)
+    skill_tag:            String  (null for HR, "python"/"sql"/... for tech)
+    question_text:        String
+    alternate_wordings:   [String]
+    why_asked:            String
+    expected_duration_s:  Number
+    difficulty:           String  ("basic" | "intermediate" | "advanced")
+    experience_levels:    [String] (["fresher", "junior"] etc.)
+    key_points:           [String]
+    expected_answer_template: String
+    follow_up_questions:  [String]
+    common_mistakes:      [String]
+    tags:                 [String]
+    active:               Boolean
+    created_at:           DateTime
+  Indexes:
+    { category: 1, skill_tag: 1 }
+    { skill_tag: 1 }
+    { difficulty: 1, category: 1 }
+
+COLLECTION 3: mock_interview_sessions
+  Purpose: Tracks all practice and mock sessions per user
+  Fields:
+    _id:                    ObjectId
+    session_id:             String (UUID, unique, indexed)
+    user_id:                String (indexed)
+    session_type:           String ("practice" | "live_mock")
+    round_number:           Number (1|2|3 for practice, null for mock)
+    status:                 String ("active" | "completed" | "abandoned")
+    question_category:      String ("HR" | "Technical" | "Mixed")
+    questions:              [{ question_id, question_text, order }]
+    current_question_index: Number
+    has_video:              Boolean (false for V1, true for V2)
+    has_technical:          Boolean (false for V1, true for V2)
+    websocket_session:      Boolean (true for live mock)
+    started_at:             DateTime
+    completed_at:           DateTime
+    abandoned_at:           DateTime
+  Indexes:
+    { session_id: 1 } unique
+    { user_id: 1, status: 1 }
+    { created_at: 1 }
+
+COLLECTION 4: mock_interview_answers
+  Purpose: Per-question answer records
+  Fields:
+    _id:                ObjectId
+    session_id:         String (indexed)
+    user_id:            String (indexed)
+    question_id:        String
+    question_text:      String
+    transcript:         String
+    audio_duration_s:   Number
+    attempt_number:     Number (1 = first try, 2 = retry)
+    rule_scores: {
+      filler_count:     Number
+      key_points_hit:   [String]
+      length_ok:        Boolean
+      rule_score:       Number
+    }
+    llm_scores: {
+      content_score:    Number (0-10)
+      clarity_score:    Number (0-10)
+      structure_score:  Number (0-10)
+      length_score:     Number (0-10)
+      weighted_score:   Number (0-10)
+      technical_accuracy: Number (null for HR, 0-10 for Technical)
+    }
+    feedback:           String
+    improved_answer:    String
+    video_scores: {          (null for V1, populated V2)
+      eye_contact:      Number
+      focus:            Number
+      emotion:          String
+      confidence:       Number
+      video_score:      Number
+    }
+    pressure_tag:       String (null | "pressure_affected" | "handles_pressure_well")
+    calibration_applied: Boolean
+    created_at:         DateTime
+  Indexes:
+    { session_id: 1 }
+    { user_id: 1, created_at: 1 }
+
+COLLECTION 5: mock_interview_reports
+  Purpose: Final report per mock session
+  Fields:
+    _id:                  ObjectId
+    session_id:           String (unique, indexed)
+    user_id:              String (indexed)
+    overall_score:        Number (0-10)
+    hr_score:             Number
+    technical_score:      Number (null V1, populated V2)
+    communication_score:  Number
+    confidence_score:     Number
+    video_score:          Number (null V1, populated V2)
+    pressure_score:       Number
+    improvement_score:    Number (vs last session, null if first)
+    strengths:            [String]
+    improvements:         [String]
+    redo_questions: [
+      { question_id, question_text, score, reason_to_redo }
+    ]
+    reattempt_suggestion: String
+    action_plan:          String
+    interviewer_perspective: String
+    question_breakdown: [
+      { question_id, score, key_issue }
+    ]
+    calibration_applied:  Boolean
+    share_token:          String (null until shared)
+    share_expires_at:     DateTime
+    created_at:           DateTime
+  Indexes:
+    { session_id: 1 } unique
+    { user_id: 1, created_at: 1 }
+
+COLLECTION 6: mock_interview_technical_notes (V2)
+  Fields:
+    _id:            ObjectId
+    user_id:        String (indexed, unique)
+    notes: [
+      { question_id, question_text, skill, key_points,
+        expected_answer, follow_ups, common_mistakes,
+        difficulty, study_tip }
+    ]
+    skills_covered: [String]
+    created_at:     DateTime
+    updated_at:     DateTime
+
+COLLECTION 7: calibration_samples (V2)
+  Fields:
+    answer_id:          String
+    question_text:      String
+    transcript:         String
+    experience_level:   String (indexed)
+    llm_scores:         Object
+    human_scores:       Object
+    rater_id:           String
+    created_at:         DateTime
+
+COLLECTION 8: calibration_profiles (V2)
+  Fields:
+    experience_level:         String (unique, indexed)
+    content_adjustment:       Number
+    clarity_adjustment:       Number
+    structure_adjustment:     Number
+    length_adjustment:        Number
+    correlation:              Number  (Pearson, target >= 0.80)
+    sample_count:             Number
+    per_dimension_correlation: Object
+    last_calibrated:          DateTime
+
+COLLECTION 9: feedback_ratings (V2)
+  Fields:
+    user_id:    String (indexed)
+    answer_id:  String (indexed)
+    helpful:    Boolean
+    comment:    String
+    created_at: DateTime
+
+================================================================================
+3.2  REDIS KEY PATTERNS (12 patterns)
+================================================================================
+
+  KEY                              TTL      PURPOSE
+  mock:notes:{user_id}            24h      Cached generated notes
+  mock:notes_lock:{user_id}       30s      Distributed lock (prevent duplicate LLM calls)
+  mock:practice:{session_id}      4h       Practice session state (current Q, scores)
+  mock:readiness:{user_id}        1h       Readiness score cache
+  mock:tech_notes:{user_id}       24h      Cached technical notes
+  mock:live:{session_id}:state    3h       Live interview session state
+  mock:live:{session_id}:history  3h       Conversation history (last 20 exchanges)
+  mock:analytics:{type}:{days}    5m       Analytics aggregation cache
+  mock:calibration:{level}        24h      Calibration profile cache
+  mock:share:{token}              7d       Share link data (PII stripped)
+  mock:video:{session_id}:{qid}   2h       Video analysis result cache
+  mock:rate:{user_id}:{action}    1h       Rate limit counter
+
+================================================================================
+3.3  KEY INDEXES (MongoDB)
+================================================================================
+
+  Run these on first deploy:
+  ```javascript
+  // Compound index for session recovery
+  db.mock_interview_sessions.createIndex({ "user_id": 1, "status": 1 })
+
+  // For fast answer retrieval per session
+  db.mock_interview_answers.createIndex({ "session_id": 1 })
+
+  // For analytics queries
+  db.mock_interview_answers.createIndex({ "created_at": 1 })
+  db.mock_interview_reports.createIndex({ "created_at": 1 })
+  db.mock_interview_sessions.createIndex({ "created_at": 1 })
+
+  // For technical question filtering
+  db.question_bank.createIndex({ "category": 1, "skill_tag": 1, "difficulty": 1 })
+
+  // For calibration
+  db.calibration_samples.createIndex({ "experience_level": 1 })
+  db.calibration_profiles.createIndex({ "experience_level": 1 }, { unique: true })
+
+  // For share links
+  db.mock_interview_reports.createIndex({ "share_token": 1 }, { sparse: true })
+  ```
+
+
+################################################################################
+PART 4: API CONTRACT (35 Endpoints)
+################################################################################
+
+================================================================================
+4.1  PRACTICE + NOTES ENDPOINTS (13 REST)
+================================================================================
+
+  # | Method | Path                              | Auth | Rate    | Purpose
+  1   POST    /mock-interview/generate-notes       Yes   3/hr     Generate notes from resume (LLM)
+  2   GET     /mock-interview/notes/{user_id}      Yes   -        Retrieve saved notes
+  3   PUT     /mock-interview/notes/{user_id}      Yes   -        Update/edit notes
+  4   GET     /mock-interview/english-essentials   No    -        Static phrases content
+  5   POST    /mock-interview/practice/start       Yes   -        Start practice session
+  6   POST    /mock-interview/practice/answer      Yes   60/hr    Submit audio + get feedback
+  7   GET     /mock-interview/practice/progress    Yes   -        Scores per question
+  8   GET     /mock-interview/readiness            Yes   -        Is user ready for mock?
+  9   GET     /mock-interview/session/recover      Yes   -        Recover active session
+  10  DELETE  /mock-interview/data/{user_id}       Yes   -        DPDP: delete all data
+  11  DELETE  /mock-interview/audio/{session_id}   Yes   -        Delete specific session audio
+  12  GET     /mock-interview/data-export/{user_id}Yes   -        DPDP: export user data
+  13  POST    /mock-interview/consent              Yes   -        Record consent given
+
+  ENDPOINT 6 DETAIL (most critical - practice answer):
+    Request:  FormData { audio: File(.webm, max 10MB), session_id: str, question_id: str }
+    Response: {
+      transcript: str,
+      audio_duration_s: float,
+      rule_scores: { filler_count, key_points_hit, length_ok },
+      llm_scores: { content, clarity, structure, length, weighted },
+      feedback: str,
+      improved_answer: str,
+      llm_used: bool,
+      from_cache: bool
+    }
+    Errors:
+      400: audio too short (<3s), audio too large (>10MB)
+      422: ffmpeg conversion failed
+      503: AI Layer unavailable (return cached feedback if available)
+
+================================================================================
+4.2  TECHNICAL ROUND ENDPOINTS (5 REST, V2)
+================================================================================
+
+  14  POST    /mock-interview/technical/generate-notes  Yes  3/hr  Generate tech notes from skills
+  15  GET     /mock-interview/technical/notes/{user_id} Yes  -     Get tech notes
+  16  POST    /mock-interview/technical/practice/start  Yes  -     Start tech practice session
+  17  POST    /mock-interview/technical/practice/answer Yes  60/hr Submit tech answer + feedback
+  18  GET     /mock-interview/technical/readiness       Yes  -     Tech readiness check
+
+================================================================================
+4.3  LIVE MOCK ENDPOINTS (3 REST + 1 WebSocket)
+================================================================================
+
+  REST (setup before WebSocket):
+  19  POST    /mock-interview/live/create            Yes  5/hr  Create live session, returns session_id
+  20  GET     /mock-interview/live/{session_id}/state Yes  -    Get current session state
+  21  GET     /mock-interview/live/history           Yes  -     List past live sessions
+
+  WEBSOCKET:
+  WS  WS      /mock-interview/live/{session_id}      Yes  -    Live AI interview connection
+      Auth via: ?token={jwt_access_token} in query string
+      Rate:     Max 3 active WS sessions per user (enforced at session create + WS connect)
+      Max duration: 45 minutes hard limit (server closes WS after 45 min, sends SESSION_EXPIRED)
+      Audio rate: Max 50KB/s inbound audio_chunk messages (burst buffer 200KB, then drop)
+
+  ENDPOINT 19 DETAIL (create live session):
+    Request:  { session_type: "HR" | "Technical" | "Mixed", resume_id?: str }
+    Response: { session_id: str, questions_preview: 8-10 question texts, expires_at: datetime,
+                connect_deadline: datetime }  <- JWT must still be valid at this time
+    Note: Questions are pre-selected here, loaded into Redis. WebSocket uses session_id.
+    Security: Check that user has < 3 active sessions before creating new one.
+              Check that JWT expiry is > 30 minutes away before creating session.
+              If JWT expires in < 30 min: return 401 with message "Token expiring soon.
+              Please log out and log in again before starting a live session."
+
+================================================================================
+4.4  ANALYTICS + CALIBRATION ENDPOINTS (8 REST, V2)
+================================================================================
+
+  22  POST    /mock-interview/calibration/submit-sample    Admin  Add calibration sample
+  23  POST    /mock-interview/calibration/recalibrate/{lv} Admin  Trigger recalibration
+  24  GET     /mock-interview/calibration/status           Admin  Calibration status per level
+  25  POST    /mock-interview/feedback/rate                Yes    "Was this helpful?"
+  26  GET     /mock-interview/analytics/engagement         Admin  Completion, abandonment, return
+  27  GET     /mock-interview/analytics/scores             Admin  Score distribution + trends
+  28  GET     /mock-interview/analytics/questions          Admin  Most-failed, most-attempted
+  29  GET     /mock-interview/analytics/costs              Admin  LLM tokens, cost per session
+
+================================================================================
+4.5  REPORT + SHARE ENDPOINTS (5 REST)
+================================================================================
+
+  30  GET     /mock-interview/report/{session_id}          Yes   -    View report
+  31  GET     /mock-interview/report/{session_id}/pdf      Yes   -    Download PDF
+  32  POST    /mock-interview/report/{session_id}/share    Yes   -    Create share link
+  33  GET     /mock-interview/shared-report/{share_token}  No    -    Public share view (PII stripped)
+  34  GET     /mock-interview/user-progress                Yes   -    User's improvement over time
+  35  GET     /mock-interview/live-sessions                Yes   -    User's live mock history
+
+
+################################################################################
+PART 5: WEBSOCKET PROTOCOL (Live AI Interview)
+################################################################################
+
+================================================================================
+5.1  CONNECTION LIFECYCLE
+================================================================================
+
+  1. Frontend opens:   WS ws://api:8000/mock-interview/live/{session_id}?token={jwt}
+  2. Backend:          Validates JWT. Additional checks before accept():
+                         a) JWT must NOT expire within the next 30 minutes.
+                            If token expires soon: close(4003, "Token expiring. Please re-login.")
+                            Reason: A live mock session can run 25+ minutes. Token must last.
+                         b) session_id must belong to the authenticated user (not someone else's).
+                         c) session must exist in Redis and status != "DONE".
+                         d) User must not already have 3 active WS connections.
+  3. Backend:          Loads session from Redis. Generates/sends FIRST question audio.
+  4. Per-question:     Loop (see 5.4 state machine)
+  5. Completion:       Backend sends interview_complete message. Frontend closes WS.
+  6. Timeout:          If no message for 60s, Backend sends keepalive ping.
+  7. Hard limit:       After 45 minutes of session age, Backend sends SESSION_EXPIRED error
+                       and closes WS gracefully (saves partial results first).
+  8. Disconnect:       On disconnect, session saved to Redis. User can reconnect within 3h.
+  9. Reconnect:        Frontend reopens WS with same session_id + reconnect_token (see 5.4).
+                       Backend verifies reconnect_token before resuming session.
+
+  STREAMING RATE LIMIT:
+    Max inbound audio_chunk messages: 50KB/s sustained (burst: 200KB)
+    If client sends audio faster than 50KB/s: drop excess chunks, DO NOT disconnect.
+    Reason: Prevents DoS via rapid audio_chunk flooding. Normal PCM at 16000Hz/16-bit
+    = 32KB/s, so 50KB/s limit is generous for normal use but blocks abuse.
+
+================================================================================
+5.2  CLIENT -> SERVER MESSAGES
+================================================================================
+
+  { "type": "audio_chunk",  "data": "<base64_pcm_16000hz_mono>", "seq": 1 }
+  { "type": "end_answer",   "session_id": "<id>" }
+  { "type": "end_interview","session_id": "<id>" }
+  { "type": "ping" }
+
+  AUDIO FORMAT for streaming:
+    Format: PCM 16-bit, 16000Hz, mono (required by Azure STT)
+    Chunk size: ~4096 bytes every 128ms (or .webm chunks every 250ms)
+    Frontend converts via: audioWorklet OR AudioContext.createScriptProcessor
+
+  AUDIO BUFFER LIMITS (Backend enforces):
+    Max audio_buffer size per answer: 5MB (= ~156 seconds of PCM at 32KB/s)
+    If buffer exceeds 5MB before end_answer: treat as end_answer (auto-stop).
+    Reason: Prevents unbounded memory usage if client never sends end_answer.
+    Per-session max audio: 50MB total across all answers.
+    If session total exceeds 50MB: send SESSION_EXPIRED error and close.
+
+  SEQUENCE NUMBER HANDLING:
+    seq field on audio_chunk is informational (for client-side debugging).
+    Backend does NOT reorder based on seq. Chunks are appended in receive order.
+    If out-of-order chunks arrive (network reorder), Azure STT handles gracefully.
+
+================================================================================
+5.3  SERVER -> CLIENT MESSAGES
+================================================================================
+
+  { "type": "session_ready",     "question_count": 9, "time_limit_per_q": 120 }
+  { "type": "question_audio",    "data": "<base64_mp3>", "question_text": "...", "question_num": 1 }
+  { "type": "transcript_partial","text": "I am a...", "seq": 5 }
+  { "type": "transcript_final",  "text": "I am a software developer...", "duration_s": 45 }
+  { "type": "follow_up",         "data": "<base64_mp3>", "follow_up_text": "Can you elaborate?"}
+  { "type": "answer_scored",     "question_num": 1, "weighted_score": 7.2 }
+  { "type": "interview_complete","report": { ...full report object... } }
+  { "type": "error",             "code": "STT_FAILED", "message": "...", "recoverable": true }
+  { "type": "pong" }
+
+================================================================================
+5.4  STATE MACHINE (per live session)
+================================================================================
+
+  States: INIT -> QUESTION_PLAYING -> LISTENING -> PROCESSING -> DONE
+                                                       |
+                                               (FOLLOW_UP -> LISTENING)
+
+  INIT:             Session loaded, first question TTS generated
+  QUESTION_PLAYING: Audio being played by Frontend (no audio received)
+  LISTENING:        Receiving audio chunks, streaming to Azure STT
+  PROCESSING:       End_answer received, evaluating response, generating next Q
+  DONE:             All questions complete, report generated
+
+  RECOVERY: If client disconnects in LISTENING or PROCESSING:
+    - Save current question index to Redis (TTL=3h)
+    - Generate a short-lived reconnect_token: secrets.token_urlsafe(16), TTL=5 minutes
+    - Store in Redis: mock:reconnect:{session_id} = reconnect_token  TTL=300s
+    - Return reconnect_token to client in the LAST WS message before close:
+        { "type": "session_paused", "reconnect_token": "xyz123...", "resume_at_q": 3 }
+    - On reconnect: Frontend passes both session_id AND reconnect_token in query:
+        WS ?token={jwt}&reconnect_token={reconnect_token}
+    - Backend verifies: reconnect_token must match Redis value AND not be expired
+      If valid: resume from saved question index (TTL resets to 3h)
+      If invalid/expired: close(4005, "Reconnect token invalid. Start new session.")
+    - Why: Prevents attacker who knows session_id from hijacking another user's session.
+
+================================================================================
+5.5  ERROR HANDLING IN WEBSOCKET
+================================================================================
+
+  ERROR CODE         | RECOVERABLE | ACTION
+  STT_FAILED         | Yes         | Ask user to repeat ("Sorry, I didn't catch that")
+  STT_SDK_ERROR      | Yes (2x)    | Restart Azure STT recognizer in-session (see below)
+  TTS_FAILED         | Yes         | Send question as text + show typed question on screen
+  LLM_TIMEOUT        | Yes         | Use rule-based next question selection (no LLM)
+  AUDIO_TOO_SHORT    | Yes         | Ask user to give a longer answer (< 5 seconds)
+  AUDIO_BUFFER_FULL  | Yes         | Auto-trigger end_answer, process what was received
+  SESSION_EXPIRED    | No          | Redirect to create new session
+  AUTH_FAILED        | No          | Redirect to login
+  RECONNECT_INVALID  | No          | Redirect to create new session
+
+  GRACEFUL DEGRADATION:
+    If Azure STT is down:     Fall back to Whisper (collect full audio, transcribe after answer)
+    If Azure TTS is down:     Show question text on screen, user reads and speaks
+    If LLM is down:           Select next question using rule-based rotation from question bank
+
+  STT SDK RECONNECT STRATEGY (FIX-6):
+    Problem: Azure SpeechRecognizer SDK connection can drop mid-answer even if Azure service
+             is healthy (network blip, timeout). Unlike "Azure STT is down", this is transient.
+    Detection: recognizer.canceled event fires with CancellationReason.Error
+    Strategy: Restart the recognizer within the SAME WebSocket session (max 2 retries/answer):
+
+    In speech_client.py transcribe_stream():
+      canceled_event = asyncio.Event()
+      retry_count = 0
+
+      def on_canceled(e):
+          if e.result.cancellation_details.reason == CancellationReason.Error:
+              canceled_event.set()  # Signal to retry
+
+      recognizer.canceled.connect(on_canceled)
+      recognizer.start_continuous_recognition_async()
+
+      # ... chunk feeding loop ...
+
+      # After push_stream.close():
+      recognizer.stop_continuous_recognition_async()
+      if canceled_event.is_set() and retry_count < 2:
+          retry_count += 1
+          # Re-create recognizer with same push_stream data
+          # (caller must buffer audio chunks for retry)
+          # Signal backend to retry, NOT to close WebSocket
+
+    Retry limit: 2 retries per answer. If still failing after 2: fall back to Whisper.
+    Note: Audio chunks must be buffered in handle_end_answer for retry to work.
+
+  STREAMING ABUSE PROTECTION:
+    Max audio_chunk messages per second: 20 (normal PCM at 128ms = ~8/sec)
+    If client sends > 20 audio_chunks/second: drop excess, DO NOT disconnect.
+    This blocks audio flooding attacks while preserving normal audio quality.
+
+
+################################################################################
+PART 6: V1 IMPLEMENTATION - Weeks 1-3
+################################################################################
+
+================================================================================
+WEEK 1: FOUNDATION (Days 1-5)
+================================================================================
+
+GOAL: Service skeleton, notes generation, question bank. No frontend yet.
+
+DAY 1: BACKEND SERVICE SKELETON
+  Files to create:
+    careerbot-api/app/services/mock_interview_service/
+      __init__.py         (empty)
+      constants.py        (all config values - see below)
+      models.py           (MongoDB document shapes - dict types only)
+      schemas.py          (Pydantic request/response models)
+      repository.py       (all MongoDB + Redis CRUD operations)
+      service.py          (business logic, calls repository + AI Layer)
+      rule_checker.py     (filler detection, key point matching)
+
+    careerbot-api/app/api/v1/endpoints/mock_interview.py  (stub all 21 REST endpoints)
+
+  constants.py content:
+    NOTES_CACHE_TTL = 86400           # 24 hours
+    NOTES_LOCK_TTL = 30               # seconds
+    PRACTICE_SESSION_TTL = 14400      # 4 hours
+    READINESS_CACHE_TTL = 3600        # 1 hour
+    MIN_READINESS_AVG = 6.0           # must average >= 6 to enter mock
+    MIN_READINESS_PER_Q = 4.0         # no single question can be below 4
+    QUESTIONS_PER_PRACTICE = 10       # HR questions per round
+    QUESTIONS_PER_MOCK = 9            # 8-10 mixed (HR + Tech in V2)
+    MAX_AUDIO_SIZE_MB = 10
+    MIN_AUDIO_DURATION_S = 3
+    MAX_AUDIO_DURATION_S = 120        # 2 minutes per answer
+    LLM_SCORE_THRESHOLD = 7.0         # below this, call LLM for feedback
+    NOTES_RATE_LIMIT = 3              # per hour
+    ANSWER_RATE_LIMIT = 60            # per hour
+    MOCK_RATE_LIMIT = 5               # per hour
+    DATA_RETENTION_DAYS = 90          # DPDP compliance
+
+  schemas.py - KEY models:
+    GenerateNotesRequest: { resume_id: str, target_role: Optional[str] }
+    GenerateNotesResponse: { notes: NotesData, cached: bool, from_cache: bool }
+    PracticeStartRequest: { round_number: int = 1, category: str = "HR" }
+    PracticeStartResponse: { session_id: str, questions: List[QuestionSummary] }
+    PracticeAnswerRequest: FormData (see endpoint 6)
+    PracticeAnswerResponse: { transcript, rule_scores, llm_scores, feedback, improved_answer }
+    ReadinessResponse: { is_ready: bool, avg_score: float, weak_questions: List, reasons: List[str] }
+    LiveSessionCreateRequest: { session_type: str, resume_id: Optional[str] }
+    LiveSessionCreateResponse: { session_id: str, question_count: int, expires_at: datetime }
+
+DAY 2: NOTES GENERATION (Backend + AI Layer)
+  Backend: service.py -> generate_notes()
+    1. Check distributed lock: redis.set(f"mock:notes_lock:{user_id}", "1", nx=True, ex=30)
+       If lock exists: wait 2s and retry (another request is generating)
+    2. Check cache: redis.get(f"mock:notes:{user_id}")
+       If hit: return cached, from_cache=True
+    3. Get resume from MongoDB (call existing resume service)
+    4. Call AI Layer: POST /api/v1/mock-interview/generate-notes
+       Payload: { resume_json, experience_level, target_role }
+       Timeout: asyncio.wait_for(coro, timeout=25.0)
+    5. Cache result: redis.setex(f"mock:notes:{user_id}", NOTES_CACHE_TTL, json)
+    6. Save to MongoDB (mock_interview_notes collection)
+    7. Release lock (auto-expires)
+
+  AI Layer: Add new endpoint to english_assessment OR create new service
+    POST /api/v1/mock-interview/generate-notes
+    Calls P1, P2, P3, P4 in parallel: asyncio.gather(p1, p2, p3, p4)
+    Returns: combined notes JSON
+
+DAY 3: LLM PROMPTS FILE (P1-P4)
+  File: careerbot-ai/src/shared/prompts/mock_interview/prompts.py
+  Implement P1 (self-intro), P2 (project), P3 (HR answers), P4 (additional)
+  See Part 8 for full prompt text.
+
+DAY 4: FRONTEND - NOTES PAGE
+  Files:
+    src/app/(interview)/mock-interview/layout.tsx
+      - ErrorBoundary wrapper
+      - Auth check (redirect if not logged in)
+      - Session recovery check on mount
+
+    src/app/(interview)/mock-interview/page.tsx  (Landing)
+      - Check: has notes? -> "Continue to Practice"
+      - Check: has practice done? -> "Start Mock Interview"
+      - Check: consent given? -> else show consent modal first
+      - New user: "Start Preparation" -> notes page
+
+    src/app/(interview)/mock-interview/notes/page.tsx
+      - Call generateNotes() on mount (show skeleton loader)
+      - Display 4 editable sections
+      - [CONFIRM] tags highlighted in yellow for suggestions
+      - "Save & Continue" button -> PUT /notes + navigate to /english
+
+    src/api/mockInterviewApi.ts
+      - generateNotes(resumeId, targetRole?)
+      - getNotes(userId)
+      - updateNotes(userId, updates)
+      ... stub all 13 V1 methods
+
+DAY 5: QUESTION BANK + ENGLISH PHRASES
+  1. Seed data file: careerbot-api/data/question_bank_hr.json
+     33 HR questions, each with: id, text, alternate_wordings, why_asked,
+     expected_duration_s, difficulty, experience_levels, key_points,
+     expected_answer_template, follow_up_questions, common_mistakes, tags
+
+  2. HR_001: "Tell me about yourself"
+     HR_002: "Why do you want this job?"
+     HR_003: "What are your strengths?"
+     HR_004: "What is your weakness?"
+     HR_005: "Where do you see yourself in 5 years?"
+     HR_006: "Why should we hire you?"
+     HR_007: "Tell me about your project [from resume]"
+     HR_008: "How do you handle pressure?"
+     HR_009: "Describe a challenging situation you faced"
+     HR_010: "What is your salary expectation?"
+     HR_011: "Are you willing to relocate?"
+     HR_012: "Do you prefer working alone or in a team?"
+     HR_013: "What do you know about our company?"
+     ... continue to HR_033
+
+  3. API: Seed script to insert question_bank collection on first deploy
+     repository.py: seed_question_bank() called from Backend startup
+
+  4. Static file: careerbot-api/data/interview_english.json
+     { phrases: [...30 interview phrases],
+       filler_replacements: {"umm": "Let me think...", ...},
+       indian_english_fixes: [...],
+       hinglish_markers: [...] }
+
+================================================================================
+WEEK 2: PRACTICE MODE (Days 6-10)
+================================================================================
+
+GOAL: Full record-and-evaluate practice loop. Server-side audio conversion.
+      Spaced repetition. Readiness gate. Frontend practice pages.
+
+DAY 6: AUDIO PIPELINE (Server-Side Conversion)
+  rule_checker.py:
+    FILLER_WORDS = ["umm", "uhh", "basically", "you know", "actually", "like"]
+    def check(transcript: str, question: dict, duration_s: float) -> dict:
+      filler_count = sum(t.lower().split().count(f) for f in FILLER_WORDS)
+      key_points_hit = [kp for kp in question["key_points"]
+                        if any(w in transcript.lower() for w in kp.lower().split())]
+      length_ok = MIN_AUDIO_DURATION_S <= duration_s <= MAX_AUDIO_DURATION_S
+      # Rule-based weighted score (0-10)
+      content_rule = min(10, len(key_points_hit) * 2.5)
+      clarity_rule = max(0, 10 - filler_count * 1.5)
+      length_rule = 10 if length_ok else (5 if duration_s < MIN_AUDIO_DURATION_S else 7)
+      rule_score = content_rule * 0.4 + clarity_rule * 0.4 + length_rule * 0.2
+      return { "filler_count", "key_points_hit", "length_ok", "rule_score" }
+
+  service.py -> submit_practice_answer():
+    async def submit_practice_answer(session_id, question_id, audio_file, user_id):
+      # 1. Validate file
+      file_security.validate(audio_file, allowed_types=[".webm"], max_mb=10)
+
+      # 2. Server-side conversion
+      input_path = f"/tmp/{uuid4()}.webm"
+      mp3_path = f"/tmp/{uuid4()}.mp3"
+      try:
+          with open(input_path, "wb") as f: f.write(await audio_file.read())
+          process = await asyncio.create_subprocess_exec(
+              "ffmpeg", "-i", input_path, "-ar", "16000", "-ac", "1", mp3_path,
+              stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+          )
+          await asyncio.wait_for(process.communicate(), timeout=30.0)
+          if process.returncode != 0: raise AudioConversionError("ffmpeg failed")
+      finally:
+          if os.path.exists(input_path): os.unlink(input_path)
+
+      # 3. Transcribe (AI Layer Whisper)
+      try:
+          transcript_resp = await asyncio.wait_for(
+              ai_client.post("/api/v1/audio/to-text", files={"audio": open(mp3_path,"rb")}),
+              timeout=20.0
+          )
+      finally:
+          if os.path.exists(mp3_path): os.unlink(mp3_path)
+      transcript = transcript_resp["transcript"]
+      duration_s  = transcript_resp["duration_seconds"]
+
+      # 4. Rule check
+      question = await repository.get_question(question_id)
+      rule = rule_checker.check(transcript, question, duration_s)
+
+      # 5. LLM feedback (only if rule score < threshold)
+      llm_scores, feedback, improved = None, None, None
+      if rule["rule_score"] < LLM_SCORE_THRESHOLD:
+          llm_result = await asyncio.wait_for(
+              ai_client.post("/api/v1/mock-interview/practice-feedback",
+                             json={"transcript": transcript, "question": question,
+                                   "rule_scores": rule}),
+              timeout=20.0
+          )
+          llm_scores = llm_result["scores"]
+          feedback   = llm_result["feedback"]
+          improved   = llm_result["improved_answer"]
+      else:
+          llm_scores = _rule_to_llm_scores(rule)
+
+      # 6. Save to MongoDB + update Redis session
+      await repository.save_answer(session_id, question_id, transcript,
+                                   duration_s, rule, llm_scores, feedback, improved)
+      await redis.set_session_state(session_id, question_id)
+      return PracticeAnswerResponse(...)
+
+DAY 7: AI LAYER - PRACTICE FEEDBACK ENDPOINT
+  Add to AI Layer: POST /api/v1/mock-interview/practice-feedback
+    Input: { transcript, question, rule_scores }
+    1. Anonymize: remove name, email, phone from transcript
+    2. Call Llama (P5 prompt): asyncio.wait_for(timeout=15.0)
+    3. Parse JSON output: { content_score, clarity_score, structure_score,
+                            length_score, weighted_score, feedback, improved_answer }
+    4. Cache: key = SHA256(question_id + transcript[:100])
+    5. Return response
+
+DAY 8: FRONTEND PRACTICE PAGE
+  src/app/(interview)/mock-interview/english/page.tsx
+    - Static: loads interview_english.json
+    - 6 sections: power phrases, difficult moments, filler replacements,
+                  Indian English fixes, phrasal verbs, Hinglish guide
+    - No API calls. Pure static.
+
+  src/app/(interview)/mock-interview/practice/page.tsx
+    STATE:
+      currentQuestion, roundNumber, sessionId, practiceScores,
+      audioBlob, transcript, feedback, isRecording, isUploading, isLoading
+
+    FLOW:
+      onMount -> startPractice(roundNumber) -> load questions
+      AudioRecorder -> onStop -> uploadAnswer() -> show transcript + feedback
+      [Try Again] -> reset audio state, keep same question
+      [Next Question] -> advance index, clear audio state
+      If last question -> checkReadiness() -> show ReadinessGate
+
+    NOTES PANEL: Visible in Round 1, hidden in Round 2, invisible in Round 3
+
+    IMPORTANT: send raw .webm file to backend. Never convert in browser.
+
+DAY 9: SPACED REPETITION + READINESS GATE
+  service.py -> get_readiness():
+    scores_per_question = await repository.get_best_scores_per_question(user_id)
+    if len(scores_per_question) < QUESTIONS_PER_PRACTICE: return not_ready
+    avg = sum(s["weighted_score"] for s in scores_per_question) / len(scores_per_question)
+    min_score = min(s["weighted_score"] for s in scores_per_question)
+    weak = [s for s in scores_per_question if s["weighted_score"] < 6]
+    is_ready = avg >= MIN_READINESS_AVG and min_score >= MIN_READINESS_PER_Q
+    return ReadinessResponse(is_ready, avg, weak, reasons=[...])
+
+  Spaced repetition for session selection:
+    Round 2 (hints only): Prioritize questions where Round 1 score < 7
+    Round 3 (no help):    Prioritize questions where Round 2 score < 7
+    Logic: get_practice_scores_by_question() -> sort by score ASC -> top 10
+
+  Frontend: ReadinessGate component
+    PASS: green checkmark, "Start Mock Interview" button
+    FAIL: show weak questions with scores, "Practice More" button
+
+DAY 10: TESTING + SESSION RECOVERY
+  service.py -> recover_session():
+    Find latest active session for user_id (status="active")
+    If found: return { session_id, session_type, current_question_index, questions }
+    If not: return { session_id: None, message: "No active session" }
+
+  layout.tsx -> on mount:
+    Call recoverSession() -> if session found, show modal:
+    "You have an unfinished practice session. [Continue] [Start Fresh]"
+
+  TEST on Day 10:
+    [ ] Full flow: generate notes -> practice round 1 -> round 2 -> round 3 -> readiness
+    [ ] ffmpeg conversion works end-to-end
+    [ ] Rule-based scoring skips LLM when score >= 7
+    [ ] LLM feedback triggers when score < 7
+    [ ] Session recovery works after browser close + reopen
+    [ ] Rate limits: 4th generate-notes call in 1hr returns 429
+
+================================================================================
+WEEK 3: LIVE AI MOCK INTERVIEW (Days 11-15)
+================================================================================
+
+GOAL: Build the WebSocket-based live AI interview.
+      Azure STT streams candidate speech. LLM selects next question.
+      Azure TTS voices AI questions. Report generated after all questions.
+
+DAY 11: AZURE SPEECH CLIENTS (Backend)
+  File: careerbot-api/app/core/singletons/speech_client.py
+    Singleton: AzureSpeechClient
+    Methods:
+      async def transcribe_stream(audio_generator) -> AsyncIterator[str]:
+        """Stream PCM audio chunks through Azure STT. Yield partial + final transcripts."""
+        push_stream = speechsdk.audio.PushAudioInputStream()
+        audio_config = speechsdk.audio.AudioConfig(stream=push_stream)
+        recognizer = speechsdk.SpeechRecognizer(
+            speech_config=self.speech_config, audio_config=audio_config
+        )
+        queue = asyncio.Queue()
+        recognizer.recognizing.connect(lambda e: queue.put_nowait(("partial", e.result.text)))
+        recognizer.recognized.connect(lambda e: queue.put_nowait(("final", e.result.text)))
+        recognizer.start_continuous_recognition_async()
+        async for chunk in audio_generator:
+            push_stream.write(chunk)
+        push_stream.close()
+        recognizer.stop_continuous_recognition_async()
+        while not queue.empty():
+            yield await queue.get()
+
+  File: careerbot-api/app/core/singletons/tts_client.py
+    Singleton: AzureTTSClient
+    Methods:
+      async def text_to_speech(text: str) -> bytes:
+        """Convert text to MP3 audio bytes using Azure Neural TTS."""
+        synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=self.speech_config, audio_config=None
+        )
+        result = synthesizer.speak_text_async(text).get()
+        if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
+            raise TTSError(f"TTS failed: {result.reason}")
+        return result.audio_data   # raw MP3 bytes
+
+    Initialization (in app startup):
+      speech_config = speechsdk.SpeechConfig(
+          subscription=settings.AZURE_SPEECH_KEY,
+          region=settings.AZURE_SPEECH_REGION
+      )
+      speech_config.speech_synthesis_voice_name = settings.AZURE_TTS_VOICE
+      speech_config.speech_recognition_language = "en-IN"
+
+DAY 12: WEBSOCKET ENDPOINT (Backend)
+  File: careerbot-api/app/api/v1/endpoints/mock_interview_live.py
+
+  LIVE SESSION CREATE (REST first, then WebSocket):
+    POST /mock-interview/live/create:
+      1. Get user resume + experience level
+      2. Call repository.select_interview_questions(session_type, experience_level, count=9)
+         - HR type: 9 HR questions from question_bank
+         - Technical type: 9 Technical questions matched to resume skills
+         - Mixed type: 5 HR + 4 Technical
+      3. Generate first question TTS audio (pre-cache in Redis)
+      4. Create session in Redis: mock:live:{session_id}:state = {
+           questions: [...], current_index: 0, status: "INIT",
+           history: [], session_type, user_id, created_at
+         }
+      5. Return { session_id, question_count, expires_at }
+
+  WEBSOCKET HANDLER:
+    @router.websocket("/mock-interview/live/{session_id}")
+    async def live_interview_ws(websocket: WebSocket, session_id: str, token: str):
+      # Authenticate
+      user = await get_user_from_token(token)
+      if not user: await websocket.close(4001, "Unauthorized"); return
+
+      # Load session from Redis
+      session = await redis.get(f"mock:live:{session_id}:state")
+      if not session: await websocket.close(4004, "Session not found"); return
+
+      await websocket.accept()
+
+      # Send first question audio
+      first_q_audio = await tts_client.text_to_speech(session["questions"][0]["question_text"])
+      await websocket.send_json({
+          "type": "question_audio",
+          "data": base64.b64encode(first_q_audio).decode(),
+          "question_text": session["questions"][0]["question_text"],
+          "question_num": 1
+      })
+
+      # Main receive loop
+      audio_buffer = []
+      try:
+          while True:
+              data = await asyncio.wait_for(websocket.receive_json(), timeout=120.0)
+              if data["type"] == "audio_chunk":
+                  audio_buffer.append(base64.b64decode(data["data"]))
+              elif data["type"] == "end_answer":
+                  await handle_end_answer(websocket, session, audio_buffer, session_id)
+                  audio_buffer = []
+              elif data["type"] == "end_interview":
+                  await finalize_interview(websocket, session, session_id, user)
+                  break
+              elif data["type"] == "ping":
+                  await websocket.send_json({"type": "pong"})
+      except asyncio.TimeoutError:
+          await websocket.send_json({"type": "error", "code": "TIMEOUT",
+                                     "message": "No activity for 120s"})
+      except WebSocketDisconnect:
+          # Save state to Redis for reconnection
+          await redis.setex(f"mock:live:{session_id}:state", 10800, json.dumps(session))
+
+  handle_end_answer(websocket, session, audio_buffer, session_id):
+    1. Stream audio_buffer to Azure STT -> get final transcript
+       (send partial transcripts back to client as they arrive)
+    2. Rule check: if len(transcript) < 10: ask to repeat
+    3. Update conversation history in Redis
+    4. Call Llama (P6-live): should follow-up OR move to next question?
+       - If follow-up: TTS follow-up question -> send question_audio
+       - If next: score current answer (P7-live) -> select next question -> TTS -> send
+    5. Update session state (current_index, history) in Redis
+
+DAY 13: FRONTEND WEBSOCKET CLIENT
+  File: src/hooks/useLiveInterview.ts
+    State: sessionState, currentQuestion, transcript, isListening, isAITalking
+    Methods:
+      connect(sessionId: string, token: string)
+      startListening()   -> MediaRecorder (PCM chunks via AudioWorklet)
+      stopListening()    -> send "end_answer"
+      endInterview()     -> send "end_interview"
+      disconnect()
+
+    Audio capture (PCM for Azure STT):
+      const context = new AudioContext({ sampleRate: 16000 });
+      const source = context.createMediaStreamSource(stream);
+      const worklet = await context.audioWorklet.addModule("/audio-processor.js");
+      const processor = new AudioWorkletNode(context, "audio-processor");
+      processor.port.onmessage = (e) => {
+        if (e.data.type === "chunk") sendAudioChunk(e.data.pcm);
+      };
+
+  File: src/app/(interview)/mock-interview/live/page.tsx
+    SECTIONS:
+      1. Pre-interview screen: Question count, duration estimate, "Start" button
+      2. AI talking indicator (animated waveform while TTS plays)
+      3. Live transcript display (partial + final)
+      4. Recording indicator (animated red dot while listening)
+      5. Progress bar (Question 3 of 9)
+      6. Timer per question (2:00 countdown)
+
+  File: /public/audio-processor.js (AudioWorklet)
+    class AudioProcessor extends AudioWorkletProcessor {
+      process(inputs) {
+        const input = inputs[0][0];  // Float32 PCM
+        const pcm16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          pcm16[i] = Math.max(-32768, Math.min(32767, input[i] * 32768));
+        }
+        this.port.postMessage({ type: "chunk", pcm: pcm16.buffer }, [pcm16.buffer]);
+        return true;
+      }
+    }
+    registerProcessor("audio-processor", AudioProcessor);
+
+DAY 14: REPORT GENERATION + SESSION RECOVERY
+  service.py -> finalize_interview():
+    1. Collect all answers from Redis session history
+    2. Call Llama P8: generate final report
+       Input: all question + answer + score pairs
+       Timeout: asyncio.wait_for(timeout=25.0)
+    3. Save report to mock_interview_reports collection
+    4. Delete live session from Redis
+    5. Send "interview_complete" message via WebSocket
+
+  Add endpoint: GET /mock-interview/live/{session_id}/state
+    Returns: { status, current_index, can_reconnect: bool }
+    Used by Frontend: if can_reconnect, show "Continue Interview" button
+
+DAY 15: PRIVACY + CONSENT + DEPLOY
+  1. Consent flow:
+     - modal before first practice or mock
+     - store: { user_id, consent_given: True, consent_at: DateTime } in user profile
+     - ALL mock-interview endpoints check consent_given before proceeding
+     - If no consent: return 403 with { code: "CONSENT_REQUIRED" }
+
+  2. Privacy endpoints (Part 4.1, endpoints 10-12):
+     - DELETE all: remove all 5 V1 collections records for user_id + Redis keys
+     - DELETE session: remove specific session audio + transcript (transcript -> "[DELETED]")
+     - Export: return all user's mock interview data as JSON
+
+  3. Anonymize before LLM:
+     In service.py, before any LLM call:
+     def _anonymize(text: str, user_name: str, email: str) -> str:
+       text = text.replace(user_name, "[CANDIDATE]")
+       text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', "[EMAIL]", text)
+       text = re.sub(r'\b(\+91|91)?[6-9]\d{9}\b', "[PHONE]", text)
+       return text
+
+  4. Staging deploy smoke test:
+     [ ] POST /mock-interview/generate-notes returns notes
+     [ ] POST /mock-interview/practice/answer returns transcript + feedback
+     [ ] GET /mock-interview/readiness returns is_ready field
+     [ ] WS /mock-interview/live/{id} connects and sends first question audio
+     [ ] Azure TTS returns audio (not silence, not error)
+     [ ] Azure STT returns transcript (not empty)
+     [ ] All 3 privacy endpoints work
+
+
+################################################################################
+PART 7: V2 IMPLEMENTATION - Weeks 4-6
+################################################################################
+
+================================================================================
+WEEK 4: TECHNICAL ROUND + VIDEO (Days 16-20)
+================================================================================
+
+PREREQUISITE CHECK (Day 16 Morning):
+  [ ] video_analyzer.py regression is fixed (confirm 4 fields in output)
+  [ ] V1 is deployed and stable in staging
+  [ ] V1 smoke tests all pass
+
+DAY 16: TECHNICAL QUESTION BANK + GENERATOR
+  File: careerbot-api/data/question_bank_technical.json
+    48 questions across 9 categories:
+    - Python (8):     TECH_001-TECH_008  (list vs tuple, decorators, OOP, generators...)
+    - Java (6):       TECH_009-TECH_014  (JDK/JRE/JVM, abstract vs interface, GC...)
+    - JavaScript (6): TECH_015-TECH_020  (let/const/var, closures, event loop...)
+    - SQL/DB (6):     TECH_021-TECH_026  (SQL vs NoSQL, JOINs, indexing, ACID...)
+    - DS&A (6):       TECH_027-TECH_032  (arrays vs linked list, hash map, Big O...)
+    - DevOps (4):     TECH_033-TECH_036  (Git, Docker, CI/CD...)
+    - React (4):      TECH_037-TECH_040  (virtual DOM, hooks, props vs state...)
+    - API/Network (4):TECH_041-TECH_044  (REST, GET vs POST, auth vs authz...)
+    - General CS (4): TECH_045-TECH_048  (OS, process vs thread, client-server...)
+
+  File: careerbot-api/app/services/mock_interview_service/technical_generator.py
+    SKILL_CATEGORY_MAP: maps skill name -> question tags
+    EXPERIENCE_DIFFICULTY_MAP: maps experience level -> allowed difficulties
+    select_technical_questions(skills, level, bank, count=12) -> List[Question]
+      Algorithm:
+        1. Map candidate skills to question tags
+        2. Filter by difficulty (fresher=basic, junior=basic+intermediate, mid=intermediate+advanced)
+        3. Take 80% from skill-matched, 20% from general CS
+        4. Sort: basic first, then intermediate, then advanced
+        5. If bank has < 8 matching: call LLM P9 to generate extras
+
+DAY 17: AI LAYER TECHNICAL FEEDBACK ENDPOINT
+  Add to AI Layer: POST /api/v1/mock-interview/technical-feedback
+    Same pattern as practice-feedback (Day 7)
+    Uses P10 prompt (technical scoring rubric includes technical_accuracy)
+    technical_accuracy is 5th scoring dimension (0-10)
+
+  Also add: POST /api/v1/mock-interview/generate-technical-questions
+    Uses P9 (personalized technical question generator)
+    Only called when question bank has < 8 matching questions for user's skills
+
+DAY 18: TECHNICAL PRACTICE FRONTEND
+  Reuse the practice page entirely.
+  Only differences:
+    - source of questions is /technical/notes, not /notes
+    - Submit to /technical/practice/answer, not /practice/answer
+    - Display skill_tag badge (e.g., "Python") on question card
+    - Show code snippets where relevant (from expected_answer_template)
+    - "Study Tip" shown below question (from generate_technical_notes)
+
+  File: src/app/(interview)/mock-interview/technical/page.tsx
+    Import and reuse PracticeQuestion, AudioRecorder, FeedbackCard, TranscriptDisplay
+    Add: TechQuestionCard component (shows skill badge + study tip)
+
+  File: src/app/(interview)/mock-interview/_components/TechQuestionCard.tsx
+    Props: question, skill_tag, study_tip, round_number
+    Display: skill badge color-coded by category
+
+DAY 19: VIDEO ANALYSIS INTEGRATION
+  Prerequisite: video_analyzer.py regression confirmed fixed.
+
+  File: careerbot-api/app/services/mock_interview_service/video_scorer.py
+    async def analyze_video(video_file_path: str, question_id: str, session_id: str) -> dict:
+      # Check cache first
+      cache_key = f"mock:video:{session_id}:{question_id}"
+      cached = await redis.get(cache_key)
+      if cached: return json.loads(cached)
+
+      # Call AI Layer
+      result = await asyncio.wait_for(
+          ai_client.post("/api/v1/english-assessment/analyze-video",
+                         files={"video": open(video_file_path, "rb")}),
+          timeout=30.0
+      )
+
+      # Map to scoring
+      video_scores = {
+          "eye_contact":   result["eye_contact_ratio"] * 10,
+          "focus":         result["focus_ratio"] * 10,
+          "emotion":       result["dominant_emotion"],
+          "confidence":    _confidence_from_emotion(result["emotion_distribution"]),
+          "video_score":   (result["eye_contact_ratio"] * 3 +
+                            result["focus_ratio"] * 3 +
+                            _confidence_from_emotion(result["emotion_distribution"]) * 0.4) * 10
+      }
+      await redis.setex(cache_key, VIDEO_ANALYSIS_CACHE_TTL, json.dumps(video_scores))
+      return video_scores
+
+  Practice answer endpoint (V2 update):
+    Accept optional video: Optional[UploadFile] = None
+    If video provided: run audio + video analysis in parallel:
+      audio_task = _process_audio(audio_file)
+      video_task = video_scorer.analyze_video(video_path) if video else asyncio.sleep(0)
+      audio_result, video_result = await asyncio.gather(audio_task, video_task)
+
+DAY 20: VIDEO FRONTEND
+  File: src/app/(interview)/mock-interview/_components/VideoOverlay.tsx
+    Shows live camera feed during practice (small overlay, bottom-right)
+    Shows video score breakdown after answer
+    Props: videoScore: { eye_contact, focus, emotion, confidence, video_score }
+
+  Enable VideoRecordingContext in practice/page.tsx:
+    Wrap page with <VideoRecordingContext>
+    Record video per question -> upload alongside audio
+
+================================================================================
+WEEK 5: CALIBRATION + ANALYTICS + PDF (Days 21-25)
+================================================================================
+
+DAY 21: SCORE CALIBRATION SYSTEM
+  File: careerbot-api/app/services/mock_interview_service/calibration.py
+    ScoreCalibrator class:
+      get_calibration_profile(experience_level) -> Dict  (check Redis cache first)
+      apply_calibration(raw_scores, profile) -> Dict     (add adjustment to each dimension)
+      add_calibration_sample(answer_id, question, transcript, experience_level,
+                             llm_scores, human_scores, rater_id)
+      recalibrate(experience_level):
+        - Needs >= 20 samples
+        - Calculate average diff (human - LLM) per dimension
+        - Calculate Pearson correlation per dimension
+        - If avg correlation < 0.80: adjust prompts weights (manual step, flag in log)
+        - Save profile to MongoDB + invalidate Redis cache
+      _pearson_correlation(x, y) -> float
+
+  Admin endpoints 22-24:
+    POST /calibration/submit-sample: Admin adds human score for an answer
+    POST /calibration/recalibrate/{level}: Trigger manual recalibration
+    GET  /calibration/status: { per_level: { correlation, sample_count, last_calibrated } }
+
+  Apply calibration in service.py:
+    After LLM scoring: profile = await calibrator.get_calibration_profile(experience_level)
+    calibrated_scores = calibrator.apply_calibration(raw_llm_scores, profile)
+
+DAY 22: ANALYTICS AGGREGATION
+  File: careerbot-api/app/services/mock_interview_service/analytics.py
+    get_engagement_metrics(days=30):
+      Return: { total_users, started_practice, completed_mock,
+                abandoned_at_practice, return_rate, avg_sessions_per_user }
+
+    get_score_trends(days=30):
+      Return: { score_distribution: {...buckets}, avg_score, improvement_rate,
+                top_q_types, worst_q_types }
+
+    get_question_analytics():
+      Return: { most_failed: [...], most_attempted: [...], skip_rate_by_q: {...} }
+
+    get_cost_analytics(days=30):
+      Return: { total_llm_calls, total_tokens, total_cost_usd, avg_cost_per_session }
+
+    All methods: check Redis cache (5 min TTL) before running MongoDB aggregation
+
+DAY 23: ANALYTICS FRONTEND
+  File: src/app/admin/mock-interview-analytics/page.tsx
+    4 tabs: Engagement / Scores / Questions / Costs
+    Charts via recharts:
+      - Completion funnel (BarChart)
+      - Score distribution bell curve (AreaChart)
+      - Most-failed questions (HorizontalBarChart)
+      - Daily cost trend (LineChart)
+    User endpoint 34: GET /mock-interview/user-progress
+      Personal chart: score improvement over last 5 sessions
+
+DAY 24: PDF REPORT
+  Backend: Install weasyprint or reportlab (add to requirements.txt)
+    GET /report/{session_id}/pdf:
+      1. Load report from MongoDB
+      2. Render HTML template with report data
+      3. Convert HTML -> PDF via weasyprint
+      4. Return PDF as StreamingResponse(pdf_bytes, media_type="application/pdf")
+
+  HTML template includes:
+    - Header: CareerBot logo + candidate name + date
+    - Score summary: radar chart (SVG, rendered server-side)
+    - Question-by-question breakdown table
+    - Strengths and improvements
+    - Action plan
+    - Redo questions highlighted in red
+
+DAY 25: SHARE LINK
+  POST /report/{session_id}/share:
+    1. Strip PII from report (remove name, email, phone)
+    2. Generate share_token = secrets.token_urlsafe(32)
+    3. Save to Redis: mock:share:{token} = stripped_report (TTL 7 days)
+    4. Update report in MongoDB: share_token, share_expires_at
+    5. Return: { share_url: "https://app.intelicoreai.com/shared/{token}" }
+
+  GET /shared-report/{share_token} (no auth required):
+    1. Get from Redis: mock:share:{token}
+    2. If expired (None): return 404 "Report link expired"
+    3. Return stripped report (no PII)
+
+================================================================================
+WEEK 6: POLISH + DEPLOY (Days 26-30)
+================================================================================
+
+DAY 26: EXPAND QUESTION BANK
+  HR bank: 33 -> 45 questions (add HR_034 to HR_045)
+    HR_034: "What is your management style?"
+    HR_035: "How do you handle conflict?"
+    HR_036: "Describe a time you went above and beyond"
+    HR_037: "How do you prioritize tasks?"
+    HR_038: "What makes a good team member?"
+    HR_039: "Tell me about a time you received feedback"
+    HR_040: "What is your greatest achievement?"
+    HR_041: "Why should we hire you over others?"
+    HR_042: "How do you handle failure?"
+    HR_043: "What do you know about our industry?"
+    HR_044: "Describe your ideal work environment"
+    HR_045: "What motivates you?"
+
+DAY 27: HINGLISH COACHING (P13)
+  rule_checker.py: detect_hinglish(transcript) -> dict
+    HINDI_MARKERS = ["matlab", "toh", "aur", "lekin", "kyunki", "woh",
+                     "main", "karta", "tha", "hai", "nahi", "achha",
+                     "theek", "bahut", "kaam", "samajh", "pata",
+                     "actually jo hai na", "basically jo hota hai"]
+    return { hinglish_detected: bool, hinglish_count: int, hinglish_phrases: [str] }
+
+  If hinglish_count >= 3: call P13 prompt (Hinglish coaching)
+  Show CalibrationFeedback component with Hinglish corrections
+
+DAY 28: PERFORMANCE OPTIMIZATION
+  1. Parallel evaluation in complete_mock():
+     audio_tasks = [_evaluate_answer(a) for a in answers]
+     video_tasks = [video_scorer.analyze_video(v) for v in video_files]
+     evaluations, video_scores = await asyncio.gather(
+         asyncio.gather(*audio_tasks), asyncio.gather(*video_tasks, return_exceptions=True)
+     )
+
+  2. Pre-warm question selection:
+     On practice/start, pre-generate TTS for first question (async background task)
+     On end_answer, pre-generate TTS for next question (async background task)
+     This overlaps TTS generation with scoring -> removes 1-2s latency
+
+  3. Cache analytics on write:
+     After each completed session, enqueue background task to invalidate analytics cache
+
+DAY 29: INTEGRATION TESTING
+  Run full test matrix (see Part 11).
+  Focus areas:
+    - Live WebSocket interview end-to-end (full 9-question session)
+    - Azure STT under poor audio quality (accent, background noise)
+    - Azure TTS voice quality for en-IN-NeerjaNeural
+    - Video scoring accuracy after regression fix
+    - PDF generation for report with all sections
+    - Share link expiry after 7 days
+
+DAY 30: PRODUCTION DEPLOY + MONITORING
+  Pre-deploy checklist (see Part 13)
+  Monitoring alerts to set:
+    - Cost alert: > $0.15 per session (LLM + STT + TTS combined)
+    - Error rate: > 5% on /practice/answer or WebSocket
+    - Latency: > 3s P95 on practice answer endpoint
+    - Azure STT confidence: < 0.7 on > 20% of transcripts (audio quality issue)
+
+
+################################################################################
+PART 8: ALL LLM PROMPTS (P1-P14)
+################################################################################
+
+================================================================================
+PROMPT CALL MAP (Which prompts are called, when, per interaction type)
+================================================================================
+
+NOTES GENERATION (once per user, rate-limited 3/hr):
+  P1 (self-intro notes)   : 1 call when user requests notes
+  P2 (project story x2)  : 2 calls in parallel with P1
+  P3 (HR answer notes)    : 1 call in parallel with P1, P2
+  P4 (additional topics)  : 1 call in parallel with P1, P2, P3
+  All 5 calls: asyncio.gather(), total cost ~$0.005, total time ~5-8s
+
+PRACTICE SESSION (per answer):
+  rule_checker.check()    : ALWAYS (zero LLM cost)
+  IF rule_score >= 7.0    : SKIP LLM. Return rule scores as final. (saves ~40-50% calls)
+  IF rule_score < 7.0     : P5 (HR answer) OR P10 (Technical answer) : 1 call
+  Detection pass          : P13 (Hinglish) : 0-1 call if Hinglish phrases detected
+  Technical practice only : P10 replaces P5 (includes technical_accuracy dimension)
+
+MOCK SESSION SETUP (once per mock, at session create time):
+  P6 (question select)    : 1 call to select + reword 9 questions from bank
+
+LIVE MOCK - PER QUESTION (runs inside WebSocket handler per answer):
+  STEP 1 - rule_checker.check()       : ALWAYS (zero LLM cost)
+  STEP 2 - P6_LIVE (conversation dir) : ALWAYS, 1 call per answer
+            -> decides: follow_up OR next_question
+  STEP 3 - IF follow_up:              : P6_LIVE already returned follow_up_text -> TTS it
+            (NO additional LLM call for follow-up question text)
+  STEP 4 - P7_LIVE (fast eval)        : 1 call per answer (AFTER P6_LIVE completes)
+            Exception: IF rule_checker shows length < 5s -> skip P7_LIVE, score = 0
+
+  PER-QUESTION LIVE SUMMARY: 1-2 LLM calls (P6_LIVE always, P7_LIVE almost always)
+  Fast path (answer too short): 0-1 calls (P6_LIVE only, P7_LIVE skipped)
+
+LIVE MOCK - SESSION END:
+  P8 (final report)       : 1 call after all 9 questions complete
+  P14 (PDF narrative)     : 1 call only if user downloads PDF
+
+V2 ADDITIONS:
+  P9 (tech Q gen)         : 1 call at technical session setup (if no cached questions)
+  P11 (combined eval)     : Replaces P7_LIVE in Mixed sessions
+  P12 (enhanced report)   : Replaces P8 in V2 sessions (includes tech + video scores)
+
+CALL COUNT PER SESSION (approximate):
+  V1 practice only (10 Qs, 50% skip LLM): ~10 calls total
+  V1 live mock (9 Qs):                    ~19-20 calls total
+  V1 full session (practice + mock):      ~25-30 calls total
+  V2 full session (+ tech + video):       ~30-38 calls total
+
+All prompts: careerbot-ai/src/shared/prompts/mock_interview/prompts.py
+Temperature: 0.3 for all (deterministic output needed)
+max_tokens: as specified per prompt
+
+P1: SELF_INTRO_NOTES_PROMPT  max_tokens=800
+  Generate a 200-250 word self-introduction script for Indian interview candidate.
+  Input: {resume_json, experience_level, years, target_role, industry}
+  Rules: Simple English, max 15 words per sentence, mark [ADD YOUR OWN] sections
+  Output JSON: { script, sections[{name, text, time_target, practice_tip}], key_phrases, has_suggestions }
+
+P2: PROJECT_NOTES_PROMPT  max_tokens=600
+  Generate explanation of one project in interview-ready English.
+  Input: {project_name, description, tech_stack, duration, role, outcome}
+  Rules: Use STAR format loosely, no jargon, relate to impact
+  Output JSON: { explanation_script, key_tech_terms, one_liner, common_q_about_this }
+
+P3: HR_ANSWERS_NOTES_PROMPT  max_tokens=1500
+  Generate scripted answers for 12 standard HR questions.
+  Input: {resume_json, experience_level, strengths, industry}
+  Output JSON: { answers: [{ question_id, answer_script, key_phrases, do_not_say }] }
+
+P4: ADDITIONAL_NOTES_PROMPT  max_tokens=500
+  Generate notes for: salary discussion, shifts, relocation, weakness.
+  Input: {experience_level, location, target_salary_range}
+  Output JSON: { salary_answer, relocation_answer, shift_answer, weakness_answer }
+
+P5: PRACTICE_FEEDBACK_PROMPT  max_tokens=400
+  Score and give feedback on a practice answer.
+  Input: {transcript, question_text, key_points, rule_scores, experience_level}
+  Scoring: content 0-10, clarity 0-10, structure 0-10, length 0-10
+  Rules: SUPPORTIVE tone, concrete fixes only, no "great job" filler
+  Output JSON: { content_score, clarity_score, structure_score, length_score,
+                  weighted_score, feedback (2 sentences), improved_answer (50-80 words) }
+
+P6: MOCK_QUESTION_SELECT_PROMPT  max_tokens=300
+  Select and reword 8-10 questions for mock interview.
+  Input: {user_weak_areas, question_bank_sample, session_type}
+  Rules: Prioritize weak areas, reword to feel fresh (not same as practice)
+  Output JSON: { selected_question_ids: [...], reworded_texts: {...id: text} }
+
+P6_LIVE: LIVE_CONVERSATION_DIRECTOR_PROMPT  max_tokens=150
+  Decide: follow-up this answer OR move to next question.
+  Input: {question_text, transcript, conversation_history, questions_remaining}
+  Rules: Follow-up only if answer was too short (<30s) or completely off-topic
+         Max 1 follow-up per question. If remaining questions < 3: never follow-up.
+  Output JSON: { action: "follow_up" | "next_question",
+                  follow_up_text: null | "Can you tell me more about..." }
+
+P7: MOCK_ANSWER_EVAL_PROMPT  max_tokens=200
+  Score a mock answer. No coaching. Just evaluate.
+  Input: {question_text, transcript, key_points, experience_level}
+  Output JSON: { content_score, clarity_score, structure_score, length_score,
+                  weighted_score, one_line_observation }
+  Rules: No feedback text. No improved_answer. Just scores + one observation.
+
+P7_LIVE: LIVE_ANSWER_EVAL_PROMPT  max_tokens=100
+  Faster version of P7 for real-time WebSocket use.
+  Same input/output as P7 but stripped down for speed.
+  max_tokens=100, temperature=0.1
+
+P8: FINAL_REPORT_PROMPT  max_tokens=1000
+  Generate complete interview report.
+  Input: { all_questions_with_scores, avg_scores, session_type, experience_level }
+  Output JSON: {
+    overall_score, hr_score, communication_score, confidence_score,
+    strengths: [3 items], improvements: [3 items],
+    redo_questions: [top 2 worst scoring],
+    reattempt_suggestion: "Practice these 3 questions, then reattempt in 2 days",
+    action_plan: "3 concrete steps this week",
+    interviewer_perspective: "As an interviewer, I would notice..."
+  }
+
+P9: TECHNICAL_QUESTION_GENERATOR  max_tokens=1200
+  Generate personalized technical questions from resume skills.
+  Input: {skills_list, experience_level, project_summaries, target_role, count}
+  Rules: NO coding questions. Test UNDERSTANDING. Project-specific questions.
+  Output JSON: { questions: [{ question_text, skill_tag, difficulty,
+                                key_points, expected_answer_template,
+                                follow_up_questions, why_asked }] }
+
+P10: TECHNICAL_FEEDBACK_PROMPT  max_tokens=450
+  Score technical practice answer (adds technical_accuracy dimension).
+  Input: {transcript, question, key_points, expected_answer, rule_scores}
+  Output JSON: { content_score, clarity_score, structure_score, length_score,
+                  technical_accuracy, weighted_score, feedback, improved_answer }
+
+P11: COMBINED_MOCK_EVAL_PROMPT  max_tokens=300
+  Evaluate in context of HR+Tech mixed session (V2 mock).
+  Same as P7 but receives session_type="Mixed" and can note technical vs HR performance.
+
+P12: ENHANCED_REPORT_PROMPT  max_tokens=1200
+  V2 report with technical + video scores included.
+  Extends P8 with: tech_score, video_scores, calibration_applied flag
+  Output: extends P8 output with { tech_score, video_score, tech_strengths, tech_improvements }
+
+P13: HINGLISH_COACH_PROMPT  max_tokens=300
+  Coach candidate on Hinglish phrases in their answer.
+  Input: {transcript, hinglish_phrases}
+  Rules: SUPPORTIVE. Max 3 corrections. Acknowledge Hinglish is natural.
+  Output JSON: { hinglish_count, corrections: [{hinglish, english, tip}], overall_note }
+
+P14: PDF_REPORT_NARRATIVE  max_tokens=400
+  Generate human-readable narrative for PDF report.
+  Input: {report_data_summary}
+  Output: plain text narrative (2-3 paragraphs, no JSON)
+  Used in: PDF header section only (not API response)
+
+
+################################################################################
+PART 9: SCORING ARCHITECTURE
+################################################################################
+
+PRACTICE SCORE (per answer, 0-10):
+  Dimension     Weight  Source
+  Content       40%     Key points from question bank matched in transcript
+  Clarity       30%     Filler word count, sentence coherence (LLM)
+  Structure     20%     Beginning/middle/end flow (LLM)
+  Length        10%     Duration within 30-120 seconds
+
+  Rule-based fast path (no LLM):
+    content_rule = min(10, len(key_points_hit) * 2.5)
+    clarity_rule = max(0, 10 - filler_count * 1.5)
+    length_rule  = 10 if 30 <= duration <= 120 else 5
+    rule_score   = content_rule*0.4 + clarity_rule*0.4 + length_rule*0.2
+    IF rule_score >= 7.0: skip LLM, return rule_score as final
+
+  LLM path (when rule_score < 7):
+    P5 or P10 returns all 4 dimension scores
+    weighted_score = content*0.4 + clarity*0.3 + structure*0.2 + length*0.1
+
+  Technical (V2): adds technical_accuracy (0-10) at 30% weight
+    New weights: content*0.25 + clarity*0.25 + structure*0.2 + length*0.1 + tech_acc*0.3*10
+
+MOCK SCORE (same dimensions + pressure_tag):
+  pressure_tag = "pressure_affected" if mock_score < practice_avg - 3
+  pressure_tag = "handles_pressure_well" if mock_score >= practice_avg
+
+VIDEO SCORE (V2, per question):
+  eye_contact_score = eye_contact_ratio * 10
+  focus_score       = focus_ratio * 10
+  emotion_score     = confidence_from_emotion_distribution(emotion_dist)
+  video_score       = eye_contact*0.3 + focus*0.3 + emotion*0.2 + confidence*0.2
+
+OVERALL REPORT SCORE:
+  V1 (HR only):  hr_readiness*0.5 + communication*0.3 + confidence*0.2
+  V2 (with Tech): hr*0.35 + technical*0.30 + communication*0.25 + video*0.10
+
+CALIBRATION ADJUSTMENT:
+  calibrated_score[dim] = raw_score[dim] + profile[dim + "_adjustment"]
+  Bounds: max(0, min(10, calibrated_score))
+  Applied when: profile.sample_count >= 20 AND profile.correlation >= 0.6
+
+
+################################################################################
+PART 10: PRIVACY & DPDP COMPLIANCE
+################################################################################
+
+DATA COLLECTION:
+  - Audio recorded with explicit consent (shown before first session)
+  - Transcript generated and stored (90-day retention)
+  - Audio deleted immediately after transcription (never persisted)
+  - PII stripped from transcript before sending to Azure OpenAI (anonymize())
+  - Session data linked to user_id (not email, not name) internally
+
+CONSENT FLOW:
+  Consent modal (before first practice):
+  "To help you prepare, we will:
+   - Record your voice during practice sessions
+   - Convert your speech to text using our AI model
+   - Send your answer text (without your name or contact details) to AI for feedback
+   Your audio is deleted immediately after transcription.
+   Your practice text data is stored for 90 days.
+   You can delete all your data anytime from Settings.
+   [I Agree, Start Preparation]  [No Thanks]"
+
+  Backend: POST /mock-interview/consent { user_id, consent_given: true, consent_at }
+  All endpoints check consent_given before processing.
+
+DPDP ACT COMPLIANCE:
+  Right to Delete:   DELETE /mock-interview/data/{user_id} (deletes within 7 days, logged)
+  Right to Export:   GET /mock-interview/data-export/{user_id} (JSON download)
+  Retention Policy:  90-day auto-delete via Celery task or APScheduler job:
+    Nightly job: delete sessions older than 90 days and their answers/transcripts
+
+AUDIT TRAIL:
+  Any admin action (calibration submit, data delete, export) logged to:
+  MongoDB: admin_audit_logs collection { admin_id, action, target_user_id, timestamp }
+
+
+################################################################################
+PART 11: TESTING CHECKLIST
+################################################################################
+
+V1 BACKEND TESTS (Day 10 + Day 15):
+  [ ] POST /generate-notes with valid resume_id -> notes returned
+  [ ] POST /generate-notes duplicate (within 1hr) -> cached, from_cache=true
+  [ ] POST /generate-notes 4th call in 1hr -> 429 rate limit
+  [ ] POST /practice/answer with .webm -> transcript + scores returned
+  [ ] POST /practice/answer with silent audio -> transcript empty, score=0
+  [ ] POST /practice/answer with audio < 3s -> 400 "too short"
+  [ ] POST /practice/answer with file > 10MB -> 400 "too large"
+  [ ] GET /readiness not ready (< 10 questions done) -> is_ready=false
+  [ ] GET /readiness not ready (avg < 6) -> is_ready=false with weak_questions
+  [ ] GET /readiness ready (avg >= 6, all >= 4) -> is_ready=true
+  [ ] GET /session/recover with active session -> session_id returned
+  [ ] GET /session/recover with no active session -> { session_id: null }
+  [ ] DELETE /data/{user_id} -> all records deleted + Redis cleared
+  [ ] Consent check: any endpoint without consent -> 403
+
+V1 WEBSOCKET TESTS (Day 15):
+  [ ] WS connects with valid JWT -> receives session_ready + first question_audio
+  [ ] WS connects with invalid JWT -> receives 4001 close
+  [ ] Send audio_chunk -> transcript_partial messages received
+  [ ] Send end_answer -> transcript_final + answer_scored received
+  [ ] Send end_interview -> interview_complete with report received
+  [ ] Disconnect + reconnect -> session resumes from correct question
+  [ ] STT returns empty transcript -> error message + "please repeat" sent
+  [ ] 120s timeout (no message) -> timeout error + graceful close
+  [ ] Full 9-question session end-to-end (< 25 min total)
+
+V2 TESTS (Day 29):
+  [ ] POST /technical/generate-notes with Python skills -> Python questions returned
+  [ ] POST /technical/generate-notes with no skills -> general CS questions
+  [ ] POST /technical/practice/answer -> technical_accuracy score in response
+  [ ] Video upload alongside audio -> video_scores in response
+  [ ] Video upload without audio -> 400 error
+  [ ] GET /calibration/status -> per-level calibration data
+  [ ] GET /analytics/engagement -> metrics returned (no server error)
+  [ ] GET /report/{id}/pdf -> PDF file downloaded
+  [ ] POST /report/{id}/share -> share_url returned
+  [ ] GET /shared-report/{token} (no auth) -> report without PII
+  [ ] GET /shared-report/{expired_token} -> 404
+
+PERFORMANCE TESTS:
+  [ ] Practice answer endpoint: P95 < 8s (includes ffmpeg + Whisper + LLM)
+  [ ] Notes generation: < 15s (4 parallel LLM calls)
+  [ ] WebSocket first question to candidate: < 3s from connection
+  [ ] WebSocket response latency: < 2s from end_answer to next question_audio
+  [ ] 20 concurrent practice sessions: no error rate spike
+
+COST TEST (per session, track with token logging):
+  [ ] V1 practice session (10 questions, mix of rule+LLM): < $0.07
+  [ ] V1 live mock (9 questions): < $0.05 LLM + < $0.005 STT/TTS
+  [ ] V2 session (tech + video + calibration): < $0.12 total
+
+
+################################################################################
+PART 12: COST MODEL & PERFORMANCE TARGETS
+################################################################################
+
+LLM COST (Llama-3.3-70B, ~$0.71/1M tokens):
+  Prompt              | Calls | Avg Tokens | Cost/Session
+  P1 (self-intro)     |  1    |  1,500     | $0.001
+  P2 (project x2)    |  2    |  1,000     | $0.001
+  P3 (HR answers)     |  1    |  2,000     | $0.001
+  P4 (additional)     |  1    |    800     | $0.001
+  P5 (practice fbk)  | 0-4   |    600     | $0.002
+  P6 (Q select)      |  1    |    500     | $0.000
+  P7 (mock eval x9)  |  9    |    300     | $0.002
+  P8 (report)        |  1    |  1,500     | $0.001
+  TOTAL V1/session    |       |            | ~$0.009
+
+  P6_LIVE (per Q)    |  9    |    200     | $0.001
+  P7_LIVE (per Q)    |  9    |    150     | $0.001
+  TOTAL LIVE MOCK     |       |            | ~$0.002
+
+AZURE SPEECH COST:
+  STT: $1.00/hr audio -> ~$0.002 per 9-question session (avg 7 min speaking)
+  TTS: $16.00/1M chars -> ~$0.0002 per session (avg 1,000 chars AI questions)
+
+V1 TOTAL PER SESSION: ~$0.012-0.015
+V2 ADDITIONAL:
+  P9 (tech Q gen)    |  0-1  |  2,000     | $0.001
+  P10 (tech fbk x5)  |  0-5  |    600     | $0.002
+  P13 (Hinglish)     |  0-3  |    400     | $0.001
+  P12 (V2 report)    |  1    |  1,500     | $0.001
+V2 ADDITIONAL COST: ~$0.005
+
+TOTAL V1+V2 PER SESSION: ~$0.017-0.022
+(Previous estimates of $0.07-0.10 were overestimates. Actual cost is much lower.)
+
+PERFORMANCE TARGETS:
+  Practice answer endpoint: P50 < 5s, P95 < 8s, P99 < 12s
+  Notes generation:         P50 < 10s, P95 < 18s
+  WebSocket first question: < 3s from WS connection established
+  WebSocket round-trip:     < 2s from end_answer to question_audio (fast path)
+                            End-to-end (silence -> AI audio plays): 4-8 seconds
+  Live STT transcript:      First partial < 500ms, final < 1.5s after silence
+  Live TTS audio:           < 1.5s for 30-word question
+  Report generation:        < 10s
+  PDF generation:           < 5s
+  Analytics endpoints:      < 500ms (Redis cached)
+
+VM CONCURRENCY LIMITS:
+  Recommendation for initial deploy (single Azure VM, Standard_D4s_v3 or equivalent):
+    Max concurrent WebSocket sessions:    20-30
+    Max concurrent practice requests:     50 (async, non-blocking)
+    Max concurrent notes generation:      10 (LLM-heavy)
+    Reasoning:
+      - Each live WS session holds open: 1 Azure STT stream + 1 TCP connection + Redis state
+      - Azure STT pricing is per-hour of audio, not per-connection count
+      - Azure has regional concurrent request limits; check your deployment quota
+      - 20-30 concurrent WS sessions = ~20-30 students interviewing simultaneously
+      - For college placement drive (100+ concurrent): scale to 2-3 VMs or use AKS
+
+  SCALE TRIGGERS (add a second VM when ANY of these hit):
+    CPU utilization > 70% sustained for 10 minutes
+    WebSocket connection queue > 5 (connections waiting to be accepted)
+    Redis commands/sec > 10,000
+    Azure STT concurrent channels > 20
+
+  PER-USER CONCURRENT LIMIT:
+    Max 3 active WS sessions per user (enforced in Redis: mock:active_ws:{user_id} counter)
+    Max 1 active notes generation per user (Redis distributed lock, TTL=60s)
+    Reason: Prevents single user from monopolizing Azure STT channels.
+
+
+################################################################################
+PART 13: PRODUCTION DEPLOYMENT CHECKLIST
+################################################################################
+
+BEFORE FIRST DEPLOY (Staging):
+  [ ] ffmpeg installed in Dockerfile (add: RUN apt-get install -y ffmpeg)
+  [ ] azure-cognitiveservices-speech added to requirements.txt
+  [ ] AZURE_SPEECH_KEY, AZURE_SPEECH_REGION in .env (and verified in Azure Portal)
+  [ ] AZURE_TTS_VOICE=en-IN-NeerjaNeural in .env
+  [ ] All MongoDB indexes created (run Part 3.3 script)
+  [ ] question_bank seeded (33 HR + 48 Tech questions)
+  [ ] interview_english.json seeded (static content)
+  [ ] Mock interview router registered in FastAPI main.py
+  [ ] WebSocket router registered in FastAPI main.py
+  [ ] Data retention job scheduled (90-day cleanup)
+
+BEFORE PRODUCTION DEPLOY (after staging verified):
+  [ ] All smoke tests pass (Part 11)
+  [ ] Full 9-question live mock session completed end-to-end
+  [ ] PDF generation produces correct PDF
+  [ ] Share link creates and serves correctly
+  [ ] DPDP delete endpoint verified (data actually deleted)
+  [ ] Cost monitoring alert set in Azure (> $50/day total)
+  [ ] Session monitoring: alert if > 5% WebSocket errors
+  [ ] Calibration profiles initialized for all experience levels (default: no adjustment)
+  [ ] Admin user tested in analytics dashboard
+  [ ] video_analyzer.py regression confirmed fixed (not just "assumed")
+
+ENV VARIABLES (complete list for careerbot-api/.env):
+  AZURE_SPEECH_KEY=...
+  AZURE_SPEECH_REGION=eastus
+  AZURE_TTS_VOICE=en-IN-NeerjaNeural
+  MOCK_DATA_RETENTION_DAYS=90
+  MOCK_LLM_SCORE_THRESHOLD=7.0
+  MOCK_MIN_READINESS_AVG=6.0
+  MOCK_QUESTIONS_PER_PRACTICE=10
+  MOCK_QUESTIONS_PER_MOCK=9
+  MOCK_NOTES_RATE_LIMIT=3
+  MOCK_ANSWER_RATE_LIMIT=60
+
+NEW BACKEND PACKAGES (add to requirements.txt):
+  azure-cognitiveservices-speech==1.34.0
+  weasyprint==60.2          (PDF generation)
+  python-multipart==0.0.9   (file uploads, likely already present)
+
+NEW FRONTEND PACKAGES (if not already in package.json):
+  recharts                  (analytics charts, likely already installed)
+  (No other new packages needed)
+
+
+================================================================================
+DEVELOPER QUICK REFERENCE
+================================================================================
+
+START HERE:  Day 0 -> Verify all items in Part 2.3
+WEEK 1:      Part 6, Days 1-5 (Foundation)
+WEEK 2:      Part 6, Days 6-10 (Practice Mode)
+WEEK 3:      Part 6, Days 11-15 (Live AI Mock Interview)
+WEEK 4:      Part 7, Days 16-20 (Technical + Video)
+WEEK 5:      Part 7, Days 21-25 (Calibration + Analytics + PDF)
+WEEK 6:      Part 7, Days 26-30 (Polish + Deploy)
+
+KEY FILES TO CREATE:
+  Backend:  mock_interview_service/{service,repo,schemas,models,rule_checker,constants}.py
+            mock_interview_service/{technical_generator,video_scorer,calibration,analytics}.py
+            api/v1/endpoints/{mock_interview,mock_interview_live}.py
+            core/singletons/{speech_client,tts_client}.py
+  AI Layer: services/mock_interview/main.py
+            shared/prompts/mock_interview/prompts.py
+  Frontend: mock-interview/{layout,page}.tsx
+            mock-interview/{notes,english,practice,technical,live,report}/page.tsx
+            mock-interview/_components/{MockSidebar,TranscriptDisplay,FeedbackCard,
+                                       ScoreCard,ReadinessGate,LiveInterviewUI,
+                                       VideoOverlay,TechQuestionCard,CalibrationFeedback}.tsx
+            hooks/useLiveInterview.ts
+            api/mockInterviewApi.ts
+            public/audio-processor.js
+
+CRITICAL RULES (NEVER VIOLATE):
+  1. Frontend sends raw .webm. Backend converts with ffmpeg. NEVER browser conversion.
+  2. Frontend NEVER calls AI Layer directly. ALL calls go through Backend.
+  3. Strip user name, email, phone BEFORE every LLM call (anonymize()).
+  4. Every AI Layer call MUST have asyncio.wait_for(timeout=20-25s).
+  5. Distributed lock on notes generation (prevent duplicate LLM calls per user).
+  6. Audio deleted immediately after transcription. Never persist audio.
+  7. Check consent_given before any practice or mock endpoint.
+  8. DO NOT start V2 Day 19 (video) until video_analyzer.py regression is confirmed fixed.
+  9. On WS connect: reject if JWT expires within 30 minutes. Store reconnect_token in Redis.
+     Verify reconnect_token on reconnect. A session_id alone is NOT sufficient to reconnect.
+ 10. Enforce audio_buffer size cap (5MB per answer). Cap total session audio at 50MB.
+     Enforce max 20 audio_chunk messages/second. Drop excess silently. Never disconnect for
+     rate-limit violations — only disconnect for auth failures or protocol violations.
+
+================================================================================
+END OF BLUEPRINT V3
+================================================================================

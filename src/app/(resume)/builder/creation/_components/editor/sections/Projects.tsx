@@ -3,8 +3,10 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
 import TechnologyChipsInput from "../TechnologyChipsInput";
+import SectionTipsPanel from "../SectionTipsPanel";
 import { technologies } from "../../../../../../../types/technologies";
 import {
   FaSpellCheck,
@@ -17,10 +19,13 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface ProjectEntry {
   title: string;
@@ -29,7 +34,7 @@ interface ProjectEntry {
   startDate: string;
   endDate: string;
   link: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ Backend uses "id" field, not "_id"
 }
 
 const emptyProject = (): ProjectEntry => ({
@@ -52,7 +57,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -64,6 +69,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Projects: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -78,11 +85,14 @@ const Projects: React.FC = () => {
     clearError,
     clearSectionIndexErrors,
     reindexErrors,
+    setFieldError,
   } = useValidation();
 
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<ProjectEntry | null>(null);
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -115,27 +125,79 @@ const Projects: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
+  useEffect(() => {
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Projects") return;
+      let allValid = true;
+      editingEntries.forEach((project, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("project", globalIndex, {
+          title: project.title,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Projects") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
   // ✅ Sync technologies to skills whenever projects change
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.projects) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, projects: allEntries });
-    }
-
-    // Extract all unique technologies from all projects
-    const allTechnologies = allEntries.flatMap(entry => entry.technologies);
+    const validEntries = [
+      ...savedEntries,
+      ...editingEntries.filter(hasValidData)
+    ];
+    const allTechnologies = validEntries.flatMap(entry => entry.technologies);
     const uniqueTechnologies = Array.from(new Set(allTechnologies));
-
-    // Merge with existing skills (keep existing skills that aren't from projects)
-    const currentSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
-    const mergedSkills = Array.from(new Set([...currentSkills, ...uniqueTechnologies]));
-
-    // Only update if there's a change to avoid infinite loops
-    if (JSON.stringify(currentSkills.sort()) !== JSON.stringify(mergedSkills.sort())) {
-      setResumeData({ ...resumeData, projects: allEntries, skills: mergedSkills });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.projects ?? []) as Array<Record<string, unknown>>;
+      const merged = validEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      const currentSkills = Array.isArray(prev.skills) ? prev.skills : [];
+      const mergedSkills = Array.from(new Set([...currentSkills, ...uniqueTechnologies]));
+      const projectsChanged = JSON.stringify(prev.projects) !== JSON.stringify(merged);
+      const skillsChanged = JSON.stringify([...currentSkills].sort()) !== JSON.stringify([...mergedSkills].sort());
+      if (!projectsChanged && !skillsChanged) return prev;
+      return { ...prev, projects: merged, skills: skillsChanged ? mergedSkills : currentSkills };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
+
+  useEffect(() => {
+    if (editingEntries.length > 0) return;
+    if (!resumeData.projects?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length !== resumeData.projects!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.projects![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.projects]);
 
   const handleChange = <K extends keyof ProjectEntry>(
     index: number,
@@ -152,7 +214,17 @@ const Projects: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyProject()]);
@@ -164,6 +236,8 @@ const Projects: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyProject()]);
 
     setTimeout(() => {
@@ -176,7 +250,7 @@ const Projects: React.FC = () => {
   const removeProject = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const projectToDelete = savedEntries[index];
-    const itemId = projectToDelete._id;
+    const itemId = projectToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
@@ -194,7 +268,11 @@ const Projects: React.FC = () => {
       // // console.log("🗑️ Deleting project item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "projects", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "projects", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "projects", itemId);
+      }
 
       // // console.log("✅ Project item deleted from backend successfully");
 
@@ -207,7 +285,7 @@ const Projects: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete project item:", error);
-      alert("Failed to delete project. Please try again.");
+      toast.error("Failed to delete project. Please try again.");
     } finally {
       setDeletingIndex(null);
     }
@@ -215,50 +293,65 @@ const Projects: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
 
-    setTimeout(() => {
-      const el = editorRefs.current[0];
-      if (el) {
-        el.focus();
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (el.childNodes.length > 0) {
-          range.selectNodeContents(el);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      }
-    }, 0);
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
   };
 
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(idx, "description", editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(idx, "description", content);
     }, 0);
   };
 
   const onEditorInput = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
-    handleChange(idx, "description", el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(idx, "description", content);
   };
 
-  function startToLabel(val: string) {
+  function startToLabel(val: string): string {
     if (!val) return "";
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -310,15 +403,15 @@ Developed real-time chat application with WebSocket connections supporting 1000+
 
 Engineered machine learning recommendation system using Python and TensorFlow that increased user engagement by 35% and generated 20% more revenue through personalized suggestions`;
 
-    generateSuggestions(editIndex, prompt);
+    generateSuggestions(editIndex, prompt, "project");
   };
 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -331,18 +424,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {
@@ -355,8 +437,11 @@ Engineered machine learning recommendation system using Python and TensorFlow th
   useEffect(() => {
     editingEntries.forEach((project, idx) => {
       const el = editorRefs.current[idx];
-      if (el && project.description && el.innerHTML !== project.description) {
-        el.innerHTML = project.description;
+      if (el && project.description) {
+        // Only update innerHTML if element is not currently focused (to preserve cursor position)
+        if (document.activeElement !== el && el.innerHTML !== project.description) {
+          el.innerHTML = project.description;
+        }
       }
     });
   }, [editingEntries]);
@@ -455,9 +540,18 @@ Engineered machine learning recommendation system using Python and TensorFlow th
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((project, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -473,7 +567,8 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                         placeholder="Project Title"
                         onChange={(e) => handleChange(editIndex, "title", e.target.value)}
                         onBlur={() => validateRequired("project", globalIndex, { title: project.title })}
-                        className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
+                        maxLength={150}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`project-${globalIndex}-title`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
                       {errors[`project-${globalIndex}-title`] && (
                         <span className="text-xs text-red-500">
@@ -501,6 +596,8 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                           value={project.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
+                          error={errors[`project-${globalIndex}-startDate`]}
+                          maxDate={project.endDate}
                         />
                       </div>
 
@@ -510,6 +607,8 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                           value={project.endDate}
                           onChange={(val) => handleChange(editIndex, "endDate", val)}
                           placeholder="MM/YY"
+                          error={errors[`project-${globalIndex}-endDate`]}
+                          minDate={project.startDate}
                         />
                       </div>
                     </div>
@@ -521,9 +620,24 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                         type="text"
                         value={project.link || ""}
                         placeholder="https://github.com/..."
-                        onChange={(e) => handleChange(editIndex, "link", e.target.value)}
-                        className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
+                        onChange={(e) => {
+                          handleChange(editIndex, "link", e.target.value);
+                          clearError("project", globalIndex, "link");
+                        }}
+                        onBlur={() => {
+                          const link = project.link?.trim();
+                          if (!link) return;
+                          if (!link.startsWith("http://") && !link.startsWith("https://")) {
+                            setFieldError("project", globalIndex, "link", "Project link must start with http:// or https://");
+                          }
+                        }}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 focus:outline-none ${errors[`project-${globalIndex}-link`] ? "border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
+                      {errors[`project-${globalIndex}-link`] && (
+                        <span className="text-xs text-red-500">
+                          {errors[`project-${globalIndex}-link`]}
+                        </span>
+                      )}
                     </div>
 
                     {/* Description */}
@@ -564,8 +678,9 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                           ref={(el) => { editorRefs.current[editIndex] = el; }}
                           contentEditable
                           suppressContentEditableWarning
+                          lang="en"
                           onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                           spellCheck={spellCheckEnabled}
                         />
                       </div>
@@ -589,21 +704,33 @@ Engineered machine learning recommendation system using Python and TensorFlow th
           {/* Tips Panel */}
           <div className="w-80 flex-shrink-0 overflow-y-auto scrollbar-hide sticky top-2">
             {showTips && activePopup === null ? (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Projects showcase your practical skills and initiative. Highlight technical challenges solved, technologies used, and measurable outcomes achieved.
-                  </p>
-                  <p>
-                    Include relevant metrics like performance improvements, user engagement, or code efficiency. Link to live demos or GitHub repositories when possible to demonstrate your work.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Personal projects are valued by 75% of employers when evaluating candidates.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Projects"
+                entryContent={[
+                  editingEntries[0]?.title,
+                  ...(editingEntries[0]?.description || '')
+                    .split('\n')
+                    .map((l) => l.trim().slice(0, 60))
+                    .filter(Boolean),
+                ].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Projects showcase your practical skills and initiative. Highlight technical challenges solved, technologies used, and measurable outcomes achieved.
+                      </p>
+                      <p>
+                        Include relevant metrics like performance improvements, user engagement, or code efficiency. Link to live demos or GitHub repositories when possible to demonstrate your work.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Personal projects are valued by 75% of employers when evaluating candidates.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             ) : (
               activePopup !== null && suggestions[activePopup] && (
                 <AISuggestions

@@ -13,30 +13,28 @@ interface RecentActivityListProps {
     maxHeight?: string;
 }
 
-// Individual activity item component for better memoization
+const COLOR_CLASSES = {
+    'A-E': 'bg-blue-100 text-blue-600',
+    'F-J': 'bg-purple-100 text-purple-600',
+    'K-O': 'bg-green-100 text-green-600',
+    'P-T': 'bg-orange-100 text-orange-600',
+    'U-Z': 'bg-pink-100 text-pink-600',
+} as const;
+
+function getColorClass(initial: string): string {
+    const charCode = initial.toUpperCase().charCodeAt(0);
+    if (charCode >= 65 && charCode <= 69) return COLOR_CLASSES['A-E'];
+    if (charCode >= 70 && charCode <= 74) return COLOR_CLASSES['F-J'];
+    if (charCode >= 75 && charCode <= 79) return COLOR_CLASSES['K-O'];
+    if (charCode >= 80 && charCode <= 84) return COLOR_CLASSES['P-T'];
+    return COLOR_CLASSES['U-Z'];
+}
+
 const ActivityItemComponent: React.FC<{ activity: ActivityItem }> = ({ activity }) => {
-    // Generate consistent color based on initial
-    const colorClasses = {
-        'A-E': 'bg-blue-100 text-blue-600',
-        'F-J': 'bg-purple-100 text-purple-600',
-        'K-O': 'bg-green-100 text-green-600',
-        'P-T': 'bg-orange-100 text-orange-600',
-        'U-Z': 'bg-pink-100 text-pink-600'
-    };
-
-    const getColorClass = (initial: string) => {
-        const charCode = initial.toUpperCase().charCodeAt(0);
-        if (charCode >= 65 && charCode <= 69) return colorClasses['A-E'];
-        if (charCode >= 70 && charCode <= 74) return colorClasses['F-J'];
-        if (charCode >= 75 && charCode <= 79) return colorClasses['K-O'];
-        if (charCode >= 80 && charCode <= 84) return colorClasses['P-T'];
-        return colorClasses['U-Z'];
-    };
-
     return (
         <li className="flex justify-between items-center py-3 px-3 border-b border-gray-100 last:border-none hover:bg-gray-50 transition-colors rounded-lg group">
             <div className='flex gap-3 items-center flex-1 min-w-0'>
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm flex-shrink-0 ${getColorClass(activity.user_initial)}`}>
+                <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm shrink-0 ${getColorClass(activity.user_initial)}`}>
                     {activity.user_initial}
                 </div>
                 <div className='flex-1 min-w-0'>
@@ -48,7 +46,7 @@ const ActivityItemComponent: React.FC<{ activity: ActivityItem }> = ({ activity 
                     </p>
                 </div>
             </div>
-            <div className='flex items-center gap-1.5 text-gray-400 group-hover:text-gray-600 transition-colors flex-shrink-0 ml-2'>
+            <div className='flex items-center gap-1.5 text-gray-400 group-hover:text-gray-600 transition-colors shrink-0 ml-2'>
                 <Clock className='w-3.5 h-3.5' />
                 <span className="text-xs font-medium whitespace-nowrap">
                     {activity.timestamp}
@@ -92,7 +90,6 @@ const RecentActivityListComponent: React.FC<RecentActivityListProps> = ({
     );
 };
 
-// Memoize component with shallow comparison
 export const RecentActivityList = memo(RecentActivityListComponent);
 RecentActivityList.displayName = 'RecentActivityList';
 

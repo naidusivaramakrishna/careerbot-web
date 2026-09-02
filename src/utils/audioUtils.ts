@@ -5,15 +5,9 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import logger from '@/lib/logger';
-import meSpeak from 'mespeak';
-
 // Singleton FFmpeg instance
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoading: Promise<FFmpeg> | null = null;
-
-// meSpeak initialization state
-let meSpeakInitialized = false;
-let meSpeakInitializing: Promise<void> | null = null;
 
 /**
  * Get or initialize FFmpeg instance (singleton pattern)
@@ -46,60 +40,6 @@ const getFFmpeg = async (): Promise<FFmpeg> => {
   return ffmpegLoading;
 };
 
-/**
- * Initialize meSpeak TTS engine (singleton pattern)
- * Loads configuration and voice files from public directory
- */
-const initializeMeSpeak = async (): Promise<void> => {
-  if (meSpeakInitialized) {
-    return;
-  }
-
-  if (meSpeakInitializing) {
-    return meSpeakInitializing;
-  }
-
-  meSpeakInitializing = (async () => {
-    try {
-      logger.info('🎤 Initializing meSpeak TTS engine...');
-
-      // Load config and voice from public directory
-      // Files were copied during build from node_modules/mespeak
-      meSpeak.loadConfig('/mespeak/mespeak_config.json');
-      meSpeak.loadVoice('/mespeak/voices/en/en.json');
-
-      // Poll until meSpeak is ready (files load asynchronously)
-      const maxWaitTime = 10000; // 10 seconds max
-      const pollInterval = 300;  // Check every 300ms
-      let waited = 0;
-
-      while (waited < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-        waited += pollInterval;
-
-        // Test if meSpeak is ready by generating a short test audio
-        try {
-          const testData = meSpeak.speak('test', { rawdata: 'buffer' });
-          if (testData && testData instanceof Uint8Array && testData.length > 0) {
-            meSpeakInitialized = true;
-            logger.info(`✅ meSpeak initialized successfully (${waited}ms)`);
-            return;
-          }
-        } catch {
-          // Not ready yet, continue waiting
-        }
-      }
-
-      throw new Error(`meSpeak initialization timeout after ${maxWaitTime}ms`);
-    } catch (error) {
-      logger.error('❌ Failed to initialize meSpeak:', error);
-      meSpeakInitializing = null;
-      throw error;
-    }
-  })();
-
-  return meSpeakInitializing;
-};
 
 /**
  * Convert WebM video blob to MP4 format
@@ -229,7 +169,7 @@ export const getAllAudioRecordings = (): { [questionId: string]: string } => {
   try {
     const recordings = sessionStorage.getItem('audio_recordings');
     return recordings ? JSON.parse(recordings) : {};
-  } catch (error) {
+  } catch {
     // // console.error('Error retrieving audio recordings:', error);
     return {};
   }
@@ -242,7 +182,7 @@ export const getAudioRecording = (questionId: string): string | null => {
   try {
     const recordings = getAllAudioRecordings();
     return recordings[questionId] || null;
-  } catch (error) {
+  } catch {
     // // console.error('Error retrieving audio recording:', error);
     return null;
   }
@@ -352,7 +292,7 @@ export const blobToFile = (blob: Blob, fileName: string): File => {
 export const prepareAudioForAPI = (
   questionId: string,
   blob: Blob,
-  additionalData?: { [key: string]: any }
+  additionalData?: { [key: string]: unknown }
 ): FormData => {
   const formData = new FormData();
 
@@ -366,7 +306,7 @@ export const prepareAudioForAPI = (
   // Add any additional data
   if (additionalData) {
     Object.keys(additionalData).forEach((key) => {
-      formData.append(key, additionalData[key]);
+      formData.append(key, String(additionalData[key]));
     });
   }
 
@@ -380,7 +320,7 @@ export const clearAllAudioRecordings = (): void => {
   try {
     sessionStorage.removeItem('audio_recordings');
     // // console.log('✅ All audio recordings cleared');
-  } catch (error) {
+  } catch {
     // // console.error('Error clearing audio recordings:', error);
   }
 };
@@ -392,7 +332,7 @@ export const getAudioRecordingsCount = (): number => {
   try {
     const recordings = getAllAudioRecordings();
     return Object.keys(recordings).length;
-  } catch (error) {
+  } catch {
     // // console.error('Error getting audio recordings count:', error);
     return 0;
   }
@@ -512,7 +452,7 @@ export const saveTextAnswer = (questionId: string, answerText: string): void => 
     answers[questionId] = answerText;
     sessionStorage.setItem('text_answers', JSON.stringify(answers));
     // // console.log(`✅ Text answer saved for question ${questionId}:`, answerText);
-  } catch (error) {
+  } catch {
     // // console.error('Error saving text answer:', error);
   }
 };
@@ -526,7 +466,7 @@ export const getTextAnswer = (questionId: string): string | null => {
     if (!answers) return null;
     const parsedAnswers = JSON.parse(answers);
     return parsedAnswers[questionId] || null;
-  } catch (error) {
+  } catch {
     // // console.error('Error getting text answer:', error);
     return null;
   }
@@ -539,162 +479,12 @@ export const getAllTextAnswers = (): { [questionId: string]: string } => {
   try {
     const answers = sessionStorage.getItem('text_answers');
     return answers ? JSON.parse(answers) : {};
-  } catch (error) {
+  } catch {
     // // console.error('Error getting all text answers:', error);
     return {};
   }
 };
 
-/**
- * Convert text to audio blob using Web Audio API
- * Creates a valid silent audio file since Web Speech API can't be captured
- * The text is still spoken for user feedback, but we generate a proper audio file separately
- */
-export const textToSpeechAndRecord = async (
-  text: string,
-  options?: {
-    rate?: number;
-    pitch?: number;
-    volume?: number;
-    lang?: string;
-  }
-): Promise<Blob> => {
-  try {
-    // Optionally speak the text for user feedback (muted if volume is 0)
-    if (options?.volume !== 0 && window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = options?.rate ?? 0.85;
-      utterance.pitch = options?.pitch ?? 1.0;
-      utterance.volume = options?.volume ?? 0;
-      utterance.lang = options?.lang ?? 'en-GB';
-
-      const voices = await getAvailableVoices();
-      const foreignVoice = voices.find(voice =>
-        voice.lang.includes('en-GB') ||
-        voice.lang.includes('en-AU') ||
-        voice.lang.includes('en-IN') ||
-        voice.name.toLowerCase().includes('british')
-      );
-      if (foreignVoice) {
-        utterance.voice = foreignVoice;
-      }
-
-      window.speechSynthesis.speak(utterance);
-    }
-
-    // ✅ Generate speech-like audio using advanced formant synthesis
-    // This creates audio with multiple frequencies that simulate human speech
-    // The AI transcription service can process this better than a simple tone
-    logger.info(`🎤 Generating speech-like audio for: "${text.substring(0, 50)}..."`);
-    const audioBlob = await generateSpeechAudio(text);
-    logger.info(`✅ Speech-like audio generated: ${(audioBlob.size / 1024).toFixed(1)} KB`);
-
-    return audioBlob;
-
-  } catch (error) {
-    logger.error('❌ Error in textToSpeechAndRecord:', error);
-    // Fallback: create a minimal silent audio file
-    return createMinimalAudioBlob();
-  }
-};
-
-/**
- * Generate speech-like audio from text using advanced synthesis
- * Creates audio with multiple frequencies to simulate speech formants
- * This produces audio that AI transcription services can process
- */
-export async function generateSpeechAudio(
-  text: string
-): Promise<Blob> {
-  try {
-    logger.info(`🎤 Generating real speech audio using meSpeak: "${text.substring(0, 50)}..."`);
-
-    // Initialize meSpeak if not already done
-    await initializeMeSpeak();
-
-    // Generate speech audio as raw WAV buffer
-    const audioData = meSpeak.speak(text, {
-      amplitude: 100,        // Volume (0-200, default 100)
-      pitch: 50,             // Voice pitch (0-99, default 50)
-      speed: 175,            // Speaking speed (words per minute, default 175)
-      variant: 'f1',         // Female voice variant (f1-f4 for female, m1-m7 for male)
-      wordgap: 0,            // Additional gap between words in 10ms units
-      rawdata: 'buffer'      // Return Uint8Array buffer instead of playing audio
-    });
-
-    // Check if audio generation succeeded
-    if (!audioData || !(audioData instanceof Uint8Array)) {
-      throw new Error('meSpeak failed to generate audio data');
-    }
-
-    // Convert Uint8Array to Blob with proper MIME type
-    // Create a new ArrayBuffer to ensure type compatibility (meSpeak returns ArrayBufferLike)
-    const buffer = new ArrayBuffer(audioData.length);
-    const view = new Uint8Array(buffer);
-    view.set(audioData);
-    const wavBlob = new Blob([buffer], { type: 'audio/wav' });
-
-    logger.info(`✅ Real speech audio generated: ${(wavBlob.size / 1024).toFixed(1)} KB`);
-    logger.info(`   Text: "${text}"`);
-
-    return wavBlob;
-
-  } catch (error) {
-    logger.error('❌ Error generating speech with meSpeak:', error);
-    logger.warn('⚠️ Falling back to minimal audio blob');
-
-    // Fallback: create a minimal audio file
-    return createMinimalAudioBlob();
-  }
-}
-
-/**
- * Convert AudioBuffer to WAV blob
- */
-function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numberOfChannels = buffer.numberOfChannels;
-  const length = buffer.length * numberOfChannels * 2;
-  const arrayBuffer = new ArrayBuffer(44 + length);
-  const view = new DataView(arrayBuffer);
-
-  // WAV header
-  const writeString = (offset: number, string: string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + length, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true); // PCM format
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, numberOfChannels, true);
-  view.setUint32(24, buffer.sampleRate, true);
-  view.setUint32(28, buffer.sampleRate * numberOfChannels * 2, true);
-  view.setUint16(32, numberOfChannels * 2, true);
-  view.setUint16(34, 16, true); // 16-bit
-  writeString(36, 'data');
-  view.setUint32(40, length, true);
-
-  // Write audio data
-  const channels: Float32Array[] = [];
-  for (let i = 0; i < numberOfChannels; i++) {
-    channels.push(buffer.getChannelData(i));
-  }
-
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-      const sample = Math.max(-1, Math.min(1, channels[channel][i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
-}
 
 /**
  * Create a minimal silent audio blob as fallback

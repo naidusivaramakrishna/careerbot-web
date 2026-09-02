@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
@@ -19,7 +19,7 @@ const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), {
 });
 
 const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), {
-  loading: () => <div className="w-64 bg-gray-100 animate-pulse" />,
+  loading: () => <div className="hidden h-full w-56 shrink-0 bg-gray-100 animate-pulse lg:block xl:w-60" />,
 });
 
 const TextToSpeechPlayer = dynamic(() => import('../components/TextToSpeechPlayer'), {
@@ -31,6 +31,8 @@ const SectionStartModal = dynamic(() => import('../components/SectionStartModal'
   loading: () => null,
 });
 
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="mb-3 h-12 shrink-0 rounded-xl border border-gray-200 bg-white animate-pulse" /> });
+
 export default function ListenAndRepeatPage() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(true);
@@ -39,6 +41,12 @@ export default function ListenAndRepeatPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [validationWarning, setValidationWarning] = useState('');
+  const [audioCompleted, setAudioCompleted] = useState(false); // Track if audio has finished playing
+
+  // ✅ Track section-specific question number for display only (1-8 for "Listen and Repeat")
+  // Note: currentQuestion.question_number remains global for backend upload API
+  const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
+  const SECTION_TOTAL_QUESTIONS = 8; // Total questions in this section
 
   // recordings mapped by question_id
   const [audioRecordings, setAudioRecordings] = useState<{
@@ -57,8 +65,9 @@ export default function ListenAndRepeatPage() {
       const response = await getCurrentQuestion(sessionId);
       setCurrentQuestion(response);
       logger.info('➡️ Now showing question:', response.question_id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch question');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch question');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -66,7 +75,15 @@ export default function ListenAndRepeatPage() {
 
   const handleStartSection = async () => {
     setShowModal(false);
+    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
+    setAudioCompleted(false); // Reset audio completion state
     await fetchCurrentQuestion();
+  };
+
+  // Handler for when audio finishes playing
+  const handleAudioEnd = () => {
+    setAudioCompleted(true);
+    logger.info('✅ Audio playback completed - recording now enabled');
   };
 
   // Record audio
@@ -163,6 +180,12 @@ export default function ListenAndRepeatPage() {
       logger.info('✅ Audio uploaded successfully:', uploadResponse);
       logger.info(`✅ Upload confirmed for ${currentQuestion.question_id} - Size: ${(audioBlob.size / 1024).toFixed(2)} KB`);
 
+      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
+      if (currentQuestion.question_number) {
+        sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
+        logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
+      }
+
       // ✅ Check if next question was included in upload response
       if (uploadResponse.next_question) {
         logger.info('📬 Next question received from upload response:', uploadResponse.next_question.question.question_id);
@@ -183,7 +206,7 @@ export default function ListenAndRepeatPage() {
           question_type: nextQuestion.question_type || 'VOICE',
           section_name: nextQuestion.section_name,
           section_id: undefined,
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
           total_questions: uploadResponse.next_question.section.total_questions,
           options: nextQuestion.options,
           audio_url: nextQuestion.audio_url,
@@ -193,6 +216,12 @@ export default function ListenAndRepeatPage() {
           story_text: nextQuestion.story_text,
           expected_text: nextQuestion.expected_text,
         });
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
+
+        // Reset audio completion for new question
+        setAudioCompleted(false);
       } else {
         // Fallback: If next_question not in response, fetch it separately
         logger.warn('⚠️ Next question not in upload response, fetching separately...');
@@ -214,16 +243,22 @@ export default function ListenAndRepeatPage() {
         }
 
         setCurrentQuestion(response);
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
+
+        // Reset audio completion for new question
+        setAudioCompleted(false);
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to upload audio or fetch next question';
+      setLoading(false);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to upload audio or fetch next question');
+      const errorMessage = error.message;
       logger.error('❌ Error in handleSubmit:', errorMessage);
       logger.error('❌ Full error:', err);
 
-      // ✅ Show error to user
       setError(errorMessage);
       alert(`⚠️ Upload Failed!\n\n${errorMessage}\n\nPlease try recording again.`);
-    } finally {
       setLoading(false);
     }
   };
@@ -249,131 +284,96 @@ export default function ListenAndRepeatPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-[#F4F6FB] flex">
+      <div className="flex h-full min-h-0 overflow-hidden bg-gray-50">
         <AssessmentSidebar currentSectionId={2} />
 
-        <main className="flex-1 px-8 py-6">
-          <div className="bg-white rounded-lg p-5 mb-6">
-            <div className="flex justify-between items-center mb-2">
-              <div>
-                <h1 className="text-lg text-black font-semibold">
-                  {currentQuestion?.section_name || 'Listen and Repeat'}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Listen carefully and repeat what you hear
-                </p>
-              </div>
-              <p className="text-sm text-gray-600">
-                {currentQuestion?.question_number} of{' '}
-                {currentQuestion?.total_questions} Questions
-              </p>
-            </div>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-6 lg:py-4">
 
-            <div className="w-full bg-gray-200 h-1 rounded-full">
-              <div
-                className="bg-green-500 h-1 rounded-full transition-all"
-                style={{
-                  width: `${
-                    ((currentQuestion?.question_number || 1) /
-                      (currentQuestion?.total_questions || 1)) *
-                    100
-                  }%`,
-                }}
-              />
-            </div>
+          {/* Section Header */}
+          <div className="mb-2 shrink-0">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 2 of 7</p>
+            <h1 className="text-lg font-bold text-gray-900">
+              {currentQuestion?.section_name || 'Listen & Repeat'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Listen carefully and repeat what you hear.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl p-6 shadow-sm">
+          <QuestionProgressBar
+            currentQuestion={sectionQuestionNumber}
+            totalQuestions={SECTION_TOTAL_QUESTIONS}
+            className="mb-3 shrink-0"
+          />
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 assessment-scroll lg:grid-cols-2">
+            {/* Audio Card */}
+            <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Listen</p>
+                <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
+                  {sectionQuestionNumber} / {SECTION_TOTAL_QUESTIONS}
+                </span>
+              </div>
+
               {error ? (
-                <p className="text-red-600">{error}</p>
+                <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  {error}
+                </div>
               ) : (
                 <>
-                  <div className="mb-6">
-                    <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-                      Question {currentQuestion?.question_number}
-                    </span>
-                  </div>
-
                   {currentQuestion?.question_text && (
                     <TextToSpeechPlayer
                       text={currentQuestion.question_text}
                       autoPlay={true}
+                      onAudioEnd={handleAudioEnd}
                     />
                   )}
 
-                  {/* Show validation warning if exists */}
                   {validationWarning && hasRecording && (
-                    <div className="mt-6 flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                      <svg
-                        className="w-5 h-5 text-yellow-600"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                        />
-                      </svg>
-                      <span className="text-sm font-medium text-yellow-800">
-                        {validationWarning}
-                      </span>
+                    <div className="mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-medium text-amber-800">
+                      {validationWarning}
                     </div>
                   )}
 
-                  {/* Show success indicator when valid recording exists */}
-                  {hasRecording && !validationWarning && (
-                    <div className="mt-6 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
-                      <svg
-                        className="w-5 h-5 text-green-600"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      <span className="text-sm font-medium text-green-800">
-                        Valid Recording Saved
-                      </span>
-                    </div>
-                  )}
                 </>
               )}
             </div>
 
-            <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col items-center">
+            {/* Recorder Card */}
+            <div className="flex min-h-0 flex-col items-center justify-center overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+              {!audioCompleted && (
+                <div className="mb-5 px-4 py-3 bg-[#2557a7]/5 border-l-4 border-[#2557a7] rounded-r-xl w-full">
+                  <p className="text-sm font-medium text-[#2557a7]">
+                    Play and listen to the audio first before recording.
+                  </p>
+                </div>
+              )}
               <AudioRecorder
                 key={currentQuestion?.question_id}
                 maxDuration={15}
                 onRecordingComplete={handleRecordingComplete}
+                disabled={!audioCompleted || !!hasRecording}
+                captured={!!hasRecording}
               />
             </div>
           </div>
 
-          <div className="flex justify-between items-center mt-6">
-            <p className="text-sm text-gray-500">
-              Question {currentQuestion?.question_number} of{' '}
-              {currentQuestion?.total_questions}
+          <div className="mt-3 flex shrink-0 items-center justify-between">
+            <p className="text-xs text-gray-400">
+              Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
             </p>
 
             <button
               onClick={handleNext}
               disabled={!hasRecording || loading}
-              className={`px-6 py-3 rounded-lg font-semibold transition ${
+              className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
                 hasRecording && !loading
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
             >
-              Next Question →
+              {loading ? 'Uploading…' : 'Next Question →'}
             </button>
           </div>
         </main>

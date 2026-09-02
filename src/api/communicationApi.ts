@@ -10,6 +10,7 @@ export interface GenerateTestRequest {
 
 export interface GenerateTestResponse {
   test_id: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   questions: any[];
   message?: string;
   // Add other response fields as per your API response
@@ -79,20 +80,20 @@ export interface VideoEvaluationResponse {
   evaluation_id: string;
   status: string;
   message?: string;
+  data?: {
+    video_evaluation_id?: string;
+    [key: string]: unknown;
+  };
   // Add other response fields as per your API response
 }
 
 export interface FinalReportRequest {
   email_id: string;
   test_id: string;
-  video_evaluation_id: string;
-  audio_evaluation_id: string;
-  video_evaluation?: {
-    [key: string]: any;
-  };
-  audio_evaluation?: {
-    [key: string]: any;
-  };
+  video_evaluation_id?: string;
+  audio_evaluation_id?: string;
+  mcq_evaluation_id?: string;
+  sample_report: boolean;
 }
 
 export interface FinalReportResponse {
@@ -141,6 +142,7 @@ export const startSession = async (data: StartSessionRequest): Promise<StartSess
     logger.debug('🔍 ===== END RAW RESPONSE =====');
 
     // Check for different possible response structures
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const responseData: any = response.data;
 
     // Try to find session_id in different possible locations
@@ -187,10 +189,12 @@ export const startSession = async (data: StartSessionRequest): Promise<StartSess
  */
 export const getCurrentQuestion = async (sessionId: string): Promise<CurrentQuestionResponse> => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await httpClient.get<any>(`/ai-assessment/sessions/${sessionId}/current-question`);
     logger.debug('🔍 getCurrentQuestion response:', response.data);
 
     // The API returns the question nested in current_question
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const responseData: any = response.data;
 
     if (responseData?.current_question) {
@@ -255,6 +259,7 @@ export const getNextQuestion = async (data: NextQuestionRequest) => {
     //   `/ai-assessment/sessions/${data.session_id}/next-question?question_id=${data.question_id}`,
     //   {}  // question_id passed as query parameter
     // );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await httpClient.post<any>(
       `/ai-assessment/sessions/${data.session_id}/next-question?completed_question_id=${data.question_id}`,
       {}  // question_id passed as query parameter
@@ -312,17 +317,38 @@ export const submitVideoEvaluation = async (data: VideoEvaluationRequest): Promi
     logger.debug(`📊 Email ID: ${data.email_id}`);
     logger.debug(`📊 Test ID: ${data.test_id}`);
 
+    // ✅ Clean MIME type - remove codecs specification that backend might reject
+    // e.g., "video/webm;codecs=vp8,opus" → "video/webm"
+    let cleanMimeType = data.file.type;
+    let filename = 'video.webm';
+
+    if (cleanMimeType.includes(';')) {
+      cleanMimeType = cleanMimeType.split(';')[0];
+      logger.debug(`🧹 Cleaned video MIME type: "${data.file.type}" → "${cleanMimeType}"`);
+    }
+
+    // Determine filename based on clean MIME type
+    if (cleanMimeType.includes('mp4')) {
+      filename = 'video.mp4';
+    } else if (cleanMimeType.includes('webm')) {
+      filename = 'video.webm';
+    }
+
+    // ✅ Create new blob with clean MIME type (without codecs)
+    const cleanBlob = new Blob([data.file], { type: cleanMimeType });
+    logger.debug(`📋 Created clean video blob: type="${cleanBlob.type}", size=${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB`);
+
     const formData = new FormData();
     formData.append('email_id', data.email_id);
     formData.append('test_id', data.test_id);
-    formData.append('file', data.file, 'video.webm');
-    logger.debug('📹 FormData prepared with email_id, test_id, and file (video.webm)', `(${(data.file.size / 1024 / 1024).toFixed(2)} MB)`);
+    formData.append('file', cleanBlob, filename); // ✅ Use clean blob instead of original
+    logger.debug(`📹 FormData prepared with email_id, test_id, and file (${filename})`, `(${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB)`);
 
     // Use httpClient for automatic correlation ID and cookie handling
     // Note: Must explicitly set Content-Type to undefined to let axios handle FormData
     const response = await httpClient.post<VideoEvaluationResponse>(
       '/ai-assessment/video-evaluation',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': undefined
@@ -446,21 +472,34 @@ export const uploadAudio = async (data: AudioUploadRequest): Promise<AudioUpload
       logger.debug(`📋 Converting question_id: "${data.question_id}" → "${simpleQuestionId}"`);
     }
 
-    // Determine filename extension based on blob type
+    // ✅ Clean MIME type - remove codecs specification that backend might reject
+    // e.g., "audio/webm;codecs=opus" → "audio/webm"
+    let cleanMimeType = data.audio_file.type;
     let filename = 'audio.webm';
-    if (data.audio_file.type.includes('wav')) {
+
+    if (cleanMimeType.includes(';')) {
+      cleanMimeType = cleanMimeType.split(';')[0];
+      logger.debug(`🧹 Cleaned MIME type: "${data.audio_file.type}" → "${cleanMimeType}"`);
+    }
+
+    // Determine filename based on clean MIME type
+    if (cleanMimeType.includes('wav')) {
       filename = 'audio.wav';
-    } else if (data.audio_file.type.includes('mp3')) {
+    } else if (cleanMimeType.includes('mp3')) {
       filename = 'audio.mp3';
-    } else if (data.audio_file.type.includes('webm')) {
+    } else if (cleanMimeType.includes('webm')) {
       filename = 'audio.webm';
     }
+
+    // ✅ Create new blob with clean MIME type (without codecs)
+    const cleanBlob = new Blob([data.audio_file], { type: cleanMimeType });
+    logger.debug(`📋 Created clean blob: type="${cleanBlob.type}", size=${(cleanBlob.size / 1024).toFixed(2)} KB`);
 
     const formData = new FormData();
     formData.append('session_id', data.session_id);
     formData.append('question_id', simpleQuestionId); // Use simple format
     formData.append('test_id', data.test_id);
-    formData.append('audio_file', data.audio_file, filename);
+    formData.append('audio_file', cleanBlob, filename); // ✅ Use clean blob instead of original
 
     // Add return_next_question parameter if provided
     if (data.return_next_question !== undefined) {
@@ -473,7 +512,7 @@ export const uploadAudio = async (data: AudioUploadRequest): Promise<AudioUpload
     // Note: Must explicitly set Content-Type to undefined to let axios handle FormData
     const response = await httpClient.post<AudioUploadResponse>(
       '/ai-assessment/audio/upload-progressive',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': undefined
@@ -495,6 +534,41 @@ export const uploadAudio = async (data: AudioUploadRequest): Promise<AudioUpload
   }
 };
 
+// ==================== AUDIO STATUS API ====================
+
+export interface AudioStatusResponse {
+  session_id: string;
+  total_expected: number;
+  completed: number;
+  processing: number;
+  failed: number;
+  overall_status: 'complete' | 'partial' | 'pending' | 'failed';
+  questions: {
+    [key: string]: 'completed' | 'processing' | 'pending' | 'failed';
+  };
+  missing: string[];
+}
+
+/**
+ * Get audio processing status for a session
+ * Checks how many audio files have been transcribed
+ */
+export const getAudioStatus = async (sessionId: string): Promise<AudioStatusResponse> => {
+  try {
+    logger.debug('📊 Checking audio status for session:', sessionId);
+
+    const response = await httpClient.get<AudioStatusResponse>(
+      `/ai-assessment/audio/status/${sessionId}`
+    );
+
+    logger.info(`✅ Audio status: ${response.data.completed}/${response.data.total_expected} complete (${response.data.processing} processing)`);
+    return response.data;
+  } catch (error) {
+    logger.error('❌ Error getting audio status:', error);
+    throw error;
+  }
+};
+
 // ==================== AUDIO EVALUATION API ====================
 
 export interface AudioEvaluationRequest {
@@ -507,6 +581,7 @@ export interface AudioEvaluationRequest {
 export interface AudioEvaluationResponse {
   status: string;
   message?: string;
+  audio_evaluation_id?: string;
   evaluation?: {
     [key: string]: unknown;
   };
@@ -551,11 +626,32 @@ export const evaluateAudio = async (data: AudioEvaluationRequest): Promise<Audio
  * @param testId - The test ID to download the report for
  * @returns Blob of the PDF file
  */
+export interface EvaluateMcqRequest {
+  test_id: string;
+  email_id: string;
+  answers: Record<string, string>;
+}
+
+export interface EvaluateMcqResponse {
+  mcq_evaluation_id?: string;
+  [key: string]: unknown;
+}
+
+export const evaluateMcq = async (data: EvaluateMcqRequest): Promise<EvaluateMcqResponse> => {
+  try {
+    const response = await httpClient.post<EvaluateMcqResponse>('/ai-assessment/mcq-evaluation', data);
+    return response.data;
+  } catch (error) {
+    logger.error('❌ Error evaluating MCQ:', error);
+    throw error;
+  }
+};
+
 export const downloadReportPdf = async (testId: string): Promise<Blob> => {
   try {
     logger.debug('📥 Downloading PDF report for test_id:', testId);
 
-    const response = await httpClient.get(`/ai-assessment/reports/${testId}/download-pdf`, {
+    const response = await httpClient.get<Blob>(`/ai-assessment/reports/${testId}/download-pdf`, {
       responseType: 'blob',
     });
 

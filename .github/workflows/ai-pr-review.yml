@@ -1,0 +1,84 @@
+name: AI PR Review (Claude + Codex)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number (blank = review ALL open PRs)"
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# One global queue with no cancellation meant every push stacked another
+# ~25-minute review behind the last one, and all PRs shared the same queue.
+# Because the AI review and the CI jobs run on the SAME physical self-hosted
+# runner, that backlog also starved Lint and Build / Security Scan.
+#
+# Per-PR group: two different PRs no longer block each other (they still
+# serialise at the runner, which is the real capacity limit).
+# cancel-in-progress: a new push supersedes the previous review of that same
+# PR. Scheduled runs group by github.ref, so a newer hourly sweep replaces an
+# older one rather than stacking behind it.
+#
+# This block is copied verbatim from the master copy of this workflow, which
+# already had the fix. The feature branches were carrying a stale version.
+concurrency:
+  group: ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  # NOT unconditional -- see the default-branch copy, which is the one that
+  # actually cancels. Any comment on a PR fires an issue_comment run whose group
+  # resolves to ai-pr-review-<PR#> via github.event.issue.number, landing it in
+  # the SAME group as a review already running for that PR. The job-level `if`
+  # skips the JOB, but the RUN still joins the group and cancel-in-progress kills
+  # the real review first (careerbot-web#61: twice, ~5s after each comment).
+  #
+  # Kept in sync here so a merge down to the default branch does not silently
+  # revert the fix -- this branch is thousands of commits ahead of it.
+  cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
+
+jobs:
+  ai-review:
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/ai-review'))
+    runs-on: [self-hosted, ai-review]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Next.js build sometimes needs a public API base at build time; harmless default.
+      NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL || '/api/v1' }}
+
+    steps:
+      - name: Checkout (full history for merge-base + at-SHA reads)
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Decide target
+        id: t
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "args=--pr ${{ github.event.pull_request.number }} --dynamic" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "args=--pr ${{ github.event.issue.number }} --dynamic" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pr }}" ]; then
+            echo "args=--pr ${{ github.event.inputs.pr }} --dynamic" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=--all --dynamic" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run review (T1 static + T2 build/lint)
+        run: |
+          python3 scripts/ai_review/ai_pr_review.py \
+            --repo "${{ github.repository }}" \
+            ${{ steps.t.outputs.args }}

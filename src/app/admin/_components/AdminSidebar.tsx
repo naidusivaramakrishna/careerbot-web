@@ -1,6 +1,6 @@
 "use client"
 import { adminLogout } from '@/api/adminAuthApi';
-import { Activity, Briefcase, LayoutDashboard, LogOut, Settings, UserPlus, Users } from 'lucide-react';
+import { Activity, Building2, DollarSign, LayoutDashboard, LogOut, Settings, UserPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useState } from 'react'
@@ -9,8 +9,9 @@ const menu = [
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "User Management", href: "/admin/dashboard/user-management", icon: Users },
     { label: "Admin Management", href: "/admin/dashboard/admin-management", icon: UserPlus },
-    { label: "Job Management", href: "/admin/dashboard/job-management", icon: Briefcase },
     { label: "System Monitoring", href: "/admin/dashboard/system-monitoring", icon: Activity },
+    { label: "Colleges", href: "/admin/dashboard/colleges", icon: Building2 },
+    { label: "AI spend", href: "/admin/dashboard/ai-spend", icon: DollarSign },
     { label: "Settings", href: "/admin/dashboard/settings", icon: Settings },
 ];
 
@@ -27,14 +28,11 @@ const AdminSidebar = () => {
         try {
             await adminLogout();
             // The adminLogout function already handles redirect to /admin/login
-        } catch (error) {
-            // // console.error('Logout error:', error);
-            // Even if the API call fails, still clear local data and redirect
+        } catch {
+            // Even if the API call fails, clear session cache and redirect
             if (typeof window !== 'undefined') {
-                localStorage.removeItem('admin_access_token');
-                localStorage.removeItem('admin_refresh_token');
-                localStorage.removeItem('admin_id');
-                localStorage.removeItem('admin_role');
+                sessionStorage.removeItem('admin_role');
+                sessionStorage.removeItem('admin_role_at');
                 router.push('/admin/login');
             }
         } finally {

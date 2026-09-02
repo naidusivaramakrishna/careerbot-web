@@ -1,0 +1,127 @@
+"use client";
+
+import { AlertCircle, X, RefreshCw } from "lucide-react";
+
+interface ErrorModalProps {
+  error: string | null;
+  onRetry: () => void;
+  onClose: () => void;
+}
+
+export default function ErrorModal({ error, onRetry, onClose }: ErrorModalProps) {
+  if (!error) return null;
+
+  // Determine error type and customize styling
+  const isScannedPdf = error.toLowerCase().includes("scanned") ||
+                       error.toLowerCase().includes("image-based") ||
+                       error.toLowerCase().includes("extractable text");
+
+  const isAuthError = error.toLowerCase().includes("authentication") ||
+                      error.toLowerCase().includes("credentials");
+
+  const isNetworkError = error.toLowerCase().includes("network") ||
+                         error.toLowerCase().includes("connection");
+
+  let bgColor = "from-red-50/95 to-rose-50/95";
+  let borderColor = "border-red-300/50";
+  let iconBg = "from-red-500 to-rose-600";
+  let titleColor = "text-red-900";
+  let textColor = "text-red-800";
+  let buttonColor = "from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 shadow-red-600/40 hover:shadow-red-600/50";
+  let iconShadow = "shadow-red-500/30";
+  let title = "Upload Failed";
+
+  if (isScannedPdf) {
+    bgColor = "from-amber-50/95 to-orange-50/95";
+    borderColor = "border-amber-300/50";
+    iconBg = "from-amber-500 to-orange-600";
+    titleColor = "text-amber-900";
+    textColor = "text-amber-800";
+    buttonColor = "from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-amber-600/40 hover:shadow-amber-600/50";
+    iconShadow = "shadow-amber-500/30";
+    title = "PDF Format Issue";
+  } else if (isAuthError) {
+    bgColor = "from-indigo-50/95 to-purple-50/95";
+    borderColor = "border-indigo-300/50";
+    iconBg = "from-indigo-500 to-purple-600";
+    titleColor = "text-indigo-900";
+    textColor = "text-indigo-800";
+    buttonColor = "from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-indigo-600/40 hover:shadow-indigo-600/50";
+    iconShadow = "shadow-indigo-500/30";
+    title = "Authentication Error";
+  } else if (isNetworkError) {
+    bgColor = "from-cyan-50/95 to-blue-50/95";
+    borderColor = "border-cyan-300/50";
+    iconBg = "from-cyan-500 to-blue-600";
+    titleColor = "text-cyan-900";
+    textColor = "text-cyan-800";
+    buttonColor = "from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 shadow-cyan-600/40 hover:shadow-cyan-600/50";
+    iconShadow = "shadow-cyan-500/30";
+    title = "Network Error";
+  }
+
+  const handleRetryClick = () => {
+    onClose();
+    setTimeout(onRetry, 200);
+  };
+
+  return (
+    <>
+      {/* Overlay */}
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 animate-in fade-in duration-300"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-300">
+        <div className={`relative bg-gradient-to-br ${bgColor} backdrop-blur-xl ${borderColor} border rounded-2xl shadow-2xl max-w-md w-full overflow-hidden`}>
+          {/* Decorative background elements */}
+          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br opacity-10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-40 h-40 bg-gradient-to-tr opacity-10 rounded-full blur-3xl" />
+
+          <div className="relative p-8">
+            {/* Header with Icon and Close Button */}
+            <div className="flex items-start justify-between mb-6">
+              <div className={`w-12 h-12 bg-gradient-to-br ${iconBg} rounded-xl flex items-center justify-center shadow-lg ${iconShadow} flex-shrink-0`}>
+                <AlertCircle className="w-6 h-6 text-white" strokeWidth={2} />
+              </div>
+              <button
+                onClick={onClose}
+                className={`text-gray-400 hover:text-gray-600 transition-colors p-1.5 hover:bg-gray-200/50 rounded-lg`}
+                aria-label="Close error modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Title */}
+            <h3 className={`text-lg font-bold ${titleColor} mb-3`}>{title}</h3>
+
+            {/* Error Message */}
+            <p className={`text-sm ${textColor} mb-6 leading-relaxed font-medium`}>
+              {error}
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleRetryClick}
+                className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r ${buttonColor} text-white text-sm font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105`}
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+              <button
+                onClick={onClose}
+                className={`px-4 py-3 bg-gray-100/80 hover:bg-gray-200/80 text-gray-700 text-sm font-semibold rounded-lg transition-all duration-200`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
