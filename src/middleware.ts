@@ -7,6 +7,18 @@ import { logger } from '@/lib/logger';
 const publicRoutes = [
     '/',
     '/admin/login',
+    // The college front door at {college}.careerbot.com. It is reached by
+    // someone who is NOT signed in -- that is its whole job -- and it reads
+    // only the public branding endpoint (id and name). Gating it sent a
+    // student who typed their college's address to the CONSUMER marketing
+    // page, with no way to tell they were in the right place, which is the
+    // exact failure its own page comment warns about.
+    //
+    // Only this one path. /institution/join stays gated: claiming a code
+    // needs a user account, and the redirect already preserves `next`, so a
+    // student lands back on it after signing in. Every other /institution
+    // screen must stay behind the gate.
+    '/institution/login',
     '/recruiter/auth',
     '/auth/google/success',
     '/auth/linkedin/success',
@@ -83,6 +95,10 @@ function redirectToLogin(request: NextRequest): NextResponse {
 
 const ADMIN_ROLES = new Set(['admin', 'super_admin', 'moderator', 'support']);
 
+// Logged at most once per process — this is a deployment fault, not a
+// per-request event, and it would otherwise repeat on every navigation.
+let warnedMissingJwtSecret = false;
+
 function roleAllows(pathname: string, actor: string | undefined): boolean {
     const a = actor?.toLowerCase();
     if (pathname.startsWith(ADMIN_PREFIX)) {
@@ -124,7 +140,11 @@ export async function middleware(request: NextRequest) {
     const isPublicRoute =
         publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'));
     if (isPublicRoute) {
-        return NextResponse.next();
+        // nextWithPathname, not a bare next(): a public page nested under a
+        // guarded layout still needs x-pathname to identify itself. Without
+        // it /institution/login fell back to the layout's default of
+        // '/institution' and was redirected as though it were the gated area.
+        return nextWithPathname(request, pathname);
     }
 
     // Landing pages accessible without auth (exact path only — sub-paths remain protected).
@@ -231,6 +251,26 @@ export async function middleware(request: NextRequest) {
         } catch {
             // refresh failed — fall through to the login redirect
         }
+    }
+
+    // We are about to bounce a role-gated request back to login. If JWT_SECRET
+    // is simply ABSENT, both verification branches above were skipped -- not
+    // because the session was bad, but because there was no key to check it
+    // with. The result is an unbreakable loop: signing in succeeds and sets
+    // valid cookies, then the very next navigation lands here and redirects to
+    // /admin/login, with nothing logged anywhere to say why.
+    //
+    // Staying closed is the correct call -- an unverified token must never
+    // reach an admin page, so this deliberately does NOT fall open. What it
+    // fixes is the silence.
+    if (isAdminOrRecruiter && !process.env.JWT_SECRET && !warnedMissingJwtSecret) {
+        warnedMissingJwtSecret = true;
+        logger.error(
+            '[middleware] JWT_SECRET is not set, so no session can be verified: ' +
+            'every /admin and /recruiter route will redirect to login even with ' +
+            'valid credentials. Set JWT_SECRET to the same value as the backend ' +
+            'JWT_SECRET_KEY.'
+        );
     }
 
     return redirectToLogin(request);
