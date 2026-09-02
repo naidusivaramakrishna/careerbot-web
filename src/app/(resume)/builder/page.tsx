@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAllResumesUnified, createResumeWithAuth } from "@/api/resumeApi";
-import { useAuth } from "@/hooks/useAuth";
+import httpClient from "@/lib/http";
 import { toast } from "sonner";
 import Image from "next/image";
 import {
   ArrowRight,
   BarChart3,
-  ChevronRight,
   CheckCircle2,
   Clock,
   Download,
@@ -24,6 +23,7 @@ import {
   Wand2,
 } from "lucide-react";
 import LandingFooter from "@/app/(landing)/_components/LandingFooter";
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
 import SignUpModal from "@/components/SignUpModal";
 
 const proofStats = [
@@ -107,11 +107,6 @@ const steps = [
   },
 ];
 
-const navItems = [
-  { id: "overview", label: "Overview" },
-  { id: "choose-path", label: "Build or Enhance" },
-  { id: "quality-checks", label: "Quality Checks" },
-];
 
 function HeroMock() {
   return (
@@ -191,14 +186,10 @@ function HeroMock() {
 
 export default function ResumeLandingPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [activeSection, setActiveSection] = useState("overview");
-  const [showSignin, setShowSignin] = useState(false);
-  const [startingFree, setStartingFree] = useState(false);
+  const [signinNext, setSigninNext] = useState<"dashboard" | "builder" | "new-resume" | null>(null);
   const [buildingResume, setBuildingResume] = useState(false);
 
-  // Shared post-auth navigation: check resumes → route accordingly
-  const navigateAfterAuth = useCallback(async () => {
+  const navigateToBuilder = useCallback(async () => {
     try {
       const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
       const hasResumes = builder_resumes.length > 0 || enhanced_resumes.length > 0;
@@ -208,24 +199,7 @@ export default function ResumeLandingPage() {
     }
   }, [router]);
 
-  const handleStartFree = useCallback(async () => {
-    if (!isAuthenticated) {
-      setShowSignin(true);
-      return;
-    }
-    setStartingFree(true);
-    try {
-      await navigateAfterAuth();
-    } finally {
-      setStartingFree(false);
-    }
-  }, [isAuthenticated, navigateAfterAuth]);
-
-  const handleBuildNewResume = useCallback(async () => {
-    if (!isAuthenticated) {
-      setShowSignin(true);
-      return;
-    }
+  const createAndNavigate = useCallback(async () => {
     setBuildingResume(true);
     try {
       const newResume = await createResumeWithAuth();
@@ -236,16 +210,7 @@ export default function ResumeLandingPage() {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       const status = error.response?.status;
       const detail = (error.response?.data?.detail || error.message || "").toLowerCase();
-
-      // Server is the source of truth. The upfront `!isAuthenticated` guard uses
-      // a MOUNT-TIME snapshot (useAuth runs its check once, useEffect(…, [])),
-      // so on a long-lived landing page the session can expire while the flag
-      // still reads true -- the guard passes and the API returns 401/403. Without
-      // this branch that fell through to a generic "please try again" with no
-      // route back to sign-in, and the user could only retry forever.
-      if (status === 401 || (status === 403 && (detail.includes("auth") || detail.includes("sign")))) {
-        setShowSignin(true);
-      } else if (
+      if (
         status === 409 ||
         detail.includes("already") ||
         detail.includes("limit") ||
@@ -261,104 +226,56 @@ export default function ResumeLandingPage() {
     } finally {
       setBuildingResume(false);
     }
-  }, [router, isAuthenticated]);
+  }, [router]);
 
-  useEffect(() => {
-    const sections = navItems
-      .map((item) => document.getElementById(item.id))
-      .filter(Boolean) as HTMLElement[];
+  const handleSigninSuccess = useCallback(async () => {
+    const next = signinNext;
+    setSigninNext(null);
+    if (next === "dashboard") {
+      router.push("/dashboard");
+    } else if (next === "new-resume") {
+      await createAndNavigate();
+    } else {
+      await navigateToBuilder();
+    }
+  }, [signinNext, router, navigateToBuilder, createAndNavigate]);
 
-    const updateActiveSection = () => {
-      const current = sections
-        .map((section) => ({
-          id: section.id,
-          distance: Math.abs(section.getBoundingClientRect().top - 96),
-          isPastTop: section.getBoundingClientRect().top <= 120,
-        }))
-        .filter((section) => section.isPastTop)
-        .sort((a, b) => a.distance - b.distance)[0];
-
-      if (current) {
-        setActiveSection(current.id);
-      } else {
-        setActiveSection("overview");
-      }
-    };
-
-    updateActiveSection();
-    window.addEventListener("scroll", updateActiveSection, { passive: true });
-    window.addEventListener("resize", updateActiveSection);
-
-    return () => {
-      window.removeEventListener("scroll", updateActiveSection);
-      window.removeEventListener("resize", updateActiveSection);
-    };
+  const checkAuthSilent = useCallback(async (): Promise<boolean> => {
+    try {
+      await httpClient.get("/auth/profile", {
+        headers: { "X-Skip-Login-Redirect": "true" },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
+
+  const handleStartFree = useCallback(async () => {
+    if (await checkAuthSilent()) {
+      await navigateToBuilder();
+    } else {
+      setSigninNext("builder");
+    }
+  }, [checkAuthSilent, navigateToBuilder]);
+
+  const handleBuildNewResume = useCallback(async () => {
+    if (await checkAuthSilent()) {
+      await createAndNavigate();
+    } else {
+      setSigninNext("new-resume");
+    }
+  }, [checkAuthSilent, createAndNavigate]);
+
 
   return (
     <>
-    <main className="min-h-screen bg-white" style={{ fontFamily: "var(--font-montserrat, Montserrat, sans-serif)" }}>
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-          <Link href="/" className="flex items-center gap-1.5 transition-opacity hover:opacity-80" aria-label="CareerBot home">
-            <Image
-              src="/assets/icons/Logo.png"
-              alt="CareerBot"
-              width={46}
-              height={46}
-              className="shrink-0"
-              style={{ filter: "hue-rotate(8deg) saturate(130%) brightness(68%)" }}
-              priority
-            />
-            <span className="text-lg font-black tracking-tight text-[#2557a7]">CareerBOT</span>
-          </Link>
+      <LandingNavbar
+        onOpenSignin={() => setSigninNext("dashboard")}
+        onOpenSignup={() => setSigninNext("builder")}
+      />
+    <main className="min-h-screen bg-white" style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
 
-          <div className="hidden items-center gap-1 md:flex">
-            {navItems.map((item) => (
-              <Link
-                key={item.id}
-                href={`#${item.id}`}
-                aria-current={activeSection === item.id ? "page" : undefined}
-                className={`rounded-full px-3.5 py-2 text-sm font-semibold transition-colors ${
-                  activeSection === item.id
-                    ? "bg-blue-50 text-[#2557a7]"
-                    : "text-slate-700 hover:bg-blue-50 hover:text-[#2557a7]"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSignin(true)}
-              className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] sm:inline-flex"
-            >
-              Sign In
-            </button>
-            <button
-              onClick={handleStartFree}
-              disabled={startingFree || authLoading}
-              className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95 disabled:opacity-70"
-            >
-              {startingFree ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={14} />}
-              Start Free
-            </button>
-          </div>
-        </nav>
-      </header>
-
-      <div className="border-b border-slate-100 bg-slate-50">
-        <div className="mx-auto flex max-w-6xl items-center gap-1.5 px-4 py-3">
-          <Link href="/" className="text-xs font-medium text-slate-500 transition-colors hover:text-[#2557a7]">
-            Home
-          </Link>
-          <ChevronRight size={13} className="text-slate-300" />
-          <span className="text-xs font-semibold text-[#2557a7]">Resume Builder</span>
-        </div>
-      </div>
 
       <section id="overview" className="relative scroll-mt-20 overflow-hidden bg-[linear-gradient(135deg,#f8fbff_0%,#eef6ff_48%,#eaf7f5_100%)] pb-20 pt-10 lg:pb-24 lg:pt-14">
         <div
@@ -392,10 +309,9 @@ export default function ResumeLandingPage() {
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
                   onClick={handleStartFree}
-                  disabled={startingFree || authLoading}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1e4a94] disabled:opacity-70"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1e4a94]"
                 >
-                  {startingFree ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={16} />}
+                  <ArrowRight size={16} />
                   Start Free
                 </button>
                 <Link
@@ -470,7 +386,7 @@ export default function ResumeLandingPage() {
                     {path.action === "build" ? (
                       <button
                         onClick={handleBuildNewResume}
-                        disabled={buildingResume || authLoading}
+                        disabled={buildingResume}
                         className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7] disabled:opacity-70"
                       >
                         {buildingResume
@@ -586,10 +502,9 @@ export default function ResumeLandingPage() {
             </p>
             <button
               onClick={handleStartFree}
-              disabled={startingFree || authLoading}
-              className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-10 py-4 text-base font-bold text-[#2557a7] shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-70"
+              className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-10 py-4 text-base font-bold text-[#2557a7] shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
             >
-              {startingFree ? <span className="w-4 h-4 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={17} />}
+              <ArrowRight size={17} />
               Start Free
             </button>
             <p className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-blue-100">
@@ -603,10 +518,10 @@ export default function ResumeLandingPage() {
       <LandingFooter />
     </main>
     <SignUpModal
-      open={showSignin}
-      onClose={() => setShowSignin(false)}
+      open={signinNext !== null}
+      onClose={() => setSigninNext(null)}
       initialFormType="signin"
-      onSuccess={navigateAfterAuth}
+      onSuccess={handleSigninSuccess}
     />
     </>
   );

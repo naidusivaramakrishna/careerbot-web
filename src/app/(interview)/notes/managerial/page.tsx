@@ -2,48 +2,50 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Mic, Users, MessageSquare, BarChart2, ChevronRight,
-  Lightbulb, Sparkles, Loader2, AlertCircle,
-} from "lucide-react";
+import { BarChart2, Mic, MessageSquare, Users } from "lucide-react";
 import { generateMrTrQuestions } from "@/api/mockInterviewApi";
+import PracticeLandingPage from "../_components/PracticeLandingPage";
 
-export const MANAGERIAL_QUESTIONS_KEY = "managerial_generated_questions";
+// Not exported: see notes/technical/page.tsx. Nothing imports this -
+// notes/managerial/practice declares the same literal locally.
+const MANAGERIAL_QUESTIONS_KEY = "managerial_generated_questions";
 
 const STATS = [
-  { value: "10", label: "Questions" },
-  { value: "AI", label: "Feedback" },
+  { value: "10", label: "questions" },
+  { value: "1", label: "round" },
+  { value: "AI", label: "feedback" },
+  { value: "STAR", label: "structure" },
 ];
 
 const HOW_IT_WORKS = [
   {
     icon: Users,
-    title: "Questions from your profile",
-    body: "AI asks behavioural and situational questions tailored to your background — covering leadership, teamwork, conflict resolution, and decision-making.",
+    title: "Leadership scenarios",
+    body: "Prepare for stakeholder conflict, team ownership, decision-making under pressure, and cross-functional influence questions.",
   },
   {
     icon: Mic,
-    title: "Speak your answer",
-    body: "Answer out loud to simulate a real interview. Your prepared scripts are shown in round 1 to guide your response.",
+    title: "Speak the STAR frame",
+    body: "Practice structuring answers aloud so situation, task, action, and result flow naturally without sounding rehearsed.",
   },
   {
     icon: MessageSquare,
-    title: "Get instant feedback",
-    body: "AI reviews your answer for content, clarity, and structure — with specific tips to make it more compelling.",
+    title: "Conciseness coaching",
+    body: "AI feedback highlights when answers run too long or lack a clear outcome — keeping you within the 60–120 second sweet spot.",
   },
   {
     icon: BarChart2,
-    title: "Two-round practice",
-    body: "Round 1 shows your prepared notes. Round 2 gives keywords only — building recall and confidence without the safety net.",
+    title: "Round-based recall",
+    body: "Start with full notes, then advance to keywords-only to build interview-level recall under realistic conditions.",
   },
 ];
 
 const TIPS = [
-  "Use the STAR method (Situation, Task, Action, Result) for behavioural questions.",
-  "Be specific — vague answers like \"I handled it well\" don't stand out. Use real examples with measurable outcomes.",
-  "Prepare 3–4 strong stories from past experience that can flex to cover multiple question types.",
-  "Show self-awareness — acknowledge challenges and what you learned, not just what went right.",
-  "Aim for 60–120 seconds per answer. Practise until your stories feel natural, not scripted.",
+  "Lead with the business context before describing your actions.",
+  "Use measurable outcomes whenever possible.",
+  "Show the trade-off you considered, not only the decision you made.",
+  "Make your learning explicit in conflict or failure stories.",
+  "Keep each answer tight: 60 to 120 seconds is the sweet spot.",
 ];
 
 export default function ManagerialPage() {
@@ -64,94 +66,33 @@ export default function ManagerialPage() {
         focus_areas: [],
         question_bank_gaps: [],
       });
-      sessionStorage.setItem(MANAGERIAL_QUESTIONS_KEY, JSON.stringify(data.questions));
+      sessionStorage.setItem(MANAGERIAL_QUESTIONS_KEY, JSON.stringify(data));
       router.push("/notes/managerial/practice");
     } catch {
-      setError("Could not load questions. Please check your connection and try again.");
+      setError("Could not prepare managerial questions. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-
-      <div>
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#2557a7]/10 text-[#2557a7] rounded-full text-xs font-semibold mb-3">
-          <Sparkles size={11} /> Managerial Practice
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1.5">Managerial Interview Prep</h1>
-        <p className="text-sm text-gray-500 leading-relaxed max-w-xl">
-          Practise the behavioural and situational questions that managers and panel interviewers rely on.
-          Answer out loud, get AI-scored feedback, and build the confidence to tell your story well.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        {STATS.map((s) => (
-          <div key={s.label} className="flex flex-col items-center justify-center py-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p className="text-xl font-black text-[#2557a7]">{s.value}</p>
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">How It Works</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {HOW_IT_WORKS.map((step, i) => {
-            const Icon = step.icon;
-            return (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#2557a7]/8 flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon size={15} className="text-[#2557a7]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800 mb-0.5">{step.title}</p>
-                  <p className="text-xs text-gray-500 leading-relaxed">{step.body}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Lightbulb size={14} className="text-[#2557a7]" />
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tips for Managerial Interviews</p>
-        </div>
-        <ul className="space-y-2.5">
-          {TIPS.map((tip, i) => (
-            <li key={i} className="flex items-start gap-2.5">
-              <span className="w-4 h-4 rounded-full bg-[#2557a7]/10 text-[#2557a7] text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                {i + 1}
-              </span>
-              <p className="text-xs text-gray-600 leading-relaxed">{tip}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
-          <AlertCircle size={13} className="shrink-0 text-red-500" />
-          {error}
-        </div>
-      )}
-
-      <button
-        onClick={handleStart}
-        disabled={loading}
-        className="w-full py-3.5 bg-[#2557a7] text-white rounded-xl font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-md flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-      >
-        {loading ? (
-          <Loader2 size={15} className="animate-spin" />
-        ) : (
-          <>Start Managerial Practice <ChevronRight size={16} /></>
-        )}
-      </button>
-
-    </div>
+    <PracticeLandingPage
+      accent="managerial"
+      eyebrow="Managerial practice"
+      title="Practice the leadership stories interviewers actually score."
+      subtitle="Turn experience into crisp, senior-sounding answers for stakeholder conflict, ownership, decision-making, and team leadership questions."
+      stats={STATS}
+      steps={HOW_IT_WORKS}
+      tips={TIPS}
+      outcomes={[
+        "Sharper STAR storytelling",
+        "Stronger executive presence",
+        "Better recall under pressure",
+      ]}
+      ctaLabel="Start Managerial Practice"
+      loading={loading}
+      error={error}
+      onStart={handleStart}
+    />
   );
 }

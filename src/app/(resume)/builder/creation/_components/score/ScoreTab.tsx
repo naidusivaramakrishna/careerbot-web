@@ -39,7 +39,7 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
     );
   }
 
-  const score = Math.round(enhancedAtsScore.final_score ?? enhancedAtsScore.Percentage ?? 0);
+  const score = enhancedAtsScore.final_score ?? enhancedAtsScore.Percentage ?? 0;
   const profile = enhancedAtsScore.profile;
   const breakdown = enhancedAtsScore.section_breakdown ?? {};
   const penalties = enhancedAtsScore.intelligence_penalties ?? [];
@@ -54,7 +54,7 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
         className="bg-white rounded-2xl border border-[#EAECF0] p-5 flex flex-col items-center gap-3"
         style={{ borderTop: `3px solid ${tc.arc}` }}
       >
-        <MultiColorCircularScore value={score} />
+        <MultiColorCircularScore value={score} precision={2} />
         <div className="flex flex-col items-center gap-1.5">
           <span className="text-[13px] font-semibold text-[#111827]">ATS Score</span>
           {profile && (
@@ -88,21 +88,25 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
                       style={{ width: `${pct}%`, background: sc.arc }}
                     />
                   </div>
-                  {sec.deductions?.slice(0, 1).map((d, i) => (
-                    <div key={i} className="flex items-start justify-between gap-2 mt-0.5">
-                      <p className="text-[10px] text-[#B45309] leading-snug flex-1">
-                        {d.after_example || d.message}
-                      </p>
-                      {onFixNow && (
-                        <button
-                          onClick={() => onFixNow(name, parseEntryIndex(d.message || d.after_example || ""))}
-                          className="shrink-0 text-[10px] font-semibold text-white bg-[#2557a7] hover:bg-[#1a4585] px-2 py-0.5 rounded-full transition-colors whitespace-nowrap"
-                        >
-                          Fix Now
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  {sec.deductions?.slice(0, 1).map((d, i) => {
+                    const NO_FIX_SECTIONS = ["Keywords", "Leadership", "format", "content", "ATSCompatibility"];
+                    const showFix = onFixNow && !NO_FIX_SECTIONS.includes(name);
+                    return (
+                      <div key={i} className="flex items-start justify-between gap-2 mt-0.5">
+                        <p className="text-[10px] text-[#B45309] leading-snug flex-1">
+                          {d.after_example || d.message}
+                        </p>
+                        {showFix && (
+                          <button
+                            onClick={() => onFixNow(name, parseEntryIndex(d.message || d.after_example || ""))}
+                            className="shrink-0 text-[10px] font-semibold text-white bg-[#2557a7] hover:bg-[#1a4585] px-2 py-0.5 rounded-full transition-colors whitespace-nowrap"
+                          >
+                            Fix Now
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -167,7 +171,7 @@ export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: strin
       setCanonicalStatus("calculating");
       await triggerScoreCalculation(resumeId);
 
-      for (let attempt = 1; attempt <= 10; attempt++) {
+      for (let attempt = 1; attempt <= 30; attempt++) {
         await new Promise((r) => setTimeout(r, 2000));
         if (!isMountedRef.current) return;
         try {

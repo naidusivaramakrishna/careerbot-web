@@ -70,6 +70,11 @@ export const useValidation = () => {
     });
   };
 
+  const setFieldError = (section: string, index: number, field: string, message: string) => {
+    const key = getKey(section, index, field);
+    setErrors((prev) => ({ ...prev, [key]: message }));
+  };
+
   // ✅ NEW — Clear all validation errors globally
   const clearAllErrors = () => setErrors({});
 
@@ -79,7 +84,8 @@ export const useValidation = () => {
     clearError,
     clearSectionIndexErrors,
     reindexErrors,
-    clearAllErrors, // ✅ expose globally
+    setFieldError,
+    clearAllErrors,
   };
 };
 

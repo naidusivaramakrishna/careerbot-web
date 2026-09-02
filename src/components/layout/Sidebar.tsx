@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
 import { getEnhancementHistory } from "@/api/enhancerApi";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useHasCollegeMembership } from "@/hooks/useCollegeMembership";
 import {
   EnterpriseApplicationTrackerIcon as IcoTracker,
   EnterpriseAtsScanIcon as IcoAtsScan,
-  EnterpriseBillingHistoryIcon as IcoHistory,
   EnterpriseChevronRightIcon as IcoChevronRight,
+  EnterpriseCommunicationIcon as IcoCommunication,
   EnterpriseCoverLetterIcon as IcoCoverLetter,
   EnterpriseDashboardIcon as IcoDashboard,
   EnterpriseInterviewPrepIcon as IcoInterview,
@@ -18,7 +19,6 @@ import {
   EnterpriseNotesIcon as IcoNotes,
   EnterpriseProfileIcon as IcoProfile,
   EnterpriseResumeIcon as IcoResume,
-  EnterpriseSubscriptionIcon as IcoGem,
   type EnterpriseNavIcon,
 } from "@/components/icons/EnterpriseNavIcons";
 /* NAV CONFIG */
@@ -38,6 +38,17 @@ const IcoMockTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
     <rect x="4" y="3" width="12" height="15" rx="1.5" stroke="currentColor" strokeWidth={sw} />
     <path d="M7.5 3.5V2.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1" stroke="currentColor" strokeWidth={sw} />
     <path d="M7 8h6M7 11.5h6M7 15h3.5" stroke="currentColor" strokeWidth={sw * 0.85} />
+  </svg>
+);
+
+/** My College — a building with a flag, distinct from the job-search icons */
+const IcoCollege = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M2.5 17.5h15" stroke="currentColor" strokeWidth={sw} />
+    <path d="M4 17.5V8.5L10 5.5l6 3v9" stroke="currentColor" strokeWidth={sw} />
+    <path d="M10 5.5V2.5l3 1-3 1" stroke="currentColor" strokeWidth={sw * 0.9} />
+    <path d="M8 17.5v-4h4v4" stroke="currentColor" strokeWidth={sw * 0.9} />
   </svg>
 );
 
@@ -107,73 +118,38 @@ const NAV_GROUPS: {
   {
     label: "GENERATE",
     items: [
-      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
-      { id: "interview_notes",        label: "Interview Notes",          icon: IcoNotes,       path: "/notes/generate" },
+      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history" },
+      { id: "interview_notes", label: "Interview Notes", icon: IcoNotes, path: "/notes/generate" },
     ],
   },
   {
     label: "PREPARE",
     items: [
-      { id: "mock_interview", label: "Mock Interview", icon: IcoInterview, path: "/mock-interview/live" },
-      {
-        id: "mock_test", label: "Mock Test", icon: IcoMockTest, path: "",
-        subItems: [
-          { id: "comm_assess",    label: "Communication Assessment", path: "/communication/start" },
-          { id: "mock_test_sub",  label: "Mock Test",                path: "/mock-test" },
-        ],
-      },
-      { id: "coding_test", label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
-    ],
-  },
-  {
-    label: "BILLING",
-    items: [
-      { id: "subscription",    label: "Subscription",    icon: IcoGem,     path: "/account/subscriptions" },
-      { id: "billing_history", label: "Billing History", icon: IcoHistory, path: "/settings/billing" },
+      { id: "mock_interview", label: "Mock Interview",  icon: IcoInterview, path: "/mock-interview/live" },
+      { id: "comm_assess",   label: "Communication",   icon: IcoCommunication, path: "/communication/start" },
+      { id: "mock_test",     label: "Mock Test",       icon: IcoMockTest,  path: "/mock-test" },
+      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test" },
     ],
   },
 ];
 
-// Feature-flag pruning for nav items.
-//
-// IMPORTANT (Codex WEB-1.1 P2): Next only statically inlines
-// `process.env.NEXT_PUBLIC_*` when the reference is a LITERAL property
-// access (e.g. `process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED`). A
-// dynamic lookup like `process.env[someVarName]` is NOT inlined into
-// the client bundle and evaluates to `undefined` at runtime in the
-// browser - which would silently hide every flagged item even when
-// the env var IS set, AND cause an SSR/CSR hydration mismatch
-// (server reads env fine, client doesn't).
-//
-// Fix: maintain a STATIC map keyed by flag name. Each value is read
-// via a literal property access so Next can inline it. To add a new
-// flag, add a row here AND set `flag: "..."` on the nav item.
-const STATIC_FLAGS: Record<string, boolean> = {
-  NEXT_PUBLIC_COVER_LETTER_ENABLED:
-    process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true",
-  NEXT_PUBLIC_CODING_TEST_ENABLED:
-    process.env.NEXT_PUBLIC_CODING_TEST_ENABLED !== "false",
+const VISIBLE_NAV_GROUPS = NAV_GROUPS;
+
+// The college area is NOT in NAV_GROUPS. That list is computed once at module
+// scope from build-time flags, and college membership is a per-USER fact
+// resolved at runtime -- putting it there would show every jobseeker a link
+// that refuses them the moment they follow it.
+// Typed as one of NAV_GROUPS' own elements rather than `as const`: the render
+// loop reads `item.subItems`, and a narrower literal type drops that property
+// from the union and fails the build.
+const COLLEGE_NAV_GROUP: (typeof NAV_GROUPS)[number] = {
+  label: "COLLEGE",
+  items: [
+    { id: "institution", label: "My College", icon: IcoCollege, path: "/institution" },
+  ],
 };
 
-type NavItem = {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  path: string;
-  smartNav?: boolean;
-  showBadge?: boolean;
-  flag?: string;
-};
-const isItemEnabled = (item: NavItem): boolean =>
-  !item.flag || STATIC_FLAGS[item.flag] === true;
-
-// Computed at module scope: NEXT_PUBLIC_* is baked at build time,
-// so the result is stable for the whole client session.
-const VISIBLE_NAV_GROUPS = NAV_GROUPS
-  .map((group) => ({ ...group, items: group.items.filter(isItemEnabled) }))
-  .filter((group) => group.items.length > 0);
-
-const EXPANDED_PATHS = ["/dashboard", "/profile"];
+const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/notes"];
 
 /* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
    cursor can cross the gap between icon and panel without it disappearing. */
@@ -214,6 +190,7 @@ function CollapsedSubItem({
       <button
         aria-label={item.label}
         className="group/icon"
+        onClick={() => popPos ? setPopPos(null) : open()}
       >
         <div
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
@@ -275,7 +252,7 @@ export default function Sidebar() {
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--sidebar-width",
-      isExpanded ? "240px" : "64px"
+      isExpanded ? "200px" : "64px"
     );
   }, [isExpanded]);
 
@@ -289,20 +266,30 @@ export default function Sidebar() {
   const { data: dashboardData } = useDashboard();
   const profileCompleteness = dashboardData?.profile.completeness ?? 0;
 
+  // Appended, not interleaved: a college user is still a jobseeker, so their
+  // own tools stay where they have always been and the college is one more
+  // place they can go.
+  const hasCollege = useHasCollegeMembership();
+  const navGroups = useMemo(
+    () => (hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS),
+    [hasCollege],
+  );
+
   const getActiveId = () => {
-    for (const group of VISIBLE_NAV_GROUPS) {
+    for (const group of navGroups) {
       for (const item of group.items) {
         if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
           return item.id;
         }
-        if (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path))) {
+        if (item.path && (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path)))) {
           return item.id;
         }
       }
     }
-    if (pathname.startsWith("/notes"))                                          return "notes";
+    if (pathname.startsWith("/notes"))                                          return "interview_notes";
     if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
-    if (pathname.startsWith("/mock-test") || pathname.startsWith("/communication")) return "mock_test";
+    if (pathname.startsWith("/communication"))                                  return "comm_assess";
+    if (pathname.startsWith("/mock-test"))                                      return "mock_test";
     if (pathname.startsWith("/settings"))                                       return "settings";
     if (pathname.startsWith("/account/subscriptions"))  return "subscription";
     if (pathname.startsWith("/settings/billing"))       return "billing_history";
@@ -374,11 +361,11 @@ export default function Sidebar() {
       <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
         id="dashboard-sidebar"
         style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
-        <nav className="flex-1 min-h-0 overflow-visible py-1 px-2" aria-label="Primary navigation collapsed" role="navigation">
-          {VISIBLE_NAV_GROUPS.map((group, gi) => (
+        <nav className="flex-1 min-h-0 overflow-visible py-0.5 px-2" aria-label="Primary navigation collapsed" role="navigation">
+          {navGroups.map((group, gi) => (
             <div key={group.label}>
-              {gi > 0 && <div className="mx-1 my-1.5 border-t border-gray-300" />}
-              <div className="space-y-px">
+              {gi > 0 && <div className="mx-1 my-1 border-t border-gray-300" />}
+              <div className="space-y-0">
                 {group.items.map((item) => {
                   const isActive = activeId === item.id;
                   const Icon = item.icon;
@@ -443,7 +430,7 @@ export default function Sidebar() {
       if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
       if (!wrapperRef.current) return;
       const r = wrapperRef.current.getBoundingClientRect();
-      setDropPos({ top: r.top - 48, left: r.right + 4 });
+      setDropPos({ top: r.top - 20, left: r.right + 4 });
     }, []);
 
     const closeDrop = useCallback(() => {
@@ -453,7 +440,7 @@ export default function Sidebar() {
     const btn = (
       <button
         onClick={() => handleNavigation(item)}
-        className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-lg transition-all duration-200 group/btn relative ${
+        className={`w-full flex items-center gap-2 px-2.5 py-0.5 rounded-lg transition-all duration-200 group/btn relative ${
           isActive ? "" : "hover:bg-gray-50"
         }`}
         style={
@@ -523,7 +510,7 @@ export default function Sidebar() {
       aria-label="Collapse sidebar navigation"
       aria-expanded={isExpanded}
       aria-controls="dashboard-sidebar"
-      style={{ position: "fixed", top: 58, left: 226, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+      style={{ position: "fixed", top: 58, left: 186, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
     >
       {/* Collapse icon: filled strip on the left */}
       <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
@@ -531,12 +518,12 @@ export default function Sidebar() {
         <rect x="0.7" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
       </svg>
     </button>
-    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-60 bg-white flex flex-col z-30 overflow-hidden"
+    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] bg-white flex flex-col z-30 overflow-hidden"
       id="dashboard-sidebar"
-      style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
+      style={{ width: 200, borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1.5 pb-1 space-y-1" aria-label="Primary navigation" role="navigation">
-        {VISIBLE_NAV_GROUPS.map((group) => (
+      <nav className="min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1 pb-1 space-y-0.5" aria-label="Primary navigation" role="navigation">
+        {navGroups.map((group) => (
           <div key={group.label}>
             {/* Section label with trailing line */}
             <div className="flex items-center gap-1.5 px-1 mb-0.5">
@@ -557,6 +544,10 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+      <div className="flex-1" />
+      <div className="px-4 py-3 border-t border-gray-100">
+        <p className="text-[10px] text-gray-400 text-center tracking-wide">CareerBot AI</p>
+      </div>
     </div>
     </>
   );

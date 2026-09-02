@@ -454,10 +454,10 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      {cert.issuer && <span style={baseTextStyle}> - {cert.issuer}</span>}
+                      {(cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      {cert.issueDate && <span>Issued: {cert.issueDate}</span>}
+                      {(cert.year || cert.issueDate) && <span>Issued: {cert.year || cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}
@@ -575,7 +575,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div key={idx} className="flex items-start" style={baseTextStyle}>
                     <span className="mr-2">•</span>
                     <span>
-                      <span className="font-medium">{lang.language}</span>
+                      <span className="font-medium">{lang.name}</span>
                       {lang.proficiency && <span style={baseTextStyle}> — {lang.proficiency}</span>}
                     </span>
                   </div>

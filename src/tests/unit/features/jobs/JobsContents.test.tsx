@@ -9,7 +9,7 @@ vi.mock('@/hooks/useCurrentUserId', () => ({
   useCurrentUserId: () => ({ userId: 'test-user' }),
 }));
 
-import { normalizeJob } from '@/app/(jobs)/jobslogin/_components/JobsContents';
+import { normalizeJob, jobMatchesSearchQuery } from '@/app/(jobs)/jobslogin/_components/JobsContents';
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 //
@@ -163,5 +163,92 @@ describe('normalizeJob', () => {
   it('returns an empty array when neither key is present', () => {
     const job = normalizeJob({ id: 'job-1', title: 'Engineer' });
     expect(job.requirements).toEqual([]);
+  });
+});
+
+describe('jobMatchesSearchQuery', () => {
+  // Pins the fix for search only matching an exact whole-phrase substring —
+  // that missed real matches whenever word order or extra words differed.
+  it('matches when the words appear in a different order than the query', () => {
+    const job = { title: 'Full Stack Developer (Python)', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, 'python full stack developer')).toBe(true);
+  });
+
+  it('matches when a query word is in the company instead of the title', () => {
+    const job = { title: 'Software Engineer', company: 'Acme Robotics' };
+    expect(jobMatchesSearchQuery(job, 'engineer robotics')).toBe(true);
+  });
+
+  it('is case-insensitive', () => {
+    const job = { title: 'Backend Developer', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, 'BACKEND')).toBe(true);
+  });
+
+  it('rejects when any query word is missing from both title and company', () => {
+    const job = { title: 'Backend Developer', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, 'backend designer')).toBe(false);
+  });
+
+  it('matches everything for an empty or whitespace-only query', () => {
+    const job = { title: 'Backend Developer', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, '')).toBe(true);
+    expect(jobMatchesSearchQuery(job, '   ')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The three behaviours this PR changed. None had a test, and all three were
+// wrong in a way that silently REMOVED jobs the server had already returned.
+// ---------------------------------------------------------------------------
+
+describe('matchesJobFilters — experience', () => {
+  const withExp = (experience: string) => ({ experience }) as never;
+
+  it('keeps a job whose requirement cannot be parsed', () => {
+    // normalizeJob prefers experience_level ("Senior") over the numeric
+    // `experience` the server filtered on, so this row was returned by
+    // /jobs/scored for experience_years=5 and then dropped on the client.
+    expect(matchesJobFilters(withExp('Senior'), ['years:5 yrs'])).toBe(true);
+  });
+
+  it('did not make a 5-year candidate see fewer jobs than a fresher', () => {
+    // The exact inversion the old `selectedYear === 0` produced.
+    expect(matchesJobFilters(withExp('Senior'), ['years:Fresher'])).toBe(true);
+    expect(matchesJobFilters(withExp('Senior'), ['years:5 yrs'])).toBe(true);
+  });
+
+  it('still excludes a job that asks for more years than the candidate has', () => {
+    expect(matchesJobFilters(withExp('8-10 years'), ['years:5 yrs'])).toBe(false);
+  });
+
+  it('includes a job whose stated minimum the candidate meets exactly', () => {
+    expect(matchesJobFilters(withExp('5-8 years'), ['years:5 yrs'])).toBe(true);
+  });
+});
+
+describe('matchesJobFilters — Match Quality chips', () => {
+  const scored = { matchScore: 82, skill_score: 74 } as never;
+  const savedJob = { matchScore: 0 } as never;   // no match payload at all
+
+  it('applies the chips on the Smart Match tab', () => {
+    expect(matchesJobFilters(scored, ['matchscore:70+'], { includeMatchScores: true })).toBe(true);
+    expect(matchesJobFilters(scored, ['matchscore:90+'], { includeMatchScores: true })).toBe(false);
+  });
+
+  it('ignores them everywhere else, so Saved and Applied do not empty out', () => {
+    // A saved job carries no match data, so every chip used to exclude it and
+    // the whole tab went blank behind a generic "no jobs" message.
+    expect(matchesJobFilters(savedJob, ['matchscore:70+'])).toBe(true);
+    expect(matchesJobFilters(savedJob, ['skillscore:50+'])).toBe(true);
+    expect(matchesJobFilters(savedJob, ['expscore:50+'])).toBe(true);
+    expect(matchesJobFilters(savedJob, ['eduscore:50+'])).toBe(true);
+  });
+
+  it('treats the threshold as inclusive', () => {
+    expect(matchesJobFilters({ matchScore: 70 } as never, ['matchscore:70+'], { includeMatchScores: true })).toBe(true);
+  });
+
+  it('excludes a job with no score when the chip IS active', () => {
+    expect(matchesJobFilters({} as never, ['matchscore:70+'], { includeMatchScores: true })).toBe(false);
   });
 });

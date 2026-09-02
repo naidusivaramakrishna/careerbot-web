@@ -10,6 +10,8 @@ import WizardStepResume from "./wizard/WizardStepResume";
 import WizardStepJobDescription from "./wizard/WizardStepJobDescription";
 import WizardStepConfirm from "./wizard/WizardStepConfirm";
 import { WIZARD_OVERVIEW_STYLES } from "./wizard/wizardOverviewStyles";
+import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
+import { toast } from "sonner";
 
 import {
   parseResume,
@@ -21,7 +23,7 @@ import {
   getMatchAnalytics,
 } from "@/api/parserApi";
 import { getExtensionSession } from "@/api/extensionApi";
-import { hasAllowedDocumentExtension } from "@/utils/validators";
+import { hasAllowedDocumentExtension, hasAllowedResumeExtension } from "@/utils/validators";
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
@@ -82,19 +84,13 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   });
 
   const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
-    // Callers that already ran the match themselves (e.g. "Fix My Resume" from
-    // a job card, which pre-seeds jm_matchResults/jm_parsedResumeData) set this
-    // one-shot flag to skip straight to the results view instead of the normal
-    // "always start with upload page, clear old session data" behavior below.
+    // Restore an existing analysis for the lifetime of this browser tab. The
+    // previous implementation deleted these values on every route remount,
+    // which made ordinary in-app navigation destroy the user's work.
     try {
-      const skipWizard = sessionStorage.getItem("jm_skipWizard") === "true";
-      sessionStorage.removeItem("jm_skipWizard");
-      if (skipWizard && sessionStorage.getItem("jm_matchResults")) {
+      if (!sessionId && sessionStorage.getItem("jm_matchResults")) {
         return "analysis";
       }
-      sessionStorage.removeItem("jm_matchResults");
-      sessionStorage.removeItem("jm_parsedResumeData");
-      sessionStorage.removeItem("jm_parsedJDData");
     } catch {}
     return "upload";
   });
@@ -142,7 +138,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
   const handleResumeUpload = (file: File) => {
     if (!file) return;
-    if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
+    if (!hasAllowedResumeExtension(file.name)) { setError("Please upload a PDF, DOC, or DOCX file."); return; }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Resume must be under 10MB."); return; }
     setUploadedFile(file);
     setError(null);
@@ -314,10 +310,21 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       setParsedJDData(jdParsed);
 
       try {
-        sessionStorage.setItem("jm_matchResults", JSON.stringify(newMatchResults));
-        sessionStorage.setItem("jm_parsedResumeData", JSON.stringify(fullResumeData));
-        sessionStorage.setItem("jm_parsedJDData", JSON.stringify(jdParsed));
-        sessionStorage.setItem("jm_jdText", resolvedJdText);
+        const snapshotWritten = writeJobmatchSessionSnapshot({
+          matchResults: newMatchResults,
+          parsedResumeData: fullResumeData,
+          parsedJDData: jdParsed,
+          jdText: resolvedJdText,
+        });
+        // The in-memory state set above is still correct for THIS render — a
+        // failed write only matters the next time this component mounts
+        // (e.g. navigating away and back), since writeJobmatchSessionSnapshot
+        // rolls back to the previous run's session data on failure rather
+        // than this one. Warn now, while there's still context, instead of
+        // letting that remount silently show stale results with no explanation.
+        if (!snapshotWritten) {
+          toast.warning("Your results are shown below, but couldn't be saved for this browser tab — they may not survive a page refresh.");
+        }
       } catch {}
 
       setTimeout(() => {
@@ -408,10 +415,15 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       <style>{WIZARD_OVERVIEW_STYLES}</style>
 
       {/* ── Outer wrapper: scopes overlay to the content area only ── */}
-      <div style={{ position: "relative", minHeight: "100vh" }}>
+      {/* minHeight subtracts the fixed Header's height (h-14 = 3.5rem) — this
+          renders inside <main className="mt-14">, so a plain 100vh here would
+          stack on top of that offset and overflow the viewport by 3.5rem,
+          producing an empty scrollbar (see AnalysisContent.tsx, which uses
+          the same calc for the same reason). */}
+      <div style={{ position: "relative", minHeight: "calc(100vh - 3.5rem)" }}>
 
       {/* ── Page shell — blurs only this area when modal is open ── */}
-      <div ref={containerRef} className="relative min-h-screen overflow-hidden" style={{
+      <div ref={containerRef} className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden" style={{
         background: "#EEF4FF",
         filter: wizardStep > 0 ? "blur(4px)" : "none",
         transition: "filter 0.25s ease",
@@ -448,6 +460,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           setWizardStep(prev => (prev + 1) as 1 | 2 | 3);
         }}
         continueDisabled={stepContinueDisabled()}
+        onAnalyzeClick={analyzeMatch}
       >
         {wizardStep === 1 && (
           <WizardStepResume
@@ -475,7 +488,6 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             jdFile={jdFile}
             jdText={jdText}
             error={error}
-            onAnalyze={analyzeMatch}
           />
         )}
       </WizardModalShell>

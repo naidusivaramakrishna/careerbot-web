@@ -6,14 +6,15 @@
  * handles both success and error responses.
  *
  * Covers:
+ *   - isAuthenticated: GETs /auth/profile, resolves true/false, optional skip-redirect header
  *   - signIn:   POSTs to /api/backend/auth/signin, returns tokens, stores tenant mapping
  *   - signUp:   POSTs to /api/backend/auth/signup, returns success, stores tenant mapping
- *   - signOut:  POSTs to /auth/signout (fire-and-forget)
+ *   - signOut:  POSTs to /api/backend/auth/signout (fire-and-forget)
  *   - resendVerificationEmail: POSTs to /auth/email/resend
  *   - verifyEmail:             POSTs to /auth/email/verify
  *   - requestPasswordReset:    POSTs to /auth/password/reset
  *   - confirmPasswordReset:    PATCHes /auth/password/reset
- *   - refreshAccessToken:      POSTs to /auth/refresh, rethrows errors as Error
+ *   - refreshAccessToken:      POSTs to /api/backend/auth/refresh (via proxy), rethrows errors as Error
  *
  * Run: npx vitest run src/tests/integration/features/auth
  */
@@ -29,6 +30,7 @@ import {
   requestPasswordReset,
   confirmPasswordReset,
   refreshAccessToken,
+  isAuthenticated,
 } from '@/api/authApi';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,6 +43,61 @@ const makeResponse = <T>(data: T, status = 200): AxiosResponse<T> =>
     headers: {},
     config: { headers: {} } as never,
   }) as unknown as AxiosResponse<T>;
+
+// ─── isAuthenticated ────────────────────────────────────────────────────────
+
+describe('Auth API — isAuthenticated', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('GETs /auth/profile without a skip header by default', async () => {
+    const spy = vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await isAuthenticated();
+
+    expect(spy).toHaveBeenCalledWith('/auth/profile', undefined);
+  });
+
+  it('sends X-Skip-Login-Redirect when skipAuthRedirect is requested', async () => {
+    // REGRESSION GUARD, and it used to pin the opposite header.
+    //
+    // A public page's probe must not bounce an anonymous visitor to login --
+    // but it MUST still refresh an expired access token for a visitor who is
+    // signed in. X-Skip-Login-Redirect does exactly that. X-Skip-Auth-Redirect
+    // short-circuits the 401 BEFORE the refresh block (src/lib/http.ts), which
+    // reported a signed-in subscriber as signed out on the pricing page.
+    const spy = vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await isAuthenticated({ skipAuthRedirect: true });
+
+    expect(spy).toHaveBeenCalledWith('/auth/profile', {
+      headers: { 'X-Skip-Login-Redirect': 'true' },
+    });
+  });
+
+  it('sends X-Skip-Auth-Redirect only when skipRefresh is asked for', async () => {
+    // The no-refresh-at-all case: "am I really logged out?", e.g. straight
+    // after signout, where silently re-minting a token is the wrong answer.
+    const spy = vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await isAuthenticated({ skipRefresh: true });
+
+    expect(spy).toHaveBeenCalledWith('/auth/profile', {
+      headers: { 'X-Skip-Auth-Redirect': 'true' },
+    });
+  });
+
+  it('resolves to true on a successful profile fetch', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await expect(isAuthenticated()).resolves.toBe(true);
+  });
+
+  it('resolves to false (never rejects) on a failed profile fetch', async () => {
+    vi.spyOn(httpClient, 'get').mockRejectedValueOnce({ response: { status: 401 } });
+
+    await expect(isAuthenticated({ skipAuthRedirect: true })).resolves.toBe(false);
+  });
+});
 
 // ─── signIn ───────────────────────────────────────────────────────────────────
 
@@ -141,8 +198,8 @@ describe('Auth API — signUp', () => {
 describe('Auth API — signOut', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('POSTs to /auth/signout', async () => {
-    const spy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(makeResponse({}));
+  it('POSTs to /api/backend/auth/signout', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({ ok: true } as Response);
 
     // signOut calls window.location.href — mock it to avoid jsdom navigation error
     Object.defineProperty(window, 'location', {
@@ -152,11 +209,14 @@ describe('Auth API — signOut', () => {
 
     await signOut();
 
-    expect(spy).toHaveBeenCalledWith('/auth/signout');
+    expect(spy).toHaveBeenCalledWith(
+      '/api/backend/auth/signout',
+      expect.objectContaining({ method: 'POST', credentials: 'include' })
+    );
   });
 
   it('does not throw even if the signout request fails', async () => {
-    vi.spyOn(httpClient, 'post').mockRejectedValueOnce(new Error('Network error'));
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'));
 
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -328,7 +388,7 @@ describe('Auth API — confirmPasswordReset', () => {
 describe('Auth API — refreshAccessToken', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('POSTs to /auth/refresh', async () => {
+  it('POSTs to /api/backend/auth/refresh via proxy', async () => {
     const spy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(
       makeResponse({ access_token: 'new-at', refresh_token: 'new-rt', token_type: 'bearer' })
     );
@@ -336,9 +396,9 @@ describe('Auth API — refreshAccessToken', () => {
     await refreshAccessToken();
 
     expect(spy).toHaveBeenCalledWith(
-      '/auth/refresh',
+      '/api/backend/auth/refresh',
       {},
-      expect.any(Object)
+      expect.objectContaining({ baseURL: '' })
     );
   });
 

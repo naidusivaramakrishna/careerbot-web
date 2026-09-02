@@ -1,7 +1,6 @@
 ﻿"use client";
 import { memo } from "react";
 import { Star, ArrowRight, MapPin, Briefcase } from "lucide-react";
-import { getMatchBandConfig } from "../utils/matchBand";
 
 interface Job {
   id: string;
@@ -94,18 +93,15 @@ function TopPickCard({ jobs = [], loading = false, emptyMessage, onViewAll }: To
                   </div>
                 </div>
 
-                {/* Match score OR arrow */}
-                {!!job.matchScore && Math.round(job.matchScore) > 0 ? (() => {
-                  const cfg = getMatchBandConfig(job.match_band);
-                  return (
-                    <span
-                      className="shrink-0 text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-md"
-                      style={{ color: cfg.color, background: cfg.bg }}
-                    >
-                      {Math.round(job.matchScore)}%
-                    </span>
-                  );
-                })() : (
+                {/* Match score OR arrow — flat brand color, not the red/amber
+                    "quality" scale used elsewhere: these are curated picks
+                    already, so coding them as warnings undercuts the panel's
+                    own "recommended for you" framing. */}
+                {!!job.matchScore && Math.round(job.matchScore) > 0 ? (
+                  <span className="shrink-0 text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-md text-indigo-600 bg-indigo-50">
+                    {Math.round(job.matchScore)}%
+                  </span>
+                ) : (
                   <ArrowRight size={13} className="shrink-0 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-[#4F46E5]" />
                 )}
               </div>

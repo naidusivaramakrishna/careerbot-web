@@ -5,14 +5,19 @@ import ResumeLandingPage from '@/app/(resume)/builder/page';
 import { getAllResumesUnified, createResumeWithAuth } from '@/api/resumeApi';
 import { toast } from 'sonner';
 
-const { mockPush } = vi.hoisted(() => ({
+const { mockPush, mockUseAuth } = vi.hoisted(() => ({
   mockPush: vi.fn(),
+  mockUseAuth: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
+}));
+
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: mockUseAuth,
 }));
 
 vi.mock('@/api/resumeApi', () => ({
@@ -56,6 +61,8 @@ describe('ResumeLandingPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: authenticated, not loading — mirrors the happy-path for most tests
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false, logout: vi.fn() });
     mockGetAllResumesUnified.mockResolvedValue(emptyResumeResponse as never);
     mockCreateResumeWithAuth.mockResolvedValue({
       id: 'new-resume-1',
@@ -147,6 +154,27 @@ describe('ResumeLandingPage', () => {
     });
   });
 
+  it('shows sign-in modal when Start Free is clicked while unauthenticated', () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false, logout: vi.fn() });
+    render(<ResumeLandingPage />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Start Free/i })[0]);
+
+    expect(screen.getByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
+    expect(mockGetAllResumesUnified).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('disables Start Free and Build New Resume buttons while auth state is loading', () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: true, logout: vi.fn() });
+    render(<ResumeLandingPage />);
+
+    screen.getAllByRole('button', { name: /Start Free/i }).forEach((btn) =>
+      expect(btn).toBeDisabled()
+    );
+    expect(screen.getByRole('button', { name: /Build New Resume/i })).toBeDisabled();
+  });
+
   it('links enhance existing resume to the upload path', () => {
     render(<ResumeLandingPage />);
 
@@ -173,17 +201,15 @@ describe('ResumeLandingPage', () => {
     );
   });
 
-  it('opens sign-in modal when resume creation fails because the user is unauthenticated', async () => {
-    mockCreateResumeWithAuth.mockRejectedValue({
-      response: { status: 401, data: { detail: 'Authentication required' } },
-    });
-
+  it('shows sign-in modal when Build New Resume is clicked while unauthenticated', () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false, logout: vi.fn() });
     render(<ResumeLandingPage />);
 
     fireEvent.click(screen.getByRole('button', { name: /Build New Resume/i }));
 
-    expect(await screen.findByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
-    expect(mockPush).not.toHaveBeenCalledWith('/templates');
+    expect(screen.getByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
+    expect(mockCreateResumeWithAuth).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('handles free-plan conflict by showing toast and routing to the existing resume list', async () => {
@@ -202,23 +228,6 @@ describe('ResumeLandingPage', () => {
       );
     });
     expect(mockPush).toHaveBeenCalledWith('/builder/start/list');
-  });
-
-  it('handles permission denied resume creation by prompting sign-in', async () => {
-    mockCreateResumeWithAuth.mockRejectedValue({
-      response: { status: 403, data: { detail: 'Forbidden' } },
-    });
-
-    render(<ResumeLandingPage />);
-
-    fireEvent.click(screen.getByRole('button', { name: /Build New Resume/i }));
-
-    await waitFor(() => {
-      expect(mockToast.error).toHaveBeenCalledWith(
-        "You don't have permission to create a resume. Please sign in and try again."
-      );
-    });
-    expect(screen.getByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
   });
 
   it('shows backend detail for generic resume creation failures', async () => {

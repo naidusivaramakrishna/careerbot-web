@@ -13,7 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
+import { useResumeProfileFill } from "@/hooks/useResumeProfileFill"
+import { sanitizeAuthRedirect, DEFAULT_AUTH_REDIRECT } from "@/lib/authRedirect";
 
 const ACCEPTED_RESUME_TYPES = ".pdf,.doc,.docx";
 
@@ -44,7 +45,13 @@ export default function UserOnboardingPage() {
   const [stage, setStage] = useState<OnboardingStage>("upload");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [skippedUpload, setSkippedUpload] = useState(false);
+  const [nextPath, setNextPath] = useState(DEFAULT_AUTH_REDIRECT);
   const { step, error, fill, reset } = useResumeProfileFill();
+
+  React.useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("next");
+    if (param) setNextPath(sanitizeAuthRedirect(param));
+  }, []);
 
   const isProcessing = step === "parsing" || step === "saving";
   const sideTitle = stage === "ready"
@@ -72,7 +79,8 @@ export default function UserOnboardingPage() {
       return;
     }
 
-    await fill(selectedFile);
+    const ok = await fill(selectedFile);
+    if (!ok) return;
     window.sessionStorage.setItem("careerbot_onboarding_just_completed", "1");
     setStage("ready");
   };
@@ -235,8 +243,8 @@ export default function UserOnboardingPage() {
                     </div>
                   </div>
 
-                  <Link href="/dashboard" className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#2557a7] bg-white px-4 text-xs font-black text-[#2557a7] transition hover:bg-[#eef4ff]">
-                    Go to Dashboard <ArrowRight size={14} />
+                  <Link href={nextPath} className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#2557a7] bg-white px-4 text-xs font-black text-[#2557a7] transition hover:bg-[#eef4ff]">
+                    {nextPath === DEFAULT_AUTH_REDIRECT ? "Go to Dashboard" : "Continue"} <ArrowRight size={14} />
                   </Link>
                 </div>
               </section>            )}

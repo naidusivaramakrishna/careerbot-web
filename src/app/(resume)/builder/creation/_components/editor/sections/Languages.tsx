@@ -6,22 +6,26 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { toast } from "sonner";
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface LanguageEntry {
-  language: string;
+  name: string;
   proficiency: string;
-  id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string;
 }
 
 const emptyLanguage = (): LanguageEntry => ({
-  language: "",
+  name: "",
   proficiency: "",
 });
 
 const Languages: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors } = useValidation();
 
   const [showTips] = useState(true);
@@ -32,7 +36,7 @@ const Languages: React.FC = () => {
   const formScrollRef = useRef<HTMLDivElement>(null);
 
   const hasValidData = (entry: LanguageEntry): boolean => {
-    return !!(entry.language && entry.proficiency);
+    return !!(entry.name && entry.proficiency);
   };
 
   const [savedEntries, setSavedEntries] = useState<LanguageEntry[]>(() => {
@@ -60,7 +64,7 @@ const Languages: React.FC = () => {
       editingEntries.forEach((language, editIndex) => {
         const globalIndex = savedEntries.length + editIndex;
         const isValid = validateRequired("language", globalIndex, {
-          language: language.language,
+          name: language.name,
           proficiency: language.proficiency,
         });
         if (!isValid) allValid = false;
@@ -178,7 +182,11 @@ const Languages: React.FC = () => {
       // // console.log("🗑️ Deleting language item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "languages", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "languages", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "languages", itemId);
+      }
 
       // // console.log("✅ Language item deleted from backend successfully");
 
@@ -225,7 +233,7 @@ const Languages: React.FC = () => {
     "fluent",
     "advanced",
     "intermediate",
-    "beginner",
+    "basic",
   ];
 
   return (
@@ -238,7 +246,7 @@ const Languages: React.FC = () => {
               <div key={index} className="flex items-center justify-between gap-4 border-b pb-3">
                 <div className="flex-1 flex items-center gap-4">
                   <div className="text-base font-bold text-gray-900">
-                    {language.language || "No language"}
+                    {language.name || "No language"}
                   </div>
                   
                   <div className="text-xs font-semibold text-[#2557a7] bg-blue-50 px-3 py-1 rounded-full">
@@ -315,15 +323,15 @@ const Languages: React.FC = () => {
                       </label>
                       <input
                         type="text"
-                        value={language.language}
+                        value={language.name}
                         placeholder="e.g., English, Spanish, Mandarin Chinese"
-                        onChange={(e) => handleChange(editIndex, "language", e.target.value)}
-                        onBlur={() => validateRequired("language", globalIndex, { language: language.language })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`language-${globalIndex}-language`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
+                        onChange={(e) => handleChange(editIndex, "name", e.target.value)}
+                        onBlur={() => validateRequired("language", globalIndex, { name: language.name })}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`language-${globalIndex}-name`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
-                      {errors[`language-${globalIndex}-language`] && (
+                      {errors[`language-${globalIndex}-name`] && (
                         <span className="text-xs text-red-500">
-                          {errors[`language-${globalIndex}-language`]}
+                          {errors[`language-${globalIndex}-name`]}
                         </span>
                       )}
                     </div>
@@ -370,7 +378,7 @@ const Languages: React.FC = () => {
             {showTips && (
               <SectionTipsPanel
                 sectionKey="Languages"
-                entryContent={[editingEntries[0]?.language].filter(Boolean) as string[]}
+                entryContent={[editingEntries[0]?.name].filter(Boolean) as string[]}
                 staticTips={
                   <div className="bg-[#faf9f8] rounded-lg p-5">
                     <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>

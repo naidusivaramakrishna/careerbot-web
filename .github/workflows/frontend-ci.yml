@@ -13,14 +13,28 @@ on:
     branches: ['**']
   # Direct pushes to the long-lived branches only. Feature branches are covered
   # by the pull_request trigger above; keeping `feature/**` here as well would
-  # run every check TWICE per PR, and this repo has 2 self-hosted runners.
+  # run every check TWICE per PR. Two runners are registered but only one is
+  # normally online, so effective capacity is ONE.
   push:
     branches: [master, develop2]
+
+
+# Supersede in-flight runs for the same PR. Every push to a PR - or to the
+# base branch a PR targets - queues a fresh round of these jobs, and they all
+# land on ONE self-hosted runner shared with the AI review. Without this, five
+# pushes meant five full rounds queued back to back, and the checks that
+# actually gate a merge sat behind reviews of commits already superseded.
+#
+# github.workflow is part of the group key so Frontend CI and Security Scan do
+# not cancel each other - they are separate workflows and both must report.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   security-checks:
     name: Security Checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 
@@ -54,9 +68,42 @@ jobs:
           fi
           echo "OK: No sensitive keys exposed via NEXT_PUBLIC_"
 
+      # Added after a live AI_LAYER_API_KEY was committed into the global axios
+      # request interceptor in src/lib/http.ts and reached this branch with all
+      # 10 checks green. It slipped past BOTH existing guards:
+      #   - Gitleaks: a bare 32-char alphanumeric literal with no recognisable
+      #     prefix matches no default rule.
+      #   - The NEXT_PUBLIC_ check above: the key was not a NEXT_PUBLIC_ var, it
+      #     was an inline string literal.
+      # This catches the shape that got through: a hardcoded bearer/api-key
+      # literal anywhere in client source.
+      - name: Check for hardcoded bearer tokens and API keys in client source
+        run: |
+          FOUND=0
+          # 'Bearer <16+ chars>' as a literal, not an interpolation
+          if grep -rnE "['\"]Bearer [A-Za-z0-9_\\-]{16,}['\"]" src/ \
+               --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "ERROR: hardcoded Bearer token in client source."
+            FOUND=1
+          fi
+          # Authorization header assigned a literal rather than a variable
+          if grep -rnE "Authorization['\"]?\]?\s*[:=]\s*['\"][A-Za-z0-9 _\\-]{20,}['\"]" src/ \
+               --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "ERROR: Authorization header assigned a hardcoded literal."
+            FOUND=1
+          fi
+          if [ $FOUND -eq 1 ]; then
+            echo ""
+            echo "Client source ships to the browser — a credential here is public."
+            echo "Proxy the call through the backend or a Next.js route handler"
+            echo "so the credential stays server-side."
+            exit 1
+          fi
+          echo "OK: No hardcoded bearer tokens in client source"
+
   lint-and-build:
     name: Lint and Build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 
@@ -67,7 +114,7 @@ jobs:
           cache: 'npm'
 
       - name: Upgrade npm to match lockfile generator
-        run: npm install -g npm@11
+        run: npm install -g npm@11 || echo "skipping global npm upgrade (no permission on self-hosted runner)"
 
       - name: Install dependencies
         run: npm ci

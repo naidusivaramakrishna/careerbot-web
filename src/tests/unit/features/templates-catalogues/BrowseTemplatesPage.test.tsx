@@ -129,7 +129,12 @@ describe('BrowseTemplatesPage — rendering', () => {
   it('renders trust badges', () => {
     render(<BrowseTemplatesPage />);
     expect(screen.getByText('100% ATS Friendly')).toBeInTheDocument();
-    expect(screen.getByText('14+ Industries')).toBeInTheDocument();
+    // Matches TRUST_BADGES in browse-templates/page.tsx, which this PR
+    // corrected from "14+ Industries" to the real family count (18).
+    // Deliberately a literal: this suite mocks the constants module, so
+    // deriving the number from FAMILY_DOMAINS would assert against the mock
+    // (2 families) rather than the string the page actually renders.
+    expect(screen.getByText('18 Industries')).toBeInTheDocument();
     expect(screen.getByText('Free to browse')).toBeInTheDocument();
   });
 

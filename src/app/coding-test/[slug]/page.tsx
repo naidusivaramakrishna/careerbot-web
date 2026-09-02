@@ -11,15 +11,15 @@ import {
 import dynamic from 'next/dynamic';
 import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 import { CodingTestApiError, fetchProblem, fetchProblems } from '../_lib/api';
-import { RunApiError, runCode, submitCode } from '../_lib/runApi';
+import { RunApiError, runCode, submitAsync, pollJudgeResult } from '../_lib/runApi';
 import { GradingApiError, fetchQuota, mockGrade } from '../_lib/gradingApi';
 import JudgePanel from '../_components/JudgePanel';
 import GradingResultPanel from '@/components/coding-test/GradingResult';
 import SubmitButton from '@/components/coding-test/SubmitButton';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
-  CodingProblemDetail, CodingProblemSummary, CodingTestLanguage, JudgeResponse,
-  QuotaResponse, SubmitSolutionResponse,
+  CodingProblemDetail, CodingProblemSummary, CodingTestLanguage,
+  JudgeJobRecord, JudgeResponse, QuotaResponse, SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
@@ -185,11 +185,13 @@ export default function CodingProblemDetailPage() {
   const [actionState,   setActionState]   = useState<ActionState>('idle');
   const [judgeResult,   setJudgeResult]   = useState<JudgeResponse | null>(null);
   const [judgeMode,     setJudgeMode]     = useState<'run' | 'submit'>('run');
+  const [judgeProgress, setJudgeProgress] = useState<JudgeJobRecord | null>(null);
   const [actionError,   setActionError]   = useState('');
   const [gradingResult, setGradingResult] = useState<SubmitSolutionResponse | null>(null);
   const [gradingError,  setGradingError]  = useState('');
   const [isGrading,     setIsGrading]     = useState(false);
   const [quota,         setQuota]         = useState<QuotaResponse | null>(null);
+  const submitAbortRef = useRef<AbortController | null>(null);
 
   /* ── timer ── */
   const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
@@ -224,6 +226,9 @@ export default function CodingProblemDetailPage() {
     setSaveStatus('saved');
     saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
   }, []);
+
+  /* ── cancel in-flight submit on unmount ── */
+  useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
 
   /* ── tab-switch detection ── */
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
@@ -339,6 +344,7 @@ export default function CodingProblemDetailPage() {
   /* ── helpers ── */
   const clearRunOutput = useCallback(() => {
     setJudgeResult(null); setActionError(''); setActionState('idle');
+    setJudgeProgress(null);
     setGradingResult(null); setGradingError(''); setIsGrading(false);
   }, []);
 
@@ -384,33 +390,49 @@ export default function CodingProblemDetailPage() {
     const src = code[language]?.trim();
     if (!src) { setActionError('Write some code before submitting.'); return; }
     setActionState('submitting'); setActionError('');
-    setJudgeResult(null); setGradingResult(null); setGradingError('');
+    setJudgeResult(null); setJudgeProgress(null); setGradingResult(null); setGradingError('');
     setJudgeMode('submit');
     setConsoleCollapsed(false);
     setConsoleTab('tests');
 
-    const judgePromise = submitCode(slug, language, code[language]);
+    submitAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    submitAbortRef.current = ctrl;
 
+    let queued: SubmitAsyncQueued;
     try {
-      const judgeRes = await judgePromise;
-      setJudgeResult(judgeRes);
-      setActionState('done');
-      if (judgeRes.verdict === 'accepted') {
-        router.refresh();
-      }
+      queued = await submitAsync(slug, language, code[language]);
     } catch (err) {
+      if (ctrl.signal.aborted) return;
       setActionState('idle');
-      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to submit your solution.');
+      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to queue submission.');
       return;
     }
 
+    let judgeRes: JudgeResponse;
+    try {
+      judgeRes = await pollJudgeResult(
+        queued.poll_url,
+        (record) => setJudgeProgress(record),
+        ctrl.signal,
+      );
+    } catch (err) {
+      if (ctrl.signal.aborted) return;
+      setActionState('idle');
+      setJudgeProgress(null);
+      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to get judge result.');
+      return;
+    }
+
+    setJudgeProgress(null);
+    setJudgeResult(judgeRes);
+    setActionState('done');
+    if (judgeRes.verdict === 'accepted') router.refresh();
+
     if (isPracticeMode) return;
 
-    // Only fire AI grading after judge succeeds.
-    // Identity-guard the grade request. mockGrade is slow, and Previous/Next
-    // swaps `slug` while it is in flight — without this, the previous problem's
-    // grade lands in the new problem's UI. Compare on resolve and discard a
-    // superseded response instead of writing it to state.
+    // Identity-guard the grade request so a slow mockGrade response doesn't
+    // land on a different problem if the user navigated with Prev/Next.
     const gradeToken = ++gradeRequestRef.current;
     const gradedSlug = slug;
     setIsGrading(true);
@@ -419,7 +441,6 @@ export default function CodingProblemDetailPage() {
       if (gradeToken !== gradeRequestRef.current || gradedSlug !== slugRef.current) return;
       setGradingResult(gradeRes);
       setConsoleTab('grade');
-      // A credit was consumed — refresh the displayed balance.
       fetchQuota().then(setQuota).catch(() => {});
     } catch (gradeErr) {
       if (gradeToken !== gradeRequestRef.current || gradedSlug !== slugRef.current) return;
@@ -900,7 +921,13 @@ export default function CodingProblemDetailPage() {
                       )}
                       {isBusy && (
                         <p className="font-mono text-[13px] italic text-slate-400">
-                          {actionState === 'submitting' ? 'Submitting your code…' : 'Running your code…'}
+                          {actionState === 'submitting'
+                            ? judgeProgress?.status === 'running'
+                              ? 'Running test cases…'
+                              : judgeProgress?.status === 'queued'
+                              ? 'Waiting in queue…'
+                              : 'Submitting…'
+                            : 'Running your code…'}
                         </p>
                       )}
                       {actionError && (
@@ -926,12 +953,28 @@ export default function CodingProblemDetailPage() {
                     judgeResult ? (
                       <JudgePanel result={judgeResult} mode={judgeMode} />
                     ) : (
-                      <div className="flex h-full items-center justify-center p-3">
-                        <p className="font-mono text-[13px] italic text-slate-500">
-                          Press{' '}
-                          <span className="font-semibold text-emerald-400">Run Code</span>{' '}
-                          to see per-test-case results.
-                        </p>
+                      <div className="flex h-full flex-col items-center justify-center gap-3 p-3">
+                        {actionState === 'submitting' ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin text-indigo-400" aria-hidden />
+                            <p className="font-mono text-[13px] text-slate-400">
+                              {judgeProgress?.status === 'running'
+                                ? 'Running test cases…'
+                                : judgeProgress?.status === 'queued'
+                                ? 'Waiting in queue…'
+                                : 'Submitting…'}
+                            </p>
+                            <div className="h-1.5 w-48 overflow-hidden rounded-full bg-slate-700">
+                              <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
+                            </div>
+                          </>
+                        ) : (
+                          <p className="font-mono text-[13px] italic text-slate-500">
+                            Press{' '}
+                            <span className="font-semibold text-emerald-400">Run Code</span>{' '}
+                            to see per-test-case results.
+                          </p>
+                        )}
                       </div>
                     )
                   )}

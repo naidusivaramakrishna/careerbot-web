@@ -10,6 +10,7 @@ import {
   FileUser,
   LayoutDashboard,
   MessageSquareText,
+  MicVocal,
   NotebookPen,
   ReceiptText,
   Rocket,
@@ -61,6 +62,7 @@ export const EnterpriseJobsIcon = createEnterpriseNavIcon(BriefcaseBusiness);
 export const EnterpriseApplicationTrackerIcon = createEnterpriseNavIcon(SquareChartGantt);
 export const EnterpriseNotesIcon = createEnterpriseNavIcon(NotebookPen);
 export const EnterpriseInterviewPrepIcon = createEnterpriseNavIcon(MessageSquareText);
+export const EnterpriseCommunicationIcon = createEnterpriseNavIcon(MicVocal, 1.85);
 export const EnterpriseSubscriptionIcon = createEnterpriseNavIcon(BadgeCheck);
 export const EnterpriseBillingHistoryIcon = createEnterpriseNavIcon(ReceiptText);
 export const EnterpriseCoverLetterIcon = createEnterpriseNavIcon(FilePenLine);

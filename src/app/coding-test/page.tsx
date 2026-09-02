@@ -7,7 +7,6 @@ import { fetchProblems } from './_lib/api';
 import { fetchProgress, fetchProblemsAnnotated, fetchQuota } from './_lib/gradingApi';
 import type { CodingTestLanguage, QuotaResponse } from './_lib/types';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
-import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 
 type Progress = { solved: number; attempted: number; accuracy: number };
 
@@ -30,24 +29,22 @@ const LANG_CONFIG: {
 
 const CIRC = 2 * Math.PI * 36; // ≈ 226.2
 
-const onboardingKey = (userId: string) => `coding_test_onboarded_${userId}`;
+const ONBOARDING_KEY = 'coding_test_onboarded';
 
 export default function CodingPracticeHub() {
-  const { userId } = useCurrentUserId();
   const [totalProblems, setTotalProblems] = useState<number | null>(null);
   const [progress, setProgress] = useState<Progress>({ solved: 0, attempted: 0, accuracy: 0 });
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [ready, setReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Check localStorage after userId resolves (SSR-safe, per-user key).
+  // Check localStorage for onboarding state (device-scoped for public page).
   useEffect(() => {
-    if (!userId) return;
-    if (!localStorage.getItem(onboardingKey(userId))) setShowOnboarding(true);
-  }, [userId]);
+    if (!localStorage.getItem(ONBOARDING_KEY)) setShowOnboarding(true);
+  }, []);
 
   const dismissOnboarding = () => {
-    if (userId) localStorage.setItem(onboardingKey(userId), '1');
+    localStorage.setItem(ONBOARDING_KEY, '1');
     setShowOnboarding(false);
   };
 
@@ -71,6 +68,9 @@ export default function CodingPracticeHub() {
           });
         }
         if (q) setQuota(q);
+        setReady(true);
+      }).catch(() => {
+        // Auth-related errors are expected for unauthenticated users on this public page
         setReady(true);
       });
 

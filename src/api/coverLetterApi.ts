@@ -23,6 +23,8 @@ import type {
   CoverLetterExportFormat,
   CoverLetterDefaultResumeRequest,
   CoverLetterDefaultResumeResponse,
+  CoverLetterDefaultTemplateRequest,
+  CoverLetterDefaultTemplateResponse,
   CoverLetterGenerateRequest,
   CoverLetterListResponse,
   CoverLetterResumeOptionsResponse,
@@ -119,6 +121,14 @@ function mapError(err: unknown): CoverLetterApiError {
     const detailMessage = typeof data?.detail === "string" ? data.detail : undefined;
     const message = data?.error?.message ?? detailMessage ?? err.message;
 
+    if (!err.response && (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT")) {
+      return new CoverLetterApiError({
+        reason: "timeout",
+        message,
+        backendErrorCode,
+      });
+    }
+
     // Per impl-blueprint §4 canonical 7-status map. 402 is NOT in
     // V1 (free feature; paid-tier deferred).
     if (status === 401 || status === 403) {
@@ -138,8 +148,14 @@ function mapError(err: unknown): CoverLetterApiError {
       });
     }
     if (status === 409) {
+      const conflictText = `${backendErrorCode ?? ""} ${message ?? ""} ${
+        typeof data?.detail === "string" ? data.detail : JSON.stringify(data?.detail ?? "")
+      }`.toUpperCase();
       return new CoverLetterApiError({
-        reason: "download_unavailable",
+        reason: conflictText.includes("IDEMPOTENCY_IN_PROGRESS")
+          || conflictText.includes("GENERATION")
+          ? "generation_in_progress"
+          : "download_unavailable",
         status,
         message,
         backendErrorCode,
@@ -277,7 +293,10 @@ export async function generateCoverLetter(
       `${BASE}/generate`,
       stripDebugMetadata(body),
       {
-        timeout: 120000,
+        // Must exceed the backend's 180s AI deadline plus persistence and
+        // bounded post-processing, otherwise a valid saved letter can look
+        // like a client-side failure.
+        timeout: 240000,
         headers: {
           "Idempotency-Key": idempotencyKey,
           "X-Skip-Auth-Redirect": "true",
@@ -348,6 +367,33 @@ export async function listCoverLetterTemplates(): Promise<CoverLetterTemplateCat
   try {
     const { data } = await httpClient.get<CoverLetterTemplateCatalogResponse>(
       `${BASE}/templates`,
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function getDefaultCoverLetterTemplate(): Promise<CoverLetterDefaultTemplateResponse> {
+  try {
+    const { data } = await httpClient.get<CoverLetterDefaultTemplateResponse>(
+      `${BASE}/default-template`,
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function setDefaultCoverLetterTemplate(
+  body: CoverLetterDefaultTemplateRequest,
+): Promise<CoverLetterDefaultTemplateResponse> {
+  try {
+    const { data } = await httpClient.put<CoverLetterDefaultTemplateResponse>(
+      `${BASE}/default-template`,
+      body,
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
     );
     return data;
   } catch (err) {
@@ -432,7 +478,8 @@ export async function updateCoverLetter(
 
 export interface DownloadCoverLetterParams {
   format: CoverLetterExportFormat;
-  template_id: CoverLetterTemplateId;
+  /** Omit to let the backend resolve the user's saved default. */
+  template_id?: CoverLetterTemplateId;
 }
 
 export async function downloadCoverLetter(

@@ -13,10 +13,14 @@ import {
   Scale,
   Truck,
   Anchor,
-  Layers,
+  Briefcase,
   FlaskConical,
   Handshake,
-  Briefcase,
+  Headphones,
+  Lightbulb,
+  Palette,
+  Settings,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -40,10 +44,13 @@ const DOMAIN_FAMILY_NAMES: Record<string, string> = {
   'legal': 'Legal',
   'logistics_warehouse_operations': 'Logistics & Warehouse',
   'marine_merchant_navy': 'Marine & Navy',
-  'modern_minimal_template': 'Modern Minimal',
   'research_scholar': 'Research Scholar',
   'sales_business_development': 'Sales & Business',
-  'general_professional': 'General Professional',
+  'customer_support_service': 'Customer Support',
+  'product_engineering_leadership': 'Product & Engineering',
+  'marketing_creative': 'Marketing & Creative',
+  'operations_management': 'Operations & Management',
+  'human_resources': 'Human Resources',
 };
 
 const DOMAIN_FAMILY_ICONS: Record<string, LucideIcon> = {
@@ -59,10 +66,13 @@ const DOMAIN_FAMILY_ICONS: Record<string, LucideIcon> = {
   'legal': Scale,
   'logistics_warehouse_operations': Truck,
   'marine_merchant_navy': Anchor,
-  'modern_minimal_template': Layers,
   'research_scholar': FlaskConical,
   'sales_business_development': Handshake,
-  'general_professional': Briefcase,
+  'customer_support_service': Headphones,
+  'product_engineering_leadership': Lightbulb,
+  'marketing_creative': Palette,
+  'operations_management': Settings,
+  'human_resources': Users,
 };
 
 export default function CategorySidebar({

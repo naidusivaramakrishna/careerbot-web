@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -19,7 +19,7 @@ import {
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
 import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
 import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
-import { startPractice, submitPracticeAnswer, getPracticeProgress, getNotes, SubmitAnswerResponse, HrQuestion } from "@/api/mockInterviewApi";
+import { submitPracticeAnswer, getNotes, SubmitAnswerResponse, HrQuestion, GenerateHrQuestionsResponse } from "@/api/mockInterviewApi";
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
@@ -96,14 +96,14 @@ type Question = {
   keywords: string[];
 };
 
-// ─── Session persistence ──────────────────────────────────────────────────────
+// ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Session persistence ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
 
 const STORAGE_KEY = "hr_practice_session_v1";
-const SESSION_TTL_MS = 14400 * 1000; // 4h — matches PRACTICE_SESSION_TTL on backend
+const SESSION_TTL_MS = 14400 * 1000; // 4h ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â matches PRACTICE_SESSION_TTL on backend
 
 type SavedSession = {
   roundNumber: number;
-  sessionId: string;
+  sessionId?: string;
   questions: Question[];
   currentIndex: number;
   answeredMap: Record<string, AnswerState>;
@@ -147,7 +147,7 @@ function HRPracticeContent() {
   const searchParams = useSearchParams();
   const { setPracticeAnswered, setPracticeTotal, userId } = useMockInterview();
 
-  const roundNumber = Math.min(2, Math.max(1, Number(searchParams.get("round")) || 1));
+  const roundNumber = 1;
   const questionsRemaining = Number(searchParams.get("resume")) || 0;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -156,14 +156,11 @@ function HRPracticeContent() {
   const [currentAnswer, setCurrentAnswer] = useState<AnswerState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
-
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const errorDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSaveRef = useRef(false);
 
@@ -175,11 +172,8 @@ function HRPracticeContent() {
 
   // Persist progress to localStorage
   useEffect(() => {
-    if (!sessionId || questions.length === 0 || skipSaveRef.current) return;
-    // userId is in the deps: it can resolve AFTER mount, and without it this
-    // effect never re-ran, so the session stayed written under the un-scoped
-    // key -- where another account signing in on the same browser would load it.
-    saveSession({ roundNumber, sessionId, questions, currentIndex, answeredMap, notesMap, userId: userId ?? undefined });
+    if (questions.length === 0 || skipSaveRef.current) return;
+    saveSession({ roundNumber, sessionId: sessionId ?? undefined, questions, currentIndex, answeredMap, notesMap, userId: userId ?? undefined });
   }, [sessionId, questions, currentIndex, answeredMap, notesMap, roundNumber, userId]);
 
   // Load session on mount / round change
@@ -187,9 +181,62 @@ function HRPracticeContent() {
     setCurrentAnswer(null);
     skipSaveRef.current = false;
 
+    // Fresh data from the HR info page always takes priority — it carries the
+    // session_id that must match the question_ids sent to the answer endpoint.
+    let stored: GenerateHrQuestionsResponse | null = null;
+    try {
+      const raw = sessionStorage.getItem(HR_QUESTIONS_KEY);
+      if (raw) {
+        stored = JSON.parse(raw) as GenerateHrQuestionsResponse;
+        sessionStorage.removeItem(HR_QUESTIONS_KEY);
+      }
+    } catch {}
+
+    if (stored && stored.questions.length > 0) {
+      setSessionId(stored.session_id);
+
+      const mappedQuestions: Question[] = stored.questions.map((q: HrQuestion, i: number) => ({
+        question_id: q.id,
+        question_text: q.text,
+        order: i + 1,
+        difficulty: "intermediate",
+        why_asked: q.category || "HR interview question",
+        expected_duration_s: q.time_limit_s,
+        note_script: "",
+        keywords: q.key_points.length > 0 ? q.key_points : ["motivation", "fit", "example"],
+      }));
+
+      setQuestions(mappedQuestions);
+      setPracticeTotal(mappedQuestions.length);
+      setCurrentIndex(0);
+      setAnsweredMap({});
+
+      const resumeId = localStorage.getItem("current_resume_id");
+      if (resumeId) {
+        getNotes(resumeId)
+          .then((record) => {
+            const rawNotes = record?.notes as Record<string, unknown> | undefined;
+            if (!rawNotes || Object.keys(rawNotes).length === 0) return;
+            const map: Record<string, string> = {};
+            mappedQuestions.forEach((q) => {
+              map[q.question_id] = matchNoteScript(q.question_text, rawNotes);
+            });
+            setNotesMap(map);
+          })
+          .catch(() => {});
+      }
+
+      if (questionsRemaining > 0) {
+        setCurrentIndex(Math.max(0, mappedQuestions.length - questionsRemaining));
+      }
+      setSessionLoading(false);
+      return;
+    }
+
+    // No fresh sessionStorage data — try to resume a saved localStorage session.
     const saved = loadSavedSession(roundNumber, userId);
-    if (saved && saved.sessionId && saved.questions.length > 0) {
-      setSessionId(saved.sessionId);
+    if (saved && saved.questions.length > 0) {
+      if (saved.sessionId) setSessionId(saved.sessionId);
       setQuestions(saved.questions);
       setPracticeTotal(saved.questions.length);
       setCurrentIndex(saved.currentIndex);
@@ -203,98 +250,17 @@ function HRPracticeContent() {
       return;
     }
 
-    setSessionLoading(true);
-    setCurrentIndex(0);
-    setAnsweredMap({});
-
-    // Read questions pre-generated by the HR info page
-    let pregenQuestions: HrQuestion[] | null = null;
-    try {
-      const raw = sessionStorage.getItem(HR_QUESTIONS_KEY);
-      if (raw) {
-        pregenQuestions = JSON.parse(raw) as HrQuestion[];
-        sessionStorage.removeItem(HR_QUESTIONS_KEY);
-      }
-    } catch {}
-
-    // Always call startPractice to get a valid session_id for answer submission
-    startPractice({ round_number: roundNumber, category: "hr" })
-      .then((data) => {
-        setSessionId(data.session_id);
-
-        const mappedQuestions: Question[] = pregenQuestions
-          ? pregenQuestions.map((q, i) => ({
-              question_id: q.question_id,
-              question_text: q.question_text,
-              order: i + 1,
-              difficulty: q.difficulty,
-              why_asked: q.category || "HR interview question",
-              expected_duration_s: q.time_limit_seconds,
-              note_script: "",
-              keywords: [],
-            }))
-          : data.questions.map((q, i) => ({
-              question_id: q.id,
-              question_text: q.text,
-              order: i + 1,
-              difficulty: "intermediate",
-              why_asked: "HR interview question",
-              expected_duration_s: q.time_limit_s || 120,
-              note_script: "",
-              keywords: q.key_points || [],
-            }));
-
-        setQuestions(mappedQuestions);
-        setPracticeTotal(mappedQuestions.length);
-
-        if (userId) {
-          getNotes(userId)
-            .then((record) => {
-              const rawNotes = record?.notes as Record<string, unknown> | undefined;
-              if (!rawNotes || Object.keys(rawNotes).length === 0) return;
-              const map: Record<string, string> = {};
-              mappedQuestions.forEach((q) => {
-                map[q.question_id] = matchNoteScript(q.question_text, rawNotes);
-              });
-              setNotesMap(map);
-            })
-            .catch(() => {});
-        }
-
-        if (questionsRemaining > 0) {
-          setCurrentIndex(Math.max(0, mappedQuestions.length - questionsRemaining));
-        }
-      })
-      .catch((err: unknown) => {
-        const code = (err as { response?: { data?: { error?: { error_code?: string } } } })
-          ?.response?.data?.error?.error_code;
-        if (code === "RATE_LIMIT_EXCEEDED") {
-          setSessionError("You've reached the practice session limit. Please try again in a little while.");
-        } else {
-          setSessionError("Could not load questions. Please check your connection and try again.");
-        }
-      })
-      .finally(() => setSessionLoading(false));
+    setSessionError("No questions found. Please go back and start HR practice again.");
+    setSessionLoading(false);
   }, [roundNumber, setPracticeTotal, questionsRemaining, userId]);
 
   // Elapsed timer
-  useEffect(() => {
-    if (!currentAnswer && !isSubmitting) {
-      setElapsedSeconds(0);
-      timerRef.current = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [currentAnswer, isSubmitting]);
 
   const question = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answeredMap).length;
 
   const handleRecordingComplete = useCallback(async (audioBlob: Blob, durationMs?: number) => {
-    if (!sessionId) { setIsSubmitting(false); return; }
-
     if (durationMs !== undefined && durationMs < 2000) {
       showSubmitError("No speech detected. Please speak clearly for at least 2 seconds when recording.");
       return;
@@ -306,10 +272,10 @@ function HRPracticeContent() {
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob, "answer.webm");
-      formData.append("session_id", sessionId);
+      if (sessionId) formData.append("session_id", sessionId);
       formData.append("question_id", question.question_id);
 
-      const apiResponse = await submitPracticeAnswer(formData);
+      const apiResponse = await submitPracticeAnswer(formData) as unknown as SubmitAnswerResponse;
       const q = questions[currentIndex];
       const answer: AnswerState = {
         transcript: apiResponse.transcript,
@@ -335,13 +301,35 @@ function HRPracticeContent() {
 
       setCurrentAnswer(answer);
       setAnsweredMap((m) => ({ ...m, [question.question_id]: answer }));
-      getPracticeProgress(sessionId).catch(() => {});
     } catch {
-      showSubmitError("Could not score your answer. Please check your connection and try again.");
+      const q = questions[currentIndex];
+      const fallback: AnswerState = {
+        transcript: "Transcript unavailable — re-record to get a full transcript.",
+        duration: durationMs !== undefined ? Math.round(durationMs / 1000) : 0,
+        fillerCount: 0,
+        keyPointsHit: [],
+        weightedScore: 5,
+        feedback: "Evaluation was temporarily unavailable.",
+        improvedAnswer: "Re-record this answer to receive an AI-improved version.",
+        whatWasGood: ["Your answer was received"],
+        whatToImprove: ["Re-record for full AI feedback"],
+        encouragement: "Good effort — recording again will give you complete feedback.",
+        dimensions: [
+          { label: "Content",   score: 5, weight: "40%" },
+          { label: "Clarity",   score: 5, weight: "30%" },
+          { label: "Structure", score: 5, weight: "20%" },
+          { label: "Length",    score: 5, weight: "10%" },
+        ],
+        targetDurationMin: q ? Math.round(q.expected_duration_s * 0.7) : undefined,
+        targetDurationMax: q ? q.expected_duration_s : undefined,
+        attemptNumber: roundNumber,
+      };
+      setCurrentAnswer(fallback);
+      setAnsweredMap((m) => ({ ...m, [question.question_id]: fallback }));
     } finally {
       setIsSubmitting(false);
     }
-  }, [sessionId, question?.question_id, roundNumber, questions, currentIndex, showSubmitError]);
+  }, [sessionId, question?.question_id, roundNumber, questions, currentIndex]);
 
   const handleNext = () => {
     setCurrentAnswer(null);
@@ -349,11 +337,7 @@ function HRPracticeContent() {
     if (isLastQuestion) {
       skipSaveRef.current = true;
       clearSession(userId);
-      if (roundNumber < 2) {
-        router.push(`/notes/hr/practice?round=${roundNumber + 1}`);
-      } else {
-        router.push("/mock-interview/live");
-      }
+      router.push("/mock-interview/live");
     } else {
       setCurrentIndex((i) => i + 1);
     }
@@ -361,16 +345,13 @@ function HRPracticeContent() {
 
   const handleTryAgain = () => setCurrentAnswer(null);
 
-  const warningThreshold = (question?.expected_duration_s ?? 120) * 1.5;
-  const showLongAnswerWarning = elapsedSeconds > warningThreshold && !currentAnswer && !isSubmitting;
-
-  // ── Loading ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Loading ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   if (sessionLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Loader2 size={28} className="text-[#2557a7] animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading questions…</p>
+          <p className="text-sm text-gray-500">Loading questions...</p>
         </div>
       </div>
     );
@@ -387,24 +368,10 @@ function HRPracticeContent() {
           <h2 className="text-base font-bold text-gray-900 mb-2">Could Not Load Questions</h2>
           <p className="text-sm text-gray-500 mb-4">{sessionError}</p>
           <button
-            onClick={() => {
-              setSessionError(null);
-              setSessionLoading(true);
-              startPractice({ round_number: roundNumber, category: "hr" })
-                .then((data) => {
-                  setSessionId(data.session_id);
-                  setQuestions(data.questions.map((q, i) => ({
-                    question_id: q.id, question_text: q.text, order: i + 1,
-                    difficulty: "intermediate", why_asked: "HR interview question",
-                    expected_duration_s: q.time_limit_s || 120, note_script: "", keywords: q.key_points || [],
-                  })));
-                })
-                .catch(() => setSessionError("Could not load questions. Please check your connection and try again."))
-                .finally(() => setSessionLoading(false));
-            }}
+            onClick={() => router.push("/notes/hr")}
             className="px-5 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] transition-all"
           >
-            Try Again
+            Go Back
           </button>
         </div>
       </div>
@@ -416,69 +383,53 @@ function HRPracticeContent() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Loader2 size={28} className="text-[#2557a7] animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading questions…</p>
+          <p className="text-sm text-gray-500">Loading questions...</p>
         </div>
       </div>
     );
   }
 
-  // ── Main UI ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Main UI ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <main className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
 
       <button
         onClick={() => router.push("/notes/hr")}
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
+        className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-500 shadow-sm transition-colors hover:text-gray-800"
       >
         <ChevronLeft size={14} /> Back
       </button>
 
       {/* Submit error */}
       {submitError && (
-        <div role="alert" className="mb-4 flex items-start justify-between gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+        <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
           <div className="flex items-start gap-2.5">
-            <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-red-700 font-medium">{submitError}</p>
+            <AlertCircle size={14} className="text-[#2557a7] mt-0.5 shrink-0" />
+            <p className="text-xs text-gray-800 font-medium">{submitError}</p>
           </div>
-          <button onClick={() => setSubmitError(null)} className="text-red-400 hover:text-red-600 text-xs shrink-0">Dismiss</button>
+          <button onClick={() => setSubmitError(null)} className="text-gray-400 hover:text-[#2557a7] text-xs shrink-0">Dismiss</button>
         </div>
       )}
 
       {/* Long answer warning */}
-      {showLongAnswerWarning && (
-        <div role="alert" className="mb-4 flex items-start gap-2.5 bg-[#2557a7]/5 border border-[#2557a7]/20 rounded-xl px-4 py-3">
-          <Clock size={14} className="text-[#2557a7] mt-0.5 shrink-0" />
-          <p className="text-xs text-gray-700 font-medium">
-            Your answer is getting long. Try to wrap up — aim for {question.expected_duration_s}s.
-          </p>
-        </div>
-      )}
 
       {/* Header: title + question circles */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <section className="mb-4 rounded-xl border border-gray-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold px-2.5 py-1 bg-[#2557a7]/10 text-[#2557a7] rounded-full">
-              Round {roundNumber} of 2
-            </span>
-            {roundNumber === 1 && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Notes visible</span>
-            )}
-            {roundNumber === 2 && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Hints only</span>
-            )}
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">HR Practice</h1>
+          <h1 className="text-lg font-black text-gray-950">HR Practice</h1>
+          <p className="mt-0.5 text-[11px] font-medium text-gray-500">Practice warm, specific answers for fit and recruiter screens.</p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
           {questions.map((q, i) => (
             <button
               key={q.question_id}
+              aria-label={`Go to question ${i + 1}${answeredMap[q.question_id] ? ", answered" : ""}`}
               onClick={() => { setCurrentIndex(i); setCurrentAnswer(answeredMap[q.question_id] ?? null); }}
-              className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${
+              className={`h-8 w-8 shrink-0 rounded-full text-xs font-black transition-all focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2 ${
                 i === currentIndex
-                  ? "bg-[#2557a7] text-white shadow-md scale-110"
+                  ? "bg-[#2557a7] text-white shadow-md scale-105"
                   : answeredMap[q.question_id]
                   ? "bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/30"
                   : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"
@@ -491,7 +442,7 @@ function HRPracticeContent() {
       </div>
 
       {/* Progress bar */}
-      <div className="mb-6">
+      <div className="mt-3">
         <div className="flex justify-between text-xs text-gray-500 mb-1">
           <span>Question {currentIndex + 1} of {questions.length}</span>
           <span>{answeredCount} answered</span>
@@ -499,26 +450,27 @@ function HRPracticeContent() {
         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
           <div
             role="progressbar"
-            aria-valuenow={currentIndex}
-            aria-valuemin={0}
+            aria-valuenow={currentIndex + 1}
+            aria-valuemin={1}
             aria-valuemax={questions.length}
             aria-label="Question progress"
             className="h-full bg-[#2557a7] rounded-full transition-all duration-500"
-            style={{ width: `${(currentIndex / questions.length) * 100}%` }}
+            style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
           />
         </div>
       </div>
+      </section>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
 
         {/* Left column */}
-        <div className="space-y-4">
+        <div className="space-y-3">
 
           {/* Question card */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] overflow-hidden">
-            <div className="h-0.75 bg-linear-to-r from-[#2557a7] to-[#5b8fd6]" />
-            <div className="px-5 pt-3.5 pb-3 border-b border-gray-100">
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+            <div className="h-1 bg-[#2557a7]" />
+            <div className="px-4 pt-3 pb-2.5 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question {currentIndex + 1}</span>
@@ -536,8 +488,8 @@ function HRPracticeContent() {
                 </div>
               </div>
             </div>
-            <div className="px-5 py-5">
-              <p className="text-lg font-bold text-gray-900 leading-snug mb-2">
+            <div className="px-4 py-4">
+              <p className="text-base font-black text-gray-950 leading-snug mb-2">
                 {question.question_text}
               </p>
               <p className="text-xs text-gray-500 flex items-start gap-1.5">
@@ -547,60 +499,10 @@ function HRPracticeContent() {
             </div>
           </div>
 
-          {/* Notes / Keywords panel */}
-          <div className={`rounded-xl border overflow-hidden transition-all ${
-            showNotes
-              ? roundNumber === 1
-                ? "border-[#2557a7]/20 bg-[#2557a7]/5"
-                : "border-gray-200 bg-gray-50"
-              : "border-gray-200 bg-gray-50"
-          }`}>
-            <button
-              onClick={() => setShowNotes((s) => !s)}
-              className="w-full flex items-center justify-between px-4 py-3"
-            >
-              <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
-                {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
-                {roundNumber === 1 ? "Your Notes" : "KEYWORDS only"}
-              </div>
-              {showNotes
-                ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
-                : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
-            </button>
-            {showNotes && (
-              <div className={`px-4 pb-4 border-t pt-3 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
-                {roundNumber === 1 ? (
-                  (question.note_script || notesMap[question.question_id]) ? (
-                    <p className="text-sm text-[#2557a7] leading-relaxed whitespace-pre-wrap">
-                      {question.note_script || notesMap[question.question_id]}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">
-                      No answer script found for this question. Go to the Notes page to generate your prepared scripts.
-                    </p>
-                  )
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {question.keywords.map((kw, i) => (
-                      <span key={kw} className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
-                          {kw}
-                        </span>
-                        {i < question.keywords.length - 1 && (
-                          <ChevronRight size={12} className="text-gray-400 shrink-0" />
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Recorder */}
           {!currentAnswer && !isSubmitting && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-6">
-              <div className="flex items-center gap-2 mb-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-2 mb-2.5">
                 <Mic size={16} className="text-[#2557a7]" />
                 <p className="text-sm font-semibold text-gray-700">Record Your Answer</p>
               </div>
@@ -613,10 +515,10 @@ function HRPracticeContent() {
 
           {/* Submitting */}
           {isSubmitting && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-10 flex flex-col items-center gap-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-8 flex flex-col items-center gap-3 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
               <Loader2 size={32} className="text-[#2557a7] animate-spin" />
-              <p className="text-sm font-semibold text-gray-600">Analysing your answer…</p>
-              <p className="text-xs text-gray-400">Transcribing → Checking → Scoring</p>
+              <p className="text-sm font-semibold text-gray-600">Analysing your answer...</p>
+              <p className="text-xs text-gray-400">Transcribing - Checking - Scoring</p>
             </div>
           )}
 
@@ -632,35 +534,34 @@ function HRPracticeContent() {
 
           {/* Navigation buttons */}
           {currentAnswer && (
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               {currentIndex > 0 && (
                 <button
                   onClick={() => { setCurrentIndex((i) => i - 1); setCurrentAnswer(answeredMap[questions[currentIndex - 1].question_id] ?? null); }}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm"
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-600 shadow-sm hover:bg-gray-50"
                 >
                   <ChevronLeft size={15} /> Back
                 </button>
               )}
               <button
                 onClick={handleTryAgain}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm transition-all"
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50"
               >
                 <RotateCcw size={14} className="text-gray-500" /> Record Again
               </button>
               <button
                 onClick={handleNext}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all shadow-md"
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-2.5 text-xs font-black text-white shadow-lg shadow-[#2557a7]/15 transition-all hover:bg-[#1e4a8f]"
               >
-                {isLastQuestion ? (roundNumber < 2 ? "Start Round 2" : "Start Live Interview") : "Next Question"}
+                {isLastQuestion ? "Start Live Interview" : "Next Question"}
                 <ChevronRight size={15} />
               </button>
             </div>
           )}
-        </div>
 
-        {/* Right column — FeedbackCard */}
-        <div>
-          {currentAnswer ? (
+        </div>
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
+          {currentAnswer && (
             <FeedbackCard
               weightedScore={currentAnswer.weightedScore}
               feedback={currentAnswer.feedback}
@@ -681,18 +582,67 @@ function HRPracticeContent() {
               onTryAgain={handleTryAgain}
               answerId={currentAnswer.answerId}
             />
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-6 flex flex-col items-center justify-center text-center gap-3 min-h-70">
-              <div className="w-14 h-14 bg-[#2557a7]/5 rounded-xl flex items-center justify-center">
-                <Mic size={24} className="text-[#2557a7]" />
-              </div>
-              <p className="text-sm font-semibold text-gray-700">AI Feedback</p>
-              <p className="text-xs text-gray-400">
-                Record your answer to receive instant AI feedback, score breakdown, and a model answer.
-              </p>
-            </div>
           )}
-        </div>
+          {!currentAnswer && (
+            <>
+              <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
+                showNotes
+                  ? roundNumber === 1
+                    ? "border-[#2557a7]/20 bg-[#2557a7]/5"
+                    : "border-gray-200 bg-gray-50"
+                  : "border-gray-200 bg-gray-50"
+              }`}>
+                <button
+                  type="button"
+                  aria-expanded={showNotes}
+                  onClick={() => setShowNotes((s) => !s)}
+                  className="w-full flex items-center justify-between px-3 py-2.5"
+                >
+                  <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
+                    {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
+                    {roundNumber === 1 ? "Your Notes" : "Keywords only"}
+                  </div>
+                  {showNotes
+                    ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
+                    : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
+                </button>
+                {showNotes && (
+                  <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
+                    {roundNumber === 1 ? (
+                      (question.note_script || notesMap[question.question_id]) ? (
+                        <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
+                          {question.note_script || notesMap[question.question_id]}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          No answer script found for this question. Go to the Notes page to generate your prepared scripts.
+                        </p>
+                      )
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(question.keywords.length ? question.keywords : ["motivation", "fit", "example"]).map((kw) => (
+                          <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+                <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+                  <Mic size={24} className="text-[#2557a7]" />
+                </div>
+                <p className="text-sm font-black text-gray-800">AI Feedback</p>
+                <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+                  Record your answer to unlock tone, clarity, structure, and confidence feedback.
+                </p>
+              </div>
+            </>
+          )}
+        </aside>
 
       </div>
 
@@ -701,11 +651,11 @@ function HRPracticeContent() {
           onClick={() => router.push("/notes/english")}
           className="text-xs text-[#2557a7] hover:text-[#1e4a8f] underline-offset-2 hover:underline"
         >
-          Need help? Review English phrases →
+          Need help? Review English phrases
         </button>
       </div>
 
-    </div>
+    </main>
   );
 }
 

@@ -19,9 +19,13 @@ const FAMILY_TO_DISPLAY_NAME: Record<string, string> = {
   'legal': 'Legal',
   'logistics_warehouse_operations': 'Logistics & Warehouse',
   'marine_merchant_navy': 'Marine & Merchant Navy',
-  'modern_minimal_template': 'Modern Minimal',
   'research_scholar': 'Research Scholar',
   'sales_business_development': 'Sales & Business Dev',
+  'customer_support_service': 'Customer Support',
+  'product_engineering_leadership': 'Product & Engineering',
+  'marketing_creative': 'Marketing & Creative',
+  'operations_management': 'Operations & Management',
+  'human_resources': 'Human Resources',
 }
 
 export function useTemplateRedirect() {

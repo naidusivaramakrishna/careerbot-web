@@ -11,7 +11,7 @@ export default function CommunicationHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const isAssessmentOver = pathname === '/communication/feedback' || pathname === '/communication/report';
-  const { isCameraLost, isMicLost, restartRecording, stopRecording } = useVideoRecording();
+  const { isCameraLost, isMicLost, restartRecording, stopRecording, isRecording, getStream } = useVideoRecording();
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState('');
 
@@ -33,7 +33,91 @@ export default function CommunicationHeader() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [timeExpired, setTimeExpired] = useState(false);
   const [fullscreenExited, setFullscreenExited] = useState(false);
+  const [isFaceAbsent, setIsFaceAbsent] = useState(false);
   const expiredRef = useRef(false);
+  const faceDetectorRef = useRef<{ detect: (src: HTMLCanvasElement) => { detections: unknown[] } } | null>(null);
+  const faceVideoRef = useRef<HTMLVideoElement>(null);
+  const faceCanvasRef = useRef<HTMLCanvasElement>(null);
+  const noFaceSecondsRef = useRef(0);
+
+  // Initialize MediaPipe face detector once recording starts
+  useEffect(() => {
+    if (!isRecording) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+        );
+        const detector = await FaceDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+            delegate: 'GPU',
+          },
+          runningMode: 'IMAGE',
+          minDetectionConfidence: 0.5,
+        });
+        if (!cancelled) faceDetectorRef.current = detector;
+      } catch {
+        // Face detection unavailable — fail silently, don't block assessment
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isRecording]);
+
+  // Connect camera stream to hidden video element for frame capture
+  useEffect(() => {
+    if (!isRecording) return;
+    const stream = getStream();
+    const video = faceVideoRef.current;
+    if (!stream || !video) return;
+    video.srcObject = stream;
+    video.play().catch(() => {});
+    return () => { video.srcObject = null; };
+  }, [isRecording, getStream]);
+
+  // Run face detection every 2 seconds during active assessment
+  useEffect(() => {
+    if (!isRecording || isAssessmentOver) return;
+
+    const interval = setInterval(async () => {
+      const detector = faceDetectorRef.current;
+      const video = faceVideoRef.current;
+      const canvas = faceCanvasRef.current;
+      if (!detector || !video || !canvas || video.readyState < 2) return;
+      if (!localStorage.getItem('test_start_date')) return;
+
+      try {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
+        ctx.drawImage(video, 0, 0);
+        const result = detector.detect(canvas);
+        const faceFound = result.detections.length > 0;
+
+        if (faceFound) {
+          noFaceSecondsRef.current = 0;
+          setIsFaceAbsent(false);
+        } else {
+          noFaceSecondsRef.current += 2;
+          if (noFaceSecondsRef.current >= 5) setIsFaceAbsent(true);
+          // Every 10s of continuous absence counts as one violation.
+          // Counter reset prevents double-firing without needing a separate guard ref.
+          if (noFaceSecondsRef.current >= 10) {
+            noFaceSecondsRef.current = 0;
+            setViolations((v) => v + 1);
+          }
+        }
+      } catch {
+        // Ignore individual frame errors
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isRecording, isAssessmentOver]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -138,7 +222,7 @@ export default function CommunicationHeader() {
       localStorage.removeItem('test_start_date');
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       stopRecording().finally(() => {
-        router.push('/communication/feedback?reason=timeout');
+        router.push('/communication/feedback?reason=violations');
       });
     }
   }, [violations, router, stopRecording]);
@@ -158,15 +242,6 @@ export default function CommunicationHeader() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Auto-return to fullscreen after 5s if user doesn't click the button
-  useEffect(() => {
-    if (!fullscreenExited) return;
-    const t = setTimeout(() => {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setFullscreenExited(false);
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [fullscreenExited]);
 
   const handleReturnFullscreen = () => {
     document.documentElement.requestFullscreen().catch(() => {});
@@ -198,12 +273,19 @@ export default function CommunicationHeader() {
   const handleExit = () => setShowConfirm(true);
   const handleConfirmExit = () => {
     localStorage.removeItem('test_start_date');
-    router.push('/dashboard');
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    stopRecording().finally(() => {
+      router.push('/dashboard');
+    });
   };
   const handleCancel = () => setShowConfirm(false);
 
   return (
     <>
+      {/* Hidden elements for face detection — invisible, no layout impact */}
+      <video ref={faceVideoRef} className="absolute w-0 h-0 opacity-0 pointer-events-none" muted playsInline />
+      <canvas ref={faceCanvasRef} className="absolute w-0 h-0 opacity-0 pointer-events-none" />
+
       {/* Static header - part of flex column, no fixed positioning */}
       <header className="h-14 w-full shrink-0 border-b border-slate-200 bg-white/95 px-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur z-50">
 
@@ -272,6 +354,29 @@ export default function CommunicationHeader() {
               >
                 Return to Assessment
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Face not visible overlay */}
+      {!isAssessmentOver && isFaceAbsent && !timeExpired && !isCameraLost && !fullscreenExited && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="h-0.5 bg-amber-500" />
+            <div className="p-7 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50">
+                <svg className="w-7 h-7 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10a3 3 0 11-6 0 3 3 0 016 0zm-9 9a6 6 0 0112 0" />
+                </svg>
+              </div>
+              <h2 className="text-base font-bold text-gray-900 mb-1.5">Face Not Visible</h2>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Your face is not visible on camera. Please ensure your face is clearly visible to continue the assessment.
+              </p>
+              <p className="mt-3 text-xs text-amber-600 font-semibold">
+                Continued absence will be counted as a violation.
+              </p>
             </div>
           </div>
         </div>

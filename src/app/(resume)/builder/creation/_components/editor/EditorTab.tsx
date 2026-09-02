@@ -294,6 +294,9 @@ const EditorTab: React.FC<Props> = ({
 
 
   const triggerAutoSave = useCallback(async (sectionName: string) => {
+    // Skills uses individual add/delete endpoints on each chip action — no PATCH needed
+    if (sectionName === "Skills") return;
+
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
@@ -301,7 +304,7 @@ const EditorTab: React.FC<Props> = ({
 
     autoSaveTimerRef.current = setTimeout(async () => {
       const resumeId = localStorage.getItem("current_resume_id");
-      
+
       if (!resumeId || !sectionName || resumeId === 'null' || resumeId === 'undefined') {
         // // console.log("⏸️ Skipping auto-save: No valid resume ID");
         return;
@@ -320,7 +323,10 @@ const EditorTab: React.FC<Props> = ({
             declarationDate: live.declarationDate ?? "",
             declarationPlace: live.declarationPlace ?? "",
           };
-          await autoSaveResume(resumeId, autoSaveDecl);
+          const declSaveResponse = await autoSaveResume(resumeId, autoSaveDecl);
+          if (declSaveResponse?.warnings?.length) {
+            declSaveResponse.warnings.forEach(w => toast.warning(w, { duration: 6000 }));
+          }
           setLastSaved(new Date());
           setIsAutoSaving(false);
           return;
@@ -414,6 +420,13 @@ const EditorTab: React.FC<Props> = ({
         } else {
           const updatePayload = { [backendKey]: sectionData };
           const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
+
+          if (autoSaveResponse?.warnings?.length) {
+            autoSaveResponse.warnings.forEach(w => {
+              const msg = typeof w === 'string' ? w : (w as Record<string, unknown>)?.message as string || "Saved with warnings";
+              toast.warning(msg, { duration: 6000 });
+            });
+          }
 
           // Sync backend-assigned IDs back into resumeData. Without this, the next
           // auto-save re-sends the same entry without an id and the backend creates
@@ -536,14 +549,15 @@ const EditorTab: React.FC<Props> = ({
     const isCustom = (resumeData.customSections || []).some(cs => cs.sectionName === openModalSection);
     if (isCustom) return { isValid: true, newErrors: {} };
 
+    // Languages validates via resume-validate-section DOM event, not formData
+    if (openModalSection === "Languages") return { isValid: true, newErrors: {} };
+
     // ProfessionalSummary writes directly to resumeData context, not formData
     if (openModalSection === "Professional Summary") {
-      const targetRole = resumeData.professionalSummary?.targetRole?.trim() || "";
       const summary = resumeData.professionalSummary?.summary?.trim() || "";
       const newErrors: Record<string, string> = {};
-      if (!targetRole) newErrors["targetRole"] = "This field is required";
       if (!summary) newErrors["summary"] = "This field is required";
-      return { isValid: !targetRole ? false : !summary ? false : true, newErrors };
+      return { isValid: !!summary, newErrors };
     }
 
     const sectionFields = getSectionFields(openModalSection);

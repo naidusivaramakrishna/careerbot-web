@@ -37,8 +37,8 @@ function buildStages(state: MockStageState): Stage[] {
     },
     {
       id: "practice",
-      label: "Practice Mode",
-      shortLabel: "Practice",
+      label: "Managerial Practice",
+      shortLabel: "Managerial",
       href: "/notes/managerial",
       icon: Mic,
       locked: !state.notes_generated,
@@ -98,23 +98,19 @@ export default function NotesSidebar() {
         />
       </div>
 
-      <div className="flex items-center justify-between px-6 py-2.5 gap-4">
+      <div className="flex items-center justify-between px-3 py-1.5 gap-2">
 
         {/* Left: context label */}
         <div className="hidden lg:flex items-center gap-2 shrink-0">
           <span className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
             Interview Prep
           </span>
-          <span className="text-gray-200 text-xs">·</span>
-          <span className="text-[10px] font-semibold text-gray-400">
-            {completedCount}/{stages.length} done
-          </span>
         </div>
 
         <div className="hidden lg:block w-px h-4 bg-gray-150 shrink-0" />
 
         {/* Steps */}
-        <div className="flex-1 flex items-center justify-center gap-0">
+        <div className="flex-1 min-w-0 flex items-center justify-center gap-0">
           {stages.flatMap((stage, i) => {
             const isActive =
               pathname === stage.href || pathname.startsWith(stage.href + "/");
@@ -130,7 +126,7 @@ export default function NotesSidebar() {
                 disabled={isLocked}
                 title={isLocked ? `Complete Interview Notes first` : stage.label}
                 className={[
-                  "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 select-none whitespace-nowrap",
+                  "relative flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all duration-200 select-none whitespace-nowrap",
                   isActive
                     ? "text-white shadow-sm"
                     : isCompleted
@@ -188,9 +184,9 @@ export default function NotesSidebar() {
               const connector = (
                 <div
                   key={`conn-${i}`}
-                  className="shrink-0 mx-1"
+                  className="shrink-0 mx-0.5"
                   style={{
-                    width: 20,
+                    width: 12,
                     height: 1,
                     borderRadius: 1,
                     background: prevDone ? "#2557a7" : "#e5e7eb",
@@ -210,7 +206,7 @@ export default function NotesSidebar() {
         {/* Right: Live Interview CTA */}
         <button
           onClick={() => router.push("/mock-interview/live")}
-          className="shrink-0 flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.97]"
+          className="shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.97]"
           style={{
             background: "linear-gradient(135deg, #2557a7 0%, #1e40af 100%)",
             boxShadow: "0 2px 10px rgba(37,87,167,0.3)",

@@ -18,7 +18,7 @@ export default function WizardStepResume({ uploadedFile, sessionResumeName, erro
       <input
         ref={resumeInputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.txt"
+        accept=".pdf,.doc,.docx"
         className="hidden"
         onChange={e => e.target.files?.[0] && onFileSelected(e.target.files[0])}
       />
@@ -85,7 +85,7 @@ export default function WizardStepResume({ uploadedFile, sessionResumeName, erro
                 (pdf upto 10MB)
               </p>
               <p style={{ fontSize: 12.5, color: "#94A3B8", margin: 0 }}>
-                Upload your Resume in a PDF or DOCX Format
+                Upload your Resume in a PDF, DOC, or DOCX Format
               </p>
             </div>
 

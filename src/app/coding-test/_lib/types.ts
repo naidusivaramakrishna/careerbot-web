@@ -155,7 +155,10 @@ export type JudgeVerdict =
   | 'runtime_error'
   | 'time_limit_exceeded'
   | 'memory_limit_exceeded'
-  | 'no_test_cases';
+  | 'no_test_cases'
+  | 'compile_error'
+  | 'time_limit_compile'
+  | 'execution_unavailable';
 
 export interface JudgeTestCaseResult {
   index: number;
@@ -181,6 +184,46 @@ export interface ExecuteJobQueued {
   status: 'queued';
   poll_url: string;
   stream_url: string;
+}
+
+// ---- Async submit judging (POST /submit-async → queue + poll) ---------------
+
+export interface SubmitAsyncQueued {
+  job_id: string;
+  attempt_id: string;
+  poll_url: string;
+}
+
+// Matches careerbot-api JudgeJobRecord (GET /coding-test/submit-result/{job_id})
+export type JudgeJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface JudgeJobRecord {
+  job_id: string;
+  status: JudgeJobStatus;
+  user_id: string;
+  tenant_id: string;
+  problem_slug: string;
+  created_at: string;
+  completed_at: string | null;
+  verdict: string | null;
+  passed: number | null;
+  total: number | null;
+  score: number | null;
+  error: string | null;
+}
+
+// ---- Poll result for free-form execute jobs (GET poll_url) ------------------
+
+export type ExecuteJobStatus = 'queued' | 'running' | 'done' | 'error';
+
+export interface ExecuteJobRecord {
+  job_id: string;
+  status: ExecuteJobStatus;
+  exit_code?: number;
+  wall_time_ms?: number;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
 }
 
 // ---- Code execution (legacy — kept for reference) ---------------------------

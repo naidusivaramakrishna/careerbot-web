@@ -221,29 +221,27 @@ export default function WeakAreasPage() {
                 })}
               </ol>
 
-              {analytics && (
-                <HighlightBox>
-                  <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
-                    Based on your last{' '}
-                    <span className="font-bold" style={{ color: '#0F172A' }}>{analytics.total_tests ?? 0}</span>{' '}
-                    {analytics.total_tests === 1 ? 'test' : 'tests'} · Overall grade{' '}
-                    <span className="font-bold" style={{ color: '#1e3a8a' }}>{analytics.overall_grade ?? '—'}</span>
-                  </p>
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Tests</p>
-                      <p className="text-2xl font-bold tabular-nums" style={{ color: '#0F172A' }}>{analytics.total_tests ?? 0}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Avg accuracy</p>
-                      <p className="text-2xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
-                        {analytics.average_accuracy != null ? Math.round(analytics.average_accuracy) : '—'}
-                        <span className="text-base font-bold" style={{ color: '#60a5fa' }}>%</span>
-                      </p>
-                    </div>
+              <HighlightBox>
+                <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+                  Based on your last{' '}
+                  <span className="font-bold" style={{ color: '#0F172A' }}>{analytics?.total_tests ?? 0}</span>{' '}
+                  {(analytics?.total_tests ?? 0) === 1 ? 'test' : 'tests'} · Overall grade{' '}
+                  <span className="font-bold" style={{ color: '#1e3a8a' }}>{analytics?.overall_grade ?? '—'}</span>
+                </p>
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Tests</p>
+                    <p className="text-2xl font-bold tabular-nums" style={{ color: '#0F172A' }}>{analytics?.total_tests ?? 0}</p>
                   </div>
-                </HighlightBox>
-              )}
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Avg accuracy</p>
+                    <p className="text-2xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
+                      {analytics?.average_accuracy != null ? Math.round(analytics.average_accuracy) : '—'}
+                      <span className="text-base font-bold" style={{ color: '#60a5fa' }}>%</span>
+                    </p>
+                  </div>
+                </div>
+              </HighlightBox>
             </>
           )}
         </div>

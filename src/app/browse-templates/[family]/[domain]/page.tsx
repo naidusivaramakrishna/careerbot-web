@@ -76,7 +76,8 @@ export default function TemplateDetailPage({ params }: PageProps) {
   const domainName = DOMAIN_DISPLAY_NAMES[domain] || domain
   const familyName = DOMAIN_NAMES[family] || family
   const familyTpl = FAMILY_TEMPLATES[family]
-  const description = familyTpl?.description || "Professional resume template"
+  const careerLevelDescription = selectedLevel && familyTpl?.descriptions?.[selectedLevel]
+  const description = careerLevelDescription || familyTpl?.description || "Professional resume template"
 
   // Fetch real templates for this family on mount to build the career-level picker.
   // The template API requires authentication — guard with getProfile first to avoid
@@ -427,7 +428,6 @@ export default function TemplateDetailPage({ params }: PageProps) {
                     Template
                   </span>
                 </h1>
-                <p className="text-slate-500 text-base max-w-2xl leading-relaxed mb-5">{description}</p>
 
                 {/* Stat badges — same style as browse-templates trust badges */}
                 <div className="flex flex-wrap items-center gap-5">
@@ -579,6 +579,16 @@ export default function TemplateDetailPage({ params }: PageProps) {
                   <span className="text-[#2257a7]"> · {selectedLevel}</span>
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">Pre-built for your career path</p>
+
+                {/* Description */}
+                {description && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-bold text-slate-800 mb-2">Description</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {description}
+                    </p>
+                  </div>
+                )}
 
                 {/* ATS badge */}
                 <div

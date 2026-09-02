@@ -47,6 +47,7 @@ export const mockDashboardSummary: DashboardSummary = {
     job_matches: 0,
     job_applications: 0,
     assessments_taken: 0,
+    mock_tests_taken: 0,
   },
   best_scores: {
     ats_score: 72,
@@ -158,6 +159,7 @@ export const mockDashboardSummaryNewUser: DashboardSummary = {
     job_matches: 0,
     job_applications: 0,
     assessments_taken: 0,
+    mock_tests_taken: 0,
   },
   best_scores: {},
   recent_activity: [],
@@ -207,6 +209,7 @@ export const mockDashboardSummaryPowerUser: DashboardSummary = {
     job_matches: 24,
     job_applications: 18,
     assessments_taken: 2,
+    mock_tests_taken: 5,
   },
   best_scores: {
     ats_score: 89,
