@@ -44,11 +44,15 @@ const CIRC = 2 * Math.PI * 36; // ≈ 226.2
 const ONBOARDING_KEY = 'coding_test_onboarded';
 
 export default function CodingPracticeHub() {
-  // Per language, not one shared total. Every card used to render the SAME
-  // number, so Python/Java/C/C++ all claimed the same count whatever the real
-  // split was. null means "we could not find out", which is NOT the same as 0
-  // and must never be rendered as a number.
-  const [counts, setCounts] = useState<Partial<Record<CodingTestLanguage, number | null>>>({});
+  // ONE total, shown on every card, because that is the truth: a problem is
+  // not owned by a language. Every problem carries starter_code for python,
+  // java, cpp AND c, so all 228 are solvable in all four and the API returns
+  // the same count for ?language=<any>. Asking per language would be four
+  // requests for one number.
+  //
+  // null means "we could not find out", which is NOT 0 and must never be
+  // rendered as a number.
+  const [total, setTotal] = useState<number | null>(null);
   const [countsFailed, setCountsFailed] = useState(false);
   // What the server said, when it said anything. A suspended feature is not
   // the same as an unreachable one, and the person looking at the screen is
@@ -72,27 +76,21 @@ export default function CodingPracticeHub() {
   useEffect(() => {
     const loadData = () =>
       Promise.all([
-        // One request per language, reading the server's `total`. The list
-        // response carries no language field, so the count cannot be derived
-        // from a single call -- and counting the returned rows would report
-        // the size of a page rather than the size of the catalogue.
-        Promise.all(
-          LANG_CONFIG.map((l) =>
-            fetchProblems({ language: l.value })
-              .then((r) => [l.value, r.total, null] as const)
-              .catch((e: unknown) => [
-                l.value,
-                null,
-                e instanceof Error && e.message ? e.message : null,
-              ] as const),
-          ),
-        ),
+        // Read the server's `total`, never the length of what came back:
+        // counting returned rows reports the size of a page, not the size of
+        // the catalogue.
+        fetchProblems()
+          .then((r) => [r.total, null] as const)
+          .catch((e: unknown) => [
+            null,
+            e instanceof Error && e.message ? e.message : null,
+          ] as const),
         fetchProgress().catch(() => null),
         fetchQuota().catch(() => null),
-      ]).then(([perLanguage, prog, q]) => {
-        setCounts(Object.fromEntries(perLanguage.map(([k, n]) => [k, n])));
-        setCountsFailed(perLanguage.every(([, n]) => n === null));
-        setCountsMessage(perLanguage.map(([, , m]) => m).find(Boolean) ?? null);
+      ]).then(([[count, message], prog, q]) => {
+        setTotal(count);
+        setCountsFailed(count === null);
+        setCountsMessage(message);
         if (prog) {
           const attempted = prog.summary.problems_attempted;
           const solved    = prog.summary.problems_accepted;
@@ -183,7 +181,7 @@ export default function CodingPracticeHub() {
                   <div>
                     <p className="text-base font-semibold text-slate-900">{lang.label}</p>
                     <p className="text-sm text-slate-500">
-                      {formatCount(ready ? counts[lang.value] : undefined)}
+                      {formatCount(ready ? total : undefined)}
                     </p>
                   </div>
                 </Link>
