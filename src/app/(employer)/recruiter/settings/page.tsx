@@ -88,7 +88,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadFromAPI = async () => {
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '/api/v1';
         const response = await fetch(`${baseUrl}/auth/profile`, {
           method: 'GET',
           credentials: 'include',

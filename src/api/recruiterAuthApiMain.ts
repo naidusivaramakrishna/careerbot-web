@@ -121,7 +121,7 @@ export const recruiterAuthApi = {
   /** Get Google OAuth login URL and redirect */
   googleAuth: async (): Promise<void> => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '/api/v1';
       const params = new URLSearchParams({
         prompt: "select_account",
         access_type: "offline",
@@ -142,7 +142,7 @@ export const recruiterAuthApi = {
   /** Get LinkedIn OAuth login URL and redirect */
   linkedinAuth: async (): Promise<void> => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '/api/v1';
       const response = await fetch(`${baseUrl}/auth/linkedin/login-url`);
       const data = await response.json();
       if (data.auth_url) {
