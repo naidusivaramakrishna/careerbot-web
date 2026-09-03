@@ -29,8 +29,19 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
     throw new CodingTestApiError('Not found', 404);
   }
   if (!res.ok) {
+    // Keep what the server said. It answers a suspended coding test with
+    // 503 and a plain explanation ("Coding test is temporarily suspended"),
+    // and discarding that for "Request failed (503)" is what turned a clearly
+    // stated outage into a blank page with the word "null" on it.
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = body?.error?.message ?? body?.detail ?? '';
+    } catch {
+      /* non-JSON body: fall back to the status alone */
+    }
     throw new CodingTestApiError(
-      `Request failed (${res.status})`,
+      detail || `Request failed (${res.status})`,
       res.status,
     );
   }
