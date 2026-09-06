@@ -4,7 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { GraduationCap, Loader2, UserPlus } from 'lucide-react';
 import Tabs from '@/components/common/Tabs';
 import { Button } from '@/components/ui/Button';
-import { createMember, createStudent, InstitutionApiError } from '@/api/institutionApi';
+import { createMember, createStudent, InstitutionApiError,
+  lookupStaff,
+  type StaffCandidate,
+} from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useBatches, useDepartments, useSections } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT, ROLE_LABELS } from '@/lib/institutionMessages';
@@ -141,6 +144,42 @@ function MemberForm({
   readOnlyHint: string | null;
 }) {
   const [accountId, setAccountId] = useState('');
+  const [email, setEmail] = useState('');
+  const [candidate, setCandidate] = useState<StaffCandidate | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [looking, setLooking] = useState(false);
+
+  // FIND THE PERSON BY THE ADDRESS YOU WERE GIVEN.
+  //
+  // The field this replaces asked for a CareerBOT account id -- a
+  // server-generated uuid with no lookup anywhere an officer can reach, so
+  // the form was built and unusable and adding a head of department meant
+  // asking an engineer. The lookup is exact-match: it confirms one address,
+  // it does not search, so this screen cannot be used to browse accounts.
+  const findByEmail = async () => {
+    const wanted = email.trim();
+    if (!wanted || looking) return;
+    setLooking(true); setError(null); setDone(null);
+    setCandidate(null); setNotFound(false); setAccountId('');
+    try {
+      const res = await lookupStaff(wanted, memberRole as 'hod' | 'faculty');
+      if (res.found && res.account) {
+        setCandidate(res.account);
+        // Held so submit() keeps working unchanged; the person never sees it.
+        setAccountId(res.account.account_id);
+        if (!displayName.trim() && res.account.full_name) {
+          setDisplayName(res.account.full_name);
+        }
+      } else {
+        setNotFound(true);
+      }
+    } catch (err) {
+      setError(err instanceof InstitutionApiError
+        ? err : new InstitutionApiError({ reason: 'UNKNOWN' }));
+    } finally {
+      setLooking(false);
+    }
+  };
   const [displayName, setDisplayName] = useState('');
   const [memberRole, setMemberRole] = useState<OnboardableRole>(allowedRoles[0] ?? 'student');
   const [departmentId, setDepartmentId] = useState(defaultDepartmentId);
@@ -170,6 +209,8 @@ function MemberForm({
       setDone(`${ROLE_LABELS[memberRole]} access granted.`);
       setAccountId('');
       setDisplayName('');
+      setEmail('');
+      setCandidate(null);
     } catch (err) {
       setError(
         err instanceof InstitutionApiError ? err : new InstitutionApiError({ reason: 'UNKNOWN' }),
@@ -201,15 +242,64 @@ function MemberForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <TextField
-            label="CareerBOT account id"
-            required
-            value={accountId}
-            disabled={!writable}
-            error={fieldErrors.account_id}
-            hint="The id of the existing account you are adding."
-            onChange={(e) => setAccountId(e.target.value)}
-          />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <TextField
+                label="Their email address"
+                required
+                type="email"
+                value={email}
+                disabled={!writable}
+                error={fieldErrors.account_id}
+                hint="The whole address, exactly. This finds one account — it does not search."
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setCandidate(null); setNotFound(false); setAccountId('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); void findByEmail(); }
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void findByEmail()}
+              disabled={!writable || !email.trim() || looking}
+              className="mb-[2px] shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            >
+              {looking ? 'Finding…' : 'Find'}
+            </button>
+          </div>
+
+          {notFound && (
+            <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-600">
+              No account with that address. They need to sign up on CareerBOT first — then come back here.
+            </p>
+          )}
+
+          {candidate && (
+            <div className="mt-2 rounded-lg border border-slate-200 p-3">
+              <p className="text-sm font-medium text-slate-900">
+                {candidate.full_name ?? candidate.email}
+              </p>
+              <p className="text-sm text-slate-600">{candidate.email}</p>
+              <span
+                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs ring-1 ${
+                  candidate.can_hold_role
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
+                    : 'bg-amber-50 text-amber-800 ring-amber-600/20'
+                }`}
+              >
+                {candidate.can_hold_role ? 'verified' : candidate.status.replace(/_/g, ' ')}
+              </span>
+              {!candidate.can_hold_role && (
+                <p className="mt-2 text-xs text-amber-900">
+                  This account has not verified its email, so it cannot hold a role yet. Granting
+                  access would be refused.
+                </p>
+              )}
+            </div>
+          )}
         </div>
         <div className="sm:col-span-2">
           <TextField
@@ -250,7 +340,16 @@ function MemberForm({
       <div className="mt-4">
         <SubmitButton
           submitting={submitting}
-          disabled={!writable || departments.length === 0}
+          // NOTHING FOUND, OR FOUND AND UNVERIFIED, MEANS THE SERVER WILL
+          // REFUSE. It answers 403 for an account that cannot hold a role, so
+          // letting the click through only converts a fact the page already
+          // knows into a confusing failure.
+          disabled={
+            !writable ||
+            departments.length === 0 ||
+            !candidate ||
+            !candidate.can_hold_role
+          }
           label="Grant access"
           busyLabel="Granting"
           readOnlyHint={readOnlyHint}
