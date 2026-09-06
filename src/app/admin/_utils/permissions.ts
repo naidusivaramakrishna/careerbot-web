@@ -19,6 +19,7 @@ export type AdminPageKey =
   | 'system-monitoring'
   | 'colleges'
   | 'ai-spend'
+  | 'ai-usage'
   | 'settings';
 
 /**
@@ -46,6 +47,12 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // route on the billing permission: deciding what a college pays and seeing
   // what a college costs are the same job. Moderator and support see neither.
   'ai-spend': ['SUPER_ADMIN', 'ADMIN'],
+  // TOKENS, NOT MONEY -- which is why PLATFORM_ADMIN is here and absent from
+  // 'ai-spend' directly above. Policing who is hammering which feature needs
+  // usage counts; it does not need the platform's cost base. The server omits
+  // every cost field for this role, so the split is enforced there and merely
+  // reflected here.
+  'ai-usage': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN'],
   'settings': ['SUPER_ADMIN'],
 };
 

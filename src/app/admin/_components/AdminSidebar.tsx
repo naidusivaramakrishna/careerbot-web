@@ -2,7 +2,7 @@
 import { adminLogout, getCurrentAdmin } from '@/api/adminAuthApi';
 import { getAdminRoleCache, setAdminRoleCache } from '../_hooks/adminRoleCache';
 import type { AdminRole } from '../_utils/permissions';
-import { Activity, BarChart3, Building2, DollarSign, LayoutDashboard, LogOut, Settings, UserPlus, UserRoundPlus, Users } from 'lucide-react';
+import { Activity, BarChart3, Building2, DollarSign, Gauge, LayoutDashboard, LogOut, Settings, UserPlus, UserRoundPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react'
@@ -31,6 +31,10 @@ const menu = [
     { label: "Onboarding", href: "/admin/dashboard/colleges/onboarding", icon: UserRoundPlus, hideFor: [] as string[] },
     { label: "Reports", href: "/admin/dashboard/colleges/reports", icon: BarChart3, hideFor: [] as string[] },
     { label: "AI spend", href: "/admin/dashboard/ai-spend", icon: DollarSign, hideFor: ["PLATFORM_ADMIN"] },
+    // VISIBLE TO A PLATFORM ADMIN, unlike "AI spend" directly above. This one
+    // shows tokens and call counts with every cost field stripped server-side,
+    // which is what lets the role police usage without seeing the cost base.
+    { label: "AI usage", href: "/admin/dashboard/ai-usage", icon: Gauge, hideFor: [] as string[] },
     { label: "Settings", href: "/admin/dashboard/settings", icon: Settings, hideFor: ["PLATFORM_ADMIN"] },
 ];
 

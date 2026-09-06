@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, BadgeCheck, Loader2, PauseCircle, PlayCircle, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Gauge, Loader2, PauseCircle, PlayCircle, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
 import {
   AdminInstitutionError,
   type CollegeDetail,
@@ -241,6 +241,21 @@ export default function CollegeDetailPage() {
                 Mark as paid
               </button>
             )}
+
+            {/* WHERE THE USAGE QUESTION GETS ANSWERED. Deliberately a link out
+                rather than a panel inlined here: this page is about the
+                college's account -- tier, officers, subscription -- and the
+                usage view is a report with its own time window that would
+                otherwise reload every time somebody opened this screen. */}
+            <Link
+              href={`/admin/dashboard/colleges/${encodeURIComponent(collegeId)}/ai-usage`}
+              className="inline-flex items-center gap-2 rounded-lg border
+                         border-gray-300 px-4 py-2 text-sm font-medium
+                         text-gray-700 hover:bg-gray-50"
+            >
+              <Gauge className="h-4 w-4" />
+              AI usage
+            </Link>
           </div>
 
           {paidNotice && (
