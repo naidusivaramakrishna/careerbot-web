@@ -3,7 +3,14 @@
  * Defines which admin roles have access to specific pages
  */
 
-export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'SUPPORT';
+export type AdminRole =
+  | 'SUPER_ADMIN'
+  | 'ADMIN'
+  // Runs every college and sees no money. Narrower than ADMIN, not a rank
+  // beneath it: it reaches the college pages and none of the revenue ones.
+  | 'PLATFORM_ADMIN'
+  | 'MODERATOR'
+  | 'SUPPORT';
 
 export type AdminPageKey =
   | 'dashboard'
@@ -28,8 +35,13 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // institutions:create, :cpo:appoint and :cpo:revoke. Moderator and support
   // hold none of them, so the nav must not offer them a page whose every
   // request would be refused.
-  'colleges': ['SUPER_ADMIN', 'ADMIN'],
-  'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
+  // PLATFORM_ADMIN is here because running the colleges is the whole of its
+  // job. It is absent from 'dashboard', 'ai-spend', 'user-management',
+  // 'admin-management' and 'settings' on purpose -- those carry revenue,
+  // consumer data or platform configuration, and the role exists so the
+  // college estate can be delegated without them.
+  'colleges': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN'],
+  'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT'],
   // SAME ROLES AS COLLEGES, and for the same reason the backend gates the
   // route on the billing permission: deciding what a college pays and seeing
   // what a college costs are the same job. Moderator and support see neither.
@@ -62,6 +74,7 @@ export const getRequiredRoles = (pageKey: AdminPageKey): AdminRole[] => {
 export const formatRoleName = (role: AdminRole | string): string => {
   const roleMap: Record<string, string> = {
     'SUPER_ADMIN': 'Super Administrator',
+    'PLATFORM_ADMIN': 'Platform Administrator',
     'ADMIN': 'Administrator',
     'MODERATOR': 'Moderator',
     'SUPPORT': 'Support Staff',
