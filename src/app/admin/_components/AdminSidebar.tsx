@@ -1,5 +1,7 @@
 "use client"
-import { adminLogout } from '@/api/adminAuthApi';
+import { adminLogout, getCurrentAdmin } from '@/api/adminAuthApi';
+import { getAdminRoleCache, setAdminRoleCache } from '../_hooks/adminRoleCache';
+import type { AdminRole } from '../_utils/permissions';
 import { Activity, BarChart3, Building2, DollarSign, LayoutDashboard, LogOut, Settings, UserPlus, UserRoundPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -12,20 +14,24 @@ import React, { useEffect, useState } from 'react'
 // and the point of the role is that the estate can be delegated without
 // exposing what the business earns.
 //
+// Roles here are UPPER CASE because that is what useAdminAccess stores after
+// normalising -- comparing against the lower-case wire value silently matches
+// nothing, which is how this hid nothing at all the first time.
+//
 // This is presentation only. Every one of these pages is enforced server-side
 // by require_permissions(), and a platform admin who types the URL is refused
 // with a 403 whatever this array says. Never treat it as the control.
 const menu = [
     { label: "College overview", href: "/admin/dashboard/colleges/overview", icon: LayoutDashboard, hideFor: [] as string[] },
-    { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard, hideFor: ["platform_admin"] },
-    { label: "User Management", href: "/admin/dashboard/user-management", icon: Users, hideFor: ["platform_admin"] },
-    { label: "Admin Management", href: "/admin/dashboard/admin-management", icon: UserPlus, hideFor: ["platform_admin"] },
+    { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard, hideFor: ["PLATFORM_ADMIN"] },
+    { label: "User Management", href: "/admin/dashboard/user-management", icon: Users, hideFor: ["PLATFORM_ADMIN"] },
+    { label: "Admin Management", href: "/admin/dashboard/admin-management", icon: UserPlus, hideFor: ["PLATFORM_ADMIN"] },
     { label: "System Monitoring", href: "/admin/dashboard/system-monitoring", icon: Activity, hideFor: [] as string[] },
     { label: "Colleges", href: "/admin/dashboard/colleges", icon: Building2, hideFor: [] as string[] },
     { label: "Onboarding", href: "/admin/dashboard/colleges/onboarding", icon: UserRoundPlus, hideFor: [] as string[] },
     { label: "Reports", href: "/admin/dashboard/colleges/reports", icon: BarChart3, hideFor: [] as string[] },
-    { label: "AI spend", href: "/admin/dashboard/ai-spend", icon: DollarSign, hideFor: ["platform_admin"] },
-    { label: "Settings", href: "/admin/dashboard/settings", icon: Settings, hideFor: ["platform_admin"] },
+    { label: "AI spend", href: "/admin/dashboard/ai-spend", icon: DollarSign, hideFor: ["PLATFORM_ADMIN"] },
+    { label: "Settings", href: "/admin/dashboard/settings", icon: Settings, hideFor: ["PLATFORM_ADMIN"] },
 ];
 
 
@@ -35,13 +41,33 @@ const AdminSidebar = () => {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [role, setRole] = useState<string | null>(null);
 
-    // Read AFTER mount, never during render. sessionStorage does not exist on
-    // the server, and reading it in the render body makes the first client
-    // paint disagree with the server HTML -- React discards the tree and the
-    // menu visibly flickers. Until this resolves, `role` is null and nothing
-    // is hidden, which is the safe direction: the server refuses anyway.
+    // THE ROLE LIVES IN adminRoleCache, NOT sessionStorage.
+    //
+    // An earlier version of this read sessionStorage.getItem('admin_role'),
+    // which is never written -- the cache is a module-level variable so it
+    // cannot be edited from DevTools. The read returned null on every load, so
+    // `role` stayed null and NOTHING was ever hidden: a platform admin saw AI
+    // spend, User Management, Admin Management and Settings in the menu. The
+    // pages themselves still refused, but the menu advertised them.
+    //
+    // Resolved after mount, never during render: the server has no cache, and
+    // deciding the menu during render would make the first client paint
+    // disagree with the server HTML. Until it resolves nothing is hidden,
+    // which is the safe direction -- the server is the actual control.
     useEffect(() => {
-        try { setRole(sessionStorage.getItem('admin_role')); } catch { /* private mode */ }
+        let alive = true;
+        const cached = getAdminRoleCache();
+        if (cached) { setRole(cached.role); return; }
+        void (async () => {
+            try {
+                const admin = await getCurrentAdmin();
+                if (!alive || !admin?.role) return;
+                const normalised = admin.role.toUpperCase() as AdminRole;
+                setAdminRoleCache(normalised);
+                setRole(normalised);
+            } catch { /* not signed in yet, or offline: hide nothing */ }
+        })();
+        return () => { alive = false; };
     }, []);
 
     const visible = menu.filter((item) => !(role && item.hideFor.includes(role)));

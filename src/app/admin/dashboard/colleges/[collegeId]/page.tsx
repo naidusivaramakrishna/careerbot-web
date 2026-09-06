@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, BadgeCheck, Loader2, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Loader2, PauseCircle, PlayCircle, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
 import {
   AdminInstitutionError,
   type CollegeDetail,
@@ -11,6 +11,7 @@ import {
   getCollege,
   markCollegePaid,
   revokeOfficer,
+  setCollegePaused,
 } from '@/api/adminInstitutionsApi';
 import { useAdminAccess } from '../../../_hooks/useAdminAccess';
 import { LockedPageOverlay } from '../../../_components/LockedPageOverlay';
@@ -77,6 +78,37 @@ export default function CollegeDetailPage() {
       setIsLoading(false);
     }
   }, [collegeId]);
+
+  const [pausing, setPausing] = useState(false);
+  const [pauseNotice, setPauseNotice] = useState<string | null>(null);
+
+  // PAUSING IS NOT A BILLING ACT, and the button is here rather than beside
+  // "mark paid" to say so: a platform admin may hold a college over a
+  // vacation or stop a bad rollout without ever being able to declare that
+  // an invoice was settled. The two permissions are separate on the server.
+  const togglePaused = useCallback(async () => {
+    if (!college) return;
+    const next = college.subscription_status !== 'paused';
+    setPausing(true);
+    setPauseNotice(null);
+    try {
+      const res = await setCollegePaused(college.id, next);
+      // The server reports changed:false when the college was already in
+      // that state. Saying so is better than a success message for
+      // something that did not happen.
+      setPauseNotice(
+        res.changed
+          ? next ? 'College paused. Students are told on arrival.' : 'College resumed.'
+          : 'Already in that state — nothing changed.',
+      );
+      await load();
+    } catch (err) {
+      setPauseNotice(
+        err instanceof AdminInstitutionError ? err.message : 'Could not change that.');
+    } finally {
+      setPausing(false);
+    }
+  }, [college, load]);
 
   useEffect(() => {
     if (hasAccess && collegeId) void load();
@@ -225,6 +257,30 @@ export default function CollegeDetailPage() {
               <p className="mt-1 text-lg font-medium text-gray-900">
                 {college.subscription_status}
               </p>
+              {/* PAUSE AND RESUME ONLY, never grace or expired: those are
+                  what a billing process concludes, not buttons. The server
+                  refuses anything else through this permission, and the UI
+                  should not offer what the server will refuse. */}
+              {(college.subscription_status === 'active' ||
+                college.subscription_status === 'paused') && (
+                <button
+                  onClick={() => void togglePaused()}
+                  disabled={pausing}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {pausing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : college.subscription_status === 'paused' ? (
+                    <PlayCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <PauseCircle className="h-3.5 w-3.5" />
+                  )}
+                  {college.subscription_status === 'paused' ? 'Resume college' : 'Pause college'}
+                </button>
+              )}
+              {pauseNotice && (
+                <p role="status" className="mt-2 text-xs text-emerald-700">{pauseNotice}</p>
+              )}
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500">

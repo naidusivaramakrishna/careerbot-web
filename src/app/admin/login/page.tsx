@@ -176,9 +176,30 @@ const AdminLoginPage = () => {
                 logger.info('✅ Login successful');
                 toast.success("Login successful");
 
-                // Redirect to admin dashboard on successful login
+                // LAND WHERE THE ROLE CAN ACTUALLY WORK.
+                //
+                // This used to send everybody to /admin/dashboard. That page
+                // counts revenue and consumer subscriptions, and a platform
+                // admin holds none of the permissions behind it -- so the one
+                // role whose whole job is the colleges was dropped on the one
+                // screen it may not read, and the first thing it saw after
+                // signing in was a refusal.
                 localStorage.setItem('token_last_refreshed_at', Date.now().toString());
-                router.push('/admin/dashboard');
+                // The declared type says `role` at the top level; the server
+                // actually returns it under `admin`. Read both rather than
+                // trust either, and fall through to the ordinary dashboard
+                // when neither is present -- a wrong landing page is a bad
+                // redirect, not a failed login.
+                const loginPayload = response as unknown as {
+                    role?: string; admin?: { role?: string };
+                };
+                const landedRole =
+                    (loginPayload.admin?.role ?? loginPayload.role ?? '').toUpperCase();
+                router.push(
+                    landedRole === 'PLATFORM_ADMIN'
+                        ? '/admin/dashboard/colleges/overview'
+                        : '/admin/dashboard',
+                );
             }
         } catch (err: unknown) {
             logger.error('❌ Auth error:', err);
