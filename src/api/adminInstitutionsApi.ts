@@ -53,6 +53,16 @@ export interface CollegeSummary {
    * trial, so a paying customer is never shown a countdown.
    */
   trial_days_remaining?: number | null;
+  /** How many students the college has. A count, never a roster. */
+  students?: number;
+  /**
+   * The first live officer's label. MAY BE NULL ON A STAFFED COLLEGE:
+   * display_name is optional on a membership, so use has_officer to decide
+   * whether anybody runs the college and this only to name them.
+   */
+  officer?: string | null;
+  /** Whether any live placement officer exists. The operational signal. */
+  has_officer?: boolean;
   created_at?: string;
 }
 
@@ -133,6 +143,100 @@ function toError(err: unknown): AdminInstitutionError {
     data?.error?.details?.reason ?? 'UNKNOWN',
     data?.error?.message ?? 'That did not work. Please try again.',
   );
+}
+
+export interface CollegeOverviewAttention {
+  trial_ending_soon: number;
+  without_officer: number;
+  paused: number;
+  grace: number;
+}
+
+export interface CollegeOverview {
+  colleges: number;
+  students: number;
+  by_status: Record<string, number>;
+  on_trial: number;
+  active: number;
+  paused: number;
+  grace: number;
+  expired: number;
+  needs_attention: CollegeOverviewAttention;
+  trial_warning_days: number;
+}
+
+/**
+ * Counts across every college, and what needs attention.
+ *
+ * COUNTS ONLY. `students` is a total, never a roster: a platform actor reads
+ * no student row without an explicit support grant, so the server returns
+ * numbers and there is nothing here that could render a person.
+ *
+ * Nothing on this response is money. That is the point of the endpoint -- the
+ * college estate can be handed to one person while revenue stays with the
+ * founder, and a screen that quietly grew a rupee figure would undo it.
+ */
+export interface OfficerCandidate {
+  account_id: string;
+  email: string;
+  full_name: string | null;
+  is_verified: boolean;
+  status: string;
+  created_at?: string | null;
+  /** False while the account is unverified — appointing would be refused. */
+  can_hold_role: boolean;
+}
+
+export interface OfficerLookupResult {
+  found: boolean;
+  account: OfficerCandidate | null;
+}
+
+/**
+ * Resolve one email address to the account that would be appointed.
+ *
+ * EXACT MATCH, NOT A SEARCH. The caller already knows the address — they were
+ * told it. There is no prefix matching here, so this cannot be walked to
+ * enumerate accounts, which is why it needs only the appoint permission and
+ * not the far larger one that reads the user directory.
+ */
+export async function lookupOfficer(email: string): Promise<OfficerLookupResult> {
+  try {
+    const { data } = await httpClient.get<OfficerLookupResult>(
+      `${BASE}/officer-lookup`, { params: { email } });
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+export interface SubscriptionResult {
+  id: string;
+  subscription_status: string;
+  previous_status?: string;
+  changed: boolean;
+}
+
+/** Suspend a college or put it back. Only paused <-> active. */
+export async function setCollegePaused(
+  collegeId: string, paused: boolean,
+): Promise<SubscriptionResult> {
+  try {
+    const { data } = await httpClient.post<SubscriptionResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}/subscription`, { paused });
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+export async function getCollegeOverview(): Promise<CollegeOverview> {
+  try {
+    const { data } = await httpClient.get<CollegeOverview>(`${BASE}/overview`);
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
 }
 
 export async function listColleges(

@@ -448,6 +448,51 @@ export async function createSection(body: CreateSectionRequest): Promise<Section
 }
 
 // ── people ────────────────────────────────────────────────────
+export interface StaffCandidate {
+  account_id: string;
+  email: string;
+  full_name: string | null;
+  is_verified: boolean;
+  status: string;
+  created_at?: string | null;
+  /** False while unverified — onboarding would be refused with a 403. */
+  can_hold_role: boolean;
+}
+
+export interface StaffLookupResult {
+  found: boolean;
+  account: StaffCandidate | null;
+}
+
+/**
+ * GET /institution/staff-lookup — resolve ONE email to the account behind it.
+ *
+ * WHY THIS EXISTS. Onboarding needs an account_id: a server-generated uuid
+ * with no lookup anywhere a college officer can reach. So the form asked for
+ * an identifier nobody could obtain, and adding a head of department meant
+ * asking an engineer.
+ *
+ * EXACT MATCH, NOT A SEARCH. There is no prefix matching, so this cannot be
+ * walked to enumerate accounts — the caller already knows the address.
+ *
+ * Gated on the SAME action as the onboarding itself, so a CPO asking about a
+ * faculty candidate is refused here rather than allowed to browse and denied
+ * at the last step.
+ */
+export async function lookupStaff(
+  email: string, role: 'hod' | 'faculty',
+): Promise<StaffLookupResult> {
+  try {
+    const response = await httpClient.get<StaffLookupResult>(
+      `${BASE}/staff-lookup`,
+      { ...withInstitutionAuth(), params: { email, role } },
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /** POST /institution/members — onboard an HOD, faculty member or student. */
 export async function createMember(body: CreateMemberRequest): Promise<MemberRecord> {
   try {

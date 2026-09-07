@@ -120,6 +120,27 @@ function nextWithPathname(request: NextRequest, pathname: string) {
     return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
+/**
+ * The signing key, under EITHER name the deployment might use.
+ *
+ * This frontend reads JWT_SECRET. The backend that MINTS the token reads
+ * JWT_SECRET_KEY. They are the same secret with two names, and nothing made
+ * them meet: a compose file passing one env file to both services set the
+ * backend's key and left this one empty, so every admin session failed
+ * verification and bounced back to /admin/login after a SUCCESSFUL login.
+ *
+ * Accepting both names is the fix that cannot be undone by a deployment: a
+ * stack that sets either one now works, and one that sets both still prefers
+ * the explicit JWT_SECRET.
+ *
+ * It does NOT fall open. A stack setting neither still verifies nothing and
+ * still refuses -- see the warning further down, which is what makes that
+ * state visible instead of silent.
+ */
+function signingSecret(): string | undefined {
+    return process.env.JWT_SECRET || process.env.JWT_SECRET_KEY || undefined;
+}
+
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     logger.info(`[${request.method}] ${pathname}`);
@@ -170,11 +191,12 @@ export async function middleware(request: NextRequest) {
     }
 
     // JWT role enforcement — decode access_token to check role claim
-    if (token && process.env.JWT_SECRET) {
+    const secret = signingSecret();
+    if (token && secret) {
         try {
             const { payload } = await jwtVerify(
                 token,
-                new TextEncoder().encode(process.env.JWT_SECRET)
+                new TextEncoder().encode(secret)
             );
             if (!roleAllows(pathname, payload.actor as string | undefined)) {
                 return NextResponse.redirect(new URL('/403', request.url));
@@ -213,7 +235,7 @@ export async function middleware(request: NextRequest) {
     //    cookie. Every failure path falls through to the login redirect
     //    (fail-safe) — a forged/expired refresh cookie can never reach a
     //    role-gated page.
-    if (refreshToken && process.env.JWT_SECRET) {
+    if (refreshToken && secret) {
         try {
             // Keep the refresh on a SAME-ORIGIN relative path. It forwards the
             // raw httpOnly Cookie header, so the target must never be a
@@ -236,7 +258,7 @@ export async function middleware(request: NextRequest) {
                 if (newAccess) {
                     const { payload } = await jwtVerify(
                         newAccess,
-                        new TextEncoder().encode(process.env.JWT_SECRET)
+                        new TextEncoder().encode(secret)
                     );
                     if (!roleAllows(pathname, payload.actor as string | undefined)) {
                         return NextResponse.redirect(new URL('/403', request.url));
@@ -263,13 +285,13 @@ export async function middleware(request: NextRequest) {
     // Staying closed is the correct call -- an unverified token must never
     // reach an admin page, so this deliberately does NOT fall open. What it
     // fixes is the silence.
-    if (isAdminOrRecruiter && !process.env.JWT_SECRET && !warnedMissingJwtSecret) {
+    if (isAdminOrRecruiter && !secret && !warnedMissingJwtSecret) {
         warnedMissingJwtSecret = true;
         logger.error(
             '[middleware] JWT_SECRET is not set, so no session can be verified: ' +
             'every /admin and /recruiter route will redirect to login even with ' +
-            'valid credentials. Set JWT_SECRET to the same value as the backend ' +
-            'JWT_SECRET_KEY.'
+            'valid credentials. Set JWT_SECRET (or JWT_SECRET_KEY) to the same ' +
+            'value the backend signs with.'
         );
     }
 
