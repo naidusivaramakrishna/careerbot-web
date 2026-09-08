@@ -70,7 +70,10 @@ export interface CreateAdminRequest {
   email: string;
   full_name: string;
   password: string;
-  role: 'ADMIN' | 'MODERATOR' | 'SUPPORT';
+  // SUPER_ADMIN is deliberately absent -- this endpoint does not mint one.
+  // PLATFORM_ADMIN was absent by oversight, which made the role unrequestable
+  // through this path even after every screen offered it.
+  role: 'ADMIN' | 'PLATFORM_ADMIN' | 'MODERATOR' | 'SUPPORT';
 }
 
 export interface CreateAdminResponse {

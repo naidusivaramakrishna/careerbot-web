@@ -70,9 +70,23 @@ describe('the role is visible everywhere an admin list is rendered', () => {
     expect(hue(modal)).toEqual(hue(table));
   });
 
-  it('is accepted by the admin-list query type', () => {
+  it('is accepted by the admin-list query type, in the WIRE case', () => {
+    // Lowercase matters: the filter value goes straight into a Mongo query
+    // without normalisation, so an uppercase filter silently returns nothing.
     const s = read('src/api/adminManagementApi.ts');
-    expect(s).toMatch(/role\?:[^;]*PLATFORM_ADMIN/);
+    expect(s).toMatch(/role\?:[^;]*'platform_admin'/);
+  });
+
+  it('the filter dropdown maps its label to the wire value', () => {
+    // This is the behavioural half: the label a person clicks must become the
+    // exact string the backend stores, or the filter returns an empty list.
+    const s = read(`${COMPONENTS}/SearchFilterControls.tsx`);
+    expect(s).toContain('"Platform Admin": "platform_admin"');
+  });
+
+  it('is requestable when creating an admin', () => {
+    const s = read('src/api/adminAuthApi.ts');
+    expect(s).toMatch(/role:[^;]*PLATFORM_ADMIN/);
   });
 
   it('appears in the role-count breakdown', () => {

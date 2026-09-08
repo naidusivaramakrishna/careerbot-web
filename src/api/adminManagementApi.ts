@@ -6,7 +6,12 @@ import { buildQueryString } from './utils';
 export interface AdminListQueryParams {
     page?: number;
     page_size?: number;
-    role?: 'SUPER_ADMIN' | 'ADMIN' | 'PLATFORM_ADMIN' | 'MODERATOR' | 'SUPPORT';
+    // LOWERCASE, because that is the wire value. SearchFilterControls sends
+    // ROLE_MAP[label] -- "platform_admin" -- and get_admins_paginated matches
+    // it against Mongo without normalising case. The uppercase form this type
+    // used to advertise would have returned an empty list for anyone who
+    // followed the type instead of copying the existing call.
+    role?: 'super_admin' | 'admin' | 'platform_admin' | 'moderator' | 'support';
     status?: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
     search?: string;
     created_from?: string; // ISO format date
@@ -88,7 +93,7 @@ export interface UpdateAdminStatusResponse {
  * Query Parameters:
  * - page: Page number (default: 1)
  * - page_size: Items per page, 1-100 (default: 50)
- * - role: Filter by role (SUPER_ADMIN, ADMIN, PLATFORM_ADMIN, MODERATOR, SUPPORT)
+ * - role: Filter by role (super_admin, admin, platform_admin, moderator, support)
  * - status: Filter by status (ACTIVE, SUSPENDED, INACTIVE)
  * - search: Search by name, email, or username
  * - created_from: Filter from date (ISO format)
