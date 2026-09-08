@@ -148,6 +148,7 @@ export const getAdminDetails = async (
  * Roles:
  * - SUPER_ADMIN: Full system access
  * - ADMIN: Administrative access
+ * - PLATFORM_ADMIN: Runs the colleges; sees no revenue or cost
  * - MODERATOR: Content moderation access
  * - SUPPORT: Customer support access
  * 
