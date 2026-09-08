@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode so the coding problems page toggle works */
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   /* --font-montserrat kept as alias so interview/cover-letter pages that reference it still resolve */
   --font-montserrat: var(--font-sans, system-ui, sans-serif);

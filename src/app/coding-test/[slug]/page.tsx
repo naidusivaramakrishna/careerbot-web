@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight,
   Clock, Database, FileText, Keyboard, Loader2, Maximize2,
   Pause, Play, RotateCw, ShieldAlert, X,
 } from 'lucide-react';
@@ -13,13 +13,16 @@ import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 import { CodingTestApiError, fetchProblem, fetchProblems } from '../_lib/api';
 import { RunApiError, runCode, submitAsync, pollJudgeResult } from '../_lib/runApi';
 import { GradingApiError, fetchQuota, mockGrade } from '../_lib/gradingApi';
+import {
+  SessionApiError,
+  createSession, patchDraft, submitSession, getSession,
+} from '../_lib/sessionApi';
 import JudgePanel from '../_components/JudgePanel';
 import GradingResultPanel from '@/components/coding-test/GradingResult';
-import SubmitButton from '@/components/coding-test/SubmitButton';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
   CodingProblemDetail, CodingProblemSummary, CodingTestLanguage,
-  JudgeJobRecord, JudgeResponse, QuotaResponse, SubmitSolutionResponse,
+  JudgeJobRecord, JudgeResponse, QuotaResponse, SubmitAsyncQueued, SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
@@ -29,13 +32,10 @@ import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 type ActionState = 'idle' | 'running' | 'submitting' | 'done';
 type LoadState = 'loading' | 'error' | 'notfound' | 'ready';
 
-const TIMER_DEFAULT    = 45 * 60;
-const SPLIT_DEFAULT    = 40;
-const SPLIT_MIN        = 18;
-const SPLIT_MAX        = 70;
-const CONSOLE_DEFAULT  = 180;
-const CONSOLE_MIN      = 72;
-const CONSOLE_MAX      = 460;
+const TIMER_DEFAULT = 45 * 60;
+const SPLIT_DEFAULT = 40;
+const SPLIT_MIN     = 18;
+const SPLIT_MAX     = 70;
 
 function formatTimer(s: number) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -112,6 +112,7 @@ export default function CodingProblemDetailPage() {
   const [problem,      setProblem]      = useState<CodingProblemDetail | null>(null);
   const [loadState,    setLoadState]    = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const isReady = loadState === 'ready' && !!problem;
   const [reloadKey,    setReloadKey]    = useState(0);
 
   const _paramLang = searchParams.get('language') as CodingTestLanguage | null;
@@ -212,6 +213,19 @@ export default function CodingProblemDetailPage() {
     }
   }, [isPracticeMode]);
 
+  /* ── assessment session ── */
+  type SessionInitState = 'idle' | 'loading' | 'ready' | 'error';
+  type TimeUpState = 'idle' | 'submitting' | 'polling' | 'submitted' | 'error';
+  const [sessionId,   setSessionId]   = useState<string | null>(null);
+  const [sessionInit, setSessionInit] = useState<SessionInitState>('idle');
+  const [timeUpState, setTimeUpState] = useState<TimeUpState>('idle');
+  const sessionIdRef  = useRef<string | null>(null);
+  // Refs keep interval/effect callbacks current without stale closure.
+  const codeRef     = useRef(code);
+  const languageRef = useRef(language);
+  useEffect(() => { codeRef.current = code; }, [code]);
+  useEffect(() => { languageRef.current = language; }, [language]);
+
   /* ── plain editor ── */
   const [plainEditor, setPlainEditor] = useState(false);
   useEffect(() => {
@@ -229,6 +243,80 @@ export default function CodingProblemDetailPage() {
 
   /* ── cancel in-flight submit on unmount ── */
   useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
+
+  /* ── 1. Create session at assessment start ── */
+  useEffect(() => {
+    if (isPracticeMode || !isReady || sessionInit !== 'idle') return;
+    setSessionInit('loading');
+    createSession(slug, languageRef.current)
+      .then((session) => {
+        setSessionId(session.session_id);
+        sessionIdRef.current = session.session_id;
+        // Drive the timer from the server-issued deadline so it stays accurate
+        // even across soft page refreshes.
+        const secsLeft = Math.max(
+          0,
+          Math.round((new Date(session.expires_at).getTime() - Date.now()) / 1000),
+        );
+        setTimerSeconds(secsLeft);
+        setTimerRunning(true);
+        setSessionInit('ready');
+      })
+      .catch(() => setSessionInit('error'));
+  }, [isPracticeMode, isReady, slug, sessionInit]);
+
+  /* ── 2. Draft autosave every 30 s (assessment mode only) ── */
+  useEffect(() => {
+    if (!sessionId || isPracticeMode) return;
+    const id = setInterval(() => {
+      // Fire-and-forget; failures are transient — the server sweeper is the safety net.
+      patchDraft(sessionId, codeRef.current[languageRef.current], languageRef.current).catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [sessionId, isPracticeMode]);
+
+  /* ── 3. Auto-submit when the timer reaches 00:00 ── */
+  const fireAutoSubmit = useCallback(async (sid: string) => {
+    setTimeUpState('submitting');
+    try {
+      await submitSession(sid);
+      setTimeUpState('submitted');
+    } catch (err) {
+      if (err instanceof SessionApiError && err.status === 409) {
+        // Already submitted (e.g. user hit Submit before timer expired)
+        setTimeUpState('submitted');
+        return;
+      }
+      // Network failure — poll until the server sweeper confirms submitted (fires within 30 s).
+      setTimeUpState('polling');
+      for (let i = 0; i < 12; i++) {
+        await new Promise<void>((r) => setTimeout(r, 5_000));
+        try {
+          const session = await getSession(sid);
+          if (session.status === 'submitted') { setTimeUpState('submitted'); return; }
+        } catch { /* transient — keep polling */ }
+      }
+      setTimeUpState('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (timerSeconds !== 0 || isPracticeMode || !sessionIdRef.current) return;
+    void fireAutoSubmit(sessionIdRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerSeconds]); // only timerSeconds triggers — refs + callback are stable
+
+  /* ── intercept Ctrl+S at the document level (Ctrl+R wired after handleRun) ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        triggerSave();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [triggerSave]);
 
   /* ── tab-switch detection ── */
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
@@ -315,31 +403,22 @@ export default function CodingProblemDetailPage() {
     document.addEventListener('pointerup',   onUp);
   }, [leftPct, isPanelCollapsed]);
 
-  /* ── console panel ── */
-  const [consoleHeight,    setConsoleHeight]    = useState(CONSOLE_DEFAULT);
-  const [consoleCollapsed, setConsoleCollapsed] = useState(false);
-  const [consoleTab,       setConsoleTab]       = useState<'output' | 'tests' | 'grade'>('output');
+  /* ── right-panel tabs ── */
+  const [rightTab,     setRightTab]     = useState<'code' | 'tests' | 'grade'>('code');
+  const [langDropOpen, setLangDropOpen] = useState(false);
+  const langDropRef = useRef<HTMLDivElement>(null);
 
-  const startConsoleResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = consoleHeight;
-    const onMove = (mv: PointerEvent) => {
-      const delta = startY - mv.clientY;
-      setConsoleHeight(Math.max(CONSOLE_MIN, Math.min(CONSOLE_MAX, startH + delta)));
+  /* close language dropdown on outside click */
+  useEffect(() => {
+    if (!langDropOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (langDropRef.current && !langDropRef.current.contains(e.target as Node)) {
+        setLangDropOpen(false);
+      }
     };
-    const onUp = () => {
-      document.body.style.cursor     = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup',   onUp);
-    };
-    document.body.style.cursor     = 'ns-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup',   onUp);
-  }, [consoleHeight]);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [langDropOpen]);
 
   /* ── helpers ── */
   const clearRunOutput = useCallback(() => {
@@ -373,8 +452,7 @@ export default function CodingProblemDetailPage() {
     setActionState('running'); setActionError(''); setJudgeResult(null);
     setGradingResult(null); setGradingError('');
     setJudgeMode('run');
-    setConsoleCollapsed(false);
-    setConsoleTab('tests');
+    setRightTab('tests');
     try {
       const res = await runCode(slug, language, code[language]);
       setJudgeResult(res);
@@ -385,6 +463,18 @@ export default function CodingProblemDetailPage() {
     }
   }, [isBusy, isGrading, code, language, slug]);
 
+  /* ── Ctrl+R → Run (wired after handleRun to avoid TDZ) ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        handleRun();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [handleRun]);
+
   const handleSubmit = useCallback(async () => {
     if (isBusy) return;
     const src = code[language]?.trim();
@@ -392,8 +482,7 @@ export default function CodingProblemDetailPage() {
     setActionState('submitting'); setActionError('');
     setJudgeResult(null); setJudgeProgress(null); setGradingResult(null); setGradingError('');
     setJudgeMode('submit');
-    setConsoleCollapsed(false);
-    setConsoleTab('tests');
+    setRightTab('tests');
 
     submitAbortRef.current?.abort();
     const ctrl = new AbortController();
@@ -440,7 +529,7 @@ export default function CodingProblemDetailPage() {
       const gradeRes = await mockGrade(slug, language, code[language], problem?.title);
       if (gradeToken !== gradeRequestRef.current || gradedSlug !== slugRef.current) return;
       setGradingResult(gradeRes);
-      setConsoleTab('grade');
+      setRightTab('grade');
       fetchQuota().then(setQuota).catch(() => {});
     } catch (gradeErr) {
       if (gradeToken !== gradeRequestRef.current || gradedSlug !== slugRef.current) return;
@@ -455,9 +544,6 @@ export default function CodingProblemDetailPage() {
       if (gradeToken === gradeRequestRef.current) setIsGrading(false);
     }
   }, [isBusy, code, language, slug, router, problem, isPracticeMode]);
-
-  /* ── derived ── */
-  const isReady = loadState === 'ready' && !!problem;
 
   /* Timer pill colours */
   const timerBadge = timerSeconds < 120
@@ -502,6 +588,7 @@ export default function CodingProblemDetailPage() {
       }}
       onKeyDown={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isGrading) { e.preventDefault(); handleRun(); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); triggerSave(); }
       }}
       spellCheck={false}
       className="h-full w-full resize-none bg-[#1e1e1e] p-3 font-mono text-base text-slate-200 focus:outline-none"
@@ -515,8 +602,7 @@ export default function CodingProblemDetailPage() {
         saveCode(language, v, slug);
       }}
       onCtrlEnter={handleRun}
-      onLanguageChange={(lang) => { setLanguage(lang); clearRunOutput(); }}
-      languages={LANGUAGES}
+      onCtrlS={triggerSave}
     />
   );
 
@@ -528,6 +614,35 @@ export default function CodingProblemDetailPage() {
 
       {/* ── Modals ── */}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
+      {/* ── Session init error (assessment mode only) ── */}
+      {sessionInit === 'error' && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-rose-600 px-4 py-2 text-sm font-medium text-white">
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+          Could not start your assessment session. Please refresh the page.
+        </div>
+      )}
+
+      {/* ── Time-up overlay (assessment mode only) ── */}
+      {timeUpState !== 'idle' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 text-center shadow-2xl">
+            <Clock className="mx-auto mb-3 h-8 w-8 text-indigo-500" aria-hidden />
+            <h2 className="text-base font-semibold text-slate-900">
+              {timeUpState === 'submitted' ? 'Assessment Submitted' : "Time's Up"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {timeUpState === 'submitting' && 'Submitting your solution…'}
+              {timeUpState === 'polling'    && 'Finalising submission — please wait…'}
+              {timeUpState === 'submitted'  && 'Your solution has been submitted. You can now close this tab.'}
+              {timeUpState === 'error'      && 'We could not confirm your submission. Contact support if this persists.'}
+            </p>
+            {(timeUpState === 'submitting' || timeUpState === 'polling') && (
+              <Loader2 className="mx-auto mt-4 h-5 w-5 animate-spin text-indigo-500" aria-hidden />
+            )}
+          </div>
+        </div>
+      )}
 
       {showTabWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -567,34 +682,30 @@ export default function CodingProblemDetailPage() {
           </Link>
 
           {/* Prev/Next navigation */}
-          {problemList.length > 0 && (
-            <>
-              <div className="h-4 w-px shrink-0 bg-slate-200" aria-hidden />
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => prevProblem && navigateTo(prevProblem)}
-                  disabled={!prevProblem}
-                  title={prevProblem ? `Previous: ${prevProblem.title}` : 'No previous problem'}
-                  className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <ChevronLeft className="h-4 w-4" aria-hidden />
-                </button>
-                <span className="whitespace-nowrap text-xs text-slate-400 tabular-nums">
-                  {currentIndex >= 0 ? `${currentIndex + 1} / ${problemList.length}` : '— / —'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => nextProblem && navigateTo(nextProblem)}
-                  disabled={!nextProblem}
-                  title={nextProblem ? `Next: ${nextProblem.title}` : 'No next problem'}
-                  className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
-            </>
-          )}
+          <div className="h-4 w-px shrink-0 bg-slate-200" aria-hidden />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => prevProblem && navigateTo(prevProblem)}
+              disabled={!prevProblem}
+              title={prevProblem ? `Previous: ${prevProblem.title}` : 'No previous problem'}
+              className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </button>
+            <span className="whitespace-nowrap text-xs text-slate-400 tabular-nums">
+              {currentIndex >= 0 ? `${currentIndex + 1} / ${problemList.length}` : '— / —'}
+            </span>
+            <button
+              type="button"
+              onClick={() => nextProblem && navigateTo(nextProblem)}
+              disabled={!nextProblem}
+              title={nextProblem ? `Next: ${nextProblem.title}` : 'No next problem'}
+              className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
 
           {isReady && (
             <>
@@ -694,6 +805,67 @@ export default function CodingProblemDetailPage() {
         <>
           {isMaximized && (
             <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-sm px-3 py-2 text-xs text-slate-100">
+              {/* Timer in fullscreen */}
+              <Clock className={`h-3.5 w-3.5 shrink-0 ${timerSeconds < 120 ? 'text-red-400' : timerSeconds < 300 ? 'text-amber-400' : 'text-emerald-400'}`} aria-hidden />
+              <span className={`font-mono font-semibold tabular-nums ${timerSeconds < 120 ? 'text-red-400' : timerSeconds < 300 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {formatTimer(timerSeconds)}
+              </span>
+              {/* Prev / Next navigation */}
+              <span className="mx-1 h-4 w-px bg-slate-600" aria-hidden />
+              <button
+                type="button"
+                onClick={() => prevProblem && navigateTo(prevProblem)}
+                disabled={!prevProblem}
+                title={prevProblem ? `Previous: ${prevProblem.title}` : 'No previous problem'}
+                className="rounded p-1 text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </button>
+              <span className="whitespace-nowrap tabular-nums text-slate-400">
+                {currentIndex >= 0 ? `${currentIndex + 1} / ${problemList.length}` : '— / —'}
+              </span>
+              <button
+                type="button"
+                onClick={() => nextProblem && navigateTo(nextProblem)}
+                disabled={!nextProblem}
+                title={nextProblem ? `Next: ${nextProblem.title}` : 'No next problem'}
+                className="rounded p-1 text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+              <span className="mx-1 h-4 w-px bg-slate-600" aria-hidden />
+              {/* Language dropdown in fullscreen overlay */}
+              <div ref={langDropRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setLangDropOpen((o) => !o)}
+                  className="flex items-center gap-1.5 rounded border border-slate-600 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 transition hover:border-slate-400"
+                >
+                  {LANGUAGES.find((l) => l.value === language)?.label ?? language}
+                  <ChevronDown className="h-3 w-3 text-slate-400" aria-hidden />
+                </button>
+                {langDropOpen && (
+                  <div className="absolute right-0 top-full z-[60] mt-1 min-w-[110px] overflow-hidden rounded-md border border-[#555] bg-[#2d2d2d] shadow-lg">
+                    {LANGUAGES.map((l) => (
+                      <button
+                        key={l.value}
+                        type="button"
+                        onClick={() => {
+                          setLanguage(l.value);
+                          clearRunOutput();
+                          setLangDropOpen(false);
+                        }}
+                        className={`w-full px-3 py-1.5 text-left text-xs transition hover:bg-[#3c3c3c] ${
+                          l.value === language ? 'text-indigo-400' : 'text-slate-300'
+                        }`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <span className="mx-1 h-4 w-px bg-slate-600" aria-hidden />
               <span className="hidden sm:inline">Press <kbd className="font-mono font-semibold">Esc</kbd> to exit</span>
               <button
                 type="button"
@@ -812,244 +984,266 @@ export default function CodingProblemDetailPage() {
             </button>
           </div>
 
-          {/* ── Right panel: editor + console + run bar ── */}
+          {/* ── Right panel: action bar + tabs + content ── */}
           <section
-            className="flex min-h-[520px] flex-col overflow-hidden bg-white lg:min-h-0 lg:flex-none"
+            className="flex min-h-[520px] flex-col overflow-hidden bg-[#1e1e1e] lg:min-h-0 lg:flex-none"
             style={rightStyle}
           >
-            {/* Editor fills remaining height */}
-            <div className="flex-1 overflow-hidden">
-              {editorNode}
-            </div>
+            {/* ── Action bar ── */}
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#3e3e3e] bg-[#252526] px-3 py-2">
+              {/* Left: Run + Submit */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleRun}
+                  disabled={isBusy || isGrading}
+                  className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionState === 'running'
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    : <Play    className="h-3.5 w-3.5"               aria-hidden />}
+                  <span>Run tests</span>
+                  <kbd className="ml-0.5 hidden rounded border border-emerald-500 bg-emerald-700/50 px-1 text-[10px] font-normal sm:inline">
+                    Ctrl+R
+                  </kbd>
+                </button>
 
-            {/* ── Console panel (persistent, resizable, collapsible) ── */}
-            <div
-              className="shrink-0 overflow-hidden border-t border-slate-200 bg-[#1e1e1e]"
-              style={{
-                height:     consoleCollapsed ? 34 : consoleHeight,
-                transition: 'height 200ms ease',
-              }}
-            >
-              {/* Console header — drag handle + tab bar */}
-              <div
-                className="flex cursor-ns-resize select-none items-center border-b border-[#3e3e3e] bg-[#252526]"
-                onPointerDown={startConsoleResize}
-              >
-                {/* Tabs */}
-                <div className="flex items-center">
-                  {(['output', 'tests', 'grade'] as const).map((tab) => {
-                    const LABELS = { output: 'Output', tests: 'Test Cases', grade: 'AI Grade' };
-                    const active = consoleTab === tab;
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => setConsoleTab(tab)}
-                        className={`flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                          active
-                            ? 'border-indigo-500 text-slate-200'
-                            : 'border-transparent text-slate-500 hover:text-slate-300'
-                        }`}
-                      >
-                        {LABELS[tab]}
-                        {tab === 'tests' && judgeResult && (
-                          <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
-                            judgeResult.verdict === 'accepted'
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-rose-600 text-white'
-                          }`}>
-                            {judgeResult.passed}/{judgeResult.total}
-                          </span>
-                        )}
-                        {tab === 'grade' && isGrading && (
-                          <Loader2 className="h-2.5 w-2.5 animate-spin text-indigo-400" aria-hidden />
-                        )}
-                        {tab === 'grade' && !isGrading && gradingResult?.score != null && (
-                          <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
-                            gradingResult.score >= 70 ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
-                          }`}>
-                            {gradingResult.score}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={isBusy || isGrading}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionState === 'submitting'
+                    ? <Loader2  className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    : <Database className="h-3.5 w-3.5"               aria-hidden />}
+                  <span>Submit</span>
+                  {!isPracticeMode && quota?.submissions_remaining != null && (
+                    <span className="ml-0.5 rounded-full bg-indigo-800 px-1.5 text-[10px]">
+                      {quota.submissions_remaining}
+                    </span>
+                  )}
+                </button>
 
-                {/* Right-side status + actions */}
-                <div className="flex flex-1 items-center justify-end gap-1 pr-2">
-                  {isBusy && (
-                    <Loader2 className="h-3 w-3 animate-spin text-slate-400" aria-hidden />
-                  )}
-                  {(actionState === 'done' || (actionState === 'idle' && !!actionError)) && (
-                    <button
-                      type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={clearRunOutput}
-                      className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 transition hover:bg-[#3c3c3c] hover:text-slate-300"
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => setConsoleCollapsed((c) => !c)}
-                    className="rounded p-0.5 text-slate-500 transition hover:bg-[#3c3c3c] hover:text-slate-200"
-                    aria-label={consoleCollapsed ? 'Expand console' : 'Collapse console'}
-                  >
-                    {consoleCollapsed
-                      ? <ChevronUp   className="h-3.5 w-3.5" aria-hidden />
-                      : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
-                  </button>
+                {/* Auto-save indicator */}
+                <div
+                  className={`flex items-center gap-1 text-xs font-medium text-emerald-400 transition-opacity duration-300 ${
+                    saveStatus === 'saved' ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  aria-live="polite"
+                >
+                  <Check className="h-3.5 w-3.5" aria-hidden />
+                  <span className="hidden sm:inline">Saved</span>
                 </div>
               </div>
 
-              {/* Console body — tab content */}
-              {!consoleCollapsed && (
-                <div className="overflow-y-auto" style={{ height: consoleHeight - 34 }}>
-                  {/* Output tab — raw error / status summary */}
-                  {consoleTab === 'output' && (
-                    <div className="p-3">
-                      {actionState === 'idle' && !actionError && (
-                        <p className="font-mono text-[13px] italic text-slate-500">
-                          No output yet — press{' '}
-                          <span className="font-semibold text-emerald-400">Run Code</span>{' '}
-                          to execute.
-                        </p>
-                      )}
-                      {isBusy && (
-                        <p className="font-mono text-[13px] italic text-slate-400">
-                          {actionState === 'submitting'
-                            ? judgeProgress?.status === 'running'
-                              ? 'Running test cases…'
-                              : judgeProgress?.status === 'queued'
-                              ? 'Waiting in queue…'
-                              : 'Submitting…'
-                            : 'Running your code…'}
-                        </p>
-                      )}
-                      {actionError && (
-                        <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-rose-400">{actionError}</pre>
-                      )}
-                      {actionState === 'done' && judgeResult && (() => {
-                        const firstErr = judgeResult.results.find((r) => r.stderr);
-                        return firstErr?.stderr ? (
-                          <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-amber-400">{firstErr.stderr}</pre>
-                        ) : (
-                          <p className="font-mono text-[13px] text-slate-400">
-                            {judgeResult.verdict === 'accepted'
-                              ? `✓ All ${judgeResult.total} test${judgeResult.total !== 1 ? 's' : ''} passed.`
-                              : `${judgeResult.passed} / ${judgeResult.total} tests passed.`}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Test Cases tab — judge results */}
-                  {consoleTab === 'tests' && (
-                    judgeResult ? (
-                      <JudgePanel result={judgeResult} mode={judgeMode} />
-                    ) : (
-                      <div className="flex h-full flex-col items-center justify-center gap-3 p-3">
-                        {actionState === 'submitting' ? (
-                          <>
-                            <Loader2 className="h-5 w-5 animate-spin text-indigo-400" aria-hidden />
-                            <p className="font-mono text-[13px] text-slate-400">
-                              {judgeProgress?.status === 'running'
-                                ? 'Running test cases…'
-                                : judgeProgress?.status === 'queued'
-                                ? 'Waiting in queue…'
-                                : 'Submitting…'}
-                            </p>
-                            <div className="h-1.5 w-48 overflow-hidden rounded-full bg-slate-700">
-                              <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
-                            </div>
-                          </>
-                        ) : (
-                          <p className="font-mono text-[13px] italic text-slate-500">
-                            Press{' '}
-                            <span className="font-semibold text-emerald-400">Run Code</span>{' '}
-                            to see per-test-case results.
-                          </p>
-                        )}
+              {/* Right: Language + Reset */}
+              <div className="flex items-center gap-2">
+                {/* Language dropdown — hidden in fullscreen (shown in overlay instead) */}
+                {!isMaximized && (
+                  <div ref={langDropRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setLangDropOpen((o) => !o)}
+                      className="flex items-center gap-1.5 rounded border border-[#555] bg-[#3c3c3c] px-2.5 py-1 text-xs font-medium text-slate-200 transition hover:border-slate-400"
+                    >
+                      {LANGUAGES.find((l) => l.value === language)?.label ?? language}
+                      <ChevronDown className="h-3 w-3 text-slate-400" aria-hidden />
+                    </button>
+                    {langDropOpen && (
+                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[110px] overflow-hidden rounded-md border border-[#555] bg-[#2d2d2d] shadow-lg">
+                        {LANGUAGES.map((l) => (
+                          <button
+                            key={l.value}
+                            type="button"
+                            onClick={() => {
+                              setLanguage(l.value);
+                              clearRunOutput();
+                              setLangDropOpen(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left text-xs transition hover:bg-[#3c3c3c] ${
+                              l.value === language ? 'text-indigo-400' : 'text-slate-300'
+                            }`}
+                          >
+                            {l.label}
+                          </button>
+                        ))}
                       </div>
-                    )
-                  )}
+                    )}
+                  </div>
+                )}
 
-                  {/* AI Grade tab */}
-                  {consoleTab === 'grade' && (
-                    <div className="p-3">
-                      {isPracticeMode ? (
-                        <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                          <ShieldAlert className="h-8 w-8 text-slate-600" aria-hidden />
-                          <p className="text-sm font-medium text-slate-400">AI grading is not available in practice mode.</p>
-                          <p className="text-xs text-slate-600">Submit your solution in an assessment to receive AI feedback.</p>
-                        </div>
-                      ) : (
-                        <>
-                          {isGrading && !gradingResult && !gradingError && (
-                            <div className="flex items-center gap-2 font-mono text-[13px] italic text-slate-400">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                              Getting AI feedback…
-                            </div>
-                          )}
-                          {gradingError && !gradingResult && (
-                            <div className="flex items-start gap-2 rounded-lg border border-rose-800 bg-rose-950/40 p-3">
-                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" aria-hidden />
-                              <p className="text-sm text-rose-400">{gradingError}</p>
-                            </div>
-                          )}
-                          {gradingResult && (
-                            <GradingResultPanel result={gradingResult} />
-                          )}
-                          {!isGrading && !gradingResult && !gradingError && (
-                            <p className="font-mono text-[13px] italic text-slate-500">
-                              Press <span className="font-semibold text-indigo-400">Submit</span> to get AI feedback on your solution.
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
+                <button
+                  type="button"
+                  onClick={resetToStarter}
+                  title="Reset to starter code"
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-[#3c3c3c] hover:text-slate-200"
+                >
+                  <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── Tab nav: CODE EDITOR | TESTS | AI GRADE ── */}
+            <div className="flex shrink-0 items-center border-b border-[#3e3e3e] bg-[#252526]">
+              {([
+                { id: 'code'  as const, label: 'Code Editor' },
+                { id: 'tests' as const, label: 'Tests'       },
+                ...(!isPracticeMode ? [{ id: 'grade' as const, label: 'AI Grade' }] : []),
+              ]).map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setRightTab(id)}
+                  className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                    rightTab === id
+                      ? 'border-indigo-500 text-slate-100'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {label}
+                  {id === 'tests' && judgeResult && (
+                    <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
+                      judgeResult.verdict === 'accepted' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                    }`}>
+                      {judgeResult.passed}/{judgeResult.total}
+                    </span>
                   )}
+                  {id === 'grade' && isGrading && (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin text-indigo-400" aria-hidden />
+                  )}
+                  {id === 'grade' && !isGrading && gradingResult?.grading_result?.total_score != null && (
+                    <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
+                      gradingResult.grading_result.total_score >= 70 ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+                    }`}>
+                      {gradingResult.grading_result.total_score}
+                    </span>
+                  )}
+                </button>
+              ))}
+
+              {/* Low-credit warning pill */}
+              {!isPracticeMode && quota && quota.submissions_remaining > 0 && quota.submissions_remaining <= 5 && (
+                <div className="ml-auto flex items-center gap-1.5 pr-3 text-[11px] text-amber-400">
+                  <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                  {quota.submissions_remaining} credit{quota.submissions_remaining === 1 ? '' : 's'} left
+                </div>
+              )}
+
+              {isBusy && (
+                <div className="ml-auto flex items-center gap-1.5 pr-3">
+                  <Loader2 className="h-3 w-3 animate-spin text-slate-500" aria-hidden />
+                  <span className="text-[11px] text-slate-500">
+                    {actionState === 'submitting'
+                      ? judgeProgress?.status === 'running' ? 'Running…'
+                        : judgeProgress?.status === 'queued' ? 'Queued…'
+                        : 'Submitting…'
+                      : 'Running…'}
+                  </span>
                 </div>
               )}
             </div>
 
-            {/* ── Low-credit warning ── */}
-            {!isPracticeMode && quota && quota.submissions_remaining > 0 && quota.submissions_remaining <= 5 && (
-              <div className="flex shrink-0 items-center gap-2 border-t border-amber-200 bg-amber-50 px-4 py-1.5">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
-                <p className="text-xs text-amber-700">
-                  Only <strong>{quota.submissions_remaining}</strong> AI grading credit{quota.submissions_remaining === 1 ? '' : 's'} remaining.
-                </p>
-              </div>
-            )}
+            {/* ── Tab content ── */}
+            <div className="flex-1 overflow-hidden">
+              {/* Code Editor tab */}
+              {rightTab === 'code' && (
+                <div className="h-full">
+                  {editorNode}
+                </div>
+              )}
 
-            {/* ── Run bar ── */}
-            <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5">
-              {/* Auto-save indicator */}
-              <div
-                className={`flex items-center gap-1 text-xs font-medium text-emerald-600 transition-opacity duration-300 ${
-                  saveStatus === 'saved' ? 'opacity-100' : 'opacity-0'
-                }`}
-                aria-live="polite"
-              >
-                <Check className="h-3.5 w-3.5" aria-hidden />
-                Saved
-              </div>
+              {/* Tests tab */}
+              {rightTab === 'tests' && (
+                judgeResult ? (
+                  <JudgePanel result={judgeResult} mode={judgeMode} />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                    {actionState === 'running' || actionState === 'submitting' ? (
+                      <>
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" aria-hidden />
+                        <p className="text-sm text-slate-400">
+                          {actionState === 'submitting'
+                            ? judgeProgress?.status === 'running' ? 'Running test cases…'
+                              : judgeProgress?.status === 'queued' ? 'Waiting in queue…'
+                              : 'Submitting…'
+                            : 'Running your code…'}
+                        </p>
+                        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-slate-700">
+                          <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
+                        </div>
+                      </>
+                    ) : actionError ? (
+                      <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+                        {/* Icon */}
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/10">
+                          <AlertCircle className="h-7 w-7 text-rose-400" aria-hidden />
+                        </div>
+                        {/* Message */}
+                        <div>
+                          <p className="text-sm font-semibold text-rose-400">
+                            {actionError.toLowerCase().includes('sign in')
+                              ? 'Sign in required'
+                              : actionError.toLowerCase().includes('too long') || actionError.toLowerCase().includes('time')
+                              ? 'Request timed out'
+                              : 'Something went wrong'}
+                          </p>
+                          <p className="mt-1.5 text-xs leading-5 text-slate-500">{actionError}</p>
+                        </div>
+                        {/* Retry */}
+                        {!actionError.toLowerCase().includes('sign in') && (
+                          <button
+                            type="button"
+                            onClick={judgeMode === 'run' ? handleRun : handleSubmit}
+                            disabled={isBusy}
+                            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                          >
+                            <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                            Try again
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <Play className="h-8 w-8 text-slate-600" aria-hidden />
+                        <p className="text-sm text-slate-500">
+                          Click <span className="font-semibold text-emerald-400">Run tests</span> to see results here.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )
+              )}
 
-              <SubmitButton
-                onRun={handleRun}
-                onSubmit={handleSubmit}
-                runState={actionState === 'running' ? 'running' : 'idle'}
-                submitState={actionState === 'submitting' ? 'submitting' : 'idle'}
-                submissionsRemaining={isPracticeMode ? null : (quota?.submissions_remaining ?? null)}
-                isPracticeMode={isPracticeMode}
-                disabled={isGrading}
-              />
+              {/* AI Grade tab */}
+              {rightTab === 'grade' && (
+                <div className="h-full overflow-y-auto p-4">
+                  {isPracticeMode ? (
+                    <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                      <ShieldAlert className="h-8 w-8 text-slate-600" aria-hidden />
+                      <p className="text-sm font-medium text-slate-400">AI grading is not available in practice mode.</p>
+                      <p className="text-xs text-slate-600">Submit your solution in an assessment to receive AI feedback.</p>
+                    </div>
+                  ) : isGrading && !gradingResult && !gradingError ? (
+                    <div className="flex items-center gap-2 text-sm italic text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Getting AI feedback…
+                    </div>
+                  ) : gradingError && !gradingResult ? (
+                    <div className="flex items-start gap-2 rounded-lg border border-rose-800 bg-rose-950/40 p-3">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" aria-hidden />
+                      <p className="text-sm text-rose-400">{gradingError}</p>
+                    </div>
+                  ) : gradingResult ? (
+                    <GradingResultPanel result={gradingResult} />
+                  ) : (
+                    <p className="text-sm italic text-slate-500">
+                      Press <span className="font-semibold text-indigo-400">Submit</span> to get AI feedback on your solution.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

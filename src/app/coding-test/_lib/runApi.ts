@@ -25,6 +25,13 @@ export class RunApiError extends Error {
 
 function toRunError(err: unknown, fallback: string): RunApiError {
   if (isAxiosError(err)) {
+    // Network timeout or connection abort — give a friendly message
+    if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK' || !err.response) {
+      return new RunApiError(
+        'The server is taking too long to respond. Please check your connection and try again.',
+        408,
+      );
+    }
     const status = err.response?.status;
     if (status === 401) return new RunApiError('Please sign in to run code.', 401);
     if (status === 404) return new RunApiError('Problem not found.', 404);
@@ -84,7 +91,7 @@ export async function submitAsync(
     const { data } = await httpClient.post<{ job_id: string; attempt_id: string; poll_url: string }>(
       `${BASE}/submit-async`,
       { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
-      { ...INLINE_AUTH_CONFIG, timeout: 30000 },
+      { ...INLINE_AUTH_CONFIG, timeout: 60000 },
     );
     return {
       job_id: data.job_id,

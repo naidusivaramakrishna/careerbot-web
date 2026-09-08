@@ -11,8 +11,10 @@ export interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
   onCtrlEnter?: () => void;
+  onCtrlS?: () => void;
   onLanguageChange?: (lang: CodingTestLanguage) => void;
   languages?: { value: CodingTestLanguage; label: string }[];
+  isMaximized?: boolean;
 }
 
 const LANG_ICONS: Record<string, string> = {
@@ -27,11 +29,16 @@ export default function CodeEditor({
   value,
   onChange,
   onCtrlEnter,
+  onCtrlS,
   onLanguageChange,
   languages,
+  isMaximized,
 }: CodeEditorProps) {
   const onCtrlEnterRef = useRef(onCtrlEnter);
   useEffect(() => { onCtrlEnterRef.current = onCtrlEnter; }, [onCtrlEnter]);
+
+  const onCtrlSRef = useRef(onCtrlS);
+  useEffect(() => { onCtrlSRef.current = onCtrlS; }, [onCtrlS]);
 
   const [copied, setCopied] = useState(false);
   const valueRef = useRef(value);
@@ -87,7 +94,7 @@ export default function CodeEditor({
           </div>
 
           {/* Right-side actions */}
-          <div className="flex items-center gap-1">
+          <div className={`flex items-center gap-1${isMaximized ? ' pr-40' : ''}`}>
             {/* Copy code */}
             <button
               type="button"
@@ -125,7 +132,12 @@ export default function CodeEditor({
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
             run: () => onCtrlEnterRef.current?.(),
           });
-
+          editor.addAction({
+            id: 'save-code',
+            label: 'Save Code (Ctrl+S)',
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+            run: () => onCtrlSRef.current?.(),
+          });
         }}
         loading={
           <div className="flex h-full items-center justify-center text-slate-400">
