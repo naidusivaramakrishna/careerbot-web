@@ -19,9 +19,17 @@ const SUBSCRIPTION_MAP: Record<string, string> = {
     'Max': 'max',
 }
 
+// Every role an account in this list can hold. It listed only User and Admin,
+// so a super admin could not filter for any of the others -- and platform
+// admins in particular were invisible on the one screen that lists everybody.
+// Values are the WIRE case the backend stores and queries.
 const ROLE_MAP: Record<string, string> = {
     'User': 'user',
-    'Admin': 'admin'
+    'Super Admin': 'super_admin',
+    'Admin': 'admin',
+    'Platform Admin': 'platform_admin',
+    'Moderator': 'moderator',
+    'Support': 'support',
 }
 
 const STATUS_MAP: Record<string, string> = {
@@ -68,7 +76,7 @@ export const UserListControls = memo(({
 
             {/* Role Dropdown */}
             <Dropdown
-                options={['Role', 'All', 'User', 'Admin']}
+                options={['Role', 'All', 'User', 'Super Admin', 'Admin', 'Platform Admin', 'Moderator', 'Support']}
                 defaultValue="Role"
                 onChange={handleRoleChange}
                 bgColor="bg-gray-100"
