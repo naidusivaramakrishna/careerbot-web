@@ -11,18 +11,19 @@ import {
 import dynamic from 'next/dynamic';
 import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 import { CodingTestApiError, fetchProblem, fetchProblems } from '../_lib/api';
-import { RunApiError, runCode, submitAsync, pollJudgeResult } from '../_lib/runApi';
+import { RunApiError, runAsync, submitCode } from '../_lib/runApi';
 import { GradingApiError, fetchQuota, mockGrade } from '../_lib/gradingApi';
 import {
   SessionApiError,
   createSession, patchDraft, submitSession, getSession,
 } from '../_lib/sessionApi';
 import JudgePanel from '../_components/JudgePanel';
+import CelebrationModal from '../_components/CelebrationModal';
 import GradingResultPanel from '@/components/coding-test/GradingResult';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
   CodingProblemDetail, CodingProblemSummary, CodingTestLanguage,
-  JudgeJobRecord, JudgeResponse, QuotaResponse, SubmitAsyncQueued, SubmitSolutionResponse,
+  JudgeJobRecord, JudgeResponse, QuotaResponse, SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
@@ -244,6 +245,14 @@ export default function CodingProblemDetailPage() {
   /* ── cancel in-flight submit on unmount ── */
   useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
 
+  /* ── celebration modal ── */
+  const [showCelebration, setShowCelebration] = useState(false);
+  useEffect(() => {
+    if (judgeResult?.verdict === 'accepted' && judgeMode === 'submit') {
+      setShowCelebration(true);
+    }
+  }, [judgeResult, judgeMode]);
+
   /* ── 1. Create session at assessment start ── */
   useEffect(() => {
     if (isPracticeMode || !isReady || sessionInit !== 'idle') return;
@@ -454,7 +463,7 @@ export default function CodingProblemDetailPage() {
     setJudgeMode('run');
     setRightTab('tests');
     try {
-      const res = await runCode(slug, language, code[language]);
+      const res = await runAsync(slug, language, code[language]);
       setJudgeResult(res);
       setActionState('done');
     } catch (err) {
@@ -484,36 +493,15 @@ export default function CodingProblemDetailPage() {
     setJudgeMode('submit');
     setRightTab('tests');
 
-    submitAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    submitAbortRef.current = ctrl;
-
-    let queued: SubmitAsyncQueued;
-    try {
-      queued = await submitAsync(slug, language, code[language]);
-    } catch (err) {
-      if (ctrl.signal.aborted) return;
-      setActionState('idle');
-      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to queue submission.');
-      return;
-    }
-
     let judgeRes: JudgeResponse;
     try {
-      judgeRes = await pollJudgeResult(
-        queued.poll_url,
-        (record) => setJudgeProgress(record),
-        ctrl.signal,
-      );
+      judgeRes = await submitCode(slug, language, code[language]);
     } catch (err) {
-      if (ctrl.signal.aborted) return;
       setActionState('idle');
-      setJudgeProgress(null);
-      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to get judge result.');
+      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to submit your solution.');
       return;
     }
 
-    setJudgeProgress(null);
     setJudgeResult(judgeRes);
     setActionState('done');
     if (judgeRes.verdict === 'accepted') router.refresh();
@@ -1249,6 +1237,19 @@ export default function CodingProblemDetailPage() {
 
           </div>
         </>
+      )}
+      {/* ── Celebration modal ── */}
+      {showCelebration && problem && (
+        <CelebrationModal
+          passed={judgeResult?.passed ?? 0}
+          total={judgeResult?.total ?? 0}
+          hasNext={!!nextProblem}
+          onClose={() => setShowCelebration(false)}
+          onNextChallenge={() => {
+            setShowCelebration(false);
+            if (nextProblem) navigateTo(nextProblem);
+          }}
+        />
       )}
     </main>
   );

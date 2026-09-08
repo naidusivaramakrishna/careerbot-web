@@ -61,6 +61,29 @@ export async function runCode(
   }
 }
 
+/**
+ * Runs visible test cases in parallel on the backend (POST /run-async).
+ * The backend now executes all test cases concurrently via asyncio.gather(),
+ * so this completes in ~3-5s regardless of test case count — no polling needed.
+ */
+export async function runAsync(
+  problemSlug: string,
+  language: CodingTestLanguage,
+  code: string,
+  timeoutMs = 10000,
+): Promise<JudgeResponse> {
+  try {
+    const { data } = await httpClient.post<JudgeResponse>(
+      `${BASE}/run-async`,
+      { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
+      { ...INLINE_AUTH_CONFIG, timeout: 60000 },
+    );
+    return data;
+  } catch (err) {
+    throw toRunError(err, 'Failed to run your code.');
+  }
+}
+
 /** Enqueue a free-form async execution job — no problem slug, no test cases. Returns job_id + stream_url. */
 export async function executeCode(
   language: CodingTestLanguage,
@@ -178,13 +201,13 @@ export async function submitCode(
   problemSlug: string,
   language: CodingTestLanguage,
   code: string,
-  timeoutMs = 5000,
+  timeoutMs = 10000,
 ): Promise<JudgeResponse> {
   try {
     const { data } = await httpClient.post<JudgeResponse>(
       `${BASE}/submit`,
       { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
-      INLINE_AUTH_CONFIG,
+      { ...INLINE_AUTH_CONFIG, timeout: 90000 },
     );
     return data;
   } catch (err) {
