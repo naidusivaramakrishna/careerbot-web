@@ -6,7 +6,7 @@ import { buildQueryString } from './utils';
 export interface AdminListQueryParams {
     page?: number;
     page_size?: number;
-    role?: 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'SUPPORT';
+    role?: 'SUPER_ADMIN' | 'ADMIN' | 'PLATFORM_ADMIN' | 'MODERATOR' | 'SUPPORT';
     status?: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
     search?: string;
     created_from?: string; // ISO format date
@@ -88,7 +88,7 @@ export interface UpdateAdminStatusResponse {
  * Query Parameters:
  * - page: Page number (default: 1)
  * - page_size: Items per page, 1-100 (default: 50)
- * - role: Filter by role (SUPER_ADMIN, ADMIN, MODERATOR, SUPPORT)
+ * - role: Filter by role (SUPER_ADMIN, ADMIN, PLATFORM_ADMIN, MODERATOR, SUPPORT)
  * - status: Filter by status (ACTIVE, SUSPENDED, INACTIVE)
  * - search: Search by name, email, or username
  * - created_from: Filter from date (ISO format)
@@ -321,11 +321,15 @@ export const getAdminStats = async (): Promise<{
     active_admins: number;
     suspended_admins: number;
     inactive_admins: number;
+    // BUILT BY A $group AGGREGATION, so a role with no admins is absent from
+    // the object rather than present as 0. Every key is optional for that
+    // reason: reading one without a fallback yields undefined, not zero.
     admins_by_role: {
-        super_admin: number;
-        admin: number;
-        moderator: number;
-        support: number;
+        super_admin?: number;
+        admin?: number;
+        platform_admin?: number;
+        moderator?: number;
+        support?: number;
     };
     recent_logins: Array<{
         admin_id: string;
@@ -340,11 +344,15 @@ export const getAdminStats = async (): Promise<{
             active_admins: number;
             suspended_admins: number;
             inactive_admins: number;
+            // BUILT BY A $group AGGREGATION, so a role with no admins is absent from
+            // the object rather than present as 0. Every key is optional for that
+            // reason: reading one without a fallback yields undefined, not zero.
             admins_by_role: {
-                super_admin: number;
-                admin: number;
-                moderator: number;
-                support: number;
+                super_admin?: number;
+                admin?: number;
+                platform_admin?: number;
+                moderator?: number;
+                support?: number;
             };
             recent_logins: Array<{
                 admin_id: string;

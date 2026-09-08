@@ -13,6 +13,7 @@ const STATUS_MAP: Record<string, string> = {
 const ROLE_MAP: Record<string, string> = {
     "Super Admin": "super_admin",
     "Admin": "admin",
+    "Platform Admin": "platform_admin",
     "Moderator": "moderator",
     "Support": "support",
 };
@@ -52,7 +53,7 @@ const SearchFilterControls: React.FC<SearchFilterControlsProps> = ({
 
             {/* Quick Filters */}
             <Dropdown
-                options={["Role", "All", "Super Admin", "Admin", "Moderator", "Support"]}
+                options={["Role", "All", "Super Admin", "Admin", "Platform Admin", "Moderator", "Support"]}
                 defaultValue="Role"
                 bgColor="bg-gray-100"
                 bgOptions="bg-white"
