@@ -72,3 +72,7 @@ verify-*.png
 
 # local browser audit captures (chrome profiles, cache, screenshots)
 /audit/
+
+# Python bytecode from scripts/ai_review (a .pyc was committed here by accident)
+__pycache__/
+*.pyc
