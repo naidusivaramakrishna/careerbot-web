@@ -93,7 +93,14 @@ function redirectToLogin(request: NextRequest): NextResponse {
     return NextResponse.redirect(target);
 }
 
-const ADMIN_ROLES = new Set(['admin', 'super_admin', 'moderator', 'support']);
+// `platform_admin` is here deliberately. The claim is that `actor` is always the
+// literal "admin" and never a role, in which case this entry is inert -- but the
+// other four entries only make sense if that claim is false, and the minting code
+// lives in careerbot-api where this repo cannot check it. If `actor` ever does
+// carry a role, omitting `platform_admin` redirects the first person ever granted
+// it to /admin/login on every /admin/* route, after a successful login, with no
+// error. Inert if the claim holds, the entire fix if it does not.
+const ADMIN_ROLES = new Set(['admin', 'super_admin', 'platform_admin', 'moderator', 'support']);
 
 // Logged at most once per process — this is a deployment fault, not a
 // per-request event, and it would otherwise repeat on every navigation.

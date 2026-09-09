@@ -85,8 +85,23 @@ describe('the role is visible everywhere an admin list is rendered', () => {
   });
 
   it('is requestable when creating an admin', () => {
+    // Wire case, mirroring the adminManagementApi assertion above: these are
+    // values that go on the wire, not TypeScript enum names. `createAdmin`
+    // posts the body verbatim with no normalisation, so an uppercase union
+    // here would send a value no AdminRole matches.
     const s = read('src/api/adminAuthApi.ts');
-    expect(s).toMatch(/role:[^;]*PLATFORM_ADMIN/);
+    expect(s).toMatch(/role:[^;]*'platform_admin'/);
+  });
+
+  it('gates /admin/* on a role set that includes platform_admin', () => {
+    // The middleware is the last thing between a logged-in platform admin and
+    // every admin route. If `actor` ever carries a role rather than the literal
+    // "admin", omitting it here redirects them to /admin/login after a
+    // SUCCESSFUL login, with no error -- this PR's goal, inverted. Including it
+    // is a no-op if `actor` is always "admin", so there is no reading of the
+    // contract where the omission is the correct one.
+    const s = read('src/middleware.ts');
+    expect(s).toMatch(/ADMIN_ROLES[^;]*'platform_admin'/);
   });
 
   it('appears in the role-count breakdown', () => {
