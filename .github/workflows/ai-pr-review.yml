@@ -8,11 +8,13 @@ on:
     # through was to hunt for "Re-run failed jobs" -- or to admin-merge, which is
     # the record-free bypass the label exists to replace. The job condition below
     # ignores every other label so this does not re-review on unrelated ones.
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   issue_comment:
+    # Security invariant: this privileged trigger checks out the default branch.
+    # The review script may fetch the PR ref for git diff/show, but must never
+    # check it out or execute PR-authored code. Dynamic commands run only from
+    # this trusted checkout. Keep this true if the review harness is changed.
     types: [created]
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       pr:
@@ -32,8 +34,7 @@ permissions:
 # Per-PR group: two different PRs no longer block each other (they still
 # serialise at the runner, which is the real capacity limit).
 # cancel-in-progress: a new push supersedes the previous review of that same
-# PR. Scheduled runs group by github.ref, so a newer hourly sweep replaces an
-# older one rather than stacking behind it.
+# PR.
 #
 # This block is copied verbatim from the master copy of this workflow, which
 # already had the fix. The feature branches were carrying a stale version.
@@ -53,13 +54,15 @@ concurrency:
 jobs:
   ai-review:
     if: >
-      github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&
+       github.event.pull_request.draft == false &&
        (github.event.action != 'labeled' && github.event.action != 'unlabeled'
         || github.event.label.name == 'ai-review-waive')) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.comment.author_association) &&
        startsWith(github.event.comment.body, '/ai-review'))
     runs-on: [self-hosted, ai-review]
     env:

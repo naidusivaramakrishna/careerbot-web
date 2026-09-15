@@ -11,6 +11,7 @@ on:
   # like a full pass.
   pull_request:
     branches: ['**']
+    types: [opened, synchronize, reopened, ready_for_review]
   # Direct pushes to the long-lived branches only. Feature branches are covered
   # by the pull_request trigger above; keeping `feature/**` here as well would
   # run every check TWICE per PR. Two runners are registered but only one is
@@ -126,6 +127,10 @@ jobs:
         run: npx tsc --noEmit 2>&1 | tail -20 || true
 
       - name: Build
+        # Draft PRs get dependency, lint and type-check feedback without using
+        # the runner for a production build. Marking ready triggers the build,
+        # which then reruns for every later commit on the non-draft PR.
+        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
