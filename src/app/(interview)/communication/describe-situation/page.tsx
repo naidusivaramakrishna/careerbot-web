@@ -543,6 +543,7 @@ export default function SituationExplainingPage() {
 
               <div className="mt-3 flex shrink-0 justify-end">
                 <button
+                  type="button"
                   onClick={handleUploadCurrentAudio}
                   disabled={!recordedAudio || isSubmitting}
                   className={`px-8 py-3 rounded-xl font-semibold text-sm transition-colors flex items-center gap-2 ${

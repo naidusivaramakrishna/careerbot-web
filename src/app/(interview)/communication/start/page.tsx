@@ -132,10 +132,11 @@ export default function CommunicationEntryPage() {
 
             <div className="space-y-4 px-5 py-5">
               <div>
-                <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                <label htmlFor="account-email" className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                   Account Email
                 </label>
                 <input
+                  id="account-email"
                   type="email"
                   value={loadingEmail ? '' : email}
                   readOnly
@@ -149,12 +150,12 @@ export default function CommunicationEntryPage() {
 
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <label className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  <span id="difficulty-level-label" className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                     Difficulty Level
-                  </label>
+                  </span>
                   <span className="text-xs font-bold text-slate-400">Required</span>
                 </div>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <div role="group" aria-labelledby="difficulty-level-label" className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                   {difficulties.map((d) => (
                     <button
                       key={d.key}

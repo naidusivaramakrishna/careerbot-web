@@ -224,6 +224,7 @@ export default function AssessmentSummaryPanel({
             )}
 
             <button
+              type="button"
               onClick={() => {
                 localStorage.setItem('assessment_end_time', new Date().toISOString());
                 onFinish();

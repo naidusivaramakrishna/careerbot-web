@@ -322,6 +322,7 @@ export default function CommunicationHeader() {
 
         {/* Right: Exit button */}
         <button
+          type="button"
           onClick={handleExit}
           className="justify-self-end flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
         >
@@ -349,6 +350,7 @@ export default function CommunicationHeader() {
                 You navigated away from the assessment. Switching tabs or apps is not allowed during the exam.
               </p>
               <button
+                type="button"
                 onClick={() => setTabSwitched(false)}
                 className="mt-6 w-full py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] text-white rounded-xl font-semibold text-sm transition-colors"
               >
@@ -398,6 +400,7 @@ export default function CommunicationHeader() {
                 The assessment must be completed in fullscreen mode. Please return to fullscreen to continue.
               </p>
               <button
+                type="button"
                 onClick={handleReturnFullscreen}
                 className="mt-6 w-full py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] text-white rounded-xl font-semibold text-sm transition-colors"
               >
@@ -445,6 +448,7 @@ export default function CommunicationHeader() {
                   </p>
                 )}
                 <button
+                  type="button"
                   onClick={handleReEnableDevices}
                   disabled={restarting}
                   className="mt-6 w-full py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2"
@@ -476,6 +480,7 @@ export default function CommunicationHeader() {
                 Your assessment time has ended. You can still share your feedback before leaving.
               </p>
               <button
+                type="button"
                 onClick={async () => {
                   localStorage.removeItem('test_start_date');
                   setTimeExpired(false);
@@ -503,12 +508,14 @@ export default function CommunicationHeader() {
               </p>
               <div className="flex gap-2.5 mt-6">
                 <button
+                  type="button"
                   onClick={handleConfirmExit}
                   className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm transition-colors"
                 >
                   Yes, Exit
                 </button>
                 <button
+                  type="button"
                   onClick={handleCancel}
                   className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm transition-colors"
                 >
