@@ -50,6 +50,11 @@ build-output.log
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...EXCEPT the template, which carries no secrets and is the only place the
+# required variables are written down. `.env*` hid it, so the one variable
+# whose absence is SILENT -- JWT_SECRET, without which every admin login
+# succeeds and then bounces -- was also the one nobody could look up.
+!.env.example
 
 # vercel
 .vercel
@@ -67,3 +72,7 @@ verify-*.png
 
 # local browser audit captures (chrome profiles, cache, screenshots)
 /audit/
+
+# Python bytecode from scripts/ai_review (a .pyc was committed here by accident)
+__pycache__/
+*.pyc

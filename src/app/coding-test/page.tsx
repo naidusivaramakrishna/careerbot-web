@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { fetchProblems } from './_lib/api';
-import { fetchProgress, fetchProblemsAnnotated, fetchQuota } from './_lib/gradingApi';
+import { fetchProgress, fetchQuota } from './_lib/gradingApi';
 import type { CodingTestLanguage, QuotaResponse } from './_lib/types';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
 
@@ -27,12 +27,37 @@ const LANG_CONFIG: {
   { value: 'cpp',    label: 'C++',    icon: <CppIcon /> },
 ];
 
+/** How many problems a language card shows.
+ *
+ * undefined = still loading, null = the request failed. Neither is a number,
+ * and neither may be interpolated into a template string: doing so put the
+ * literal text "null Problems" on the page in staging when the API was
+ * unreachable, which reads as a data problem rather than an outage.
+ */
+function formatCount(n: number | null | undefined): string {
+  if (n === undefined || n === null) return '— Problems';
+  return n === 1 ? '1 Problem' : `${n} Problems`;
+}
+
 const CIRC = 2 * Math.PI * 36; // ≈ 226.2
 
 const ONBOARDING_KEY = 'coding_test_onboarded';
 
 export default function CodingPracticeHub() {
-  const [totalProblems, setTotalProblems] = useState<number | null>(null);
+  // ONE total, shown on every card, because that is the truth: a problem is
+  // not owned by a language. Every problem carries starter_code for python,
+  // java, cpp AND c, so all 228 are solvable in all four and the API returns
+  // the same count for ?language=<any>. Asking per language would be four
+  // requests for one number.
+  //
+  // null means "we could not find out", which is NOT 0 and must never be
+  // rendered as a number.
+  const [total, setTotal] = useState<number | null>(null);
+  const [countsFailed, setCountsFailed] = useState(false);
+  // What the server said, when it said anything. A suspended feature is not
+  // the same as an unreachable one, and the person looking at the screen is
+  // the one who needs to know which it is.
+  const [countsMessage, setCountsMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress>({ solved: 0, attempted: 0, accuracy: 0 });
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [ready, setReady] = useState(false);
@@ -51,13 +76,21 @@ export default function CodingPracticeHub() {
   useEffect(() => {
     const loadData = () =>
       Promise.all([
-        fetchProblemsAnnotated()
-          .then((res) => res.length)
-          .catch(() => fetchProblems().then((r) => r.total).catch(() => null)),
+        // Read the server's `total`, never the length of what came back:
+        // counting returned rows reports the size of a page, not the size of
+        // the catalogue.
+        fetchProblems()
+          .then((r) => [r.total, null] as const)
+          .catch((e: unknown) => [
+            null,
+            e instanceof Error && e.message ? e.message : null,
+          ] as const),
         fetchProgress().catch(() => null),
         fetchQuota().catch(() => null),
-      ]).then(([total, prog, q]) => {
-        if (total !== null) setTotalProblems(total);
+      ]).then(([[count, message], prog, q]) => {
+        setTotal(count);
+        setCountsFailed(count === null);
+        setCountsMessage(message);
         if (prog) {
           const attempted = prog.summary.problems_attempted;
           const solved    = prog.summary.problems_accepted;
@@ -125,6 +158,18 @@ export default function CodingPracticeHub() {
           <div className="flex-1">
             <h2 className="mb-4 text-base font-semibold text-slate-800">Select a Language</h2>
 
+            {ready && countsFailed && (
+              <p
+                role="status"
+                className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              >
+                {countsMessage
+                  ? countsMessage
+                  : 'Problem counts are unavailable right now — the coding-test service could not be reached.'}{' '}
+                The languages below still open.
+              </p>
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {LANG_CONFIG.map((lang) => (
                 <Link
@@ -136,7 +181,7 @@ export default function CodingPracticeHub() {
                   <div>
                     <p className="text-base font-semibold text-slate-900">{lang.label}</p>
                     <p className="text-sm text-slate-500">
-                      {ready ? `${totalProblems} Problems` : '— Problems'}
+                      {formatCount(ready ? total : undefined)}
                     </p>
                   </div>
                 </Link>

@@ -34,7 +34,13 @@ export interface NotificationEvent {
  * Returns an EventSource that emits notifications
  */
 export function subscribeToNotifications(userId: string, onNotification: (notification: Notification) => void, onError?: (error: Event) => void): EventSource {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+  // '/api/v1', not an absolute localhost URL: this matches lib/http.ts, which
+  // is what the rest of the app uses. The old fallback pointed at port 8000
+  // whatever was actually listening there -- observed live opening an
+  // EventSource against an unrelated service and getting 401 on every
+  // institution screen. NEXT_PUBLIC_* is inlined at BUILD time, so a wrong
+  // fallback cannot be corrected by exporting the variable at runtime.
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '/api/v1';
   const url = `${baseUrl}/notifications/stream?user_id=${encodeURIComponent(userId)}`;
   const eventSource = new EventSource(url, {
     withCredentials: true,

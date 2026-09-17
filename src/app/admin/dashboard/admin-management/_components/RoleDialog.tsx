@@ -11,7 +11,14 @@ interface RoleDialogProps {
     onClose: () => void;
 }
 
-const VALID_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT']);
+// THE ROLES A SUPER ADMIN CAN ASSIGN. Must stay in step with AdminRole in
+// app/services/admin_service/models.py -- the backend accepts platform_admin
+// on PATCH /admin/auth/{id}/role, and this list omitting it was the only thing
+// preventing the role from ever being given to anybody. The role, its
+// permissions and every screen behind it were built and unreachable.
+const VALID_ROLES = new Set([
+    'SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT',
+]);
 
 const RoleDialog = memo(({ roleForm, setRoleForm, actionLoading, onUpdate, onClose }: RoleDialogProps) => {
     const [confirmed, setConfirmed] = useState(false);
@@ -30,7 +37,7 @@ const RoleDialog = memo(({ roleForm, setRoleForm, actionLoading, onUpdate, onClo
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">New Role</label>
                         <Dropdown
-                            options={["Role", "SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT"]}
+                            options={["Role", "SUPER_ADMIN", "ADMIN", "PLATFORM_ADMIN", "MODERATOR", "SUPPORT"]}
                             defaultValue={roleForm.role || undefined}
                             onChange={(value) => { setRoleForm(f => ({ ...f, role: value })); setConfirmed(false); }}
                             bgColor="bg-gray-100"

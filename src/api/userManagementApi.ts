@@ -7,7 +7,7 @@ import { buildQueryString } from './utils';
 export interface UserListQueryParams {
     page?: number;
     page_size?: number;
-    role?: 'user' | 'admin' | 'moderator';
+    role?: 'user' | 'super_admin' | 'admin' | 'platform_admin' | 'moderator' | 'support';
     status?: 'active' | 'inactive' | 'suspended' | 'pending_verification';
     subscription?: 'free' | 'pro' | 'max';
     search?: string;
@@ -56,7 +56,7 @@ export interface UserDetailsResponse {
 
 export interface UpdateUserRequest {
     full_name?: string;
-    role?: 'user' | 'admin' | 'moderator';
+    role?: 'user' | 'super_admin' | 'admin' | 'platform_admin' | 'moderator' | 'support';
 }
 
 export interface UpdateUserResponse {
@@ -180,7 +180,7 @@ export interface ExportUsersRequest {
  * Query Parameters:
  * - page: Page number (default: 1)
  * - page_size: Items per page, 1-100 (default: 50)
- * - role: Filter by user role (user, admin, moderator)
+ * - role: Filter by role (user, super_admin, admin, platform_admin, moderator, support)
  * - status: Filter by account status (active, inactive, suspended, pending_verification)
  * - subscription: Filter by subscription plan (free, basic, premium, pro, enterprise)
  * - search: Search email, username, or name
@@ -243,7 +243,7 @@ export const getUserDetails = async (
  * Allowed Updates:
  * - email: Change user email (must be unique)
  * - full_name: Update user's full name
- * - role: Change user role (user, admin, moderator)
+ * - role: Change role (user, super_admin, admin, platform_admin, moderator, support)
  * - subscription_plan: Modify subscription (free, pro, enterprise)
  */
 export const updateUser = async (
