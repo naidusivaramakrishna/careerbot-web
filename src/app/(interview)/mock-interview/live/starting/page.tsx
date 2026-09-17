@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 interface SessionParams {
   session_type: "hr" | "technical" | "managerial" | "technical_coding";
   resume_id?: string;
+  target_role?: string;
   enable_streaming_stt: boolean;
   voice: string;
   use_orchestrator: boolean;
@@ -49,17 +50,13 @@ export default function LiveStartingPage() {
     const voice = selectedInterviewer?.voice ?? (isVoiceMatchedToGender(params.voice, params.gender) ? params.voice : fallbackVoice);
     const interviewerName = selectedInterviewer?.name ?? params.interviewer_name;
     const interviewerGender = selectedInterviewer?.gender ?? params.gender;
-    const interviewerSlug = selectedInterviewer?.slug ?? params.interviewer_slug;
 
     const basePayload = {
       session_type: params.session_type,
       resume_id: params.resume_id,
+      target_role: params.target_role,
       enable_streaming_stt: params.enable_streaming_stt,
       voice,
-      interviewer_index: params.interviewer_index,
-      interviewer_name: interviewerName,
-      interviewer_gender: interviewerGender,
-      interviewer_slug: interviewerSlug,
     };
 
     const onSuccess = (data: Awaited<ReturnType<typeof createLiveSession>>) => {

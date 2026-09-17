@@ -11,7 +11,7 @@ import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackC
 import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
 import {
   submitPracticeAnswer, getNotes, MrTrQuestion, GenerateMrTrQuestionsResponse, SubmitAnswerResponse,
-} from "@/api/mockInterviewApi";
+} from "@/api/interviewPrepApi";
 
 const TECH_QUESTIONS_KEY = "tech_generated_questions";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";

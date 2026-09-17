@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getEnglishEssentials, EnglishEssentials } from "@/api/mockInterviewApi";
+import { getEnglishEssentials, EnglishEssentials } from "@/api/interviewPrepApi";
 import { Loader2 } from "lucide-react";
 import {
   Zap,

@@ -93,7 +93,10 @@ export default function MockSidebar() {
               Stay
             </button>
             <button
-              onClick={() => router.push("/dashboard")}
+              onClick={() => {
+                if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+                router.push("/dashboard");
+              }}
               className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
             >
               Exit

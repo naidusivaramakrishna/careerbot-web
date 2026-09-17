@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { getProfile } from "@/api/userApi";
-import { recoverSession, getUserProgress, getNotes, ActiveSession, UserProgress } from "@/api/mockInterviewApi";
+import { recoverSession, getUserProgress, ActiveSession, UserProgress } from "@/api/mockInterviewApi";
+import { getNotes } from "@/api/interviewPrepApi";
 import logger from "@/lib/logger";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

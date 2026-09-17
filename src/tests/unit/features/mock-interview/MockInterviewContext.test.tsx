@@ -18,6 +18,9 @@ vi.mock("@/api/userApi", () => ({
 vi.mock("@/api/mockInterviewApi", () => ({
   recoverSession: mocks.recoverSession,
   getUserProgress: mocks.getUserProgress,
+}));
+
+vi.mock("@/api/interviewPrepApi", () => ({
   getNotes: mocks.getNotes,
 }));
 

@@ -19,7 +19,7 @@ import {
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
 import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
 import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
-import { submitPracticeAnswer, getNotes, SubmitAnswerResponse, HrQuestion, GenerateHrQuestionsResponse } from "@/api/mockInterviewApi";
+import { submitPracticeAnswer, getNotes, SubmitAnswerResponse, HrQuestion, GenerateHrQuestionsResponse } from "@/api/interviewPrepApi";
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { logger } from "@/lib/logger";
-import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
+import { generateNotes, getNotes, updateNotes } from "@/api/interviewPrepApi";
 import { getAllResumesUnified } from "@/api/resumeApi";
 import { parseResumeForEnhancer } from "@/api/enhancerApi";
 import type { ResumeResponse } from "@/api/resumeApi";
@@ -745,7 +745,8 @@ export default function NotesPage() {
 
         <button
           onClick={handleGenerate}
-          className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
+          disabled={availableResumes.length === 0 && (uploading || !resumeId)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#2557a7]"
         >
           <Sparkles size={14} />
           Generate My Notes
