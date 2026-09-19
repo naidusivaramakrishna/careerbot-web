@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, X } from 'lucide-react';
 
 /* ── Confetti colours ── */
@@ -71,6 +72,7 @@ interface Props {
 export default function CelebrationModal({
   passed, total, onClose, onNextChallenge, hasNext,
 }: Props) {
+  const router = useRouter();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   /* Close on Escape */
@@ -107,11 +109,17 @@ export default function CelebrationModal({
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
+        @media (prefers-reduced-motion: reduce) {
+          [style*="animation"] { animation: none !important; }
+        }
       `}</style>
 
       {/* ── Backdrop ── */}
       <div
         ref={overlayRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Challenge complete"
         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
         onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       >
@@ -200,7 +208,7 @@ export default function CelebrationModal({
               ) : (
                 <button
                   type="button"
-                  onClick={() => { window.location.href = '/coding-test/problems'; }}
+                  onClick={() => router.push('/coding-test/problems')}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white shadow-md shadow-emerald-200 transition hover:bg-emerald-600 active:scale-95"
                 >
                   Browse More Problems

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight,
-  Clock, Database, FileText, Keyboard, Loader2, Maximize2,
+  Clock, Copy, Database, FileText, Keyboard, Loader2, Maximize2,
   Pause, Play, RotateCw, ShieldAlert, X,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -23,7 +23,7 @@ import GradingResultPanel from '@/components/coding-test/GradingResult';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
   CodingProblemDetail, CodingProblemSummary, CodingTestLanguage,
-  JudgeJobRecord, JudgeResponse, QuotaResponse, SubmitSolutionResponse,
+  JudgeResponse, QuotaResponse, SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
@@ -187,13 +187,11 @@ export default function CodingProblemDetailPage() {
   const [actionState,   setActionState]   = useState<ActionState>('idle');
   const [judgeResult,   setJudgeResult]   = useState<JudgeResponse | null>(null);
   const [judgeMode,     setJudgeMode]     = useState<'run' | 'submit'>('run');
-  const [judgeProgress, setJudgeProgress] = useState<JudgeJobRecord | null>(null);
-  const [actionError,   setActionError]   = useState('');
+  const [actionError,   setActionError]   = useState<{ message: string; status?: number } | null>(null);
   const [gradingResult, setGradingResult] = useState<SubmitSolutionResponse | null>(null);
   const [gradingError,  setGradingError]  = useState('');
   const [isGrading,     setIsGrading]     = useState(false);
   const [quota,         setQuota]         = useState<QuotaResponse | null>(null);
-  const submitAbortRef = useRef<AbortController | null>(null);
 
   /* ── timer ── */
   const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
@@ -236,14 +234,21 @@ export default function CodingProblemDetailPage() {
   /* ── auto-save indicator ── */
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* ── copy code ── */
+  const [copied, setCopied] = useState(false);
+  const handleCopyCode = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(code[language]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* non-secure context — silently ignore */ }
+  }, [code, language]);
   const triggerSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus('saved');
     saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
   }, []);
-
-  /* ── cancel in-flight submit on unmount ── */
-  useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
 
   /* ── celebration modal ── */
   const [showCelebration, setShowCelebration] = useState(false);
@@ -278,16 +283,31 @@ export default function CodingProblemDetailPage() {
   useEffect(() => {
     if (!sessionId || isPracticeMode) return;
     const id = setInterval(() => {
-      // Fire-and-forget; failures are transient — the server sweeper is the safety net.
       patchDraft(sessionId, codeRef.current[languageRef.current], languageRef.current).catch(() => {});
     }, 30_000);
     return () => clearInterval(id);
+  }, [sessionId, isPracticeMode]);
+
+  /* ── 2b. Flush draft on tab hide / page unload ── */
+  useEffect(() => {
+    if (!sessionId || isPracticeMode) return;
+    const flush = () => {
+      patchDraft(sessionId, codeRef.current[languageRef.current], languageRef.current).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', flush);
+    };
   }, [sessionId, isPracticeMode]);
 
   /* ── 3. Auto-submit when the timer reaches 00:00 ── */
   const fireAutoSubmit = useCallback(async (sid: string) => {
     setTimeUpState('submitting');
     try {
+      // Flush latest editor state before submitting so the server has the final code.
+      await patchDraft(sid, codeRef.current[languageRef.current], languageRef.current).catch(() => {});
       await submitSession(sid);
       setTimeUpState('submitted');
     } catch (err) {
@@ -318,7 +338,9 @@ export default function CodingProblemDetailPage() {
   /* ── intercept Ctrl+S at the document level (Ctrl+R wired after handleRun) ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         triggerSave();
       }
@@ -431,8 +453,7 @@ export default function CodingProblemDetailPage() {
 
   /* ── helpers ── */
   const clearRunOutput = useCallback(() => {
-    setJudgeResult(null); setActionError(''); setActionState('idle');
-    setJudgeProgress(null);
+    setJudgeResult(null); setActionError(null); setActionState('idle');
     setGradingResult(null); setGradingError(''); setIsGrading(false);
   }, []);
 
@@ -457,8 +478,8 @@ export default function CodingProblemDetailPage() {
   const handleRun = useCallback(async () => {
     if (isBusy || isGrading) return;
     const src = code[language]?.trim();
-    if (!src) { setActionError('Write some code before running.'); return; }
-    setActionState('running'); setActionError(''); setJudgeResult(null);
+    if (!src) { setActionError({ message: 'Write some code before running.' }); return; }
+    setActionState('running'); setActionError(null); setJudgeResult(null);
     setGradingResult(null); setGradingError('');
     setJudgeMode('run');
     setRightTab('tests');
@@ -468,14 +489,19 @@ export default function CodingProblemDetailPage() {
       setActionState('done');
     } catch (err) {
       setActionState('idle');
-      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to run your code.');
+      setActionError({
+        message: err instanceof Error ? err.message : 'Failed to run your code.',
+        status: err instanceof RunApiError ? err.status : undefined,
+      });
     }
   }, [isBusy, isGrading, code, language, slug]);
 
   /* ── Ctrl+R → Run (wired after handleRun to avoid TDZ) ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
         e.preventDefault();
         handleRun();
       }
@@ -487,9 +513,9 @@ export default function CodingProblemDetailPage() {
   const handleSubmit = useCallback(async () => {
     if (isBusy) return;
     const src = code[language]?.trim();
-    if (!src) { setActionError('Write some code before submitting.'); return; }
-    setActionState('submitting'); setActionError('');
-    setJudgeResult(null); setJudgeProgress(null); setGradingResult(null); setGradingError('');
+    if (!src) { setActionError({ message: 'Write some code before submitting.' }); return; }
+    setActionState('submitting'); setActionError(null);
+    setJudgeResult(null); setGradingResult(null); setGradingError('');
     setJudgeMode('submit');
     setRightTab('tests');
 
@@ -498,7 +524,10 @@ export default function CodingProblemDetailPage() {
       judgeRes = await submitCode(slug, language, code[language]);
     } catch (err) {
       setActionState('idle');
-      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to submit your solution.');
+      setActionError({
+        message: err instanceof Error ? err.message : 'Failed to submit your solution.',
+        status: err instanceof RunApiError ? err.status : undefined,
+      });
       return;
     }
 
@@ -984,7 +1013,7 @@ export default function CodingProblemDetailPage() {
                 <button
                   type="button"
                   onClick={handleRun}
-                  disabled={isBusy || isGrading}
+                  disabled={isBusy || isGrading || (!isPracticeMode && sessionInit === 'error')}
                   className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionState === 'running'
@@ -999,7 +1028,7 @@ export default function CodingProblemDetailPage() {
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  disabled={isBusy || isGrading}
+                  disabled={isBusy || isGrading || (!isPracticeMode && sessionInit === 'error')}
                   className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionState === 'submitting'
@@ -1063,6 +1092,18 @@ export default function CodingProblemDetailPage() {
 
                 <button
                   type="button"
+                  onClick={handleCopyCode}
+                  title={copied ? 'Copied!' : 'Copy code'}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-[#3c3c3c] hover:text-slate-200"
+                >
+                  {copied
+                    ? <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+                    : <Copy  className="h-3.5 w-3.5"                  aria-hidden />}
+                  <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={resetToStarter}
                   title="Reset to starter code"
                   className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-[#3c3c3c] hover:text-slate-200"
@@ -1123,11 +1164,7 @@ export default function CodingProblemDetailPage() {
                 <div className="ml-auto flex items-center gap-1.5 pr-3">
                   <Loader2 className="h-3 w-3 animate-spin text-slate-500" aria-hidden />
                   <span className="text-[11px] text-slate-500">
-                    {actionState === 'submitting'
-                      ? judgeProgress?.status === 'running' ? 'Running…'
-                        : judgeProgress?.status === 'queued' ? 'Queued…'
-                        : 'Submitting…'
-                      : 'Running…'}
+                    {actionState === 'submitting' ? 'Submitting…' : 'Running…'}
                   </span>
                 </div>
               )}
@@ -1135,74 +1172,23 @@ export default function CodingProblemDetailPage() {
 
             {/* ── Tab content ── */}
             <div className="flex-1 overflow-hidden">
-              {/* Code Editor tab */}
-              {rightTab === 'code' && (
-                <div className="h-full">
-                  {editorNode}
-                </div>
-              )}
+              {/* Code Editor tab — always mounted so Monaco state is preserved */}
+              <div className={`h-full ${rightTab !== 'code' ? 'hidden' : ''}`}>
+                {editorNode}
+              </div>
 
-              {/* Tests tab */}
-              {rightTab === 'tests' && (
-                judgeResult ? (
-                  <JudgePanel result={judgeResult} mode={judgeMode} />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-                    {actionState === 'running' || actionState === 'submitting' ? (
-                      <>
-                        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" aria-hidden />
-                        <p className="text-sm text-slate-400">
-                          {actionState === 'submitting'
-                            ? judgeProgress?.status === 'running' ? 'Running test cases…'
-                              : judgeProgress?.status === 'queued' ? 'Waiting in queue…'
-                              : 'Submitting…'
-                            : 'Running your code…'}
-                        </p>
-                        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-slate-700">
-                          <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
-                        </div>
-                      </>
-                    ) : actionError ? (
-                      <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
-                        {/* Icon */}
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/10">
-                          <AlertCircle className="h-7 w-7 text-rose-400" aria-hidden />
-                        </div>
-                        {/* Message */}
-                        <div>
-                          <p className="text-sm font-semibold text-rose-400">
-                            {actionError.toLowerCase().includes('sign in')
-                              ? 'Sign in required'
-                              : actionError.toLowerCase().includes('too long') || actionError.toLowerCase().includes('time')
-                              ? 'Request timed out'
-                              : 'Something went wrong'}
-                          </p>
-                          <p className="mt-1.5 text-xs leading-5 text-slate-500">{actionError}</p>
-                        </div>
-                        {/* Retry */}
-                        {!actionError.toLowerCase().includes('sign in') && (
-                          <button
-                            type="button"
-                            onClick={judgeMode === 'run' ? handleRun : handleSubmit}
-                            disabled={isBusy}
-                            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
-                          >
-                            <RotateCw className="h-3.5 w-3.5" aria-hidden />
-                            Try again
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        <Play className="h-8 w-8 text-slate-600" aria-hidden />
-                        <p className="text-sm text-slate-500">
-                          Click <span className="font-semibold text-emerald-400">Run tests</span> to see results here.
-                        </p>
-                      </>
-                    )}
-                  </div>
-                )
-              )}
+              {/* Tests tab — JudgePanel always mounted so run history is preserved */}
+              <div className={`h-full ${rightTab !== 'tests' ? 'hidden' : ''}`}>
+                <JudgePanel
+                  result={judgeResult}
+                  mode={judgeMode}
+                  isLoading={isBusy}
+                  loadingMessage={actionState === 'submitting' ? 'Submitting…' : 'Running your code…'}
+                  errorMessage={actionError?.message}
+                  errorStatus={actionError?.status}
+                  onRetry={judgeMode === 'run' ? handleRun : handleSubmit}
+                />
+              </div>
 
               {/* AI Grade tab */}
               {rightTab === 'grade' && (

@@ -113,8 +113,8 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
         stderr: judgeRes.results.find(r => r.stderr)?.stderr ?? '',
         exit_code: judgeRes.verdict === 'accepted' ? 0 : 1,
       });
-    } catch {
-      setRunResult({ stdout: "", stderr: "Execution failed.", exit_code: 1 });
+    } catch (err) {
+      setRunResult({ stdout: "", stderr: err instanceof Error ? err.message : "Execution failed.", exit_code: 1 });
     } finally {
       setIsRunning(false);
     }

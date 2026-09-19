@@ -1,4 +1,14 @@
 export type CodingTestDifficulty = 'easy' | 'medium' | 'hard';
+
+export interface TopicInfo {
+  name: string;
+  is_starred: boolean;
+}
+
+export interface TopicCategory {
+  category: string;
+  topics: TopicInfo[];
+}
 export type CodingTestLanguage = 'python' | 'java' | 'cpp' | 'c';
 
 export interface CodingProblemSummary {
@@ -232,18 +242,6 @@ export interface RunResult {
   stdout: string;
   stderr: string;
   exit_code: number;
-}
-
-// ---- Assessment session (timed exam) ----------------------------------------
-
-export type AssessmentSessionStatus = 'active' | 'submitted' | 'expired';
-
-export interface AssessmentSession {
-  session_id: string;
-  problem_slug: string;
-  language: CodingTestLanguage;
-  expires_at: string; // ISO 8601
-  status: AssessmentSessionStatus;
 }
 
 // ---- Per-test-case execution results (parsed from Python harness output) ---

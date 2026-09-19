@@ -25,18 +25,29 @@ export class RunApiError extends Error {
 
 function toRunError(err: unknown, fallback: string): RunApiError {
   if (isAxiosError(err)) {
-    // Network timeout or connection abort — give a friendly message
-    if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK' || !err.response) {
+    // Abort / cancellation — surface as a distinct case so callers can ignore it.
+    if (err.code === 'ERR_CANCELED') {
+      return new RunApiError('Request cancelled.', 0);
+    }
+    // Connection timeout (axios timeout setting exceeded).
+    if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
       return new RunApiError(
         'The server is taking too long to respond. Please check your connection and try again.',
         408,
       );
     }
-    const status = err.response?.status;
+    // No response received (ERR_NETWORK, DNS failure, CORS, offline, etc.).
+    if (!err.response) {
+      return new RunApiError(
+        'Could not reach the server. Please check your connection and try again.',
+        0,
+      );
+    }
+    const status = err.response.status;
     if (status === 401) return new RunApiError('Please sign in to run code.', 401);
     if (status === 404) return new RunApiError('Problem not found.', 404);
     if (status === 503) return new RunApiError('Code execution is temporarily unavailable. Please try again later.', 503);
-    const detail = (err.response?.data as { detail?: string } | undefined)?.detail ?? err.message;
+    const detail = (err.response.data as { detail?: string } | undefined)?.detail ?? err.message;
     return new RunApiError(detail || fallback, status);
   }
   return new RunApiError(fallback);
