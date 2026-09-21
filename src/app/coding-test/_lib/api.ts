@@ -3,6 +3,7 @@ import type {
   CodingProblemDetail,
   CodingProblemListFilters,
   CodingProblemListResponse,
+  TopicCategory,
 } from './types';
 
 class CodingTestApiError extends Error {
@@ -72,6 +73,10 @@ export async function fetchProblem(
   signal?: AbortSignal,
 ): Promise<CodingProblemDetail> {
   return getJson<CodingProblemDetail>(CODING_TEST_API.problem(slug), signal);
+}
+
+export async function fetchTopics(signal?: AbortSignal): Promise<TopicCategory[]> {
+  return getJson<TopicCategory[]>(CODING_TEST_API.topics, signal);
 }
 
 export { CodingTestApiError };

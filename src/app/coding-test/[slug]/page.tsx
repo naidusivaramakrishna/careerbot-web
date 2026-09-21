@@ -129,6 +129,10 @@ export default function CodingProblemDetailPage() {
     const ctrl = new AbortController();
     setLoadState('loading');
     setErrorMessage('');
+    // Reset all run/submit output so prior-problem results never bleed into the
+    // next problem when navigating with Prev/Next (same component instance).
+    setJudgeResult(null); setActionError(null); setActionState('idle');
+    setGradingResult(null); setGradingError(''); setIsGrading(false);
     fetchProblem(slug, ctrl.signal)
       .then((res) => {
         setProblem(res);
@@ -201,7 +205,15 @@ export default function CodingProblemDetailPage() {
       if (timerSeconds === 0) setTimerRunning(false);
       return;
     }
-    const id = setInterval(() => setTimerSeconds((s) => s - 1), 1000);
+    const id = setInterval(() => {
+      if (sessionExpiresAtRef.current) {
+        // Drive from the server-issued deadline so background-tab throttling
+        // cannot let the timer drift and allow candidates to keep working.
+        setTimerSeconds(Math.max(0, Math.round((sessionExpiresAtRef.current - Date.now()) / 1000)));
+      } else {
+        setTimerSeconds((s) => Math.max(0, s - 1));
+      }
+    }, 1000);
     return () => clearInterval(id);
   }, [timerRunning, timerSeconds]);
 
@@ -218,7 +230,10 @@ export default function CodingProblemDetailPage() {
   const [sessionId,   setSessionId]   = useState<string | null>(null);
   const [sessionInit, setSessionInit] = useState<SessionInitState>('idle');
   const [timeUpState, setTimeUpState] = useState<TimeUpState>('idle');
-  const sessionIdRef  = useRef<string | null>(null);
+  const sessionIdRef      = useRef<string | null>(null);
+  // Absolute server deadline (ms since epoch) used to drive the timer accurately
+  // without drifting from background-tab throttling.
+  const sessionExpiresAtRef = useRef<number | null>(null);
   // Refs keep interval/effect callbacks current without stale closure.
   const codeRef     = useRef(code);
   const languageRef = useRef(language);
@@ -266,12 +281,11 @@ export default function CodingProblemDetailPage() {
       .then((session) => {
         setSessionId(session.session_id);
         sessionIdRef.current = session.session_id;
-        // Drive the timer from the server-issued deadline so it stays accurate
-        // even across soft page refreshes.
-        const secsLeft = Math.max(
-          0,
-          Math.round((new Date(session.expires_at).getTime() - Date.now()) / 1000),
-        );
+        // Store the server deadline so the timer tick can derive remaining time
+        // accurately instead of relying on a decrement that drifts under throttling.
+        const expiresMs = new Date(session.expires_at).getTime();
+        sessionExpiresAtRef.current = expiresMs;
+        const secsLeft = Math.max(0, Math.round((expiresMs - Date.now()) / 1000));
         setTimerSeconds(secsLeft);
         setTimerRunning(true);
         setSessionInit('ready');
@@ -358,6 +372,10 @@ export default function CodingProblemDetailPage() {
   // problem the user has since navigated to.
   const gradeRequestRef = useRef(0);
   const slugRef = useRef(slug);
+  // Abort controller for the in-flight submit request so navigation away
+  // cancels the POST and prevents stale results landing on a different problem.
+  const submitAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
   useEffect(() => { slugRef.current = slug; }, [slug]);
   useEffect(() => {
     const onVis  = () => {
@@ -519,10 +537,18 @@ export default function CodingProblemDetailPage() {
     setJudgeMode('submit');
     setRightTab('tests');
 
+    // Cancel any previously in-flight submit, start a fresh one.
+    submitAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    submitAbortRef.current = ctrl;
+    const submittedSlug = slug; // capture for identity guard after await
+
     let judgeRes: JudgeResponse;
     try {
-      judgeRes = await submitCode(slug, language, code[language]);
+      judgeRes = await submitCode(slug, language, code[language], undefined, ctrl.signal);
     } catch (err) {
+      // Navigation (abort) or stale response — silently discard.
+      if (ctrl.signal.aborted || submittedSlug !== slugRef.current) return;
       setActionState('idle');
       setActionError({
         message: err instanceof Error ? err.message : 'Failed to submit your solution.',
@@ -530,6 +556,10 @@ export default function CodingProblemDetailPage() {
       });
       return;
     }
+
+    // Guard: user may have navigated to a different problem while the 90 s
+    // request was in flight — don't paint the new problem with old results.
+    if (ctrl.signal.aborted || submittedSlug !== slugRef.current) return;
 
     setJudgeResult(judgeRes);
     setActionState('done');
@@ -742,15 +772,19 @@ export default function CodingProblemDetailPage() {
             <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition-colors duration-500 ${timerBadge}`}>
               <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
               <span className="font-mono text-sm font-semibold tabular-nums">{formatTimer(timerSeconds)}</span>
-              <button
-                type="button"
-                onClick={() => setTimerRunning((r) => !r)}
-                title={timerRunning ? 'Pause timer' : 'Start timer'}
-                className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
-              >
-                {timerRunning ? <Pause className="h-3.5 w-3.5" aria-hidden /> : <Play className="h-3.5 w-3.5" aria-hidden />}
-              </button>
-              {!timerRunning && timerSeconds < TIMER_DEFAULT && (
+              {/* Pause / Reset only available in practice mode — hiding them in
+                  assessment mode prevents candidates from bypassing the timer. */}
+              {isPracticeMode && (
+                <button
+                  type="button"
+                  onClick={() => setTimerRunning((r) => !r)}
+                  title={timerRunning ? 'Pause timer' : 'Start timer'}
+                  className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  {timerRunning ? <Pause className="h-3.5 w-3.5" aria-hidden /> : <Play className="h-3.5 w-3.5" aria-hidden />}
+                </button>
+              )}
+              {isPracticeMode && !timerRunning && timerSeconds < TIMER_DEFAULT && (
                 <button
                   type="button"
                   onClick={() => setTimerSeconds(TIMER_DEFAULT)}
@@ -1177,9 +1211,10 @@ export default function CodingProblemDetailPage() {
                 {editorNode}
               </div>
 
-              {/* Tests tab — JudgePanel always mounted so run history is preserved */}
+              {/* Tests tab — keyed by slug so internal history resets per problem */}
               <div className={`h-full ${rightTab !== 'tests' ? 'hidden' : ''}`}>
                 <JudgePanel
+                  key={slug}
                   result={judgeResult}
                   mode={judgeMode}
                   isLoading={isBusy}
@@ -1187,6 +1222,7 @@ export default function CodingProblemDetailPage() {
                   errorMessage={actionError?.message}
                   errorStatus={actionError?.status}
                   onRetry={judgeMode === 'run' ? handleRun : handleSubmit}
+                  onFinish={() => { setShowCelebration(false); if (nextProblem) navigateTo(nextProblem); }}
                 />
               </div>
 

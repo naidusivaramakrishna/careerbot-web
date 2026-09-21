@@ -73,7 +73,16 @@ export default function CelebrationModal({
   passed, total, onClose, onNextChallenge, hasNext,
 }: Props) {
   const router = useRouter();
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const overlayRef    = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const prevFocusRef   = useRef<HTMLElement | null>(null);
+
+  /* Move focus into the dialog on mount; restore it on unmount. */
+  useEffect(() => {
+    prevFocusRef.current = document.activeElement as HTMLElement;
+    closeButtonRef.current?.focus();
+    return () => { prevFocusRef.current?.focus(); };
+  }, []);
 
   /* Close on Escape */
   useEffect(() => {
@@ -84,7 +93,8 @@ export default function CelebrationModal({
 
   return (
     <>
-      {/* ── Keyframe injections ── */}
+      {/* ── Keyframe injections (scoped to .celebration-modal so the
+          reduced-motion override does not affect the rest of the app) ── */}
       <style>{`
         @keyframes confetti-fall {
           0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
@@ -110,7 +120,7 @@ export default function CelebrationModal({
           to   { transform: rotate(360deg); }
         }
         @media (prefers-reduced-motion: reduce) {
-          [style*="animation"] { animation: none !important; }
+          .celebration-modal [style*="animation"] { animation: none !important; }
         }
       `}</style>
 
@@ -145,11 +155,12 @@ export default function CelebrationModal({
 
         {/* ── Card ── */}
         <div
-          className="relative mx-4 w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl"
+          className="celebration-modal relative mx-4 w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl"
           style={{ animation: 'celebration-in 0.45s cubic-bezier(0.34,1.56,0.64,1) both' }}
         >
-          {/* Close button */}
+          {/* Close button — receives focus on mount */}
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"

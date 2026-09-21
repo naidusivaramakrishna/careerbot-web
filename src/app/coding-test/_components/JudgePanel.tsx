@@ -6,7 +6,7 @@ import {
   Clock, FlaskConical, Lock, Loader2, Play, RotateCw, XCircle,
 } from 'lucide-react';
 
-import type { JudgeResponse, JudgeTestCaseResult, JudgeStatus } from '../_lib/types';
+import type { JudgeResponse, JudgeTestCaseResult, JudgeStatus, JudgeVerdict } from '../_lib/types';
 
 /* ── per-status config ── */
 const STATUS_CFG: Record<JudgeStatus, { color: string; label: string }> = {
@@ -15,6 +15,17 @@ const STATUS_CFG: Record<JudgeStatus, { color: string; label: string }> = {
   runtime_error:         { color: 'text-amber-500',   label: 'Runtime Error'},
   time_limit_exceeded:   { color: 'text-orange-500',  label: 'TLE'         },
   memory_limit_exceeded: { color: 'text-red-500',     label: 'MLE'         },
+};
+
+/* ── verdict → heading for non-standard outcomes ── */
+const VERDICT_HEADING: Partial<Record<JudgeVerdict, string>> = {
+  compile_error:         'Compilation Error',
+  time_limit_compile:    'Compile Time Limit Exceeded',
+  execution_unavailable: 'Execution Unavailable',
+  no_test_cases:         'No Test Cases Found',
+  runtime_error:         'Runtime Error',
+  time_limit_exceeded:   'Time Limit Exceeded',
+  memory_limit_exceeded: 'Memory Limit Exceeded',
 };
 
 function timeAgo(date: Date) {
@@ -111,10 +122,11 @@ interface JudgePanelProps {
   errorMessage?: string;
   errorStatus?: number;
   onRetry?: () => void;
+  onFinish?: () => void;
 }
 
 export default function JudgePanel({
-  result, mode, isLoading, loadingMessage, errorMessage, errorStatus, onRetry,
+  result, mode, isLoading, loadingMessage, errorMessage, errorStatus, onRetry, onFinish,
 }: JudgePanelProps) {
   const counterRef = useRef(0);
   const [history,    setHistory]    = useState<HistoryItem[]>([]);
@@ -137,46 +149,6 @@ export default function JudgePanel({
   }, []);
 
   const selected = history.find((h) => h.id === selectedId) ?? history[0];
-
-  /* ── Main content when no result is selected ── */
-  const emptyContent = isLoading ? (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-      <Loader2 className="h-6 w-6 animate-spin text-indigo-400" aria-hidden />
-      <p className="text-sm text-slate-400">{loadingMessage ?? 'Running your code…'}</p>
-      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-slate-700">
-        <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
-      </div>
-    </div>
-  ) : errorMessage ? (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/10">
-        <AlertCircle className="h-7 w-7 text-rose-400" aria-hidden />
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-rose-400">
-          {errorStatus === 401 ? 'Sign in required' : errorStatus === 408 ? 'Request timed out' : 'Something went wrong'}
-        </p>
-        <p className="mt-1.5 text-xs leading-5 text-slate-500">{errorMessage}</p>
-      </div>
-      {errorStatus !== 401 && onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500"
-        >
-          <RotateCw className="h-3.5 w-3.5" aria-hidden />
-          Try again
-        </button>
-      )}
-    </div>
-  ) : (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-      <Play className="h-8 w-8 text-slate-600" aria-hidden />
-      <p className="text-sm text-slate-500">
-        Click <span className="font-semibold text-emerald-400">Run tests</span> to see results here.
-      </p>
-    </div>
-  );
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -223,112 +195,170 @@ export default function JudgePanel({
         })}
       </div>
 
-      {/* ══ Main content ══ */}
+      {/* ══ Main content ══
+          Loading and error states always supersede any prior result so the
+          user can always see the spinner / error card after a subsequent run. */}
       <div className="flex flex-1 flex-col overflow-hidden bg-white">
-        {!selected ? emptyContent : (() => {
-          const { result: sel, mode: selMode } = selected;
-          const accepted = sel.verdict === 'accepted';
-          const failed   = sel.total - sel.passed;
+        {isLoading ? (
+          /* ── Running spinner ── */
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+            <Loader2 className="h-6 w-6 animate-spin text-indigo-400" aria-hidden />
+            <p className="text-sm text-slate-400">{loadingMessage ?? 'Running your code…'}</p>
+            <div className="h-1.5 w-40 overflow-hidden rounded-full bg-slate-200">
+              <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
+            </div>
+          </div>
+        ) : errorMessage ? (
+          /* ── Error card ── */
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/10">
+              <AlertCircle className="h-7 w-7 text-rose-400" aria-hidden />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-rose-400">
+                {errorStatus === 401 ? 'Sign in required' : errorStatus === 408 ? 'Request timed out' : 'Something went wrong'}
+              </p>
+              <p className="mt-1.5 text-xs leading-5 text-slate-500">{errorMessage}</p>
+            </div>
+            {errorStatus !== 401 && onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500"
+              >
+                <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                Try again
+              </button>
+            )}
+          </div>
+        ) : !selected ? (
+          /* ── Idle / no results yet ── */
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+            <Play className="h-8 w-8 text-slate-600" aria-hidden />
+            <p className="text-sm text-slate-500">
+              Click <span className="font-semibold text-emerald-600">Run tests</span> to see results here.
+            </p>
+          </div>
+        ) : (
+          /* ── Result view ── */
+          (() => {
+            const { result: sel, mode: selMode } = selected;
+            const accepted = sel.verdict === 'accepted';
+            const failed   = sel.total - sel.passed;
 
-          const verdictHeading =
-            selMode === 'submit'
-              ? accepted ? 'Submission Passed' : 'Submission Failed'
-              : accepted ? 'All Sample Tests Passed' : 'Some Tests Failed';
+            const verdictHeading =
+              VERDICT_HEADING[sel.verdict]
+                ?? (selMode === 'submit'
+                  ? accepted ? 'Submission Passed' : 'Submission Failed'
+                  : accepted ? 'All Sample Tests Passed' : 'Some Tests Failed');
 
-          const verdictSub =
-            selMode === 'submit'
-              ? `Submitted ${timeAgo(selected.timestamp)}`
-              : `Run ${timeAgo(selected.timestamp)}`;
+            const verdictSub =
+              selMode === 'submit'
+                ? `Submitted ${timeAgo(selected.timestamp)}`
+                : `Run ${timeAgo(selected.timestamp)}`;
 
-          return (
-            <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-5">
-                {/* Verdict heading */}
-                <h3 className={`text-xl font-bold ${accepted ? 'text-slate-800' : 'text-rose-600'}`}>
-                  {verdictHeading}
-                </h3>
-                <p className="mt-0.5 text-sm text-slate-500">{verdictSub}</p>
+            /* Highlight non-pass, non-wrong-answer verdicts distinctly */
+            const isDiagnosticVerdict = !!VERDICT_HEADING[sel.verdict];
 
-                {/* Score bar */}
-                <div className="mt-4">
-                  <div className="mb-1.5 flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-500">
-                      {sel.passed} of {sel.total} test{sel.total !== 1 ? 's' : ''} passed
-                    </span>
-                    {failed > 0 && (
-                      <span className="font-semibold text-rose-500">{failed} failed</span>
-                    )}
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ${
-                        accepted ? 'bg-emerald-500' : 'bg-amber-500'
-                      }`}
-                      style={{ width: sel.total > 0 ? `${(sel.passed / sel.total) * 100}%` : '0%' }}
-                    />
-                  </div>
-                </div>
+            return (
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-5">
+                  {/* Verdict heading */}
+                  <h3 className={`text-xl font-bold ${
+                    accepted
+                      ? 'text-slate-800'
+                      : isDiagnosticVerdict
+                      ? 'text-amber-600'
+                      : 'text-rose-600'
+                  }`}>
+                    {verdictHeading}
+                  </h3>
+                  <p className="mt-0.5 text-sm text-slate-500">{verdictSub}</p>
 
-                {/* Celebratory message */}
-                {accepted && (
-                  <p className="mt-4 text-sm leading-6 text-slate-600">
-                    Your code passed all our tests.{' '}
-                    <span className="font-semibold text-emerald-600">Way to go!</span>
-                  </p>
-                )}
+                  {/* Score bar — hide for diagnostic verdicts with 0/0 */}
+                  {!(isDiagnosticVerdict && sel.total === 0) && (
+                    <div className="mt-4">
+                      <div className="mb-1.5 flex items-center justify-between text-xs">
+                        <span className="font-medium text-slate-500">
+                          {sel.passed} of {sel.total} test{sel.total !== 1 ? 's' : ''} passed
+                        </span>
+                        {failed > 0 && (
+                          <span className="font-semibold text-rose-500">{failed} failed</span>
+                        )}
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${
+                            accepted ? 'bg-emerald-500' : 'bg-amber-500'
+                          }`}
+                          style={{ width: sel.total > 0 ? `${(sel.passed / sel.total) * 100}%` : '0%' }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
-                {/* Test case checklist OR hidden-test summary */}
-                {sel.results.length === 0 ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-sm text-slate-500">
-                      {selMode === 'submit'
-                        ? `${sel.passed} of ${sel.total} hidden test cases passed.`
-                        : 'No test case details available.'}
+                  {/* Celebratory message */}
+                  {accepted && (
+                    <p className="mt-4 text-sm leading-6 text-slate-600">
+                      Your code passed all our tests.{' '}
+                      <span className="font-semibold text-emerald-600">Way to go!</span>
                     </p>
-                  </div>
-                ) : (
-                  <div className="mt-4 space-y-2">
-                    {sel.results.map((tc, i) => (
-                      <TestCaseRow key={tc.index} tc={tc} num={i + 1} />
-                    ))}
-                  </div>
-                )}
+                  )}
 
-                {/* Hidden tests nudge (run mode only) */}
-                {selMode === 'run' && (
-                  <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
-                    <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" aria-hidden />
-                    <div>
-                      <p className="text-[11px] font-semibold text-indigo-700 mb-0.5 flex items-center gap-1">
-                        Hidden Test Cases
-                        <Lock className="h-2.5 w-2.5 text-indigo-400" aria-hidden />
-                      </p>
-                      <p className="text-[11px] leading-5 text-indigo-600">
-                        Click <span className="font-bold">Submit</span> to run against all hidden test cases and get your final verdict.
+                  {/* Test case checklist OR hidden-test summary */}
+                  {sel.results.length === 0 ? (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-sm text-slate-500">
+                        {selMode === 'submit'
+                          ? `${sel.passed} of ${sel.total} hidden test cases passed.`
+                          : 'No test case details available.'}
                       </p>
                     </div>
+                  ) : (
+                    <div className="mt-4 space-y-2">
+                      {sel.results.map((tc, i) => (
+                        <TestCaseRow key={tc.index} tc={tc} num={i + 1} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Hidden tests nudge (run mode only) */}
+                  {selMode === 'run' && (
+                    <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+                      <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" aria-hidden />
+                      <div>
+                        <p className="text-[11px] font-semibold text-indigo-700 mb-0.5 flex items-center gap-1">
+                          Hidden Test Cases
+                          <Lock className="h-2.5 w-2.5 text-indigo-400" aria-hidden />
+                        </p>
+                        <p className="text-[11px] leading-5 text-indigo-600">
+                          Click <span className="font-bold">Submit</span> to run against all hidden test cases and get your final verdict.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Congratulations bar (submit + accepted) ── */}
+                {selMode === 'submit' && accepted && (
+                  <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-5 py-3">
+                    <p className="text-sm font-medium text-slate-700">
+                      Congratulations, all tests have passed!
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onFinish}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 active:scale-95"
+                    >
+                      <CheckCircle2 className="h-4 w-4" aria-hidden />
+                      Finish lesson
+                    </button>
                   </div>
                 )}
               </div>
-
-              {/* ── Congratulations bar (submit + accepted) ── */}
-              {selMode === 'submit' && accepted && (
-                <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-5 py-3">
-                  <p className="text-sm font-medium text-slate-700">
-                    Congratulations, all tests have passed!
-                  </p>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 active:scale-95"
-                  >
-                    <CheckCircle2 className="h-4 w-4" aria-hidden />
-                    Finish lesson
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+            );
+          })()
+        )}
       </div>
     </div>
   );

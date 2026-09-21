@@ -213,12 +213,13 @@ export async function submitCode(
   language: CodingTestLanguage,
   code: string,
   timeoutMs = 10000,
+  signal?: AbortSignal,
 ): Promise<JudgeResponse> {
   try {
     const { data } = await httpClient.post<JudgeResponse>(
       `${BASE}/submit`,
       { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
-      { ...INLINE_AUTH_CONFIG, timeout: 90000 },
+      { ...INLINE_AUTH_CONFIG, timeout: 90000, signal },
     );
     return data;
   } catch (err) {
