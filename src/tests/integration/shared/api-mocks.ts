@@ -307,19 +307,6 @@ export const mockResponses = {
     },
   },
 
-  mockInterview: {
-    notesGenerated: {
-      notes_id: 'notes-789',
-      content: 'Interview notes from resume',
-      sections: ['self-intro', 'projects', 'hr-questions'],
-    },
-    interviewComplete: {
-      session_id: 'session-101',
-      score: 8.5,
-      questions_answered: 10,
-      reportUrl: '/mock-interview/report/session-101',
-    },
-  },
 };
 
 /**
