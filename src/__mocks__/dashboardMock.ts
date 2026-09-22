@@ -18,7 +18,7 @@ export const mockDashboardSummary: DashboardSummary = {
     credits_remaining: 45,
   },
   profile: {
-    completeness: 75, // Backend-computed
+    completeness: 75,
     missing_fields: ['LinkedIn URL', 'Certifications', 'Projects'],
   },
   recommended_step: {
@@ -34,20 +34,20 @@ export const mockDashboardSummary: DashboardSummary = {
   },
   progress: {
     resume_uploaded: true,
-    profile_completed: true, // >= 60%
+    profile_completed: true,
     ats_scan_done: false,
-    resume_enhanced: false,
     job_applied: false,
   },
   usage_counts: {
     resumes_created: 3,
     resumes_parsed: 2,
     ats_scans: 2,
-    resumes_enhanced: 1,
     job_matches: 0,
     job_applications: 0,
     assessments_taken: 0,
     mock_tests_taken: 0,
+    mock_interviews_taken: 0,
+    coding_tests_taken: 0,
   },
   best_scores: {
     ats_score: 72,
@@ -60,7 +60,7 @@ export const mockDashboardSummary: DashboardSummary = {
       feature: 'resume_parse',
       feature_label: 'Resume Parsed',
       credits_used: 5,
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       result_summary: 'Found 12 skills, 2 jobs, 1 degree',
     },
     {
@@ -68,14 +68,14 @@ export const mockDashboardSummary: DashboardSummary = {
       feature: 'profile_update',
       feature_label: 'Profile Updated',
       credits_used: 0,
-      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(), // 5 hours ago
+      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
     },
     {
       id: 'act_3',
       feature: 'ats_scan',
       feature_label: 'ATS Scan Completed',
       credits_used: 5,
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
+      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
       result_summary: 'Score: 72/100',
     },
     {
@@ -83,7 +83,7 @@ export const mockDashboardSummary: DashboardSummary = {
       feature: 'enhancement',
       feature_label: 'Resume Enhanced',
       credits_used: 10,
-      timestamp: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(), // 2 days ago
+      timestamp: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
       result_summary: '15 improvements applied',
     },
   ],
@@ -109,8 +109,6 @@ export const mockDashboardSummary: DashboardSummary = {
   ],
 };
 
-// Mock for different user states
-
 // New user (just signed up)
 export const mockDashboardSummaryNewUser: DashboardSummary = {
   ...mockDashboardSummary,
@@ -122,16 +120,7 @@ export const mockDashboardSummaryNewUser: DashboardSummary = {
   },
   profile: {
     completeness: 25,
-    missing_fields: [
-      'Phone',
-      'Location',
-      'LinkedIn URL',
-      'Skills',
-      'Experience',
-      'Education',
-      'Projects',
-      'Certifications',
-    ],
+    missing_fields: ['Phone', 'Location', 'LinkedIn URL', 'Skills', 'Experience', 'Education', 'Projects', 'Certifications'],
   },
   recommended_step: {
     step_number: 1,
@@ -148,18 +137,18 @@ export const mockDashboardSummaryNewUser: DashboardSummary = {
     resume_uploaded: false,
     profile_completed: false,
     ats_scan_done: false,
-    resume_enhanced: false,
     job_applied: false,
   },
   usage_counts: {
     resumes_created: 0,
     resumes_parsed: 0,
     ats_scans: 0,
-    resumes_enhanced: 0,
     job_matches: 0,
     job_applications: 0,
     assessments_taken: 0,
     mock_tests_taken: 0,
+    mock_interviews_taken: 0,
+    coding_tests_taken: 0,
   },
   best_scores: {},
   recent_activity: [],
@@ -177,7 +166,7 @@ export const mockDashboardSummaryPowerUser: DashboardSummary = {
     plan_name: 'Pro Plan',
     credits_total: 500,
     credits_remaining: 245,
-    plan_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+    plan_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   },
   profile: {
     completeness: 100,
@@ -198,18 +187,18 @@ export const mockDashboardSummaryPowerUser: DashboardSummary = {
     resume_uploaded: true,
     profile_completed: true,
     ats_scan_done: true,
-    resume_enhanced: true,
     job_applied: true,
   },
   usage_counts: {
     resumes_created: 15,
     resumes_parsed: 8,
     ats_scans: 12,
-    resumes_enhanced: 5,
     job_matches: 24,
     job_applications: 18,
     assessments_taken: 2,
     mock_tests_taken: 5,
+    mock_interviews_taken: 3,
+    coding_tests_taken: 4,
   },
   best_scores: {
     ats_score: 89,
@@ -222,7 +211,7 @@ export const mockDashboardSummaryPowerUser: DashboardSummary = {
       feature: 'job_application',
       feature_label: 'Applied to Job',
       credits_used: 0,
-      timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 mins ago
+      timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
       result_summary: 'Senior Software Engineer @ Google',
     },
     {
@@ -230,7 +219,7 @@ export const mockDashboardSummaryPowerUser: DashboardSummary = {
       feature: 'job_match',
       feature_label: 'Job Match Analysis',
       credits_used: 8,
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       result_summary: 'Match: 92% (Excellent)',
     },
     {
@@ -238,7 +227,7 @@ export const mockDashboardSummaryPowerUser: DashboardSummary = {
       feature: 'ats_scan',
       feature_label: 'ATS Scan Completed',
       credits_used: 5,
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // 6 hours ago
+      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
       result_summary: 'Score: 89/100',
     },
   ],
@@ -249,7 +238,7 @@ export const mockDashboardSummaryLowCredits: DashboardSummary = {
   ...mockDashboardSummary,
   plan: {
     ...mockDashboardSummary.plan,
-    credits_remaining: 8, // Low credits
+    credits_remaining: 8,
   },
   recommended_step: {
     step_number: 0,
@@ -273,5 +262,5 @@ export const mockDashboardSummaryLowCredits: DashboardSummary = {
  *   mockDashboardSummaryLowCredits → Low credits warning
  */
 export function getMockDashboardData(): DashboardSummary {
-  return mockDashboardSummaryNewUser; // ← Shows First-Time Dashboard
+  return mockDashboardSummaryNewUser;
 }

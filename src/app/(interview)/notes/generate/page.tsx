@@ -358,7 +358,7 @@ function GenerationProgress({ stage }: { stage: number }) {
 
 export default function NotesPage() {
   const router = useRouter();
-  const { setNotesGenerated: setContextNotesGenerated, progressLoading, userId } = useMockInterview();
+  const { setNotesGenerated: setContextNotesGenerated, progressLoading } = useMockInterview();
   const [notes, setNotes] = useState<NotesData | null>(null);
   const [activeTab, setActiveTab] = useState("intro");
   const [experienceLevel, setExperienceLevel] = useState<"fresher" | "experienced">("fresher");
@@ -525,14 +525,10 @@ export default function NotesPage() {
   };
 
   const persistNotes = (updated: NotesData) => {
-    // updateNotes takes a USER id: PUT /notes/{user_id} compares the segment to
-    // the authenticated user and 403s on any mismatch. Passing resumeId here
-    // meant every note edit failed with 403 — and the empty .catch() swallowed
-    // it, so the edit looked saved and was silently lost on reload.
-    // The notes document is keyed on user_id alone, so this writes the same
-    // record the resume-scoped GET reads.
-    if (!userId) return;
-    updateNotes(userId, updated as unknown as Record<string, unknown>)
+    // PUT /interview-prep/notes/{resume_id} is resume-scoped, symmetric with
+    // the GET this page reads on load.
+    if (!resumeId) return;
+    updateNotes(resumeId, updated as unknown as Record<string, unknown>)
       .then(() => setSaveError(null))
       .catch((err) => {
       // Do not swallow: a failed autosave the user cannot see is worse than a

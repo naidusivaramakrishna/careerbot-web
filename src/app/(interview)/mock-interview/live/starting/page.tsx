@@ -4,15 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createLiveSession } from "@/api/mockInterviewApi";
 import { getInterviewerByIndex, isVoiceMatchedToGender } from "../../_lib/interviewers";
+import { useMockInterview } from "../../_context/MockInterviewContext";
 import { Loader2 } from "lucide-react";
 
 interface SessionParams {
-  session_type: "hr" | "technical" | "managerial" | "technical_coding";
+  session_type: "hr" | "technical" | "managerial";
   resume_id?: string;
   target_role?: string;
-  enable_streaming_stt: boolean;
+  // voice is presentation-only now (picks which avatar/name to show) — the
+  // backend no longer accepts a voice field; the AI provider assigns its own.
   voice: string;
-  use_orchestrator: boolean;
   interviewer_index: number;
   interviewer_slug?: string;
   interviewer_name: string;
@@ -22,6 +23,7 @@ interface SessionParams {
 
 export default function LiveStartingPage() {
   const router = useRouter();
+  const { setPendingAvatarSession } = useMockInterview();
   const [error, setError] = useState<string | null>(null);
   const calledRef = useRef(false);
 
@@ -47,20 +49,19 @@ export default function LiveStartingPage() {
     sessionStorage.removeItem("live_session_params");
     const selectedInterviewer = getInterviewerByIndex(params.interviewer_index);
     const fallbackVoice = params.gender === "female" ? "nova" : "alloy";
+    // voice is presentation-only (which avatar/name to render) — not sent to
+    // the backend, which no longer accepts it and assigns its own AI voice.
     const voice = selectedInterviewer?.voice ?? (isVoiceMatchedToGender(params.voice, params.gender) ? params.voice : fallbackVoice);
     const interviewerName = selectedInterviewer?.name ?? params.interviewer_name;
     const interviewerGender = selectedInterviewer?.gender ?? params.gender;
 
-    const basePayload = {
-      session_type: params.session_type,
-      resume_id: params.resume_id,
-      target_role: params.target_role,
-      enable_streaming_stt: params.enable_streaming_stt,
-      voice,
-    };
-
     const onSuccess = (data: Awaited<ReturnType<typeof createLiveSession>>) => {
-      sessionStorage.setItem("live_session_data", JSON.stringify(data));
+      // livekit_client_token is a live credential — interview-avatar.txt says
+      // never store it (localStorage/sessionStorage/logs). Relay it in-memory
+      // via context instead; everything else is fine in sessionStorage as before.
+      const { avatar, ...storable } = data;
+      setPendingAvatarSession(data.session_id, avatar);
+      sessionStorage.setItem("live_session_data", JSON.stringify(storable));
       sessionStorage.setItem("live_session_type", params.session_type_label);
       sessionStorage.setItem(
         "live_session_interviewer",
@@ -75,12 +76,16 @@ export default function LiveStartingPage() {
       router.replace(`/mock-interview/live/${data.session_id}`);
     };
 
-    createLiveSession({ ...basePayload, use_orchestrator: true })
+    createLiveSession({
+      session_type: params.session_type,
+      resume_id: params.resume_id,
+      target_role: params.target_role,
+    })
       .then(onSuccess)
       .catch(() => {
         setError("Could not create the live interview. Please check your connection and try again.");
       });
-  }, [router]);
+  }, [router, setPendingAvatarSession]);
 
   if (error) {
     return (

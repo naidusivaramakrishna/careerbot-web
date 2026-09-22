@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getLiveHistory, LiveSession } from "@/api/mockInterviewApi";
+import { getLiveHistory, getReport, LiveSession } from "@/api/mockInterviewApi";
 import { useMockInterview } from "../_context/MockInterviewContext";
 import {
   LineChart,
@@ -26,7 +26,14 @@ import {
 
 // ─── Score badge ──────────────────────────────────────────────────────────────
 
-function ScoreBadge({ score }: { score: number }) {
+function ScoreBadge({ score, loading }: { score: number; loading?: boolean }) {
+  if (loading) {
+    return (
+      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-400 animate-pulse">
+        …/100
+      </span>
+    );
+  }
   const cls =
     score >= 70
       ? "bg-[#2557a7]/10 text-[#2557a7]"
@@ -84,7 +91,10 @@ function mapLiveSession(s: LiveSession) {
     }),
     duration_min: s.duration_s ? Math.round(s.duration_s / 60) : 0,
     question_count: typeof s.question_count === "number" ? s.question_count : null,
-    overall_score: s.score != null ? Math.round(s.score * 10) : 0,
+    // GET /live/history currently always returns score: null (backend known
+    // gap) — resolved lazily per visible row from GET /report/{id} below.
+    overall_score: 0,
+    score_loaded: false,
     improvement_pct: null as number | null,
     pressure: s.pressure_tag === "pressure_affected" ? "Pressure affected" : null,
     status: s.status,
@@ -116,9 +126,43 @@ export default function HistoryPage() {
   const filtered = sessions.filter((s) => s.type === "mock");
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIdsKey = paginated.map((s) => s.session_id).join(",");
 
-  const liveSessions = sessions.filter((s) => s.type === "mock");
-  const totalSessions = userProgress?.live_sessions ?? liveSessions.length;
+  // GET /live/history returns score: null for every row (backend known gap).
+  // Resolve the real score per visible row from GET /report/{id} instead —
+  // only for the current page, to stay well under that endpoint's 10/min cap.
+  useEffect(() => {
+    const idsToFetch = paginated.filter((s) => !s.score_loaded).map((s) => s.session_id);
+    if (idsToFetch.length === 0) return;
+
+    let cancelled = false;
+    Promise.allSettled(
+      idsToFetch.map((id) => getReport(id).then((r) => ({ id, score: Math.round(r.overall_score) })))
+    ).then((results) => {
+      if (cancelled) return;
+      setSessions((prev) =>
+        prev.map((s) => {
+          const idx = idsToFetch.indexOf(s.session_id);
+          if (idx === -1) return s;
+          const result = results[idx];
+          if (result.status === "fulfilled") {
+            return { ...s, overall_score: result.value.score, score_loaded: true };
+          }
+          // Report not available yet (still processing, or never scored) —
+          // mark as loaded so we don't refetch every render.
+          return { ...s, score_loaded: true };
+        })
+      );
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdsKey]);
+
+  // Only sessions whose real score has resolved feed the stats/chart —
+  // otherwise every unscored row's placeholder 0 would drag these down.
+  const liveSessions = sessions.filter((s) => s.type === "mock" && s.score_loaded);
+  const totalSessions = userProgress?.live_sessions ?? sessions.filter((s) => s.type === "mock").length;
   const avgScore = liveSessions.length > 0
     ? Math.round(liveSessions.reduce((s, r) => s + r.overall_score, 0) / liveSessions.length)
     : 0;
@@ -347,7 +391,7 @@ export default function HistoryPage() {
 
                   {/* Score + improvement */}
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <ScoreBadge score={session.overall_score} />
+                    <ScoreBadge score={session.overall_score} loading={!session.score_loaded} />
                     <div className="flex items-center gap-1.5">
                       {session.improvement_pct !== null && (
                         <span

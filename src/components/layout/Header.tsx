@@ -19,6 +19,7 @@ import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
 import { getDashboardSummary } from '@/api/dashboardApi';
+import { logger } from '@/lib/logger';
 import { signOut } from '@/api/authApi';
 import { Notification } from '@/api/notificationsApi';
 import { resolveNotificationRoute } from '@/lib/notificationRoute';
@@ -193,39 +194,80 @@ export default function Header() {
   /* Profile */
   useEffect(() => {
     const fetchProfile = async () => {
-      // Step 1: try to get the full profile
-      let profile: UserProfile | null = null;
-      try {
-        profile = await getProfile({ skipAuthRedirect: true });
-      } catch { /* silently fail */ }
+      // Fetch profile and dashboard summary in parallel.
+      // Summary is the authoritative identity source — tied to the JWT,
+      // proven correct after OAuth account switches. getProfile() can
+      // resolve the previous account after a switch and is only used when
+      // its identity is positively verified against the summary.
+      const [profileResult, summaryResult] = await Promise.allSettled([
+        getProfile({ skipAuthRedirect: true }),
+        getDashboardSummary({ skipAuthRedirect: true }),
+      ]);
 
-      // Step 2: if profile has no display name (or failed entirely), fall back to
-      // dashboard summary which always carries user.name after signup
-      if (!profile?.username && !profile?.full_name) {
-        try {
-          const summary = await getDashboardSummary({ skipAuthRedirect: true });
-          if (summary?.user?.name) {
-            profile = {
-              ...(profile ?? {}),
-              full_name: summary.user.name,
-              email: profile?.email ?? summary.user.email,
-            };
-          }
-        } catch { /* ignore */ }
+      let profile: UserProfile | null =
+        profileResult.status === 'fulfilled' ? profileResult.value : null;
+
+      const summaryUser =
+        summaryResult.status === 'fulfilled'
+          ? summaryResult.value?.user
+          : null;
+
+      const summaryEmail = summaryUser?.email?.trim().toLowerCase();
+      const profileEmail  = profile?.email?.trim().toLowerCase();
+
+      // Identity check: summary email/id is ground truth.
+      // If summary returned no email, profile is unverifiable — discard it.
+      // This prevents a switched-away account's username, name and email
+      // from persisting in the dropdown after an OAuth account switch.
+      const identityVerified =
+        !!summaryEmail &&
+        (profileEmail === summaryEmail ||
+          (!profileEmail && !!profile?.id && profile.id === summaryUser?.id));
+
+      if (!identityVerified) {
+        if (summaryResult.status === 'rejected') {
+          logger.error('[Header] dashboard summary failed; identity could not be verified', summaryResult.reason);
+        }
+        profile = null;
       }
 
-      if (profile) setUserProfile(profile);
+      // Summary wins for name and email. username is kept from getProfile()
+      // since it is the user's chosen signup name, not an identity field.
+      if (summaryUser?.name || summaryUser?.email) {
+        profile = {
+          ...(profile ?? {}),
+          full_name: summaryUser.name || profile?.full_name,
+          email:     summaryUser.email || profile?.email,
+        };
+      }
 
-      // Step 3: profile picture (independent of name)
-      try {
-        const picRes = await getProfilePicture({ skipAuthRedirect: true });
-        if (picRes?.picture_url) {
-          const fullUrl = picRes.picture_url.startsWith('http')
-            ? picRes.picture_url
-            : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${picRes.picture_url}`;
-          setProfilePicUrl(fullUrl);
-        }
-      } catch { /* silently fail */ }
+      // Always call setUserProfile — including with null. Skipping the call
+      // when profile is null leaves the previous render's state in place,
+      // which after an account switch is the previous user's identity.
+      setUserProfile(profile);
+
+      // Avatar: every path must call setProfilePicUrl, including with null.
+      // Leaving the setter uncalled after a switch keeps the previous user's
+      // photo rendered — cross-account PII disclosure.
+      const toAbsolute = (u: string) =>
+        u.startsWith('http')
+          ? u
+          : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${u}`;
+
+      const summaryPic = summaryUser?.profile_picture_url;
+      if (summaryPic) {
+        setProfilePicUrl(toAbsolute(summaryPic));
+      } else if (identityVerified) {
+        let resolved: string | null = null;
+        try {
+          const picRes = await getProfilePicture({ skipAuthRedirect: true });
+          if (picRes?.picture_url) resolved = toAbsolute(picRes.picture_url);
+        } catch { /* avatar is not worth failing the header over */ }
+        setProfilePicUrl(resolved);
+      } else {
+        // No verified identity to attribute a photo to — clear stale avatar.
+        setProfilePicUrl(null);
+      }
     };
     fetchProfile();
     const onPicUpdate = (e: CustomEvent) => {

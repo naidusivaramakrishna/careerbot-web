@@ -3,6 +3,11 @@
 import Image from "next/image";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
+// Type-only — the actual livekit-client module (a full WebRTC SDK) is loaded
+// dynamically inside joinAvatar() below, only when an avatar session exists.
+// avatar: null is the common case (feature off by default per environment),
+// so this keeps that SDK out of the bundle everyone pays for by default.
+import type { Room, RemoteTrack } from "livekit-client";
 import {
   buildWsUrl,
   getLiveSessionState,
@@ -10,10 +15,11 @@ import {
   WsServerMessage,
   WsClientMessage,
   LiveCreateResponse,
+  LiveAvatarSession,
 } from "@/api/mockInterviewApi";
-import type { LipSyncPayload, LipSyncViseme, LipSyncWord } from "@/api/mockInterviewApi";
 import { MOCK_INTERVIEWERS, isValidInterviewerIndex, pickInterviewerIndex } from "../../_lib/interviewers";
 import type { MockInterviewer } from "../../_lib/interviewers";
+import { useMockInterview } from "../../_context/MockInterviewContext";
 import { CodingTransition } from "@/components/interview/CodingTransition";
 import { CodingStep } from "@/components/interview/CodingStep";
 import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
@@ -31,7 +37,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  MessageSquare,
   RefreshCw,
   Maximize2,
   X,
@@ -41,11 +46,10 @@ import {
 
 type InterviewPhase =
   | "connecting"    // WebSocket connecting
-  | "ai-talking"    // AI is playing audio question
-  | "follow-up"     // AI is asking a follow-up
-  | "listening"     // Microphone recording
-  | "processing"    // AI processing answer
-  | "coding"        // Live coding round active
+  | "ai-talking"    // Interviewer is speaking (streaming audio deltas)
+  | "listening"     // Candidate's turn — mic streaming, AI doing turn detection
+  | "processing"    // Candidate's turn closed, waiting on scoring / next question
+  | "coding"        // Live coding round active (not sent by this backend release — kept inert)
   | "completed";    // All questions done
 
 interface CodingRoundState {
@@ -57,195 +61,8 @@ interface CodingRoundState {
 interface Question {
   number: number;
   text: string;
-  isFollowUp?: boolean;
 }
 
-interface MouthCue {
-  level: number;
-  visemeId: string;
-  intensity: number;
-  widthScale: number;
-  heightScale: number;
-  yOffset: number;
-  borderRadius: string;
-}
-
-const CLOSED_MOUTH_CUE: MouthCue = {
-  level: 0,
-  visemeId: "sil",
-  intensity: 0,
-  widthScale: 0.72,
-  heightScale: 0.12,
-  yOffset: 0,
-  borderRadius: "999px",
-};
-
-const VISEME_PROFILES: Record<string, Omit<MouthCue, "visemeId" | "intensity">> = {
-  sil: { level: 0, widthScale: 0.72, heightScale: 0.12, yOffset: 0, borderRadius: "999px" },
-  PP: { level: 0.16, widthScale: 0.58, heightScale: 0.14, yOffset: 0, borderRadius: "999px" },
-  FF: { level: 0.24, widthScale: 0.86, heightScale: 0.18, yOffset: 0, borderRadius: "999px" },
-  TH: { level: 0.34, widthScale: 0.95, heightScale: 0.28, yOffset: 0.5, borderRadius: "999px" },
-  DD: { level: 0.3, widthScale: 0.82, heightScale: 0.22, yOffset: -0.5, borderRadius: "999px" },
-  KK: { level: 0.42, widthScale: 0.78, heightScale: 0.36, yOffset: 0, borderRadius: "999px" },
-  CH: { level: 0.48, widthScale: 0.7, heightScale: 0.46, yOffset: 0.5, borderRadius: "999px" },
-  SS: { level: 0.22, widthScale: 1.05, heightScale: 0.16, yOffset: -0.5, borderRadius: "999px" },
-  NN: { level: 0.28, widthScale: 0.84, heightScale: 0.2, yOffset: -0.5, borderRadius: "999px" },
-  RR: { level: 0.46, widthScale: 0.74, heightScale: 0.42, yOffset: 0, borderRadius: "999px" },
-  AA: { level: 0.92, widthScale: 1.0, heightScale: 0.86, yOffset: 1, borderRadius: "45%" },
-  E: { level: 0.5, widthScale: 1.18, heightScale: 0.34, yOffset: -0.5, borderRadius: "999px" },
-  I: { level: 0.46, widthScale: 1.28, heightScale: 0.28, yOffset: -0.5, borderRadius: "999px" },
-  O: { level: 0.82, widthScale: 0.72, heightScale: 0.84, yOffset: 1, borderRadius: "50%" },
-  U: { level: 0.74, widthScale: 0.58, heightScale: 0.72, yOffset: 1, borderRadius: "50%" },
-};
-
-const AZURE_VISEME_TO_NORMALIZED: Record<string, string> = {
-  "0": "sil",
-  "1": "AA",
-  "2": "AA",
-  "3": "O",
-  "4": "E",
-  "5": "RR",
-  "6": "I",
-  "7": "U",
-  "8": "O",
-  "9": "AA",
-  "10": "O",
-  "11": "I",
-  "12": "KK",
-  "13": "RR",
-  "14": "NN",
-  "15": "SS",
-  "16": "CH",
-  "17": "TH",
-  "18": "FF",
-  "19": "DD",
-  "20": "KK",
-  "21": "PP",
-};
-
-const RHUBARB_VISEME_TO_NORMALIZED: Record<string, string> = {
-  A: "PP",
-  B: "SS",
-  C: "E",
-  D: "AA",
-  E: "O",
-  F: "U",
-  G: "FF",
-  H: "DD",
-  X: "sil",
-};
-
-const MOUTH_SPRITE_IDS = ["sil", "PP", "FF", "TH", "DD", "KK", "CH", "SS", "NN", "RR", "AA", "E", "I", "O", "U"] as const;
-const MOUTH_SPRITE_ID_SET = new Set<string>(MOUTH_SPRITE_IDS);
-const INTERVIEWER_IMAGE_WIDTH = 1672;
-const INTERVIEWER_IMAGE_HEIGHT = 941;
-const INTERVIEWER_IMAGE_ZOOM = 1.24;
-const INTERVIEWER_OBJECT_POSITION_X = 0.5;
-const INTERVIEWER_OBJECT_POSITION_Y = 0.44;
-
-interface RenderedMediaFrame {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-function clamp(value: number, min = 0, max = 1) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function getInterviewerMediaFrame(containerWidth: number, containerHeight: number): RenderedMediaFrame {
-  const coverScale = Math.max(
-    containerWidth / INTERVIEWER_IMAGE_WIDTH,
-    containerHeight / INTERVIEWER_IMAGE_HEIGHT,
-  );
-  const coverWidth = INTERVIEWER_IMAGE_WIDTH * coverScale;
-  const coverHeight = INTERVIEWER_IMAGE_HEIGHT * coverScale;
-  const coverLeft = (containerWidth - coverWidth) * INTERVIEWER_OBJECT_POSITION_X;
-  const coverTop = (containerHeight - coverHeight) * INTERVIEWER_OBJECT_POSITION_Y;
-  const zoomedWidth = coverWidth * INTERVIEWER_IMAGE_ZOOM;
-  const zoomedHeight = coverHeight * INTERVIEWER_IMAGE_ZOOM;
-
-  return {
-    left: coverLeft + (coverWidth - zoomedWidth) / 2,
-    top: coverTop + (coverHeight - zoomedHeight) / 2,
-    width: zoomedWidth,
-    height: zoomedHeight,
-  };
-}
-
-function isRhubarbLipSync(lipSync: LipSyncPayload | null | undefined, visemeId: string) {
-  const provider = (lipSync?.provider ?? lipSync?.sync_provider ?? "").toLowerCase();
-  return provider.includes("rhubarb") || (lipSync?.sync_source === "forced_alignment" && /^[A-HX]$/i.test(visemeId));
-}
-
-function normalizeVisemeId(viseme: LipSyncViseme | undefined, lipSync?: LipSyncPayload | null): string {
-  const raw = viseme?.viseme_id ?? viseme?.provider_viseme_id ?? "sil";
-  const id = String(raw).trim();
-  if (!id) return "sil";
-  const upper = id.toUpperCase();
-
-  if (isRhubarbLipSync(lipSync, upper)) {
-    return RHUBARB_VISEME_TO_NORMALIZED[upper] ?? "sil";
-  }
-
-  const numeric = AZURE_VISEME_TO_NORMALIZED[id];
-  if (numeric) return numeric;
-  return VISEME_PROFILES[upper] ? upper : "sil";
-}
-
-function hasUsableWordTiming(lipSync: LipSyncPayload | null | undefined): lipSync is LipSyncPayload & { words: LipSyncWord[] } {
-  return lipSync?.sync_source !== "unavailable" && Array.isArray(lipSync?.words) && lipSync.words.some((word) => word.end_ms > word.start_ms);
-}
-
-function hasUsableVisemeTiming(lipSync: LipSyncPayload | null | undefined): lipSync is LipSyncPayload & { visemes: LipSyncViseme[] } {
-  return lipSync?.sync_source !== "unavailable" && Array.isArray(lipSync?.visemes) && lipSync.visemes.some((viseme) => viseme.end_ms > viseme.start_ms);
-}
-
-function mouthCueFromViseme(viseme: LipSyncViseme | undefined, lipSync?: LipSyncPayload | null): MouthCue {
-  if (!viseme) return CLOSED_MOUTH_CUE;
-
-  const visemeId = normalizeVisemeId(viseme, lipSync);
-  const profile = VISEME_PROFILES[visemeId] ?? VISEME_PROFILES.sil;
-  const intensity = clamp(typeof viseme.intensity === "number" ? viseme.intensity : 1);
-  return {
-    ...profile,
-    visemeId,
-    intensity,
-    level: clamp(profile.level * intensity),
-  };
-}
-
-function activeVisemeAt(lipSync: LipSyncPayload, currentMs: number) {
-  const visemes = lipSync.visemes ?? [];
-  return visemes.find((viseme) => currentMs >= viseme.start_ms && currentMs < viseme.end_ms);
-}
-
-function visibleQuestionAt(words: LipSyncWord[], fullText: string, currentMs: number) {
-  const visibleCount = words.filter((word) => currentMs >= word.start_ms).length;
-  if (visibleCount <= 0) return "";
-
-  const originalTokens = fullText.match(/\S+\s*/g) ?? [fullText];
-  if (originalTokens.length >= visibleCount) {
-    return originalTokens.slice(0, visibleCount).join("");
-  }
-
-  return words.slice(0, visibleCount).map((word) => word.word).join(" ");
-}
-
-function lipSyncTimelineMs(audio: HTMLAudioElement, lipSync: LipSyncPayload) {
-  const offset = typeof lipSync.audio_start_offset_ms === "number" ? lipSync.audio_start_offset_ms : 0;
-  return Math.max(0, audio.currentTime * 1000 - offset);
-}
-
-function mouthSpriteIdFromCue(cue: MouthCue) {
-  if (MOUTH_SPRITE_ID_SET.has(cue.visemeId)) return cue.visemeId;
-  return cue.level > 0.12 ? "AA" : "sil";
-}
-
-function mouthSpriteSrc(basePath: string, cue: MouthCue) {
-  return `${basePath}/mouth-${mouthSpriteIdFromCue(cue).toLowerCase()}.png`;
-}
 interface ScoreToast {
   questionNumber: number;
   score: number;
@@ -310,12 +127,13 @@ function AIWaveform({ barClassName = "bg-[#2557a7]" }: { barClassName?: string }
   );
 }
 
-function getInterviewerStatus(phase: InterviewPhase) {
+function getInterviewerStatus(phase: InterviewPhase, isSessionClosing = false) {
+  if (isSessionClosing) return "Wrapping up the interview";
   if (phase === "connecting") return "Joining the room";
   if (phase === "ai-talking") return "Asking the next question";
-  if (phase === "follow-up") return "Asking a follow-up";
   if (phase === "listening") return "Listening to your answer";
   if (phase === "processing") return "Reviewing your response";
+  if (phase === "coding") return "Live coding round";
   return "Session complete";
 }
 
@@ -325,7 +143,7 @@ function InterviewTimeline({ phase }: { phase: InterviewPhase }) {
     { key: "listening", label: "Answer" },
     { key: "processing", label: "Review" },
   ] as const;
-  const activeIndex = phase === "follow-up" ? 0 : steps.findIndex((step) => step.key === phase);
+  const activeIndex = steps.findIndex((step) => step.key === phase);
 
   return (
     <div className="mt-4 grid grid-cols-3 gap-2" aria-label="Interview question flow">
@@ -364,34 +182,6 @@ function MicLevelMeter({ level }: { level: number }) {
   );
 }
 
-// ─── Timer ────────────────────────────────────────────────────────────────────
-
-function QuestionTimer({ secondsLeft, total }: { secondsLeft: number; total: number }) {
-  const pct = (secondsLeft / total) * 100;
-  const ring = secondsLeft < 20 ? "#9ca3af" : "#2557a7";
-  const color = secondsLeft < 20 ? "text-gray-400" : "text-[#2557a7]";
-  const r = 19;
-  const circ = 2 * Math.PI * r;
-
-  return (
-    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center" role="timer" aria-label={`Time remaining: ${secondsLeft} seconds`}>
-      <svg viewBox="0 0 56 56" className="absolute inset-0 -rotate-90" width="48" height="48">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="#e5e7eb" strokeWidth="4" />
-        <circle
-          cx="28" cy="28" r={r} fill="none"
-          stroke={ring} strokeWidth="4"
-          strokeDasharray={`${circ}`}
-          strokeDashoffset={circ * (1 - pct / 100)}
-          strokeLinecap="round"
-          className="transition-all duration-1000"
-        />
-      </svg>
-      <span className={`text-xs font-bold ${color} z-10`}>
-        {secondsLeft < 60 ? `${secondsLeft}s` : `${Math.floor(secondsLeft / 60)}m`}
-      </span>
-    </div>
-  );
-}
 
 // ─── End Early modal ──────────────────────────────────────────────────────────
 
@@ -539,7 +329,11 @@ function CompletedScreen({ sessionId, reportId }: { sessionId: string; reportId?
   );
 }
 
-// ─── TTS audio playback helper ───────────────────────────────────────────────
+// ─── Interviewer audio playback (streamed PCM16 24 kHz deltas) ──────────────
+// live-interview.txt section 4 "Server → speaker": interviewer_audio_delta
+// carries raw PCM16 mono @ 24 kHz, base64-encoded, arriving in bursts faster
+// than real time — deltas are scheduled back-to-back on one persistent
+// AudioContext rather than played one at a time.
 
 // Decode URL-safe or standard base64 into a Uint8Array.
 function decodeBase64(b64: string): Uint8Array {
@@ -553,156 +347,62 @@ function decodeBase64(b64: string): Uint8Array {
   return bytes;
 }
 
-// Try MPEG first, then WAV, then OGG — we don't always know what the backend sends.
-const TTS_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg; codecs=opus", "audio/webm"];
+const INTERVIEWER_AUDIO_SAMPLE_RATE = 24000;
 
-function playTtsAudio(
-  base64Audio: string | null,
-  mutedRef: React.RefObject<boolean>,
-  audioRef: React.RefObject<HTMLAudioElement | null>,
-  visualizerCleanupRef: React.MutableRefObject<(() => void) | null>,
-  lipSync: LipSyncPayload | null | undefined,
-  questionText: string,
-  onMouthCue: (cue: MouthCue) => void,
-  onVisibleQuestionText: (text: string) => void,
-  onEnd: () => void,
-) {
-  if (visualizerCleanupRef.current) {
-    visualizerCleanupRef.current();
-    visualizerCleanupRef.current = null;
-  }
+interface InterviewerAudioPlayer {
+  context: AudioContext;
+  gainNode: GainNode;
+  playAt: number;
+  activeSources: Set<AudioBufferSourceNode>;
+}
 
-  if (audioRef.current) {
-    audioRef.current.pause();
-    audioRef.current = null;
-  }
-  onMouthCue(CLOSED_MOUTH_CUE);
+function createInterviewerAudioPlayer(): InterviewerAudioPlayer | null {
+  const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  const context = new AudioContextCtor({ sampleRate: INTERVIEWER_AUDIO_SAMPLE_RATE });
+  const gainNode = context.createGain();
+  gainNode.connect(context.destination);
+  return { context, gainNode, playAt: 0, activeSources: new Set() };
+}
 
-  if (!base64Audio || mutedRef.current) {
-    setTimeout(onEnd, 1500);
-    return;
-  }
-
+function scheduleInterviewerAudioDelta(player: InterviewerAudioPlayer, audioBase64: string) {
   let bytes: Uint8Array;
   try {
-    bytes = decodeBase64(base64Audio);
+    bytes = decodeBase64(audioBase64);
   } catch {
-    setTimeout(onEnd, 1500);
     return;
   }
+  const sampleCount = bytes.byteLength >> 1;
+  if (sampleCount <= 0) return;
 
-  let mimeIndex = 0;
+  const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
+  const buffer = player.context.createBuffer(1, sampleCount, INTERVIEWER_AUDIO_SAMPLE_RATE);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < sampleCount; i++) channel[i] = pcm[i] / 0x8000;
 
-  const tryNext = () => {
-    if (mimeIndex >= TTS_MIME_TYPES.length) {
-      setTimeout(onEnd, 2000);
-      return;
-    }
+  const source = player.context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(player.gainNode);
+  source.onended = () => player.activeSources.delete(source);
 
-    const mime = TTS_MIME_TYPES[mimeIndex++];
-    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audioRef.current = audio;
+  const startAt = Math.max(player.playAt, player.context.currentTime);
+  source.start(startAt);
+  player.playAt = startAt + buffer.duration;
+  player.activeSources.add(source);
+}
 
-    let audioContext: AudioContext | null = null;
-    let rafId: number | null = null;
-    const useTimedWords = hasUsableWordTiming(lipSync);
-    const useTimedVisemes = hasUsableVisemeTiming(lipSync);
-
-    const stopVisualizer = () => {
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
-      rafId = null;
-      onMouthCue(CLOSED_MOUTH_CUE);
-      if (audioContext?.state !== "closed") {
-        audioContext?.close().catch(() => {});
-      }
-    };
-
-    try {
-      if (useTimedWords || useTimedVisemes) {
-        const tick = () => {
-          const currentMs = lipSyncTimelineMs(audio, lipSync);
-          if (useTimedVisemes) {
-            onMouthCue(mouthCueFromViseme(activeVisemeAt(lipSync, currentMs), lipSync));
-          }
-          if (useTimedWords) {
-            onVisibleQuestionText(visibleQuestionAt(lipSync.words, questionText, currentMs));
-          }
-          rafId = window.requestAnimationFrame(tick);
-        };
-
-        visualizerCleanupRef.current = stopVisualizer;
-        tick();
-      } else {
-        const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (AudioContextCtor) {
-          audioContext = new AudioContextCtor();
-          const source = audioContext.createMediaElementSource(audio);
-          const analyser = audioContext.createAnalyser();
-          analyser.fftSize = 256;
-          analyser.smoothingTimeConstant = 0.68;
-          source.connect(analyser);
-          analyser.connect(audioContext.destination);
-          const samples = new Uint8Array(analyser.frequencyBinCount);
-
-          const tick = () => {
-            analyser.getByteFrequencyData(samples);
-            const speechEnergy = samples.slice(2, 32).reduce((sum, value) => sum + value, 0) / 30;
-            const level = Math.min(1, speechEnergy / 105);
-            onMouthCue({
-              ...VISEME_PROFILES.AA,
-              visemeId: "audio-energy",
-              intensity: level,
-              level,
-            });
-            rafId = window.requestAnimationFrame(tick);
-          };
-
-          visualizerCleanupRef.current = stopVisualizer;
-          if (audioContext.state === "suspended") {
-            audioContext.resume().catch(() => {});
-          }
-          tick();
-        }
-      }
-    } catch {
-      visualizerCleanupRef.current = null;
-    }
-
-    const cleanupAudio = () => {
-      stopVisualizer();
-      visualizerCleanupRef.current = null;
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
-    };
-
-    audio.onended = () => {
-      if (useTimedWords) onVisibleQuestionText(questionText);
-      cleanupAudio();
-      onEnd();
-    };
-    audio.onerror = () => {
-      cleanupAudio();
-      tryNext();
-    };
-    audio.play().catch(() => {
-      cleanupAudio();
-      setTimeout(onEnd, 3000);
-    });
-  };
-
-  tryNext();
+// interviewer_interrupted: "stop scheduled sources and reset playAt = 0."
+function stopInterviewerAudio(player: InterviewerAudioPlayer) {
+  player.activeSources.forEach((source) => {
+    try { source.stop(); } catch { /* already stopped/ended */ }
+  });
+  player.activeSources.clear();
+  player.playAt = 0;
 }
 export default function LiveInterviewSessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
-  // Typed as MockInterviewer, not left to inference: indexing MOCK_INTERVIEWERS
-  // directly yields the `as const` literal shape, which omits the optional
-  // rotationDeg that InterviewerMouthAnchor declares — so reading it below is a
-  // type error even though the field is part of the intended contract and the
-  // read already guards with `?? 0`.
   const interviewer = useMemo<MockInterviewer>(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
@@ -711,12 +411,11 @@ export default function LiveInterviewSessionPage() {
   const [visibleQuestionText, setVisibleQuestionText] = useState("");
   const [questionNumber, setQuestionNumber] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(120);
-  const timeLimitTotalRef = useRef(120);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const isAudioMutedRef = useRef(false); // ref so WS handler sees latest value without stale closure
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null); // current TTS audio element
-  const ttsVisualizerCleanupRef = useRef<(() => void) | null>(null);
+  const isAudioMutedRef = useRef(false); // handleWsMessage reads this, not the state, to stay dependency-free
+  const interviewerAudioPlayerRef = useRef<InterviewerAudioPlayer | null>(null);
+  const [isCandidateSpeaking, setIsCandidateSpeaking] = useState(false);
+  const [isSessionClosing, setIsSessionClosing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [partialTranscript, setPartialTranscript] = useState("");
   const [wsConnected, setWsConnected] = useState(false);
@@ -725,99 +424,141 @@ export default function LiveInterviewSessionPage() {
   const [micRetryKey, setMicRetryKey] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
   const [completedReportId, setCompletedReportId] = useState<string | null>(null);
-  const [interviewerMouthCue, setInterviewerMouthCue] = useState<MouthCue>(CLOSED_MOUTH_CUE);
-  const [mouthSpriteFailed, setMouthSpriteFailed] = useState(false);
-  const [interviewerMediaFrame, setInterviewerMediaFrame] = useState<RenderedMediaFrame | null>(null);
-  const [useLipSyncQuestionReveal, setUseLipSyncQuestionReveal] = useState(false);
-  const interviewerStageRef = useRef<HTMLElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Keep ref in sync with state so toggles mid-playback take effect
+  // ─── Avatar (interview-avatar.txt) ──────────────────────────────────────
+  // Optional talking-face layer on top of the same interviewer_audio_delta
+  // stream. avatar: null (the default) is normal — this whole subsystem then
+  // stays in "fallback" and the interview behaves exactly as without it.
+  type AvatarConnection = "connecting" | "live" | "audio-blocked" | "fallback";
+  const [avatarConnection, setAvatarConnection] = useState<AvatarConnection>("fallback");
+  const [avatarActivity, setAvatarActivity] = useState<"idle" | "listening" | "talking">("idle");
+  const avatarVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const avatarRoomRef = useRef<Room | null>(null);
+  const avatarAudioElRef = useRef<HTMLMediaElement | null>(null); // attach() returns HTMLMediaElement
+  // handleWsMessage reads this via ref, not avatarConnection state, to stay
+  // dependency-free (same reasoning as questionNumberRef / isAudioMutedRef).
+  const avatarAudioLiveRef = useRef(false);
+  const { consumePendingAvatarSession } = useMockInterview();
+
+  const disconnectAvatarRoom = useCallback(() => {
+    avatarRoomRef.current?.disconnect();
+    avatarRoomRef.current = null;
+    avatarAudioElRef.current?.remove();
+    avatarAudioElRef.current = null;
+    avatarAudioLiveRef.current = false;
+  }, []);
+
+  const joinAvatar = useCallback(async (avatar: LiveAvatarSession) => {
+    setAvatarConnection("connecting");
+
+    let Room: typeof import("livekit-client").Room;
+    let RoomEvent: typeof import("livekit-client").RoomEvent;
+    let Track: typeof import("livekit-client").Track;
+    try {
+      ({ Room, RoomEvent, Track } = await import("livekit-client"));
+    } catch {
+      // Chunk failed to load (offline, blocked, etc.) — same silent fallback
+      // as any other avatar-unavailable path.
+      setAvatarConnection("fallback");
+      return;
+    }
+
+    const room = new Room({ adaptiveStream: true });
+    avatarRoomRef.current = room;
+
+    room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+      if (track.kind === Track.Kind.Video) {
+        if (avatarVideoElRef.current) track.attach(avatarVideoElRef.current);
+        setAvatarConnection((s) => (s === "connecting" ? "live" : s));
+      }
+      if (track.kind === Track.Kind.Audio) {
+        const el = track.attach();
+        el.autoplay = true;
+        document.body.appendChild(el);
+        avatarAudioElRef.current = el;
+        avatarAudioLiveRef.current = true; // from now on, ignore interviewer_audio_delta
+        if (room.canPlaybackAudio === false) setAvatarConnection("audio-blocked");
+      }
+    });
+
+    // Autoplay can be blocked or unblocked at any point (e.g. after a tab
+    // switch) — react to it rather than only checking once on attach.
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      setAvatarConnection((s) => {
+        if (!room.canPlaybackAudio) return "audio-blocked";
+        return s === "audio-blocked" ? "live" : s;
+      });
+    });
+
+    room.on(RoomEvent.Disconnected, () => {
+      avatarAudioLiveRef.current = false;
+      setAvatarConnection("fallback");
+    });
+
+    try {
+      await room.connect(avatar.livekit_url, avatar.livekit_client_token);
+    } catch {
+      // "avatar unavailable, continuing audio-only" — never surfaced as an error.
+      avatarAudioLiveRef.current = false;
+      setAvatarConnection("fallback");
+    }
+  }, []);
+
+  const handleEnableAvatarSound = useCallback(() => {
+    avatarRoomRef.current?.startAudio()
+      .then(() => setAvatarConnection("live"))
+      .catch(() => {});
+  }, []);
+
+  // Consume the avatar session handed off from the "starting" page, once.
+  // Cached in a ref (not just re-read from context) so a React StrictMode
+  // double-mount doesn't lose it — same pattern as initialWsUrlRef below.
+  const consumedAvatarRef = useRef<{ done: boolean; avatar: LiveAvatarSession | null }>({ done: false, avatar: null });
+  useEffect(() => {
+    if (!sessionId) return;
+    if (!consumedAvatarRef.current.done) {
+      consumedAvatarRef.current = { done: true, avatar: consumePendingAvatarSession(sessionId) };
+    }
+    const avatar = consumedAvatarRef.current.avatar;
+    if (avatar) {
+      joinAvatar(avatar);
+    } else {
+      setAvatarConnection("fallback");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Disconnect on unmount (leaving the page) — interview_complete and
+  // avatar_unavailable disconnect it explicitly from handleWsMessage.
+  useEffect(() => () => disconnectAvatarRoom(), [disconnectAvatarRoom]);
+
   useEffect(() => { isAudioMutedRef.current = isAudioMuted; }, [isAudioMuted]);
 
+  // Toggling mute adjusts the persistent player's gain directly — no need to
+  // tear down or re-decode anything already scheduled.
   useEffect(() => {
-    setMouthSpriteFailed(false);
-    MOUTH_SPRITE_IDS.forEach((spriteId) => {
-      const image = new window.Image();
-      image.src = `${interviewer.mouthSpriteBasePath}/mouth-${spriteId.toLowerCase()}.png`;
-    });
-  }, [interviewer.mouthSpriteBasePath]);
-
-  useEffect(() => {
-    const stage = interviewerStageRef.current;
-    if (!stage) return;
-
-    const updateFrame = () => {
-      const rect = stage.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return;
-      setInterviewerMediaFrame(getInterviewerMediaFrame(rect.width, rect.height));
-    };
-
-    updateFrame();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateFrame);
-    observer?.observe(stage);
-    window.addEventListener("resize", updateFrame);
-
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updateFrame);
-    };
-  }, []);
+    if (interviewerAudioPlayerRef.current) {
+      interviewerAudioPlayerRef.current.gainNode.gain.value = isAudioMuted ? 0 : 1;
+    }
+  }, [isAudioMuted]);
 
   useEffect(() => {
     const storedType = sessionStorage.getItem("live_session_type");
     if (storedType) setSessionType(storedType);
   }, []);
 
+  // Tear down the audio player on unmount.
   useEffect(() => {
     return () => {
-      if (ttsVisualizerCleanupRef.current) {
-        ttsVisualizerCleanupRef.current();
-        ttsVisualizerCleanupRef.current = null;
+      const player = interviewerAudioPlayerRef.current;
+      if (player) {
+        stopInterviewerAudio(player);
+        player.context.close().catch(() => {});
+        interviewerAudioPlayerRef.current = null;
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (phase !== "ai-talking" && phase !== "follow-up") {
-      setInterviewerMouthCue(CLOSED_MOUTH_CUE);
-      setUseLipSyncQuestionReveal(false);
-    }
-  }, [phase]);
-
-  useEffect(() => {
-    const questionText = currentQuestion?.text ?? "";
-    const shouldRevealQuestion = phase === "ai-talking" || phase === "follow-up";
-
-    if (!questionText) {
-      setVisibleQuestionText("");
-      return;
-    }
-
-    if (!shouldRevealQuestion) {
-      setVisibleQuestionText(questionText);
-      return;
-    }
-
-    if (useLipSyncQuestionReveal) {
-      return;
-    }
-
-    const words = questionText.match(/\S+\s*/g) ?? [questionText];
-    let wordIndex = 0;
-    setVisibleQuestionText("");
-
-    const revealTimer = window.setInterval(() => {
-      wordIndex += 1;
-      setVisibleQuestionText(words.slice(0, wordIndex).join(""));
-
-      if (wordIndex >= words.length) {
-        window.clearInterval(revealTimer);
-      }
-    }, 115);
-
-    return () => window.clearInterval(revealTimer);
-  }, [currentQuestion?.text, phase, useLipSyncQuestionReveal]);
 
   // ─── Camera self-view + fullscreen ─────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -974,44 +715,31 @@ export default function LiveInterviewSessionPage() {
   const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMicActiveRef = useRef<number>(Date.now());
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const autoSubmitRef = useRef<(() => void) | null>(null);
-
-  const startTimer = useCallback((duration: number) => {
-    stopTimer();
-    setTimeLeft(duration);
-    timeLimitTotalRef.current = duration;
-    timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          stopTimer();
-          autoSubmitRef.current?.();
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-  }, [stopTimer]);
-
-  useEffect(() => () => stopTimer(), [stopTimer]);
-
-  // ─── Microphone → raw PCM16 @ 16 kHz → WebSocket audio_chunk ────────────
-  // MediaRecorder produces WebM/Opus which the backend faster-whisper STT rejects.
-  // ScriptProcessorNode gives raw Int16 PCM that the backend framing layer expects.
+  // ─── Microphone → raw PCM16 @ 24 kHz → WebSocket audio_chunk ────────────
+  // The live realtime backend expects PCM16 mono at 24 kHz exactly — it does
+  // not validate the sample rate, so sending 16 kHz (or any other rate) is
+  // silently accepted and misheard. MediaRecorder produces WebM/Opus, which
+  // this pipeline can't emit; ScriptProcessorNode gives raw Int16 PCM instead.
+  //
+  // Streams continuously from connect to end — not gated to a "listening"
+  // phase. The AI does its own turn detection (VAD) server-side and expects
+  // audio_chunk frames the whole time; there is no client-side push-to-talk.
   const audioContextRef = useRef<AudioContext | null>(null);
   const micLevelFrameRef = useRef<number | null>(null);
   const audioSeqRef = useRef(0);
 
   useEffect(() => {
-    if (phase !== "listening") {
+    // Deliberately NOT keyed on `phase` — phase changes constantly through a
+    // normal interview (ai-talking/listening/processing cycling every turn),
+    // and re-running this effect tears down + rebuilds the whole getUserMedia
+    // + AudioContext pipeline every time. That was the actual bug behind
+    // "Too many events. Slow down." (restart bursts tripped the server's
+    // 60 frames/s cap), missing live transcripts (audio to STT kept getting
+    // cut mid-stream), and the AI moving on without waiting (its own VAD saw
+    // discontinuous audio, not silence-that-means-still-thinking). The
+    // pipeline is built once on connect and torn down once on disconnect;
+    // phaseRef below just stops it from sending once the interview is done.
+    if (!wsConnected) {
       setMicLevel(0);
       return;
     }
@@ -1036,8 +764,8 @@ export default function LiveInterviewSessionPage() {
         ctx.resume().catch(() => {});
 
         const NATIVE_RATE = ctx.sampleRate;   // actual rate: 48000, 44100, etc.
-        const TARGET_RATE = 16000;
-        const RATIO = NATIVE_RATE / TARGET_RATE; // 3.0 for 48 kHz, 2.75625 for 44.1 kHz
+        const TARGET_RATE = 24000;
+        const RATIO = NATIVE_RATE / TARGET_RATE; // 2.0 for 48 kHz, 1.8375 for 44.1 kHz
 
         console.warn('[STT DEBUG] AudioContext sampleRate:', NATIVE_RATE, '| ratio:', RATIO.toFixed(4), '| target:', TARGET_RATE);
 
@@ -1056,15 +784,16 @@ export default function LiveInterviewSessionPage() {
         };
         tick();
 
-        // Native buffer sized so each chunk yields ~256 ms at 16 kHz after downsampling.
-        // ScriptProcessorNode requires a power-of-2 buffer size.
-        const nativeBufSize = Math.pow(2, Math.round(Math.log2(RATIO * 4096))) as 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384;
+        // Native buffer sized so each chunk yields ~100 ms at 24 kHz after downsampling
+        // (2400 samples) — the documented sweet spot: ~10 frames/s, well under the
+        // server's 60 frames/s cap. ScriptProcessorNode requires a power-of-2 buffer size.
+        const nativeBufSize = Math.pow(2, Math.round(Math.log2(RATIO * 2400))) as 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384;
         processor = ctx.createScriptProcessor(nativeBufSize, 1, 1);
         processor.onaudioprocess = (event) => {
           const float32 = event.inputBuffer.getChannelData(0);
 
-          // Linear-interpolation downsample: native rate → 16 kHz.
-          // Handles integer ratios (48k→16k = 3×) and fractional ones (44.1k→16k = 2.75625×).
+          // Linear-interpolation downsample: native rate → 24 kHz.
+          // Handles integer ratios (48k→24k = 2×) and fractional ones (44.1k→24k = 1.8375×).
           const outLen = Math.floor(float32.length / RATIO);
           const resampled = new Float32Array(outLen);
           for (let i = 0; i < outLen; i++) {
@@ -1085,13 +814,14 @@ export default function LiveInterviewSessionPage() {
           let binary = "";
           for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
 
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
+          if (wsRef.current?.readyState === WebSocket.OPEN && phaseRef.current !== "completed") {
             const seq = audioSeqRef.current++;
             // Log first chunk and every 10th to confirm audio is flowing without console spam
             if (seq === 0 || seq % 10 === 0) {
               console.warn(`[STT DEBUG] audio_chunk seq=${seq} | samples=${resampled.length} | bytes=${bytes.byteLength} | nativeRate=${NATIVE_RATE}`);
             }
-            wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(binary), sequence: seq }));
+            // Field is "data" only — the documented protocol has no sequence field.
+            wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(binary) }));
           }
         };
 
@@ -1110,7 +840,7 @@ export default function LiveInterviewSessionPage() {
       audioContextRef.current = null;
       setMicLevel(0);
     };
-  }, [phase, micRetryKey]);
+  }, [wsConnected, micRetryKey]);
 
   const wsSend = useCallback((msg: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -1129,6 +859,14 @@ export default function LiveInterviewSessionPage() {
     }
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
   }, [wsConnected, phase, wsSend]);
+
+  // handleWsMessage is a useCallback with a stable, mostly-empty dependency
+  // list (see below) — it must not read frequently-changing state directly,
+  // since openWebSocket depends on it and the connect effect depends on
+  // openWebSocket, so a changing identity would reopen the socket on every
+  // message. Read current values through refs instead.
+  const questionNumberRef = useRef(1);
+  useEffect(() => { questionNumberRef.current = questionNumber; }, [questionNumber]);
 
   // Track last mic activity so the inactivity banner uses real silence,
   // not transcript updates (STT latency can exceed 30s so transcript is
@@ -1188,8 +926,9 @@ export default function LiveInterviewSessionPage() {
 
   const handleWsMessage = useCallback((msg: WsServerMessage) => {
     switch (msg.type) {
+      // Not sent by this backend release (no live-interview coding round
+      // exists yet) — kept only so the coding-round UI stays intact.
       case "coding_round_start":
-        stopTimer();
         setCodingRound({
           problemSlug: msg.problem_slug,
           problemTitle: msg.problem_title,
@@ -1199,9 +938,10 @@ export default function LiveInterviewSessionPage() {
         return;
       case "session_ready":
         sessionReadyRef.current = true;
-        setTotalQuestions(msg.total_questions);
         setServerError(null);
         setWsConnected(true);
+        setVisibleQuestionText("");
+        setPhase("ai-talking");
         break;
       case "session_resumed": {
         // Reset reconnect tracking for future disconnects
@@ -1210,72 +950,119 @@ export default function LiveInterviewSessionPage() {
         // Establish dedup baseline so replayed events are ignored
         lastEventIdRef.current = msg.resumed_from_event_id ?? 0;
 
-        setTotalQuestions(msg.total_questions);
         setQuestionNumber(msg.questions_asked + 1);
         // Restore the current question text (not just the number)
         if (msg.current_question) {
           setCurrentQuestion({ number: msg.questions_asked + 1, text: msg.current_question });
+          setVisibleQuestionText(msg.current_question);
         }
         setServerError(null);
         setWsConnected(true);
         setShowReconnectModal(false);
-        // If the candidate was mid-answer when the connection dropped, restore listening phase
-        if (msg.pending_answer) {
-          setPhase("listening");
-          startTimer(120); // fallback limit; server will send time_limit_s with next question if answer is finished
-        }
+        // If the candidate was mid-answer when the connection dropped, the AI
+        // is waiting on them — resume straight into listening.
+        setPhase(msg.pending_answer ? "listening" : "ai-talking");
         break;
       }
-      case "question_audio": {
-        const lipSync = msg.lip_sync ?? null;
-        const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
-        setCurrentQuestion({ number: msg.question_number, text: msg.text });
+      case "interviewer_audio_delta": {
+        setPhase("ai-talking");
+        // The server always sends these whether or not the avatar is up, so
+        // it can switch instantly if the avatar drops. While the avatar's
+        // LiveKit audio track is live, it IS this same voice — playing both
+        // would double it, slightly out of step. See interview-avatar.txt §5.
+        if (avatarAudioLiveRef.current) break;
+        if (!interviewerAudioPlayerRef.current) {
+          interviewerAudioPlayerRef.current = createInterviewerAudioPlayer();
+          if (interviewerAudioPlayerRef.current) {
+            interviewerAudioPlayerRef.current.gainNode.gain.value = isAudioMutedRef.current ? 0 : 1;
+          }
+        }
+        const player = interviewerAudioPlayerRef.current;
+        if (!player) break;
+        scheduleInterviewerAudioDelta(player, msg.audio_base64);
+        break;
+      }
+      case "interviewer_transcript_delta":
         setServerError(null);
-        setQuestionNumber(msg.question_number);
+        setVisibleQuestionText((prev) => prev + msg.text);
+        break;
+      case "interviewer_transcript_final":
+        setServerError(null);
+        setVisibleQuestionText(msg.text);
+        setCurrentQuestion((q) => (q ? { ...q, text: msg.text } : { number: questionNumberRef.current, text: msg.text }));
+        break;
+      case "interviewer_generation_complete":
+      case "turn_complete":
+        setPhase("listening");
+        break;
+      case "interviewer_interrupted": {
+        const player = interviewerAudioPlayerRef.current;
+        if (player) stopInterviewerAudio(player);
+        break;
+      }
+      case "question_next": {
+        const text = msg.question_text ?? msg.text ?? msg.question?.question_text ?? "";
+        setServerError(null);
+        setQuestionNumber((n) => n + 1);
+        setCurrentQuestion((q) => ({ number: (q?.number ?? questionNumberRef.current) + 1, text }));
         setTranscript("");
         setPartialTranscript("");
-        setUseLipSyncQuestionReveal(usesTimedReveal);
-        setPhase(msg.is_follow_up ? "follow-up" : "ai-talking");
-        // Use server's time_limit_s; fall back to 120 only when server sends 0 or omits it
-        const limit = msg.time_limit_s || 120;
-        const afterAudio = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); startTimer(limit); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterAudio);
+        setVisibleQuestionText(text);
+        setPhase("ai-talking");
         break;
       }
-      case "follow_up": {
-        const lipSync = msg.lip_sync ?? null;
-        const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
-        setCurrentQuestion((q) => q ? { ...q, text: msg.text, isFollowUp: true } : null);
-        setUseLipSyncQuestionReveal(usesTimedReveal);
-        setPhase("follow-up");
-        const limit = msg.time_limit_s || 120;
-        const afterFollowUp = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); startTimer(limit); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterFollowUp);
+      case "candidate_turn_open":
+        setIsCandidateSpeaking(true);
         break;
-      }
+      case "candidate_turn_closed":
+        setIsCandidateSpeaking(false);
+        setPhase("processing");
+        // Finalize whatever partial transcript we had — transcript_final may
+        // still arrive after this and will overwrite it, which is fine.
+        setPartialTranscript((partial) => {
+          if (partial) setTranscript(partial);
+          return "";
+        });
+        break;
       case "transcript_partial":
-        console.warn('[STT DEBUG] transcript_partial received:', msg.text);
         setServerError(null);
         setPartialTranscript(msg.text);
         break;
       case "transcript_final":
-        console.warn('[STT DEBUG] transcript_final received:', msg.text);
         setServerError(null);
         setTranscript(msg.text);
         setPartialTranscript("");
         break;
-      case "answer_scored":
-        showScoreToast(msg.question_number, msg.score);
-        setPhase("processing");
-        break;
-      case "question_skipped":
+      case "turn_timeout":
         setTranscript("");
         setPartialTranscript("");
         break;
+      case "answer_scored": {
+        const { evaluation } = msg;
+        if (!evaluation.scoring_skipped && !evaluation.excluded_from_scoring) {
+          showScoreToast(questionNumberRef.current, evaluation.weighted_score);
+        }
+        setPhase("processing");
+        break;
+      }
+      case "session_closing":
+        setIsSessionClosing(true);
+        break;
       case "interview_complete":
-        stopTimer();
+        disconnectAvatarRoom();
         setCompletedReportId(msg.report_id);
         setPhase("completed");
+        break;
+      // Purely presentational — safe to ignore, but a good "I'm listening" cue.
+      case "avatar_state":
+        setAvatarActivity(msg.state);
+        break;
+      // The avatar never returns in the same session — switch to the audio
+      // deltas and show no error, per interview-avatar.txt §6.
+      case "avatar_unavailable":
+        avatarAudioLiveRef.current = false;
+        setAvatarConnection("fallback");
+        disconnectAvatarRoom();
         break;
       case "session_paused":
         setWsConnected(false);
@@ -1290,13 +1077,15 @@ export default function LiveInterviewSessionPage() {
           doReconnectRef.current();
         }, 500);
         break;
+      case "heartbeat":
+        break;
       case "error":
         setServerError(msg.message || "The interview service reported an issue. You can retry or end for a partial report.");
         break;
       default:
         break;
     }
-  }, [startTimer, stopTimer, showScoreToast]);
+  }, [showScoreToast, disconnectAvatarRoom]);
 
   const openWebSocket = useCallback((wsUrl: string) => {
     if (wsRef.current) {
@@ -1310,12 +1099,16 @@ export default function LiveInterviewSessionPage() {
 
     ws.onmessage = (event) => {
       try {
-        const raw = JSON.parse(event.data) as WsServerMessage & { event_id?: number };
+        const raw = JSON.parse(event.data) as WsServerMessage & { event_id?: number; total_questions?: number };
         // Skip replayed frames sent by the server after reconnect (dedup by event_id)
         if (raw.event_id !== undefined) {
           if (raw.event_id <= lastEventIdRef.current) return;
           lastEventIdRef.current = raw.event_id;
         }
+        // Not documented on session_ready/session_resumed anymore, but read it
+        // defensively if the backend still sends it — the question-progress
+        // bar just shows no "of N" when it's absent.
+        if (typeof raw.total_questions === "number") setTotalQuestions(raw.total_questions);
         handleWsMessage(raw);
       } catch { /* ignore malformed frames */ }
     };
@@ -1325,6 +1118,15 @@ export default function LiveInterviewSessionPage() {
 
       // Clean close — interview ended normally; do not reconnect
       if (event.code === 1000 || event.code === 1001) return;
+
+      // AI_SESSION_UNAVAILABLE: the AI provider itself was unreachable when
+      // the server tried to connect. Doc's own remedy is unconditional —
+      // "retry with a new session" — reconnecting THIS session would just
+      // fail the same way again, so go straight back to set up a fresh one.
+      if (event.code === 1011) {
+        routerRef.current.replace('/mock-interview/live');
+        return;
+      }
 
       // Terminal server codes — the token/session is gone; reconnecting would fail.
       // If session_ready was never received this is an initial-connection failure
@@ -1394,27 +1196,11 @@ export default function LiveInterviewSessionPage() {
     };
   }, []);
 
-  const handleEndAnswer = useCallback(() => {
-    stopTimer();
-    setShowInactivityBanner(false);
-    setPhase("processing");
-    if (partialTranscript) setTranscript(partialTranscript);
-    setPartialTranscript("");
-    wsSend({ type: "end_answer" });
-  }, [partialTranscript, stopTimer, wsSend]);
-
-  // Keep autoSubmitRef pointing at the latest handleEndAnswer so the timer
-  // can fire it without capturing a stale closure.
-  useEffect(() => {
-    autoSubmitRef.current = handleEndAnswer;
-  }, [handleEndAnswer]);
-
   const handleEndInterview = useCallback(() => {
-    stopTimer();
     setShowEndModal(false);
     wsSend({ type: "end_interview" });
     router.push("/mock-interview/history");
-  }, [stopTimer, wsSend, router]);
+  }, [wsSend, router]);
 
   const doReconnect = useCallback(async () => {
     if (!sessionId) return;
@@ -1463,16 +1249,12 @@ export default function LiveInterviewSessionPage() {
     doReconnect();
   }, [doReconnect]);
 
-  const isQuestionBeingSpoken = phase === "ai-talking" || phase === "follow-up";
+  const isQuestionBeingSpoken = phase === "ai-talking";
   const questionTextForDisplay = currentQuestion
     ? isQuestionBeingSpoken
       ? visibleQuestionText
       : currentQuestion.text
     : "Your interviewer is preparing the first question.";
-
-  const interviewerMouthLevel = interviewerMouthCue.level;
-  const mouthAnchor = interviewer.mouthAnchor;
-  const mouthSprite = mouthSpriteSrc(interviewer.mouthSpriteBasePath, interviewerMouthCue);
 
   const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
     wsSend({
@@ -1642,7 +1424,7 @@ export default function LiveInterviewSessionPage() {
           <div className="bg-[#2557a7]/20 border-b border-[#2557a7]/40 px-4 py-2.5 flex items-center justify-between">
             <p className="text-xs text-[#2557a7] flex items-center gap-2">
               <AlertCircle size={13} className="shrink-0" />
-              Are you still there? Press <strong>Done Speaking</strong> or continue your answer.
+              Are you still there? Keep speaking — the interview will continue automatically.
             </p>
             <button onClick={() => setShowInactivityBanner(false)} className="text-[#2557a7] hover:text-[#1e4a8f]">
               <X size={14} />
@@ -1666,102 +1448,94 @@ export default function LiveInterviewSessionPage() {
         {phase !== "coding" && (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:overflow-hidden">
           <div className="mx-auto flex h-full w-full max-w-[1560px] flex-col gap-3">
-            {/* Question progress */}
+            {/* Question progress — the realtime protocol doesn't report a total
+                question count, so this shows a running counter rather than a
+                fixed-length bar when totalQuestions is unknown (0). */}
             <div className="flex shrink-0 items-center gap-3">
-              <div className="flex flex-1 gap-1.5">
-                {Array.from({ length: totalQuestions }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 flex-1 rounded-full transition-all ${
-                      i < questionNumber - 1
-                        ? "bg-[#2557a7]"
-                        : i === questionNumber - 1
-                        ? "bg-[#2557a7]"
-                        : "bg-gray-200"
-                    }`}
-                  />
-                ))}
-              </div>
-              <span className="shrink-0 text-xs font-medium text-gray-500">
-                {questionNumber}/{totalQuestions}
-              </span>
+              {totalQuestions > 0 ? (
+                <>
+                  <div className="flex flex-1 gap-1.5">
+                    {Array.from({ length: totalQuestions }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 rounded-full transition-all ${
+                          i <= questionNumber - 1 ? "bg-[#2557a7]" : "bg-gray-200"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-gray-500">
+                    {questionNumber}/{totalQuestions}
+                  </span>
+                </>
+              ) : (
+                <span className="shrink-0 text-xs font-medium text-gray-500">
+                  Question {questionNumber}
+                </span>
+              )}
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.14fr)_minmax(320px,0.78fr)_300px] gap-3 overflow-hidden">
               {/* Interviewer */}
               <section
-                ref={interviewerStageRef}
                 className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]"
               >
-                <div
-                  className="absolute"
-                  style={interviewerMediaFrame ? {
-                    left: `${interviewerMediaFrame.left}px`,
-                    top: `${interviewerMediaFrame.top}px`,
-                    width: `${interviewerMediaFrame.width}px`,
-                    height: `${interviewerMediaFrame.height}px`,
-                  } : { inset: 0 }}
-                >
-                  <Image
-                    src={interviewer.src}
-                    alt={`${interviewer.name}, AI interviewer seated in a professional interview room`}
-                    fill
-                    className="object-fill"
-                    priority
-                    sizes="48vw"
-                  />
+                {/* Live avatar (interview-avatar.txt). Element stays mounted the
+                    whole time so LiveKit has a target to attach the track to
+                    before it arrives; only shown once video is actually live.
+                    Plain inset-0 cover — not the static photo's crop frame
+                    below, which is calibrated to that PNG's exact pixels. */}
+                <video
+                  ref={avatarVideoElRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`absolute inset-0 h-full w-full object-cover ${
+                    avatarConnection === "live" || avatarConnection === "audio-blocked" ? "block" : "hidden"
+                  }`}
+                />
 
-                  {isQuestionBeingSpoken && (
-                    <div
-                      className="pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-                      data-testid="interviewer-mouth-cue"
-                      data-viseme={interviewerMouthCue.visemeId}
-                      data-mouth-sprite={mouthSpriteIdFromCue(interviewerMouthCue)}
-                      style={{
-                        left: `${mouthAnchor.xPercent}%`,
-                        top: `${mouthAnchor.yPercent}%`,
-                        width: `clamp(${mouthAnchor.minWidthPx}px, ${mouthAnchor.widthPercent}%, ${mouthAnchor.maxWidthPx}px)`,
-                        transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) rotate(${mouthAnchor.rotationDeg ?? 0}deg) scale(${0.96 + interviewerMouthLevel * 0.08})`,
-                      }}
-                      aria-hidden="true"
-                    >
-                      {!mouthSpriteFailed ? (
-                        <Image
-                          src={mouthSprite}
-                          alt=""
-                          width={120}
-                          height={64}
-                          unoptimized
-                          className="block h-auto w-full select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.22)] transition-[opacity,transform] duration-75 ease-linear motion-reduce:transition-none"
-                          style={{ opacity: 0.72 + interviewerMouthLevel * 0.28 }}
-                          onError={() => setMouthSpriteFailed(true)}
-                          draggable={false}
-                        />
-                      ) : (
-                        <span
-                          className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
-                          style={{
-                            width: `${28 + interviewerMouthLevel * 14}px`,
-                            height: `${14 + interviewerMouthLevel * 10}px`,
-                            borderRadius: interviewerMouthCue.borderRadius,
-                            filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
-                            opacity: 0.12 + interviewerMouthLevel * 0.32,
-                          }}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
+                {/* Fallback shown when there's no avatar at all, or while it's
+                    connecting / down. */}
+                {avatarConnection !== "live" && avatarConnection !== "audio-blocked" && (
+                  <div className="absolute inset-0 bg-gray-900">
+                    <Image
+                      src={interviewer.src}
+                      alt={`${interviewer.name}, AI interviewer`}
+                      fill
+                      priority
+                      sizes="(min-width: 1024px) 48vw, 100vw"
+                      className="object-cover object-top"
+                    />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
                 <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
                   <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
                   {wsConnected ? "Live interview room" : "Connecting room"}
                 </div>
                 <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-[#2557a7] shadow-sm" role="status" aria-live="polite">
-                  {getInterviewerStatus(phase)}
+                  {getInterviewerStatus(phase, isSessionClosing)}
                 </div>
 
-                {(phase === "ai-talking" || phase === "follow-up") && (
+                {avatarConnection === "connecting" && (
+                  <div className="absolute left-1/2 top-14 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-md sm:flex">
+                    <Loader2 size={11} className="animate-spin" />
+                    Connecting avatar…
+                  </div>
+                )}
+
+                {avatarConnection === "audio-blocked" && (
+                  <button
+                    onClick={handleEnableAvatarSound}
+                    className="absolute left-1/2 top-14 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-[#2557a7] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm backdrop-blur-md hover:bg-[#1e4a8f]"
+                  >
+                    <Volume2 size={12} />
+                    Tap to enable sound
+                  </button>
+                )}
+
+                {phase === "ai-talking" && (
                   <div className="absolute left-1/2 top-4 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-md sm:flex">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 motion-reduce:animate-none" />
                     Interviewer speaking
@@ -1780,11 +1554,8 @@ export default function LiveInterviewSessionPage() {
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Current question</p>
-                      <p className="mt-1 text-sm font-bold text-gray-900">Question {questionNumber}/{totalQuestions || "-"}</p>
+                      <p className="mt-1 text-sm font-bold text-gray-900">Question {questionNumber}{totalQuestions ? `/${totalQuestions}` : ""}</p>
                     </div>
-                    {currentQuestion?.isFollowUp && (
-                      <span className="rounded-full border border-[#2557a7]/20 bg-[#2557a7]/10 px-2 py-1 text-xs font-semibold text-[#2557a7]">Follow-up</span>
-                    )}
                   </div>
                   <div className="max-h-36 overflow-y-auto pr-1">
                     <p className="text-base font-semibold leading-relaxed text-gray-950">
@@ -1809,12 +1580,6 @@ export default function LiveInterviewSessionPage() {
                       <AIWaveform />
                     </div>
                   )}
-                  {phase === "follow-up" && (
-                    <div className="flex items-center justify-center gap-2">
-                      <MessageSquare size={12} className="text-[#2557a7]" />
-                      <span className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">Follow-up question</span>
-                    </div>
-                  )}
                   {phase === "listening" && (
                     <p className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">{interviewer.name} is listening</p>
                   )}
@@ -1834,7 +1599,7 @@ export default function LiveInterviewSessionPage() {
                         {!micError && (
                           <div className="flex items-center gap-2 rounded-full bg-gray-50 px-2 py-1" role="status" aria-label={`Microphone input level ${micLevel} percent`}>
                             <MicLevelMeter level={micLevel} />
-                            <span className="text-[10px] font-semibold text-gray-500">{micLevel > 8 ? "Hearing you" : "Waiting"}</span>
+                            <span className="text-[10px] font-semibold text-gray-500">{isCandidateSpeaking || micLevel > 8 ? "Hearing you" : "Waiting"}</span>
                           </div>
                         )}
                       </div>
@@ -1911,19 +1676,7 @@ export default function LiveInterviewSessionPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => {
-                      setIsAudioMuted((m) => {
-                        const next = !m;
-                        if (ttsAudioRef.current) {
-                          if (next) {
-                            ttsAudioRef.current.pause();
-                          } else {
-                            ttsAudioRef.current.play().catch(() => {});
-                          }
-                        }
-                        return next;
-                      });
-                    }}
+                    onClick={() => setIsAudioMuted((m) => !m)}
                     className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:bg-gray-100"
                     aria-label={isAudioMuted ? "Unmute interviewer audio" : "Mute interviewer audio"}
                   >
@@ -1948,18 +1701,13 @@ export default function LiveInterviewSessionPage() {
 
               <div className="rounded-2xl border border-[#2557a7]/20 bg-white p-3 shadow-sm">
                 {phase === "listening" ? (
-                  <div className="flex items-center gap-3 rounded-xl bg-[#2557a7]/5 p-2">
-                    <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotalRef.current} />
-                    <button
-                      onClick={handleEndAnswer}
-                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#2557a7] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#1e4a8f]"
-                    >
-                      Done Speaking <ChevronRight size={14} aria-hidden="true" />
-                    </button>
+                  <div className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-[#2557a7]/5 px-4 text-center text-sm font-semibold text-[#2557a7]">
+                    <span className={`h-2 w-2 rounded-full bg-[#2557a7] ${isCandidateSpeaking ? "animate-pulse" : "opacity-40"}`} aria-hidden="true" />
+                    {isCandidateSpeaking ? "Hearing you — keep going" : "Your turn — start speaking"}
                   </div>
                 ) : (
                   <div className="flex min-h-14 items-center justify-center rounded-xl bg-gray-50 px-4 text-center text-sm font-semibold text-gray-500">
-                    {getInterviewerStatus(phase)}
+                    {getInterviewerStatus(phase, isSessionClosing)}
                   </div>
                 )}
               </div>

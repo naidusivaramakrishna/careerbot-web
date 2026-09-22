@@ -89,17 +89,18 @@ const makeData = (
       resume_uploaded: false,
       profile_completed: false,
       ats_scan_done: false,
-      resume_enhanced: false,
       job_applied: false,
     },
     usage_counts: {
       resumes_created: 0,
       resumes_parsed: 0,
       ats_scans: 0,
-      resumes_enhanced: 0,
       job_matches: 0,
       job_applications: 0,
       assessments_taken: 0,
+      mock_tests_taken: 0,
+      mock_interviews_taken: 0,
+      coding_tests_taken: 0,
     },
     best_scores: { ats_score: undefined, job_match_score: undefined, interview_score: undefined },
     recent_activity: [
@@ -180,7 +181,8 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
         recent_activity: [],
         usage_counts: {
           resumes_created: 0, resumes_parsed: 0, ats_scans: 0,
-          resumes_enhanced: 0, job_matches: 0, job_applications: 0, assessments_taken: 0,
+          job_matches: 0, job_applications: 0, assessments_taken: 0,
+          mock_tests_taken: 0, mock_interviews_taken: 0, coding_tests_taken: 0,
         },
       });
       const h1 = screen.getByRole('heading', { level: 1 });
@@ -344,12 +346,11 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
       expect(screen.getByRole('heading', { level: 2, name: 'Browse & Apply' })).toBeInTheDocument();
     });
 
-    it('links the Browse jobs CTA to /jobs', () => {
+    it('links the Browse jobs CTA to /jobslogin', () => {
       renderDash({ progress: { resume_uploaded: true, profile_completed: true, ats_scan_done: true } });
-      // Both the primary action CTA and the OperationsTable row link to /jobs
       const links = screen.getAllByRole('link', { name: /Browse jobs/i });
       expect(links.length).toBeGreaterThanOrEqual(1);
-      links.forEach((link) => expect(link).toHaveAttribute('href', '/jobs'));
+      links.forEach((link) => expect(link).toHaveAttribute('href', '/jobslogin'));
     });
 
     it('advances to step 4 when best_scores.ats_score is non-null (optimistic override)', () => {
@@ -495,7 +496,7 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
       // Check unique names directly
       const byName: [RegExp, string][] = [
         [/Resume Builder/i, '/builder/start'],
-        [/Browse Jobs/i, '/jobs'],
+        [/Browse Jobs/i, '/jobslogin'],
         [/Interview Prep/i, '/mock-interview'],
         [/Mock Test/i, '/mock-test'],
         [/Coding Practice/i, '/coding-test'],

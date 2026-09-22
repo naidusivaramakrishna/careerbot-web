@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 import { getProfile } from "@/api/userApi";
-import { recoverSession, getUserProgress, ActiveSession, UserProgress } from "@/api/mockInterviewApi";
+import { recoverSession, getUserProgress, ActiveSession, UserProgress, LiveAvatarSession } from "@/api/mockInterviewApi";
 import { getNotes } from "@/api/interviewPrepApi";
 import logger from "@/lib/logger";
 
@@ -33,6 +33,12 @@ interface MockInterviewContextValue {
   // Progress summary
   userProgress: UserProgress | null;
   progressLoading: boolean;
+  // In-memory-only relay for the LiveAvatar session (livekit_client_token is a
+  // live credential — interview-avatar.txt says never store it in
+  // localStorage/sessionStorage/logs). Set by the "starting" page right after
+  // POST /live/create, consumed once by the session page on mount.
+  setPendingAvatarSession: (sessionId: string, avatar: LiveAvatarSession | null) => void;
+  consumePendingAvatarSession: (sessionId: string) => LiveAvatarSession | null;
 }
 
 // ─── Default state ────────────────────────────────────────────────────────────
@@ -146,6 +152,21 @@ export function MockInterviewProvider({ children }: { children: ReactNode }) {
 
   const dismissActiveSession = useCallback(() => setActiveSession(null), []);
 
+  // Ref, not state: this never needs to trigger a render, and keeping it out
+  // of state avoids it ever being logged/persisted alongside the rest.
+  const pendingAvatarRef = useRef<{ sessionId: string; avatar: LiveAvatarSession | null } | null>(null);
+
+  const setPendingAvatarSession = useCallback((sessionId: string, avatar: LiveAvatarSession | null) => {
+    pendingAvatarRef.current = { sessionId, avatar };
+  }, []);
+
+  const consumePendingAvatarSession = useCallback((sessionId: string) => {
+    const pending = pendingAvatarRef.current;
+    if (!pending || pending.sessionId !== sessionId) return null;
+    pendingAvatarRef.current = null; // one-time use
+    return pending.avatar;
+  }, []);
+
   return (
     <MockInterviewContext.Provider
       value={{
@@ -160,6 +181,8 @@ export function MockInterviewProvider({ children }: { children: ReactNode }) {
         dismissActiveSession,
         userProgress,
         progressLoading,
+        setPendingAvatarSession,
+        consumePendingAvatarSession,
       }}
     >
       {children}

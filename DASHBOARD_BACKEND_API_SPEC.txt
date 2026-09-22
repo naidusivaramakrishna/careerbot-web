@@ -117,13 +117,16 @@ TABLE OF CONTENTS
     },
 
     "usage_counts": {
-      "resumes_created":    "number — total resumes created (builder)",
-      "resumes_parsed":     "number — total resume parse operations",
-      "ats_scans":          "number — total ATS scans run",
-      "resumes_enhanced":   "number — total enhancement operations",
-      "job_matches":        "number — total job match analyses",
-      "job_applications":   "number — total applications submitted",
-      "assessments_taken":  "number — total communication assessments completed"
+      "resumes_created":      "number  — total resumes created (builder)",
+      "resumes_parsed":       "number  — total resume parse operations",
+      "ats_scans":            "number  — total ATS scans run",
+      "resumes_enhanced":     "number  — total enhancement operations (legacy; unused by frontend)",
+      "job_matches":          "number  — total job match analyses",
+      "job_applications":     "number  — total applications submitted",
+      "assessments_taken":    "number  — total communication assessments completed",
+      "mock_tests_taken":     "number? — total mock tests completed (new; may be absent on older deployments)",
+      "mock_interviews_taken":"number? — total mock interview sessions (new; may be absent on older deployments)",
+      "coding_tests_taken":   "number? — total coding practice sessions (new; may be absent on older deployments)"
     },
 
     "best_scores": {

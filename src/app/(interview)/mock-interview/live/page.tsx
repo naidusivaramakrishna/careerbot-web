@@ -854,8 +854,11 @@ export default function LiveSetupPage() {
 
     // Store params for the starting page, then navigate immediately so the user
     // doesn't wait on the API call before seeing any progress.
-    const typeMap: Record<SessionType, "hr" | "technical" | "managerial" | "technical_coding"> = {
-      HR: "hr", Technical: "technical", Managerial: "managerial", "Technical + Coding": "technical_coding",
+    // "technical_coding" is not a valid session_type on the backend anymore —
+    // this release has no live-interview coding round at all. "Technical + Coding"
+    // still maps to plain "technical" for now (see live-interview.txt section 6/9).
+    const typeMap: Record<SessionType, "hr" | "technical" | "managerial"> = {
+      HR: "hr", Technical: "technical", Managerial: "managerial", "Technical + Coding": "technical",
     };
     const resumeId = localStorage.getItem("current_resume_id") ?? undefined;
     const interviewerIndex = pickRandomInterviewerIndex();
@@ -864,9 +867,7 @@ export default function LiveSetupPage() {
       session_type: typeMap[selectedType],
       resume_id: resumeId,
       target_role: targetRole,
-      enable_streaming_stt: true,
       voice: selectedInterviewer.voice,
-      use_orchestrator: true,
       interviewer_index: interviewerIndex,
       interviewer_slug: selectedInterviewer.slug,
       interviewer_name: selectedInterviewer.name,

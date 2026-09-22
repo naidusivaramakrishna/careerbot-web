@@ -140,14 +140,14 @@ export interface EnglishEssentials {
 
 /**
  * Generate AI-powered interview prep notes from user's resume
- * POST /api/v1/mock-interview/generate-notes
+ * POST /api/v1/interview-prep/generate-notes
  * Credit cost: 10 credits
  */
 export const generateNotes = async (data: GenerateNotesRequest): Promise<GenerateNotesResponse> => {
   try {
-    logger.debug('📝 Generating mock interview notes', data);
+    logger.debug('📝 Generating interview prep notes', data);
     const response = await httpClient.post<GenerateNotesResponse>(
-      '/mock-interview/generate-notes',
+      '/interview-prep/generate-notes',
       data as unknown as Record<string, unknown>,
       { timeout: 180_000 } // 3 min — AI generation takes longer than the default 30s
     );
@@ -161,34 +161,26 @@ export const generateNotes = async (data: GenerateNotesRequest): Promise<Generat
 
 /**
  * Fetch stored interview prep notes for a resume
- * GET /api/v1/mock-interview/notes/{resume_id}
+ * GET /api/v1/interview-prep/notes/{resume_id}
  */
 export const getNotes = async (resumeId: string): Promise<NotesRecord> => {
-  const response = await httpClient.get<NotesRecord>(`/mock-interview/notes/${resumeId}`);
+  const response = await httpClient.get<NotesRecord>(`/interview-prep/notes/${resumeId}`);
   return response.data;
 };
 
 /**
  * Partially update interview prep notes (user edits)
- * PUT /api/v1/mock-interview/notes/{user_id}
+ * PUT /api/v1/interview-prep/notes/{resume_id}
  *
- * NOTE: this takes a USER id, unlike getNotes above which takes a resume id.
- * That asymmetry is the backend's, not a mistake here:
- *   - GET  /notes/{resume_id} resolves resume-scoped, falling back to
- *     user-scoped when the segment is the caller's own id.
- *   - PUT  /notes/{user_id}   compares the segment to the authenticated user
- *     and returns 403 Access denied on any mismatch.
- * The stored notes document is keyed on user_id alone (see save_notes in
- * careerbot-api's mock_interview repository), so a user-scoped write and a
- * resume-filtered read address the SAME record — passing a resume id here
- * only produces a 403, it does not address a different document.
+ * As of the interview-prep move, PUT is resume-scoped — symmetric with GET
+ * above. (Previously this endpoint was user-scoped; that asymmetry is gone.)
  */
 export const updateNotes = async (
-  userId: string,
+  resumeId: string,
   notes: Record<string, unknown>
 ): Promise<UpdateNotesResponse> => {
   const response = await httpClient.put<UpdateNotesResponse>(
-    `/mock-interview/notes/${userId}`,
+    `/interview-prep/notes/${resumeId}`,
     { notes } as unknown as Record<string, unknown>
   );
   return response.data;
@@ -196,20 +188,20 @@ export const updateNotes = async (
 
 /**
  * Return interview English phrases and filler replacements
- * GET /api/v1/mock-interview/english-essentials (public)
+ * GET /api/v1/interview-prep/english-essentials (public)
  */
 export const getEnglishEssentials = async (): Promise<EnglishEssentials> => {
-  const response = await httpClient.get<EnglishEssentials>('/mock-interview/english-essentials');
+  const response = await httpClient.get<EnglishEssentials>('/interview-prep/english-essentials');
   return response.data;
 };
 
 /**
  * Start a new practice round with questions
- * POST /api/v1/mock-interview/practice/start
+ * POST /api/v1/interview-prep/practice/start
  */
 export const startPractice = async (data: StartPracticeRequest): Promise<StartPracticeResponse> => {
   const response = await httpClient.post<StartPracticeResponse>(
-    '/mock-interview/practice/start',
+    '/interview-prep/practice/start',
     data as unknown as Record<string, unknown>
   );
   return response.data;
@@ -217,12 +209,12 @@ export const startPractice = async (data: StartPracticeRequest): Promise<StartPr
 
 /**
  * Submit a recorded audio answer for AI scoring
- * POST /api/v1/mock-interview/practice/answer  (multipart/form-data)
+ * POST /api/v1/interview-prep/practice/answer  (multipart/form-data)
  * Credit cost: 5 credits (only if LLM is called; 0 if rule score >= 7.0)
  */
 export const submitPracticeAnswer = async (formData: FormData): Promise<SubmitAnswerResponse> => {
   const response = await httpClient.post<SubmitAnswerResponse>(
-    '/mock-interview/practice/answer',
+    '/interview-prep/practice/answer',
     formData as unknown as Record<string, unknown>,
     { headers: { 'Content-Type': 'multipart/form-data' } }
   );
@@ -231,10 +223,10 @@ export const submitPracticeAnswer = async (formData: FormData): Promise<SubmitAn
 
 /**
  * Return progress for an active practice session
- * GET /api/v1/mock-interview/practice/progress?session_id=
+ * GET /api/v1/interview-prep/practice/progress?session_id=
  */
 export const getPracticeProgress = async (sessionId: string): Promise<PracticeProgress> => {
-  const response = await httpClient.get<PracticeProgress>('/mock-interview/practice/progress', {
+  const response = await httpClient.get<PracticeProgress>('/interview-prep/practice/progress', {
     params: { session_id: sessionId },
   });
   return response.data;
@@ -265,14 +257,14 @@ export interface GenerateTechnicalQuestionsResponse {
 
 /**
  * Generate AI-powered technical interview questions
- * POST /api/v1/mock-interview/generate-technical-questions
+ * POST /api/v1/interview-prep/generate-technical-questions
  * Credit cost: 5 credits (MOCK_INTERVIEW_TECH_Q)
  */
 export const generateTechnicalQuestions = async (
   data: GenerateTechnicalQuestionsRequest
 ): Promise<GenerateTechnicalQuestionsResponse> => {
   const response = await httpClient.post<GenerateTechnicalQuestionsResponse>(
-    '/mock-interview/generate-technical-questions',
+    '/interview-prep/generate-technical-questions',
     data as unknown as Record<string, unknown>
   );
   return response.data;
@@ -296,13 +288,13 @@ export interface GenerateHrQuestionsResponse {
 
 /**
  * Generate HR interview questions
- * POST /api/v1/mock-interview/generate-hr-questions
+ * POST /api/v1/interview-prep/generate-hr-questions
  */
 export const generateHrQuestions = async (
   numQuestions = 10
 ): Promise<GenerateHrQuestionsResponse> => {
   const response = await httpClient.post<GenerateHrQuestionsResponse>(
-    '/mock-interview/generate-hr-questions',
+    '/interview-prep/generate-hr-questions',
     { num_questions: numQuestions } as unknown as Record<string, unknown>
   );
   return response.data;
@@ -339,13 +331,13 @@ export interface GenerateMrTrQuestionsResponse {
 
 /**
  * Generate Technical Role (TR) or Managerial Role (MR) interview questions
- * POST /api/v1/mock-interview/generate-mr-tr-questions
+ * POST /api/v1/interview-prep/generate-mr-tr-questions
  */
 export const generateMrTrQuestions = async (
   data: GenerateMrTrQuestionsRequest
 ): Promise<GenerateMrTrQuestionsResponse> => {
   const response = await httpClient.post<GenerateMrTrQuestionsResponse>(
-    '/mock-interview/generate-mr-tr-questions',
+    '/interview-prep/generate-mr-tr-questions',
     data as unknown as Record<string, unknown>
   );
   return response.data;
@@ -365,11 +357,11 @@ export interface RateFeedbackResponse {
 
 /**
  * Submit thumbs up/down rating on an AI feedback response
- * POST /api/v1/mock-interview/feedback/rate
+ * POST /api/v1/interview-prep/feedback/rate
  */
 export const rateAnswerFeedback = async (data: RateFeedbackRequest): Promise<RateFeedbackResponse> => {
   const response = await httpClient.post<RateFeedbackResponse>(
-    '/mock-interview/feedback/rate',
+    '/interview-prep/feedback/rate',
     data as unknown as Record<string, unknown>
   );
   return response.data;

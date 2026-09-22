@@ -277,7 +277,7 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
     { label: "Resume Builder", detail: "Create, parse, and maintain your resume workspace", href: "/builder/start", Icon: FileText, metric: `${data.usage_counts.resumes_created + data.usage_counts.resumes_parsed} used` },
     { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
     { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
-    { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobs", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
+    { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobslogin", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
     { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: `${data.usage_counts.mock_interviews_taken ?? 0} sessions` },
     { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} sessions` },
     { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.mock_tests_taken ?? 0} tests` },
