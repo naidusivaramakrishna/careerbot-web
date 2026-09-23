@@ -9,9 +9,10 @@ import {
   type CustomSection,
 } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 import { getResumeById, getDefaultTemplate } from '@/api/resumeApi';
-import { getEnhancedResume, applyFix } from '@/api/enhancerApi';
+import { getEnhancedResume, applyFix, deleteFix } from '@/api/enhancerApi';
 import { httpClient } from '@/lib/http';
 import { toast } from 'sonner';
+import { fixedEducationSnapshot } from '@/tests/fixtures/enhancer/canonicalSnapshots';
 
 vi.mock('@/api/resumeApi', () => ({
   getResumeById: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('@/api/resumeApi', () => ({
 vi.mock('@/api/enhancerApi', () => ({
   getEnhancedResume: vi.fn(),
   applyFix: vi.fn(),
+  deleteFix: vi.fn(),
 }));
 
 vi.mock('@/lib/http', () => ({
@@ -208,6 +210,7 @@ const mockGetResumeById = vi.mocked(getResumeById);
 const mockGetDefaultTemplate = vi.mocked(getDefaultTemplate);
 const mockGetEnhancedResume = vi.mocked(getEnhancedResume);
 const mockApplyFix = vi.mocked(applyFix);
+const mockDeleteFix = vi.mocked(deleteFix);
 const mockHttpPost = vi.mocked(httpClient.post);
 const mockToast = vi.mocked(toast);
 
@@ -233,6 +236,19 @@ describe('ResumeContext', () => {
           },
         },
         ats_breakdown: { final_score: 88 },
+      },
+      suggestions: [],
+      applied_fixes: [{ suggestion_id: 'suggestion-1', status: 'applied', undo_available: true }],
+      operation: { type: 'apply_fix', suggestion_id: 'suggestion-1' },
+    } as never);
+    mockDeleteFix.mockResolvedValue({
+      // Legacy deployed delete handlers did not include `success`, despite
+      // returning this valid completed-undo payload.
+      deleted_suggestion_id: 'suggestion-1',
+      enhanced_data: enhancedResume.enhanced_data,
+      ats_score: {
+        final_score: 71,
+        section_breakdown: enhancedResume.ats_score.section_breakdown,
       },
     } as never);
     mockHttpPost.mockResolvedValue({ data: { id: 'created-1' } } as never);
@@ -261,6 +277,30 @@ describe('ResumeContext', () => {
     expect(mapBackendSkillsToCategorized(null).programming_languages).toEqual([]);
   });
 
+  it('preserves deleted predefined categories so they stay hidden after reload', () => {
+    expect(mapBackendSkillsToCategorized({
+      softSkills: [{ id: '1', name: 'Communication' }],
+      deletedCategories: ['marketing_sales'],
+    })).toMatchObject({
+      soft_skills: ['Communication'],
+      hidden_predefined_categories: ['marketing_sales'],
+    });
+  });
+  it('renders slash-based custom category acronyms from backend slugs', () => {
+    const mapped = mapBackendSkillsToCategorized({
+      customSkills: {
+        ci_cd: [{ id: '1', name: 'Jenkins' }],
+        ai_ml: [{ id: '2', name: 'Deep Learning' }],
+        'Ci Cd': [{ id: '3', name: 'GitHub Actions' }],
+      },
+    });
+
+    expect(mapped.custom_categories).toEqual([
+      { id: 'custom_backend_ci_cd', name: 'CI/CD', skills: ['Jenkins'] },
+      { id: 'custom_backend_ai_ml', name: 'AI/ML', skills: ['Deep Learning'] },
+      { id: 'custom_backend_Ci Cd', name: 'CI/CD', skills: ['GitHub Actions'] },
+    ]);
+  });
   it('starts with empty resume data when no resume id is provided', async () => {
     renderProvider();
 
@@ -393,6 +433,534 @@ describe('ResumeContext', () => {
       fix_type: 'auto',
     });
     expect(screen.getByText('Name: Auto Fixed Avery')).toBeInTheDocument();
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed' }),
+    );
+    await waitFor(() => expect(
+      JSON.parse(window.localStorage.getItem('careerbot:enhanced-fixed-suggestions:enhanced-1') ?? '[]'),
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'suggestion-1', status: 'fixed' })])));
+  });
+
+  it('loads Summary manual action items after rescanning the same enhanced resume', async () => {
+    mockGetEnhancedResume.mockResolvedValueOnce({
+      ...enhancedResume,
+      suggestions: [
+        { id: 'summary-auto', section: 'Summary', message: 'Add measurable results.', fix_type: 'auto' },
+      ],
+      enhancer_state: {
+        ...enhancedResume.enhancer_state,
+        ats_display: {
+          score: 76,
+          sections: [{ name: 'Summary', score_pct: 45, weighted_pts: 2, max_pts: 5, deductions: [] }],
+          action_items: {
+            Summary: [
+              { id: 'summary-manual-1', after_example: 'Name a target role.', fix_type: 'manual' },
+              { id: 'summary-manual-2', after_example: 'Add domain keywords.', fix_type: 'manual' },
+            ],
+          },
+        },
+      },
+    } as never);
+
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+
+    await screen.findByText('Name: Enhanced Avery');
+    expect(latestContext.enhancedSuggestions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'summary-auto', section: 'Summary', status: 'pending' }),
+      expect.objectContaining({ id: 'summary-manual-1', section: 'Summary', status: 'pending', fix_type: 'manual' }),
+      expect.objectContaining({ id: 'summary-manual-2', section: 'Summary', status: 'pending', fix_type: 'manual' }),
+    ]));
+  });
+  it('keeps pending manual suggestions after a partial auto-fix response', async () => {
+    mockGetEnhancedResume.mockResolvedValueOnce({
+      ...enhancedResume,
+      suggestions: [
+        { id: 'summary-auto', section: 'Summary', message: 'Add measurable results.', fix_type: 'auto' },
+        { id: 'summary-manual-1', section: 'Summary', message: 'Name a target role.', fix_type: 'manual' },
+        { id: 'summary-manual-2', section: 'Summary', message: 'Add domain keywords.', fix_type: 'manual' },
+      ],
+    } as never);
+    mockApplyFix.mockResolvedValueOnce({
+      success: true,
+      suggestions: [],
+      applied_fixes: [{ suggestion_id: 'summary-auto', status: 'applied', undo_available: true }],
+      operation: { type: 'apply_fix', suggestion_id: 'summary-auto' },
+    } as never);
+
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Suggestions: summary-auto,summary-manual-1,summary-manual-2');
+
+    await act(async () => {
+      await latestContext.applyAutoFix('summary-auto');
+    });
+
+    expect(latestContext.enhancedSuggestions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'summary-auto', status: 'fixed' }),
+      expect.objectContaining({ id: 'summary-manual-1', status: 'pending' }),
+      expect.objectContaining({ id: 'summary-manual-2', status: 'pending' }),
+    ]));
+  });
+  // P2 regression: a full, authoritative snapshot (a fresh GET / rescan, not
+  // a partial apply_fix response) must drop a pending card the server no
+  // longer lists -- otherwise a resolved suggestion stays pending forever,
+  // including across reloads (pending cards round-trip through localStorage).
+  it('drops a pending suggestion the server no longer lists on a full snapshot (rescan)', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    // Seed a pending suggestion directly (independent of the deduction-
+    // derivation path exercised by the initial load) so this test's
+    // premise doesn't depend on that separate, already-covered behavior.
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        suggestions: [{ id: 'suggestion-1', section: 'Summary', message: 'Add measurable results.', fix_type: 'manual' }],
+        ats_score: { final_score: 76, section_breakdown: {} },
+      });
+    });
+    await waitFor(() => expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    ));
+
+    await act(async () => {
+      latestContext.syncEnhancedScore(
+        { suggestions: [], ats_score: { final_score: 90, section_breakdown: {} } },
+        { isFullSnapshot: true },
+      );
+    });
+
+    await waitFor(() => expect(latestContext.enhancedSuggestions).not.toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1' }),
+    ));
+  });
+
+  // P2 regression: syncEnhancedResumeData used to spread every mapped
+  // section from the server over local resumeData unconditionally
+  // ({...previous, ...mapped}). autosave only sends items that already have
+  // a backend id (a brand-new, not-yet-saved entry is id-less and
+  // deliberately excluded), so a response for an UNRELATED mutation (e.g.
+  // deleting a Certification) silently wiped out a project the user just
+  // added in a different, still-open section.
+  it('preserves a local id-less entry in an unrelated section when an unrelated mutation syncs', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    // Simulate the user having just added a brand-new, not-yet-saved
+    // project (no id assigned yet -- that only happens server-side).
+    await act(async () => {
+      latestContext.setResumeData((previous) => ({
+        ...previous,
+        projects: [
+          ...(previous.projects ?? []),
+          { title: 'Unsaved Side Project', description: '', technologies: [], startDate: '', endDate: '', link: '' },
+        ],
+      }));
+    });
+    expect(latestContext.resumeData.projects).toEqual([
+      expect.objectContaining({ title: 'Unsaved Side Project' }),
+    ]);
+
+    // An unrelated mutation (e.g. a Certification delete) broadcasts its own
+    // snapshot, whose mapped `projects` is the server's (empty) array --
+    // it knows nothing about the just-added, unsaved project.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          payload: {
+            enhanced_data: enhancedResume.enhanced_data,
+            ats_score: { final_score: 80, section_breakdown: {} },
+          },
+        },
+      }));
+    });
+
+    await waitFor(() => expect(latestContext.resumeData.projects).toEqual([
+      expect.objectContaining({ title: 'Unsaved Side Project' }),
+    ]));
+  });
+
+  it('keeps a pending suggestion missing from a PARTIAL (non-full) snapshot', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        suggestions: [{ id: 'suggestion-1', section: 'Summary', message: 'Add measurable results.', fix_type: 'manual' }],
+        ats_score: { final_score: 76, section_breakdown: {} },
+      });
+    });
+    await waitFor(() => expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    ));
+
+    await act(async () => {
+      // No isFullSnapshot -- an ordinary apply/delete-fix-style response.
+      latestContext.syncEnhancedScore({
+        suggestions: [],
+        ats_score: { final_score: 90, section_breakdown: {} },
+      });
+    });
+
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    );
+  });
+
+  it('keeps the score and every pending card when the server rejects an auto fix', async () => {
+    mockApplyFix.mockResolvedValueOnce({
+      success: true,
+      was_applied: false,
+      correction_applied: 'Cannot apply this auto fix.',
+      enhancer_state: {
+        resume: enhancedResume.enhanced_data,
+        suggestions: [],
+      },
+    } as never);
+
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+    const scoreBefore = latestContext.enhancedAtsScore;
+    const suggestionsBefore = latestContext.enhancedSuggestions;
+
+    await expect(latestContext.applyAutoFix('suggestion-1')).rejects.toThrow('Cannot apply this auto fix.');
+
+    expect(latestContext.enhancedAtsScore).toEqual(scoreBefore);
+    expect(latestContext.enhancedSuggestions).toEqual(suggestionsBefore);
+  });
+
+  it('uses the exact manual value and consumes the canonical apply snapshot', async () => {
+    mockApplyFix.mockResolvedValueOnce({
+      ...fixedEducationSnapshot,
+      enhancer_state: {
+        resume: {
+          personalInfo: { fullname: 'Manual Fixed Avery', email: 'fixed@example.com' },
+          professionalSummary: { summary: 'Updated quantified summary', targetRole: 'Frontend Lead' },
+        },
+      },
+      applied_fixes: [{ suggestion_id: 'suggestion-1', status: 'applied', undo_available: true }],
+    } as never);
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      await latestContext.applyManualFix('suggestion-1', 'Updated quantified summary');
+    });
+
+    expect(mockApplyFix).toHaveBeenCalledWith({
+      enhancer_state: 'enhanced-1',
+      suggestion_id: 'suggestion-1',
+      fix_type: 'manual',
+      value: 'Updated quantified summary',
+    });
+    expect(latestContext.enhancedAtsScore).toMatchObject({ final_score: 64 });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed', undoAvailable: true }),
+    );
+  });
+
+  it('keeps a confirmed card fixed when a later rescan returns a stale pending copy', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      await latestContext.applyAutoFix('suggestion-1');
+    });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed' }),
+    );
+
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        ats_score: { final_score: 80, section_breakdown: enhancedResume.ats_score.section_breakdown },
+        suggestions: [
+          { id: 'suggestion-1', section: 'Summary', message: 'Use a stronger quantified summary.', fix_type: 'manual' },
+        ],
+      });
+    });
+
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed' }),
+    );
+  });
+  it('does not reopen earlier fixed sections when another fix returns a stale pending list', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      await latestContext.applyAutoFix('suggestion-1');
+    });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed' }),
+    );
+
+    mockApplyFix.mockResolvedValueOnce({
+      success: true,
+      enhanced_data: enhancedResume.enhanced_data,
+      ats_score: { final_score: 80, section_breakdown: {} },
+      // The Contact response is stale for Summary/Skills. It may confirm the
+      // new fix, but it must not behave like an Undo for another section.
+      suggestions: [
+        { id: 'suggestion-1', section: 'Skills', message: 'Use HTML in experience.', fix_type: 'manual' },
+        { id: 'contact-1', section: 'Contact', message: 'Add a GitHub profile.', fix_type: 'manual' },
+      ],
+      applied_fixes: [{ suggestion_id: 'contact-1', status: 'applied', undo_available: true }],
+      operation: { type: 'apply_fix', suggestion_id: 'contact-1' },
+    } as never);
+
+    await act(async () => {
+      await latestContext.applyManualFix('contact-1', 'https://github.com/avery');
+    });
+
+    expect(latestContext.enhancedSuggestions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed' }),
+      expect.objectContaining({ id: 'contact-1', status: 'fixed' }),
+    ]));
+  });
+  it('does not optimistically fix a manual card when the server rejects it', async () => {
+    mockApplyFix.mockResolvedValueOnce({
+      success: true,
+      was_applied: false,
+      correction_applied: 'Manual writeback is unsupported.',
+      enhancer_state: { resume: enhancedResume.enhanced_data, suggestions: [] },
+    } as never);
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+    const scoreBefore = latestContext.enhancedAtsScore;
+
+    await expect(latestContext.applyManualFix('suggestion-1', 'new text'))
+      .rejects.toThrow('Manual writeback is unsupported.');
+
+    expect(latestContext.enhancedAtsScore).toEqual(scoreBefore);
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    );
+  });
+  it('accepts a legacy successful Undo response and restores the pending card and score', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      await latestContext.undoFix('suggestion-1');
+    });
+
+    expect(mockDeleteFix).toHaveBeenCalledWith({
+      enhancer_state: 'enhanced-1',
+      suggestion_id: 'suggestion-1',
+    });
+    expect(latestContext.enhancedAtsScore).toMatchObject({ final_score: 71 });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    );
+  });
+
+  it('uses the canonical applied-fix ledger for card state, then restores pending on undo snapshot', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          payload: {
+            enhanced_data: enhancedResume.enhanced_data,
+            ats_score: { final_score: 80, section_breakdown: {} },
+            suggestions: [],
+            applied_fixes: [{
+              suggestion_id: 'suggestion-1',
+              status: 'applied',
+              undo_available: false,
+            }],
+          },
+        },
+      }));
+    });
+
+    await waitFor(() => expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed', undoAvailable: false }),
+    ));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          payload: {
+            enhanced_data: enhancedResume.enhanced_data,
+            ats_score: enhancedResume.ats_score,
+            suggestions: [{
+              id: 'suggestion-1',
+              section: 'summary',
+              message: 'Use a stronger quantified summary.',
+              fix_type: 'manual',
+            }],
+            applied_fixes: [],
+          },
+        },
+      }));
+    });
+
+    await waitFor(() => expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    ));
+  });
+
+  // P1 regression: autosave's own enhanced-resume-score-sync broadcast used
+  // to replace resumeData unconditionally. resumeData is a dependency of the
+  // editor's autosave-triggering effect (EditorTab.tsx), so that replacement
+  // re-armed another autosave the instant the previous one landed -- forever,
+  // for as long as a section modal stayed open -- and each round overwrote
+  // anything typed in the meantime with the pre-edit server snapshot. Fixed
+  // by tagging the autosave broadcast {origin:"autosave"} (enhancerApi.ts)
+  // and skipping syncEnhancedResumeData for it here, while still syncing the
+  // score/suggestions (a separate state slice the autosave effect doesn't
+  // depend on, so this doesn't reintroduce the loop).
+  it('does not replace resumeData for an autosave-origin sync, but still syncs the score', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          origin: 'autosave',
+          payload: {
+            enhanced_data: {
+              ...enhancedResume.enhanced_data,
+              personalInfo: {
+                ...enhancedResume.enhanced_data.personalInfo,
+                fullname: 'AUTOSAVE MUST NOT OVERWRITE LOCAL EDITS',
+              },
+            },
+            ats_score: { final_score: 99, section_breakdown: {} },
+          },
+        },
+      }));
+    });
+
+    // Score still syncs from an autosave response.
+    await waitFor(() => expect(latestContext.enhancedAtsScore).toMatchObject({ final_score: 99 }));
+    // resumeData does not: the autosave-origin payload's name never appears.
+    expect(screen.queryByText('Name: AUTOSAVE MUST NOT OVERWRITE LOCAL EDITS')).not.toBeInTheDocument();
+    expect(screen.getByText('Name: Enhanced Avery')).toBeInTheDocument();
+  });
+
+  it('still replaces resumeData for a non-autosave sync event (regression guard)', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          payload: {
+            enhanced_data: {
+              ...enhancedResume.enhanced_data,
+              personalInfo: {
+                ...enhancedResume.enhanced_data.personalInfo,
+                fullname: 'Explicit Save Updated Name',
+              },
+            },
+            ats_score: { final_score: 82, section_breakdown: {} },
+          },
+        },
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByText('Name: Explicit Save Updated Name')).toBeInTheDocument());
+  });
+
+  it('clears a locally cached fixed card when the canonical undo ledger is empty', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      await latestContext.applyAutoFix('suggestion-1');
+    });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'fixed' }),
+    );
+
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        ats_score: { final_score: 71, section_breakdown: {} },
+        suggestions: [],
+        applied_fixes: [],
+        operation: { type: 'delete_fix', suggestion_id: 'suggestion-1' },
+        deleted_suggestion_id: 'suggestion-1',
+      });
+    });
+
+    expect(latestContext.enhancedSuggestions).not.toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1' }),
+    );
+  });
+  it('loads the headline and section bars from the same fresh ATS display snapshot', async () => {
+    mockGetEnhancedResume.mockResolvedValue({
+      ...enhancedResume,
+      ats_score: {
+        final_score: 76,
+        section_breakdown: {
+          Certifications: { percentage: 0, weight: 5 },
+        },
+      },
+      enhancer_state: {
+        ats_display: {
+          score: 83,
+          sections: [{
+            name: 'Certifications',
+            score_pct: 100,
+            weighted_pts: 5,
+            max_pts: 5,
+            deductions: [],
+          }],
+        },
+      },
+    } as never);
+
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+
+    await screen.findByText('Name: Enhanced Avery');
+    expect(latestContext.enhancedAtsScore).toMatchObject({
+      final_score: 83,
+      section_breakdown: {
+        Certifications: { percentage: 100, weight: 5 },
+      },
+    });
+  });
+
+  it('keeps a resolved Summary card visible as fixed after a section-save snapshot', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        ats_score: {
+          final_score: 83,
+          section_breakdown: {
+            Summary: {
+              percentage: 100,
+              weight: 8,
+              weighted_contribution: 8,
+              deductions: [],
+            },
+          },
+        },
+        // A normal section save can return the current pending list with the
+        // resolved Summary suggestion absent. The UI must not drop its card.
+        suggestions: [],
+      }, { resolvedSuggestionSections: ['ProfessionalSummary'] });
+    });
+
+    expect(latestContext.enhancedAtsScore).toMatchObject({
+      final_score: 83,
+      section_breakdown: { Summary: { percentage: 100 } },
+    });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({
+        id: 'suggestion-1',
+        status: 'fixed',
+        undoAvailable: false,
+      }),
+    );
   });
 
   it('supports custom section and field mutations plus completion percentage updates', async () => {
