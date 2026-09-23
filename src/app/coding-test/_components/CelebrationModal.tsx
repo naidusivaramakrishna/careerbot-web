@@ -120,7 +120,7 @@ export default function CelebrationModal({
           to   { transform: rotate(360deg); }
         }
         @media (prefers-reduced-motion: reduce) {
-          .celebration-modal [style*="animation"] { animation: none !important; }
+          :is(.celebration-modal, .celebration-modal *)[style*="animation"] { animation: none !important; }
         }
       `}</style>
 
@@ -134,7 +134,7 @@ export default function CelebrationModal({
         onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       >
         {/* ── Falling confetti ── */}
-        <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
+        <div className="celebration-modal pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
           {PIECES.map((p) => (
             <div
               key={p.id}

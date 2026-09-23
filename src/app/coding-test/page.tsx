@@ -183,7 +183,7 @@ function DailyGoalCard({ progress, goal }: { progress: number; goal: number }) {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50">
             <Target className="h-3.5 w-3.5 text-amber-500" />
           </div>
-          <p className="text-sm font-bold text-slate-800">Daily Goal</p>
+          <p className="text-sm font-bold text-slate-800">Problems Solved</p>
         </div>
         <Link
           href="/coding-test/problems"
@@ -208,7 +208,7 @@ function DailyGoalCard({ progress, goal }: { progress: number; goal: number }) {
 
       <div className="flex items-center justify-between">
         <p className="text-[11px] text-slate-500">
-          {complete ? 'Goal reached! ' : `${progress}/${goal} problems today`}
+          {complete ? `${progress}/${goal} target reached! ` : `${progress}/${goal} solved`}
           {complete && <span className="font-medium text-emerald-600">Nice work!</span>}
         </p>
         <div className="flex items-center gap-1">

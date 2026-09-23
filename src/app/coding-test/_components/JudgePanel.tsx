@@ -208,14 +208,14 @@ export default function JudgePanel({
               <div className="h-full w-full animate-pulse rounded-full bg-indigo-500/50" />
             </div>
           </div>
-        ) : errorMessage ? (
-          /* ── Error card ── */
+        ) : errorMessage && !selected ? (
+          /* ── Full-pane error card (no history to fall back on) ── */
           <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/10">
-              <AlertCircle className="h-7 w-7 text-rose-400" aria-hidden />
+              <AlertCircle className="h-7 w-7 text-rose-600" aria-hidden />
             </div>
             <div>
-              <p className="text-sm font-semibold text-rose-400">
+              <p className="text-sm font-semibold text-rose-600">
                 {errorStatus === 401 ? 'Sign in required' : errorStatus === 408 ? 'Request timed out' : 'Something went wrong'}
               </p>
               <p className="mt-1.5 text-xs leading-5 text-slate-500">{errorMessage}</p>
@@ -262,6 +262,28 @@ export default function JudgePanel({
 
             return (
               <div className="flex flex-1 flex-col overflow-hidden">
+                {/* ── Inline error banner when a new run errored but prior results are browseable ── */}
+                {errorMessage && (
+                  <div className="flex shrink-0 items-center gap-2 border-b border-rose-200 bg-rose-50 px-4 py-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-rose-600">
+                        {errorStatus === 401 ? 'Sign in required' : errorStatus === 408 ? 'Request timed out' : 'Something went wrong'}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">{errorMessage}</p>
+                    </div>
+                    {errorStatus !== 401 && onRetry && (
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        className="shrink-0 flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-100"
+                      >
+                        <RotateCw className="h-3 w-3" aria-hidden />
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-5">
                   {/* Verdict heading */}
                   <h3 className={`text-xl font-bold ${

@@ -29,7 +29,6 @@ import {
   Star,
   Sun,
   Trophy,
-  TrendingUp,
   X,
 } from 'lucide-react';
 import { fetchProblems, fetchTopics } from '../_lib/api';
@@ -43,7 +42,7 @@ type StatusFilter = 'all' | 'solved' | 'unsolved' | 'attempted';
 type LoadState = 'loading' | 'error' | 'ready';
 type ActiveTab = 'all' | 'favorites' | 'recent';
 type ViewMode = 'list' | 'grid';
-type SortBy = 'most_recent' | 'acceptance' | 'difficulty';
+type SortBy = 'most_recent' | 'difficulty';
 
 const PAGE_SIZE = 20;
 
@@ -157,11 +156,24 @@ function CodingProblemsListContent() {
   const searchParams = useSearchParams();
 
   const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem('coding-test:dark-mode');
+    setDark(stored !== null ? stored === '1' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }, []);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sortBy, setSortBy] = useState<SortBy>('most_recent');
   const [sortDropOpen, setSortDropOpen] = useState(false);
   const sortDropRef = useRef<HTMLDivElement>(null);
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('coding-test:bookmarks');
+      if (raw) setBookmarked(new Set(JSON.parse(raw) as string[]));
+    } catch { /* ignore quota/SSR errors */ }
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem('coding-test:bookmarks', JSON.stringify([...bookmarked])); } catch { /* ignore */ }
+  }, [bookmarked]);
 
   const paramLang = searchParams.get('language') as CodingTestLanguage | null;
   const validLangs: CodingTestLanguage[] = ['python', 'java', 'cpp', 'c'];
@@ -193,7 +205,7 @@ function CodingProblemsListContent() {
     setState('loading');
     setErrorMessage('');
 
-    fetchProblemsAnnotated({}, controller.signal)
+    fetchProblemsAnnotated({ language: language || undefined }, controller.signal)
       .then((data) => { setAllProblems(data); setState('ready'); })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -210,7 +222,7 @@ function CodingProblemsListContent() {
       });
 
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, language]);
 
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') setReloadKey((k) => k + 1); };
@@ -386,7 +398,6 @@ function CodingProblemsListContent() {
 
   const SORT_LABELS: Record<SortBy, string> = {
     most_recent: 'Most Recent',
-    acceptance: 'Acceptance',
     difficulty: 'Difficulty',
   };
 
@@ -587,7 +598,7 @@ function CodingProblemsListContent() {
 
             <div className="flex items-center gap-2 ml-auto">
               {/* Dark mode toggle */}
-              <button type="button" onClick={() => setDark((d) => !d)}
+              <button type="button" onClick={() => setDark((d) => { try { localStorage.setItem('coding-test:dark-mode', d ? '0' : '1'); } catch { /* ignore */ } return !d; })}
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200">
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
@@ -860,12 +871,6 @@ function CodingProblemsListContent() {
                                 </div>
                               )}
                             </Link>
-
-                            {/* Acceptance */}
-                            <div className="hidden shrink-0 items-center gap-1 sm:flex">
-                              <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">—</span>
-                            </div>
 
                             {/* Difficulty badge */}
                             <span className={`shrink-0 rounded-full px-3 py-0.5 text-xs font-semibold capitalize ${DIFF_BADGE[p.difficulty]}`}>

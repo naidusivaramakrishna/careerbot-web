@@ -3,7 +3,7 @@ import { isAxiosError } from 'axios';
 import { httpClient } from '@/lib/http';
 import type {
   CodingTestLanguage, ExecuteJobQueued, ExecuteJobRecord,
-  JudgeJobRecord, JudgeResponse, JudgeVerdict, SubmitAsyncQueued,
+  JudgeJobRecord, JudgeResponse, JudgeVerdict,
 } from './types';
 
 const BASE = '/coding-test';
@@ -82,12 +82,13 @@ export async function runAsync(
   language: CodingTestLanguage,
   code: string,
   timeoutMs = 10000,
+  signal?: AbortSignal,
 ): Promise<JudgeResponse> {
   try {
     const { data } = await httpClient.post<JudgeResponse>(
       `${BASE}/run-async`,
       { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
-      { ...INLINE_AUTH_CONFIG, timeout: 60000 },
+      { ...INLINE_AUTH_CONFIG, timeout: 60000, signal },
     );
     return data;
   } catch (err) {
@@ -111,31 +112,6 @@ export async function executeCode(
     return data;
   } catch (err) {
     throw toRunError(err, 'Failed to start code execution.');
-  }
-}
-
-/** Enqueue an async submit job — returns immediately with a poll URL. */
-export async function submitAsync(
-  problemSlug: string,
-  language: CodingTestLanguage,
-  code: string,
-  timeoutMs = 5000,
-): Promise<SubmitAsyncQueued> {
-  try {
-    const { data } = await httpClient.post<{ job_id: string; attempt_id: string; poll_url: string }>(
-      `${BASE}/submit-async`,
-      { problem_slug: problemSlug, language, code, timeout_ms: timeoutMs },
-      { ...INLINE_AUTH_CONFIG, timeout: 60000 },
-    );
-    return {
-      job_id: data.job_id,
-      attempt_id: data.attempt_id,
-      // Construct poll URL using the same base path as other API calls so that
-      // httpClient's baseURL prefix is applied correctly (avoids double /api/v1).
-      poll_url: `${BASE}/submit-result/${data.job_id}`,
-    };
-  } catch (err) {
-    throw toRunError(err, 'Failed to queue submission.');
   }
 }
 

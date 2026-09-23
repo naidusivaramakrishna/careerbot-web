@@ -133,6 +133,7 @@ export default function CodingProblemDetailPage() {
     // next problem when navigating with Prev/Next (same component instance).
     setJudgeResult(null); setActionError(null); setActionState('idle');
     setGradingResult(null); setGradingError(''); setIsGrading(false);
+    setJudgeMode('run'); setShowCelebration(false);
     fetchProblem(slug, ctrl.signal)
       .then((res) => {
         setProblem(res);
@@ -372,9 +373,11 @@ export default function CodingProblemDetailPage() {
   // problem the user has since navigated to.
   const gradeRequestRef = useRef(0);
   const slugRef = useRef(slug);
-  // Abort controller for the in-flight submit request so navigation away
-  // cancels the POST and prevents stale results landing on a different problem.
+  // Abort controllers for in-flight run/submit requests — navigation away cancels
+  // the POST so stale results never land on a different problem.
+  const runAbortRef    = useRef<AbortController | null>(null);
   const submitAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { runAbortRef.current?.abort();    }, []);
   useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
   useEffect(() => { slugRef.current = slug; }, [slug]);
   useEffect(() => {
@@ -501,11 +504,19 @@ export default function CodingProblemDetailPage() {
     setGradingResult(null); setGradingError('');
     setJudgeMode('run');
     setRightTab('tests');
+
+    runAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    runAbortRef.current = ctrl;
+    const runSlug = slug;
+
     try {
-      const res = await runAsync(slug, language, code[language]);
+      const res = await runAsync(slug, language, code[language], undefined, ctrl.signal);
+      if (ctrl.signal.aborted || runSlug !== slugRef.current) return;
       setJudgeResult(res);
       setActionState('done');
     } catch (err) {
+      if (ctrl.signal.aborted || runSlug !== slugRef.current) return;
       setActionState('idle');
       setActionError({
         message: err instanceof Error ? err.message : 'Failed to run your code.',
@@ -1222,7 +1233,7 @@ export default function CodingProblemDetailPage() {
                   errorMessage={actionError?.message}
                   errorStatus={actionError?.status}
                   onRetry={judgeMode === 'run' ? handleRun : handleSubmit}
-                  onFinish={() => { setShowCelebration(false); if (nextProblem) navigateTo(nextProblem); }}
+                  onFinish={() => { setShowCelebration(false); if (nextProblem) navigateTo(nextProblem); else router.push('/coding-test/problems'); }}
                 />
               </div>
 
