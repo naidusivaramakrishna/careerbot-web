@@ -44,7 +44,7 @@ type DisplayTemplateId =
 
 type IconComponent = ComponentType<{ className?: string }>;
 
-type ReviewSuggestion = {
+export type ReviewSuggestion = {
   title: string;
   description: string;
   icon: "growth" | "company";
@@ -1172,7 +1172,7 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion[] {
+export function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion[] {
   const suggestions: ReviewSuggestion[] = [];
   const seen = new Set<string>();
 
@@ -1207,6 +1207,30 @@ function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion[] {
     });
   }
 
+  // eligible_evidence_usage_pct (careerbot-ai PR #310/311/312): of the
+  // resume evidence relevant to THIS job, how much made it into the
+  // letter. Deliberately surfaced as an actionable suggestion, not a 4th
+  // score in the Insights panel — a low value means real, usable proof
+  // points are sitting unused, which is something to fix, not just a
+  // number to display.
+  //
+  // Placed BEFORE the generic "Improve company alignment" / "Add
+  // measurable achievements" checks below on purpose: those two fire on
+  // almost every weak letter (the same letters where evidence usage is
+  // likely under 50%), and getTopSuggestions keeps only the first 2
+  // results. With this check after them, they filled both slots on
+  // exactly the letters this suggestion exists to catch, so it was
+  // reachable only on near-perfect letters. See the regression tests
+  // below ("eligible_evidence_usage_pct visibility").
+  const eligibleEvidencePct = letter.keyword_report?.eligible_evidence_usage_pct;
+  if (eligibleEvidencePct != null && eligibleEvidencePct < 50) {
+    addSuggestion({
+      title: "Use more of your relevant experience",
+      description: "Your resume has more experience relevant to this job than the letter currently uses — consider adding it.",
+      icon: "growth",
+    });
+  }
+
   const matchPct = letter.jd_match_summary?.jd_match_pct;
   if (matchPct == null || matchPct < 90) {
     addSuggestion({
@@ -1220,21 +1244,6 @@ function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion[] {
     addSuggestion({
       title: "Add measurable achievements",
       description: "Include specific outcomes, metrics, scope, or tools only when they are supported by your resume.",
-      icon: "growth",
-    });
-  }
-
-  // eligible_evidence_usage_pct (careerbot-ai PR #310/311/312): of the
-  // resume evidence relevant to THIS job, how much made it into the
-  // letter. Deliberately surfaced as an actionable suggestion, not a 4th
-  // score in the Insights panel — a low value means real, usable proof
-  // points are sitting unused, which is something to fix, not just a
-  // number to display.
-  const eligibleEvidencePct = letter.keyword_report?.eligible_evidence_usage_pct;
-  if (eligibleEvidencePct != null && eligibleEvidencePct < 50) {
-    addSuggestion({
-      title: "Use more of your relevant experience",
-      description: "Your resume has more experience relevant to this job than the letter currently uses — consider adding it.",
       icon: "growth",
     });
   }
