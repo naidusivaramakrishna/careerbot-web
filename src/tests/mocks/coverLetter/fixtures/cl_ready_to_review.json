@@ -30,14 +30,19 @@
     {"requirement": "MongoDB at scale", "status": "met", "supporting_claim_ids": ["c3"], "used_in_letter": true},
     {"requirement": "Multi-tenant SaaS", "status": "met", "supporting_claim_ids": ["c4"], "used_in_letter": true},
     {"requirement": "Kubernetes", "status": "not_found", "supporting_claim_ids": [], "used_in_letter": false},
-    {"requirement": "Observability tooling", "status": "partial", "supporting_claim_ids": [], "used_in_letter": false}
+    {"requirement": "Observability tooling", "status": "partial", "supporting_claim_ids": ["c5"], "used_in_letter": false, "implied_via_broader_claim": true}
   ],
   "jd_match_summary": {"jd_match_pct": 75.0, "total": 6, "met": 4, "partial": 1, "missing": 1},
   "keyword_report": {
     "used_keywords": ["Python", "FastAPI", "MongoDB"],
     "keyword_coverage_pct": 75.0,
-    "coverage_explanation": "3 of 4 selected keywords used in the letter.",
-    "keyword_counts": {"Python": 2, "FastAPI": 1, "MongoDB": 1}
+    "coverage_explanation": {
+      "coverage_pct": "Percent of JD requirements explicitly represented in the generated cover letter.",
+      "keyword_coverage_pct": "Percent of required and preferred JD keywords that appear in the generated cover letter."
+    },
+    "keyword_counts": {"Python": 2, "FastAPI": 1, "MongoDB": 1},
+    "evidence_usage_pct": 42.0,
+    "eligible_evidence_usage_pct": 88.5
   },
   "grounding": {
     "claim_catalog_size": 14,

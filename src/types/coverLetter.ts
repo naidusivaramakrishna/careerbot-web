@@ -189,6 +189,12 @@ export interface JdMatchMatrixEntry {
   status: JdMatchStatus;
   supporting_claim_ids?: string[];
   used_in_letter?: boolean;
+  /** True when the requirement is genuinely represented in the letter via a
+   * broader/shared claim (e.g. "Spring Boot" implying "Java frameworks"),
+   * but used_in_letter stays false because that claim is shared across too
+   * many sibling requirements to attribute safely. Show as "represented via
+   * a broader mention" rather than "not addressed." */
+  implied_via_broader_claim?: boolean;
 }
 
 export interface JdMatchSummary {
@@ -215,6 +221,12 @@ export interface KeywordReport {
   partial_keywords: string[];
   missing_keywords: string[];
   evidence_usage_pct: number;
+  /** JD-scoped version of evidence_usage_pct: cited claims / claims that back
+   * at least one met-or-partial JD requirement, instead of the full resume
+   * claim catalog. Answers "of the evidence relevant to THIS job, how much
+   * made it into the letter" — a fairer number than evidence_usage_pct for
+   * resumes with lots of content unrelated to this JD. */
+  eligible_evidence_usage_pct: number;
   readability_score: number;
   ats_risk: string;
   keyword_stuffing_score: number;
@@ -238,7 +250,9 @@ export interface ResponseMetadata {
   verification_policy_version?: string;
   tokens_used?: number;
   llm_calls?: number;
-  model?: string;
+  // AI service can send an explicit null on its early-failure path
+  // (generation aborted before any LLM call ran).
+  model?: string | null;
   stage1_fallback_reason?: string | null;
 }
 

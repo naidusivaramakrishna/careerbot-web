@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
   CheckCircle2,
+  ChevronDown,
   Copy,
   Download,
   Loader2,
@@ -25,6 +26,7 @@ import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import { CoverLetterTemplatePreview, CoverLetterTemplatePreviewModal } from "./CoverLetterTemplatePreview";
 import CoverLetterStatusPill from "./CoverLetterStatusPill";
 import WarningBanner from "./WarningBanner";
+import JDMatchMatrix from "./JDMatchMatrix";
 import { getMatchBand, getMatchLabel, getMatchLabelTone, type MatchBand } from "../_utils/matchLabel";
 
 export interface CoverLetterViewProps {
@@ -526,7 +528,8 @@ function ReadyCoverLetterReview({
             readabilityScore={readabilityScore}
             suggestions={suggestions}
           />
-          <ExportActions
+          <JDMatchMatrix entries={letter.jd_match_matrix ?? []} />
+          <ExportDropdown
             canDownload={canDownload}
             supportsPdf={supportsPdf}
             supportsDocx={supportsDocx}
@@ -534,15 +537,6 @@ function ReadyCoverLetterReview({
             onDownload={onDownload}
             plainText={letter.plain_text}
           />
-          <button
-            type="button"
-            onClick={() => onDownload("pdf")}
-            disabled={!canDownload || !supportsPdf || isDownloading}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-4 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:opacity-50 2xl:h-12 2xl:gap-3 2xl:px-6 2xl:text-base"
-          >
-            <Download className="h-5 w-5" />
-            {isDownloading ? "Preparing PDF..." : "Download PDF"}
-          </button>
         </aside>
       </section>
 
@@ -698,7 +692,7 @@ function SuggestionCard({
   );
 }
 
-function ExportActions({
+function ExportDropdown({
   canDownload,
   supportsPdf,
   supportsDocx,
@@ -713,50 +707,91 @@ function ExportActions({
   onDownload: (format: "pdf" | "docx") => void;
   plainText: string | null;
 }) {
-  return (
-    <div className="rounded-lg border border-[#dfe6f5] bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] 2xl:p-5">
-      <h2 className="text-lg font-black text-[#070b33]">Export</h2>
-      <div className="mt-4 grid grid-cols-3 gap-2 2xl:gap-3">
-        <ExportTile label="PDF" icon={Download} disabled={!canDownload || !supportsPdf || isDownloading} onClick={() => onDownload("pdf")} />
-        <ExportTile label="DOCX" icon={FileText} disabled={!canDownload || !supportsDocx || isDownloading} onClick={() => onDownload("docx")} />
-        <ExportTile
-          label="Copy"
-          icon={Copy}
-          disabled={!plainText}
-          onClick={() => {
-            if (!plainText) return;
-            navigator.clipboard?.writeText(plainText).then(
-              () => toast.success("Copied cover letter."),
-              () => toast.error("Could not copy cover letter."),
-            );
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+  const [open, setOpen] = useState(false);
+  const anyFormatAvailable = (canDownload && (supportsPdf || supportsDocx)) || Boolean(plainText);
 
-function ExportTile({
-  label,
-  icon: Icon,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  icon: IconComponent;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+  const options: Array<{
+    key: string;
+    label: string;
+    icon: IconComponent;
+    disabled: boolean;
+    onSelect: () => void;
+  }> = [
+    {
+      key: "pdf",
+      label: "Download as PDF",
+      icon: Download,
+      disabled: !canDownload || !supportsPdf || isDownloading,
+      onSelect: () => onDownload("pdf"),
+    },
+    {
+      key: "docx",
+      label: "Download as DOCX",
+      icon: FileText,
+      disabled: !canDownload || !supportsDocx || isDownloading,
+      onSelect: () => onDownload("docx"),
+    },
+    {
+      key: "copy",
+      label: "Copy as text",
+      icon: Copy,
+      disabled: !plainText,
+      onSelect: () => {
+        if (!plainText) return;
+        navigator.clipboard?.writeText(plainText).then(
+          () => toast.success("Copied cover letter."),
+          () => toast.error("Could not copy cover letter."),
+        );
+      },
+    },
+  ];
+
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-lg border border-[#dfe6f5] bg-white text-xs font-black text-[#070b33] transition hover:border-[#2557a7] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 2xl:min-h-[86px] 2xl:text-sm"
+    <div
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+          setOpen(false);
+        }
+      }}
     >
-      <Icon className="h-5 w-5 text-[#2557a7] 2xl:h-6 2xl:w-6" />
-      {label}
-    </button>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        disabled={!anyFormatAvailable || isDownloading}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-4 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:opacity-50 2xl:h-12 2xl:gap-3 2xl:px-6 2xl:text-base"
+      >
+        {isDownloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+        {isDownloading ? "Preparing..." : "Download / Export"}
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-lg border border-[#dfe6f5] bg-white shadow-[0_18px_42px_rgba(15,23,42,0.14)]"
+        >
+          {options.map(({ key, label, icon: Icon, disabled, onSelect }) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              disabled={disabled}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onSelect();
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-3 border-b border-[#eef1f8] px-4 py-3 text-left text-sm font-bold text-[#070b33] transition last:border-b-0 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Icon className="h-4 w-4 text-[#2557a7]" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1185,6 +1220,21 @@ function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion[] {
     addSuggestion({
       title: "Add measurable achievements",
       description: "Include specific outcomes, metrics, scope, or tools only when they are supported by your resume.",
+      icon: "growth",
+    });
+  }
+
+  // eligible_evidence_usage_pct (careerbot-ai PR #310/311/312): of the
+  // resume evidence relevant to THIS job, how much made it into the
+  // letter. Deliberately surfaced as an actionable suggestion, not a 4th
+  // score in the Insights panel — a low value means real, usable proof
+  // points are sitting unused, which is something to fix, not just a
+  // number to display.
+  const eligibleEvidencePct = letter.keyword_report?.eligible_evidence_usage_pct;
+  if (eligibleEvidencePct != null && eligibleEvidencePct < 50) {
+    addSuggestion({
+      title: "Use more of your relevant experience",
+      description: "Your resume has more experience relevant to this job than the letter currently uses — consider adding it.",
       icon: "growth",
     });
   }

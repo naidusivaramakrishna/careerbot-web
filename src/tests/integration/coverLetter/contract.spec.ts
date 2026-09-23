@@ -117,6 +117,10 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
     assertCoverLetterResponseShape(CL_FIXTURES.failedLowJdMatch, "failedLowJdMatch");
   });
 
+  it("failedNoModel passes full shape assertion", () => {
+    assertCoverLetterResponseShape(CL_FIXTURES.failedNoModel, "failedNoModel");
+  });
+
   // ── readyToReview specific ─────────────────────────────────────────────
 
   describe("readyToReview", () => {
@@ -174,8 +178,24 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
       expect(cl.keyword_report).not.toBeNull();
       expect(Array.isArray(cl.keyword_report!.used_keywords)).toBe(true);
       expect(typeof cl.keyword_report!.keyword_coverage_pct).toBe("number");
-      expect(typeof cl.keyword_report!.coverage_explanation).toBe("string");
+      // coverage_explanation is Record<string,string> on the current
+      // contract (AI service changed this from a plain string), not a
+      // bare string — a stale fixture that still had it as a string
+      // would previously slip through unnoticed with a "string" check.
+      expect(typeof cl.keyword_report!.coverage_explanation).toBe("object");
+      expect(cl.keyword_report!.coverage_explanation).not.toBeNull();
       expect(typeof cl.keyword_report!.keyword_counts).toBe("object");
+    });
+
+    it("has eligible_evidence_usage_pct as a number distinct from evidence_usage_pct (PR #310/311/312)", () => {
+      expect(typeof cl.keyword_report!.eligible_evidence_usage_pct).toBe("number");
+      expect(typeof cl.keyword_report!.evidence_usage_pct).toBe("number");
+    });
+
+    it("has at least one jd_match_matrix entry using implied_via_broader_claim (PR #310/311/312)", () => {
+      const impliedEntry = cl.jd_match_matrix.find((e) => e.implied_via_broader_claim === true);
+      expect(impliedEntry).toBeDefined();
+      expect(impliedEntry!.used_in_letter).toBe(false);
     });
   });
 
@@ -240,6 +260,36 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
 
     it("all jd_match_matrix entries are not_found (unable to match)", () => {
       expect(cl.jd_match_matrix.every((e) => e.status === "not_found")).toBe(true);
+    });
+  });
+
+  // ── failedNoModel specific ────────────────────────────────────────────
+  // Regression test: careerbot-ai's early-failure path (pipeline aborted
+  // before any LLM call ran) sends an explicit JSON null for
+  // metadata.model. The backend's ResponseMetadata.model was previously
+  // a non-Optional str, so this response shape would fail Pydantic
+  // validation and surface as an opaque 502 UPSTREAM_CONTRACT_ERROR
+  // instead of the structured "failed" body below. Guards against that
+  // regression by asserting the FE type/contract accepts model: null.
+
+  describe("failedNoModel", () => {
+    const cl = CL_FIXTURES.failedNoModel;
+
+    it("has status failed", () => {
+      expect(cl.status).toBe("failed");
+    });
+
+    it("has metadata.model === null", () => {
+      expect(cl.metadata.model).toBeNull();
+    });
+
+    it("has metadata.llm_calls === 0 (no LLM call happened)", () => {
+      expect(cl.metadata.llm_calls).toBe(0);
+    });
+
+    it("has reason set to a non-null string", () => {
+      expect(typeof cl.reason).toBe("string");
+      expect(cl.reason).not.toBeNull();
     });
   });
 });
