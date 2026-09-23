@@ -5,9 +5,49 @@ import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
 import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest } from '@/types/api.types';
 
+// The Skills API declares `category` as FastAPI `{category:path}`, so a slash
+// belongs to a category such as `CI/CD` or `AI/ML`. Preserve `/` for that path
+// converter while encoding each other segment; double-encoding would validate
+// the literal text `CI%2FCD` instead.
+const encodeCategoryPath = (category: string): string =>
+  category.split("/").map(encodeURIComponent).join("/");
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
   __raw: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * The backend's structured error envelope is
+ * `{ success: false, error: { message, error_code, details: { detail, ... } } }`
+ * (sometimes a bare FastAPI `{ detail }`). `error.message` is often just the
+ * HTTP status text (e.g. "HTTP 422"); the actionable text lives in
+ * `error.details.detail`. Prefer that, and only fall back to dumping the raw
+ * JSON when nothing readable is present — dumping the full envelope directly
+ * into a toast/thrown message is what previously leaked raw JSON to the user
+ * on any apply-fix rejection (e.g. AI_FIX_REJECTED).
+ */
+function friendlyErrorMessage(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (isRecord(raw)) {
+    const error = isRecord(raw.error) ? raw.error : undefined;
+    const details = error && isRecord(error.details) ? error.details : undefined;
+    if (typeof details?.detail === 'string' && details.detail.trim()) return details.detail;
+
+    const topDetail = raw.detail;
+    if (typeof topDetail === 'string' && topDetail.trim()) return topDetail;
+    if (Array.isArray(topDetail) && topDetail.length > 0 && isRecord(topDetail[0])) {
+      const msg = topDetail[0].msg ?? topDetail[0].message;
+      if (typeof msg === 'string' && msg.trim()) return msg;
+    }
+
+    const errorMessage = error && typeof error.message === 'string' ? error.message : undefined;
+    if (errorMessage && !/^HTTP \d{3}$/i.test(errorMessage)) return errorMessage;
+  }
+  return JSON.stringify(raw);
 }
 
 async function safePost<T = unknown>(
@@ -25,9 +65,7 @@ async function safePost<T = unknown>(
     logApiError('POST', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(
-        typeof raw === 'string' ? raw : JSON.stringify(raw)
-      ) as ApiErrorWithRaw;
+      const apiError: ApiErrorWithRaw = new Error(friendlyErrorMessage(raw)) as ApiErrorWithRaw;
       apiError.__raw = raw;
       throw apiError;
     }
@@ -45,7 +83,7 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
     logApiError('GET', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
+      const apiError: ApiErrorWithRaw = new Error(friendlyErrorMessage(raw)) as ApiErrorWithRaw;
       apiError.__raw = raw;
       throw apiError;
     }
@@ -65,7 +103,7 @@ async function safePatch<T = unknown>(url: string, data?: unknown, config?: Axio
     logApiError('PATCH', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
+      const apiError: ApiErrorWithRaw = new Error(friendlyErrorMessage(raw)) as ApiErrorWithRaw;
       apiError.__raw = raw;
       throw apiError;
     }
@@ -83,7 +121,7 @@ async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig)
     logApiError('DELETE', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
+      const apiError: ApiErrorWithRaw = new Error(friendlyErrorMessage(raw)) as ApiErrorWithRaw;
       apiError.__raw = raw;
       throw apiError;
     }
@@ -100,6 +138,8 @@ export interface EnhanceResumeRequest {
   target_jd?: string | string[];
   job_description?: string;
   region?: string;
+  /** Persisted ATS template used by enhanced preview and export. */
+  template_id?: string;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -215,6 +255,17 @@ export async function getEnhancedResume(enhanced_id: string): Promise<EnhancedRe
   const response = await safeGet<EnhancedResumeHistoryItem>(`/resume/enhance/${enhanced_id}`);
   return response;
 }
+/**
+ * Every enhanced mutation must notify the ResumeProvider. If an older endpoint
+ * only returns an acknowledgement, the provider reloads the canonical GET
+ * snapshot rather than estimating resume data, score, or suggestion state.
+ */
+function publishEnhancedResumeSync(enhancedId: string, payload: unknown): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("enhanced-resume-score-sync", {
+    detail: { enhancedId, payload },
+  }));
+}
 
 /**
  * STEP 4: Update Enhanced Resume (Bulk Update)
@@ -233,6 +284,7 @@ export async function updateEnhancedResume(
   request: UpdateEnhancedResumeRequest
 ): Promise<EnhanceResumeResponse> {
   const response = await safePatch<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
+  publishEnhancedResumeSync(enhanced_id, response);
   return response;
 }
 
@@ -246,18 +298,13 @@ export async function updateEnhancedResume(
 export async function autoSaveEnhancedResume(
   enhanced_id: string,
   sections: Record<string, unknown>
-): Promise<void> {
-  try {
-    logApiRequest('PATCH', `/resume/enhance/${enhanced_id}/autosave`, sections);
-    const response = await httpClient.patch(
-      `/resume/enhance/${enhanced_id}/autosave`,
-      sections
-    );
-    logApiResponse('PATCH', `/resume/enhance/${enhanced_id}/autosave`, response.status, response.headers['x-trace-id']);
-  } catch (err: unknown) {
-    logApiError('PATCH', `/resume/enhance/${enhanced_id}/autosave`, err);
-    throw err;
-  }
+): Promise<EnhanceResumeResponse> {
+  const response = await safePatch<EnhanceResumeResponse>(
+    `/resume/enhance/${enhanced_id}/autosave`,
+    sections,
+  );
+  publishEnhancedResumeSync(enhanced_id, response);
+  return response;
 }
 
 /**
@@ -287,11 +334,12 @@ export async function addSkillToEnhancedResume(
   try {
     logApiRequest('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, { name: skillName });
     const response = await httpClient.post<{ id?: string; _id?: string }>(
-      `/resume/enhance/${enhanced_id}/skills/${category}`,
+      `/resume/enhance/${enhanced_id}/skills/${encodeCategoryPath(category)}`,
       { name: skillName }
     );
     logApiResponse('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, response.status, response.headers['x-trace-id']);
     const id = response.data?.id ?? response.data?._id;
+    publishEnhancedResumeSync(enhanced_id, response.data);
     return { id };
   } catch (err: unknown) {
     logApiError('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, err);
@@ -311,13 +359,22 @@ export async function deleteSectionItemFromEnhancedResume(
   enhanced_id: string,
   section: string,
   itemId: string
-): Promise<void> {
+): Promise<unknown> {
   try {
     logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, {});
     const response = await httpClient.delete(
       `/resume/enhance/${enhanced_id}/sections/${section}/items/${encodeURIComponent(itemId)}`
     );
     logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, response.status, response.headers['x-trace-id']);
+    // The shared editor components do not all own the score state. Publish the
+    // post-delete server snapshot so the ResumeProvider can update its single
+    // authoritative score/suggestions view for any section item deletion.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("enhanced-resume-score-sync", {
+        detail: { enhancedId: enhanced_id, payload: response.data },
+      }));
+    }
+    return response.data;
   } catch (err: unknown) {
     logApiError('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, err);
     throw err;
@@ -340,9 +397,10 @@ export async function deleteSkillFromEnhancedResume(
   try {
     logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, {});
     const response = await httpClient.delete(
-      `/resume/enhance/${enhanced_id}/skills/${category}/${encodeURIComponent(skillId)}`
+      `/resume/enhance/${enhanced_id}/skills/${encodeCategoryPath(category)}/${encodeURIComponent(skillId)}`
     );
     logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, response.status, response.headers['x-trace-id']);
+    publishEnhancedResumeSync(enhanced_id, response.data);
   } catch (err: unknown) {
     logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, err);
     throw err;
@@ -363,9 +421,10 @@ export async function deleteSkillCategoryFromEnhancedResume(
   try {
     logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, {});
     const response = await httpClient.delete(
-      `/resume/enhance/${enhanced_id}/skills/categories/${category}`
+      `/resume/enhance/${enhanced_id}/skills/categories/${encodeCategoryPath(category)}`
     );
     logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, response.status, response.headers['x-trace-id']);
+    publishEnhancedResumeSync(enhanced_id, response.data);
   } catch (err: unknown) {
     logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, err);
     throw err;
@@ -487,7 +546,10 @@ export interface ApplyFixRequest {
   enhancer_state: string; // enhanced_resume_id — the backend uses this to look up current state
   suggestion_id: string;
   fix_type?: 'auto' | 'manual' | 'info';
-  value?: string; // required for manual fixes (e.g. the phone number / email the user typed)
+  // The API accepts scalar updates as well as structured section values (for
+  // example a project, certification, or a list of skills). Keeping this
+  // contract broad lets the backend validate the suggestion-specific schema.
+  value?: string | string[] | Record<string, unknown>;
 }
 
 /**

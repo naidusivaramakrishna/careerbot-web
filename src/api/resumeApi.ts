@@ -3,6 +3,12 @@ import logger from '@/lib/logger';
 import { getProfile } from './userApi';
 import type { CustomSection, CustomField } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 
+// The Skills API declares `category` as FastAPI `{category:path}`, so a slash
+// belongs to a category such as `CI/CD` or `AI/ML`. Preserve `/` for that path
+// converter while encoding each other segment; double-encoding would validate
+// the literal text `CI%2FCD` instead.
+const encodeCategoryPath = (category: string): string =>
+  category.split("/").map(encodeURIComponent).join("/");
 export interface CategorizedSkills {
   programming_languages: string[];
   frameworks: string[];
@@ -378,10 +384,10 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
         logger.debug("💾 Storing first resume ID");
         localStorage.setItem("current_resume_id", firstResumeId);
       }
-      
+
       return validResumes;
     }
-    
+
     if (response.data && typeof response.data === 'object') {
       const resumeId = (response.data as ResumeResponse & { _id?: string }).id || (response.data as ResumeResponse & { _id?: string })._id;
 
@@ -426,96 +432,36 @@ interface BackendCustomSection {
   sectionName: string;
   icon: string;
   items: BackendCustomSectionItem[];
+  // The frontend's own named-fields model, round-tripped verbatim through
+  // the backend's CustomSection (extra="allow" preserves unknown keys as-is
+  // — verified directly against the API). `items` above is a lossy, generic
+  // projection of these same fields (built for the PDF/DOCX exporters,
+  // which only understand fixed item slots like title/description/tags,
+  // not arbitrarily-named fields) -- every distinct field TYPE collapses to
+  // one fixed slot, so field NAMES never survive it, and a second field of
+  // the same type silently overwrites the first. Sending `fields` alongside
+  // `items` lets the read path (transformCustomSectionsFromBackend) restore
+  // the real names/values instead of reconstructing generic ones ("Tags",
+  // "Description") from `items`.
+  fields?: CustomField[];
 }
 
 /**
  * Transform frontend customSections (fields-based) to backend format (items-based)
  */
 const transformCustomSectionsForBackend = (customSections: CustomSection[]): BackendCustomSection[] => {
-  return customSections
-    .filter(section => {
-      // Skip sections with no fields — they have no content to render
-      if (!section.fields || section.fields.length === 0) return false;
-      // Skip sections where every field is empty
-      return section.fields.some(f => {
-        const v = f.value;
-        if (typeof v === 'string') return v.trim() !== '';
-        if (Array.isArray(v)) return v.length > 0;
-        return !!v;
-      });
-    })
-    .map((section) => {
-    // Create an item from the fields
-    const item: BackendCustomSectionItem = {
-      title: '',
-      subtitle: '',
-      description: '',
-      startDate: '',
-      endDate: '',
-      url: '',
-      tags: [],
-      location: '',
-    };
-
-    // Map fields to backend structure
-    section.fields?.forEach((field) => {
-      const fieldValue = field.value;
-
-      // Smart mapping based on field name and type
-      if (field.fieldType === 'text') {
-        // First text field → title, others → subtitle or custom fields
-        if (!item.title && (field.fieldName.toLowerCase().includes('title') || field.fieldName.toLowerCase().includes('name'))) {
-          item.title = fieldValue as string;
-        } else if (!item.subtitle && field.fieldName.toLowerCase().includes('subtitle')) {
-          item.subtitle = fieldValue as string;
-        } else if (!item.location && field.fieldName.toLowerCase().includes('location')) {
-          item.location = fieldValue as string;
-        } else if (!item.title) {
-          item.title = fieldValue as string;
-        } else if (!item.subtitle) {
-          item.subtitle = fieldValue as string;
-        }
-      } else if (field.fieldType === 'textarea') {
-        // Textarea → description
-        item.description = fieldValue as string;
-      } else if (field.fieldType === 'date') {
-        // Date fields
-        if (field.fieldName.toLowerCase().includes('start')) {
-          item.startDate = fieldValue as string;
-        } else if (field.fieldName.toLowerCase().includes('end')) {
-          item.endDate = fieldValue as string;
-        } else if (!item.startDate) {
-          item.startDate = fieldValue as string;
-        }
-      } else if (field.fieldType === 'url') {
-        // URL field
-        item.url = fieldValue as string;
-      } else if (field.fieldType === 'list') {
-        // List → tags
-        item.tags = (fieldValue as string[]).filter(v => v.trim() !== '');
-      }
-    });
-
-    // ✅ FIXED: Remove empty fields to avoid backend validation errors
-    // Only include fields that have actual values
-    const cleanedItem: BackendCustomSectionItem = {};
-    Object.keys(item).forEach((key) => {
-      const value = item[key];
-      // Include field if it has a non-empty value
-      if (value !== '' && !(Array.isArray(value) && value.length === 0)) {
-        cleanedItem[key] = value;
-      }
-    });
-
-    return {
-      // Include backend ID when it's a real UUID (not a frontend-generated `custom_*` id)
-      // This allows the backend to UPDATE the existing record instead of INSERTing a new one
-      ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
-      sectionName: section.sectionName,
-      icon: 'custom', // Default icon
-      items: [cleanedItem], // Single item per section for now
-    };
-  }); // end .map
+  // `fields` is the canonical, lossless custom-section model. A prior mapper
+  // also synthesized one generic item from every field; two fields of different
+  // types then competed for the same item keys (`tags`, `description`, etc.).
+  // Keep legacy `items` empty for new saves and let the backend render `fields`
+  // directly. Legacy records that only have `items` still use the read fallback.
+  return customSections.map((section) => ({
+    ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
+    sectionName: section.sectionName,
+    icon: 'custom',
+    items: [],
+    fields: section.fields,
+  }));
 };
 
 /**
@@ -525,6 +471,22 @@ const transformCustomSectionsFromBackend = (backendSections: BackendCustomSectio
   if (!backendSections || backendSections.length === 0) return [];
 
   return backendSections.map((section, sectionIndex) => {
+    // Prefer the verbatim named fields written alongside `items` by
+    // transformCustomSectionsForBackend (round-tripped as-is through the
+    // backend's CustomSection.fields extra field). Only reconstruct generic
+    // labels from `items` for genuinely legacy sections that predate this
+    // and never got a `fields` array at all -- reconstructing from `items`
+    // when `fields` IS present is what silently replaced "Technical
+    // Strengths"/"Automation Testing" with generic "Tags"/"Description" on
+    // every reload.
+    if (section.fields && section.fields.length > 0) {
+      return {
+        id: section.id || `custom_${Date.now()}_${sectionIndex}`,
+        sectionName: section.sectionName,
+        fields: section.fields,
+      };
+    }
+
     const fields: CustomField[] = [];
 
     // If section has items, convert first item to fields
@@ -720,7 +682,7 @@ export const deleteResumeSection = async (
   resumeId: string,
   section: string
 ): Promise<void> => {
-  
+
   try {
     logger.debug("🗑️ Deleting section:", section);
 
@@ -740,7 +702,7 @@ export const deleteResumeSectionItem = async (
   section: string,
   itemId: string
 ): Promise<void> => {
-  
+
   try {
     logger.debug("🗑️ Deleting item from section:", { section, itemId });
 
@@ -763,7 +725,7 @@ export const addSkillToCategory = async (
   try {
     logger.debug("➕ Adding skill to category:", { category, skillName });
     const response = await httpClient.post<{ id?: string; _id?: string }>(
-      `/resumes/${resumeId}/skills/${category}`,
+      `/resumes/${resumeId}/skills/${encodeCategoryPath(category)}`,
       { name: skillName }
     );
     const id = response.data?.id ?? response.data?._id ?? response.data?.skill?.id;
@@ -783,7 +745,7 @@ export const deleteSkillById = async (
 ): Promise<void> => {
   try {
     logger.debug("🗑️ Deleting skill:", { category, skillId });
-    await httpClient.delete(`/resumes/${resumeId}/skills/${category}/${encodeURIComponent(skillId)}`);
+    await httpClient.delete(`/resumes/${resumeId}/skills/${encodeCategoryPath(category)}/${encodeURIComponent(skillId)}`);
     logger.info("✅ Skill deleted successfully");
   } catch (error) {
     logger.error("❌ Error deleting skill:", error);
@@ -798,7 +760,7 @@ export const deleteSkillCategory = async (
 ): Promise<void> => {
   try {
     logger.debug("🗑️ Deleting skill category:", category);
-    await httpClient.delete(`/resumes/${resumeId}/skills/categories/${category}`);
+    await httpClient.delete(`/resumes/${resumeId}/skills/categories/${encodeCategoryPath(category)}`);
     logger.info("✅ Skill category deleted successfully");
   } catch (error) {
     logger.error("❌ Error deleting skill category:", error);
@@ -808,7 +770,7 @@ export const deleteSkillCategory = async (
 
 // ==================== TRIGGER SCORE CALCULATION ====================
 export const triggerScoreCalculation = async (resumeId: string): Promise<void> => {
-  
+
   try {
     logger.debug("🚀 Triggering score calculation for resume:", resumeId);
 
@@ -824,7 +786,7 @@ export const triggerScoreCalculation = async (resumeId: string): Promise<void> =
 
 // ==================== GET BUILDER SCORE ====================
 export const getBuilderScore = async (resumeId: string): Promise<BuilderScoreResponse> => {
-  
+
   try {
     logger.debug("📊 Fetching builder score for resume:", resumeId);
 
@@ -900,7 +862,7 @@ export const getResumeScore = async (
 
 // ==================== DELETE RESUME ====================
 export const deleteResume = async (resumeId: string): Promise<void> => {
-  
+
   try {
     logger.debug("🗑️ Deleting resume:", resumeId);
 
@@ -960,7 +922,7 @@ export const autoSaveResume = async (
 
 // ==================== GET DRAFT RESUMES ====================
 export const getDraftResumes = async (): Promise<ResumeResponse[]> => {
-  
+
   try {
     logger.debug("📥 Fetching draft resumes...");
 
@@ -977,7 +939,7 @@ export const getDraftResumes = async (): Promise<ResumeResponse[]> => {
 
 // ==================== GET COMPLETED RESUMES ====================
 export const getCompletedResumes = async (): Promise<ResumeResponse[]> => {
-  
+
   try {
     logger.debug("📥 Fetching completed resumes...");
 
@@ -994,7 +956,7 @@ export const getCompletedResumes = async (): Promise<ResumeResponse[]> => {
 
 // ==================== PUBLISH RESUME ====================
 export const publishResume = async (resumeId: string): Promise<void> => {
-  
+
   try {
     logger.debug("📤 Publishing resume:", resumeId);
 
@@ -1059,9 +1021,48 @@ export const downloadResume = async (
   }
 };
 
+// Renders the resume via the SAME backend PDF generator used for the actual
+// download, then rasterizes it server-side to a single stacked PNG
+// (format=png) -- so the live preview panel and the downloaded file can
+// never format custom sections, dates, or section grouping differently.
+// There used to be a second, hand-written React template renderer for the
+// preview that silently drifted out of sync with the backend renderer; a
+// later attempt to embed the actual PDF client-side via react-pdf/pdfjs-dist
+// hit a persistent, environment-specific webpack bundling crash
+// ("undefined is not a non-null object") that survived several independent
+// fix attempts. Rendering to a plain image server-side sidesteps that whole
+// class of problem -- the frontend just shows a normal <img>.
+export const getResumePreviewImage = async (
+  resumeId: string,
+  catalogueTemplateId?: string,
+  domainTemplateId?: string,
+  sectionBgColor?: string,
+  accentColor?: string,
+  sectionOrder?: string[],
+  fontFamily?: string,
+  lineSpacing?: string,
+  careerLevel?: string
+): Promise<Blob> => {
+  const params = new URLSearchParams({ format: 'png' });
+  if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
+  if (domainTemplateId) params.append('template_id', domainTemplateId);
+  if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
+  if (accentColor) params.append('accent_color', accentColor);
+  if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
+  if (fontFamily) params.append('font_family', fontFamily);
+  if (lineSpacing) params.append('line_height', lineSpacing);
+  if (careerLevel) params.append('career_level', careerLevel);
+
+  const response = await httpClient.get<Blob>(
+    `/resumes/${resumeId}/download?${params.toString()}`,
+    { responseType: 'blob' }
+  );
+  return response.data;
+};
+
 // Keep your existing getTemplatesByCategory function
 export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
-  
+
   try {
     logger.debug("📋 Fetching templates by category:", category);
 
@@ -1148,7 +1149,7 @@ export const applyTemplateToResume = async (
  * Get all template categories
  */
 export const getTemplateCategories = async (): Promise<string[]> => {
-  
+
   try {
     logger.debug("📋 Fetching template categories");
 
@@ -1177,7 +1178,7 @@ export const getTemplateCategories = async (): Promise<string[]> => {
  * Get the default template
  */
 export const getDefaultTemplate = async (): Promise<{ template_id?: string; id?: string }> => {
-  
+
   try {
     logger.debug("📋 Fetching default template");
 
@@ -1197,7 +1198,7 @@ export const getDefaultTemplate = async (): Promise<{ template_id?: string; id?:
  * Set a template as default
  */
 export const setDefaultTemplate = async (templateId: string | number): Promise<unknown> => {
-  
+
   try {
     logger.debug("📋 Setting default template:", templateId);
 

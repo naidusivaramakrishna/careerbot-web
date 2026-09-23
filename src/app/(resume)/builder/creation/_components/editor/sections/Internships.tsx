@@ -76,9 +76,9 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 );
 
 const Internships: React.FC = () => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resumeSource } = useResume();
   const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -161,16 +161,18 @@ const Internships: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
+    // An entry without its own id is genuinely new and must stay id-less —
+    // the backend appends it as a new item and assigns the real id (synced
+    // back below). Backfilling an id from the previous array by POSITION
+    // is unsound: inserting a new entry shifts every later entry's index,
+    // so a same-index lookup can hand a brand-new entry an EXISTING entry's
+    // id, and the next save then overwrites that existing entry instead of
+    // creating a new one. See the sibling effect below for the safe,
+    // identity-checked way to backfill backend-assigned ids.
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
-      const prevItems = (prev.internships ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.internships) === JSON.stringify(merged)) return prev;
-      return { ...prev, internships: merged };
+      if (JSON.stringify(prev.internships) === JSON.stringify(allEntries)) return prev;
+      return { ...prev, internships: allEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -179,9 +181,14 @@ const Internships: React.FC = () => {
     if (!resumeData.internships?.length) return;
     setSavedEntries(prev => {
       // If savedEntries is empty but API data has arrived, populate from API
+      // See WorkExperience.tsx's sibling effect: don't clear editingEntries
+      // when re-filtering still yields nothing valid, or both it and
+      // savedEntries end up empty and the modal renders no fields at all.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.internships!.filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.internships!.filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.internships!.length) return prev;
@@ -360,7 +367,7 @@ const Internships: React.FC = () => {
 
     const descBox = descriptionRefs.current[editIndex];
     const formContainer = formScrollRef.current;
-    
+
     if (descBox && formContainer) {
       const descBoxTop = descBox.offsetTop;
       formContainer.scrollTo({
@@ -449,23 +456,23 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                   <div className="text-base font-bold text-gray-900">
                     {internship.role || "No role"}
                   </div>
-                  
+
                   <div className="text-sm text-gray-700">
                     {internship.company || "No company"}
                   </div>
-                  
+
                   <div className="text-xs text-gray-600">
-                    {internship.startDate ? startToLabel(internship.startDate) : ""} 
+                    {internship.startDate ? startToLabel(internship.startDate) : ""}
                     {internship.startDate && " - "}
                     {internship.currentlyWorking ? "Present" : (internship.endDate ? startToLabel(internship.endDate) : "")}
                   </div>
-                  
+
                   {internship.location && (
                     <div className="text-xs text-gray-600">
                       {internship.location}
                     </div>
                   )}
-                  
+
                   {internship.technologies && internship.technologies.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-1">
                       {internship.technologies.map((tech, techIndex) => (
@@ -504,8 +511,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -531,7 +538,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
       {/* Editing Form */}
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >

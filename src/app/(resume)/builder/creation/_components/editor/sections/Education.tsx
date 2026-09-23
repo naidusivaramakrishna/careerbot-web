@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
-import MonthYearPicker from "../MonthYearPicker";
+import MonthYearPicker, { toYearMonth } from "../MonthYearPicker";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { toast } from "sonner";
 import { RiEdit2Fill } from 'react-icons/ri';
@@ -25,6 +25,48 @@ interface EducationEntry {
 
 const SCORE_TYPES: ScoreType[] = ["CGPA", "Marks", "GPA", "Percentage"];
 
+const normalizeScoreValue = (value: string, scoreType?: ScoreType): string =>
+  scoreType === "Percentage"
+    ? value.replace(/\s*(?:%|percent(?:age)?)\s*$/i, "").trim()
+    : value;
+
+const displayScoreValue = (value: string, scoreType?: ScoreType): string => {
+  const normalized = normalizeScoreValue(value, scoreType);
+  return scoreType === "Percentage" ? `${normalized}%` : normalized;
+};
+
+const compactNumber = (value: number): string => Number(value.toFixed(2)).toString();
+
+const scoreAsPercentage = (value: string, scoreType?: ScoreType): number | null => {
+  const normalized = normalizeScoreValue(value, scoreType).trim();
+  if (!normalized || !scoreType) return null;
+  if (scoreType === "Marks") {
+    const fraction = normalized.match(/^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/);
+    if (fraction) {
+      const earned = Number(fraction[1]);
+      const total = Number(fraction[2]);
+      return total > 0 ? (earned / total) * 100 : null;
+    }
+    const marks = Number(normalized);
+    return Number.isFinite(marks) ? marks : null;
+  }
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) return null;
+  if (scoreType === "CGPA") return numeric * 10;
+  if (scoreType === "GPA") return numeric * 25;
+  return numeric;
+};
+
+const convertScoreValue = (value: string, fromType: ScoreType | undefined, toType: ScoreType): string => {
+  if (!value.trim() || !fromType || fromType === toType) return normalizeScoreValue(value, toType);
+  const percentage = scoreAsPercentage(value, fromType);
+  if (percentage === null) return normalizeScoreValue(value, toType);
+  if (toType === "CGPA") return compactNumber(percentage / 10);
+  if (toType === "GPA") return compactNumber(percentage / 25);
+  if (toType === "Marks") return `${compactNumber(percentage)}/100`;
+  return compactNumber(percentage);
+};
+
 const emptyEducation = (): EducationEntry => ({
   school: "",
   degree: "",
@@ -35,9 +77,9 @@ const emptyEducation = (): EducationEntry => ({
 });
 
 const Education: React.FC = () => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resumeSource } = useResume();
   const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -88,18 +130,30 @@ const Education: React.FC = () => {
       if (e.detail.section !== "Education") return;
       let allValid = true;
       editingEntries.forEach((edu, editIndex) => {
-        const globalIndex = savedEntries.length + editIndex;
+        const globalIndex = editingOriginalIndex ?? (savedEntries.length + editIndex);
         const isValid = validateRequired("education", globalIndex, {
           school: edu.school,
           degree: edu.degree,
         });
         if (!isValid) allValid = false;
+
+        // Start/End date are optional individually, but if both are filled they
+        // must be in order. Malformed/legacy values (toYearMonth returns null,
+        // e.g. a bare "2023" instead of "MMM YY") are skipped rather than
+        // blocking save — we only enforce the check when both sides are
+        // actually comparable.
+        const startYM = toYearMonth(edu.startDate);
+        const endYM = toYearMonth(edu.endDate);
+        if (startYM !== null && endYM !== null && endYM < startYM) {
+          setFieldError("education", globalIndex, "endDate", "End date can't be before start date");
+          allValid = false;
+        }
       });
       e.detail.resultRef.valid = allValid;
     };
     window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
     return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
-  }, [editingEntries, savedEntries, validateRequired]);
+  }, [editingEntries, savedEntries, editingOriginalIndex, validateRequired, setFieldError]);
 
   useEffect(() => {
     type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
@@ -115,22 +169,22 @@ const Education: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
-    const validEntries = [
-      ...savedEntries,
-      ...editingEntries.filter(hasValidData)
-    ];
+    const validEditingEntries = editingEntries.filter(hasValidData);
+    const validEntries = [...savedEntries];
+    if (editingOriginalIndex !== null) {
+      validEntries.splice(editingOriginalIndex, 1, ...validEditingEntries);
+    } else {
+      validEntries.push(...validEditingEntries);
+    }
+    // An id-less entry is genuinely new and must stay id-less — see
+    // Internships.tsx's sibling effect for why backfilling an id by array
+    // POSITION is unsound.
     setResumeData(prev => {
-      const prevItems = (prev.education ?? []) as Array<Record<string, unknown>>;
-      const merged = validEntries.map((entry, idx) => {
-        if ((entry as unknown as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.education) === JSON.stringify(merged)) return prev;
-      return { ...prev, education: merged };
+      if (JSON.stringify(prev.education) === JSON.stringify(validEntries)) return prev;
+      return { ...prev, education: validEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedEntries, editingEntries]);
+  }, [savedEntries, editingEntries, editingOriginalIndex]);
 
   // After save, EditorTab merges backend-assigned IDs into resumeData.education.
   // Sync those IDs back into savedEntries so that subsequent deletes hit the API
@@ -163,36 +217,42 @@ const Education: React.FC = () => {
     updated[index] = { ...updated[index], [field]: value };
     setEditingEntries(updated);
     clearError("education", savedEntries.length + index, field as string);
+    // The date-order error is always attached to "endDate" (see
+    // handleValidateSave) — clear it here too when startDate changes,
+    // otherwise fixing the start date leaves a stale error under End date.
+    if (field === "startDate" || field === "endDate") {
+      clearError("education", savedEntries.length + index, "endDate");
+    }
   };
 
   // ✅ FIXED: Validate before saving
   const addEducation = () => {
     // ✅ Step 1: Validate all editing entries first
     let hasErrors = false;
-    
+
     editingEntries.forEach((entry, editIndex) => {
-      const globalIndex = savedEntries.length + editIndex;
-      
+      const globalIndex = editingOriginalIndex ?? (savedEntries.length + editIndex);
+
       // Clear old errors for this entry first
       clearSectionIndexErrors("education", globalIndex);
-      
+
       // Validate required fields
       const isValid = validateRequired("education", globalIndex, {
         school: entry.school,
         degree: entry.degree,
       });
-      
+
       if (!isValid) {
         hasErrors = true;
       }
     });
-    
+
     // ✅ Step 2: If there are validation errors, don't proceed
     if (hasErrors) {
       // // console.log("❌ Validation failed - cannot save education");
       return; // Stop here, errors will be shown in the form
     }
-    
+
     // ✅ Step 3: Only save valid entries with data
     const validEditingEntries = editingEntries.filter(hasValidData);
 
@@ -201,7 +261,7 @@ const Education: React.FC = () => {
         // Editing an existing entry — re-insert at the original position
         setSavedEntries((prev) => {
           const updated = [...prev];
-          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          updated.splice(editingOriginalIndex, 1, ...validEditingEntries);
           return updated;
         });
       } else {
@@ -222,14 +282,6 @@ const Education: React.FC = () => {
   };
 
   const cancelEdit = () => {
-    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
-      // Restore the original entry back to its position in the list
-      setSavedEntries(prev => {
-        const restored = [...prev];
-        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
-        return restored;
-      });
-    }
     setEditingEntries([]);
     setEditingOriginalIndex(null);
     setEditingOriginalEntry(null);
@@ -284,9 +336,6 @@ const Education: React.FC = () => {
     const entryToEdit = savedEntries[index];
     setEditingOriginalIndex(index);
     setEditingOriginalEntry(entryToEdit);
-    const updatedSaved = [...savedEntries];
-    updatedSaved.splice(index, 1);
-    setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
   };
 
@@ -316,12 +365,12 @@ const Education: React.FC = () => {
                   <div className="text-base font-bold text-gray-900">
                     {education.degree || "No degree"}
                   </div>
-                  
+
                   {/* School */}
                   <div className="text-sm text-gray-700">
                     {education.school || "No school"}
                   </div>
-                  
+
                   {/* Dates */}
                   <div className="text-xs text-gray-600">
                     {education.startDate ? startToLabel(education.startDate) : ""}
@@ -332,7 +381,7 @@ const Education: React.FC = () => {
                   {/* Score */}
                   {education.scoreType && education.scoreValue && (
                     <div className="text-xs text-gray-500 mt-1">
-                      {education.scoreType}: {education.scoreValue}{education.scoreType === "Percentage" ? "%" : ""}
+                      {education.scoreType}: {displayScoreValue(education.scoreValue, education.scoreType)}
                     </div>
                   )}
                 </div>
@@ -354,8 +403,8 @@ const Education: React.FC = () => {
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -401,7 +450,7 @@ const Education: React.FC = () => {
             )}
             <div className="flex flex-col gap-3">
               {editingEntries.map((education, editIndex) => {
-                const globalIndex = savedEntries.length + editIndex;
+                const globalIndex = editingOriginalIndex ?? (savedEntries.length + editIndex);
                 return (
                   <div key={`edit-${editIndex}`} className="flex flex-col gap-3 pb-4 relative">
                     {/* School & Degree */}
@@ -468,6 +517,11 @@ const Education: React.FC = () => {
                           minDate={education.startDate}
                           allowFutureDates
                         />
+                        {errors[`education-${globalIndex}-endDate`] && (
+                          <span className="text-xs text-red-500">
+                            {errors[`education-${globalIndex}-endDate`]}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -481,7 +535,11 @@ const Education: React.FC = () => {
                           value={education.scoreValue || ""}
                           placeholder={education.scoreType === "Percentage" ? "e.g., 85" : "e.g., 3.8"}
                           onChange={(e) => {
-                            handleChange(editIndex, "scoreValue", e.target.value);
+                            handleChange(
+                              editIndex,
+                              "scoreValue",
+                              normalizeScoreValue(e.target.value, education.scoreType)
+                            );
                             clearError("education", globalIndex, "scoreValue");
                           }}
                           onBlur={() => {
@@ -515,7 +573,24 @@ const Education: React.FC = () => {
                         {/* Score Type Dropdown */}
                         <select
                           value={education.scoreType || ""}
-                          onChange={(e) => handleChange(editIndex, "scoreType", e.target.value as ScoreType)}
+                          onChange={(e) => {
+                            const scoreType = e.target.value as ScoreType | "";
+                            const updated = [...editingEntries];
+                            const previousType = updated[editIndex].scoreType;
+                            updated[editIndex] = {
+                              ...updated[editIndex],
+                              scoreType: scoreType || undefined,
+                              scoreValue: scoreType
+                                ? convertScoreValue(
+                                    updated[editIndex].scoreValue || "",
+                                    previousType,
+                                    scoreType
+                                  )
+                                : updated[editIndex].scoreValue,
+                            };
+                            setEditingEntries(updated);
+                            clearError("education", globalIndex, "scoreValue");
+                          }}
                           className="pl-6 pr-3 py-3.5 text-sm bg-transparent text-black outline-none cursor-pointer font-medium appearance-none bg-left bg-no-repeat"
                           style={{
                             backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
