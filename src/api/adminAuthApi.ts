@@ -70,7 +70,25 @@ export interface CreateAdminRequest {
   email: string;
   full_name: string;
   password: string;
-  role: 'ADMIN' | 'MODERATOR' | 'SUPPORT';
+  // LOWERCASE, because these are wire values, not TypeScript enum names.
+  // `AdminRole` in careerbot-api is `platform_admin` / `admin` / `moderator` /
+  // `support` (app/services/admin_service/models.py), and the sibling module
+  // `adminManagementApi.ts` was rewritten lowercase in this same change for
+  // exactly that reason. `createAdmin` posts this body verbatim with no
+  // normalisation, so an uppercase union here would put a value on the wire
+  // that matches no role the backend knows.
+  //
+  // SUPER_ADMIN is deliberately absent -- this path does not mint one.
+  // platform_admin was absent by oversight, which made the role unrequestable
+  // through this path even after every screen offered it.
+  //
+  // NOTE: `POST /admin/auth/admins` does not exist in careerbot-api today --
+  // the admin auth router (mounted at /admin/auth) defines /bootstrap,
+  // /signup, /list, /profile, /{admin_id}, /{admin_id}/role, /{admin_id}/status
+  // and the auth routes, but no /admins. `createAdmin` therefore 404s
+  // regardless of this union. Tracked separately; this type is corrected so it
+  // is right when the endpoint lands rather than wrong in a second place.
+  role: 'admin' | 'platform_admin' | 'moderator' | 'support';
 }
 
 export interface CreateAdminResponse {

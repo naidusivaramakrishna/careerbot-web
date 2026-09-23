@@ -38,6 +38,12 @@ const AdminTable: React.FC<AdminTableProps> = ({
                 return 'text-purple-700 bg-purple-100';
             case 'ADMIN':
                 return 'text-blue-700 bg-blue-100';
+            // Teal, deliberately not blue: a platform admin is NOT a lesser
+            // admin, it is a different job -- runs the colleges, sees no money.
+            // Sharing ADMIN's colour would invite exactly that misreading in
+            // the one list where the two appear side by side.
+            case 'PLATFORM_ADMIN':
+                return 'text-teal-700 bg-teal-100';
             case 'MODERATOR':
                 return 'text-green-700 bg-green-100';
             case 'SUPPORT':

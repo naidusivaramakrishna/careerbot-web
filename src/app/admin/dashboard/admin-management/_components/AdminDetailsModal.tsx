@@ -27,6 +27,8 @@ interface Props {
 const ROLE_BADGE_COLORS: Record<string, string> = {
     super_admin: 'text-purple-600 bg-purple-100',
     admin: 'text-blue-600 bg-blue-100',
+    // Matches AdminTable's teal. Same role, same colour, both screens.
+    platform_admin: 'text-teal-600 bg-teal-100',
     moderator: 'text-green-600 bg-green-100',
     support: 'text-gray-600 bg-gray-100',
 };

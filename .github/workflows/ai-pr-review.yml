@@ -2,7 +2,13 @@ name: AI PR Review (Claude + Codex)
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # `labeled`/`unlabeled` are here because `ai-review-waive` is the documented
+    # escape hatch for a check that now BLOCKS the merge. Without them, applying
+    # the label produced no new run: the red check stayed red and the only way
+    # through was to hunt for "Re-run failed jobs" -- or to admin-merge, which is
+    # the record-free bypass the label exists to replace. The job condition below
+    # ignores every other label so this does not re-review on unrelated ones.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   issue_comment:
     types: [created]
   schedule:
@@ -49,7 +55,9 @@ jobs:
     if: >
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' &&
+       (github.event.action != 'labeled' && github.event.action != 'unlabeled'
+        || github.event.label.name == 'ai-review-waive')) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        startsWith(github.event.comment.body, '/ai-review'))
@@ -82,3 +90,19 @@ jobs:
           python3 scripts/ai_review/ai_pr_review.py \
             --repo "${{ github.repository }}" \
             ${{ steps.t.outputs.args }}
+
+  # careerbot-web has no Python test runner of its own -- this is the repo's only
+  # .py file. Without this job its copy of the gate would be the one nobody checks,
+  # which is exactly the blind spot this PR exists to close. The suite is the same
+  # one that guards careerbot-ai and careerbot-api.
+  gate-self-test:
+    runs-on: [self-hosted, ai-review]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pytest
+        run: python3 -m pip install --quiet pytest
+      - name: Run the gate's own test suite
+        run: python3 -m pytest tests/unit/test_ai_review_gate.py -q --override-ini="addopts="
