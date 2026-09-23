@@ -206,12 +206,19 @@ const Certifications: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // Cancel a queued full-section autosave before DELETE starts. Otherwise a
-      // pre-delete snapshot can finish while this request is in flight and
-      // recreate the item after the endpoint has removed it.
+      // Cancel a queued full-section autosave before DELETE starts. If one has
+      // already fired and its PATCH is in flight, clearing the timer is a
+      // no-op -- that request still reaches the backend with a pre-delete
+      // snapshot and can resurrect this exact item there. awaitInFlight is
+      // populated by EditorTab's listener when that's the case; awaiting it
+      // here guarantees DELETE is always the request that lands last.
+      const awaitInFlight: { promise?: Promise<void> } = {};
       window.dispatchEvent(new CustomEvent("resume-item-deleted", {
-        detail: { section: "Certifications", itemId },
+        detail: { section: "Certifications", itemId, awaitInFlight },
       }));
+      if (awaitInFlight.promise) {
+        await awaitInFlight.promise;
+      }
       // // console.log("🗑️ Deleting certification item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend

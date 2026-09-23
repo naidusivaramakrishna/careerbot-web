@@ -202,6 +202,15 @@ const EditorTab: React.FC<Props> = ({
   // Skip the immediately following state-driven autosave so an older full
   // section snapshot cannot race the DELETE and restore that item.
   const skipNextAutoSaveForSectionRef = useRef<string | null>(null);
+  // The debounced autosave PATCH currently in flight, if any. clearTimeout
+  // only cancels a QUEUED autosave -- once the timer has fired and its PATCH
+  // is awaiting a response, clearing the (already-consumed) timer ref is a
+  // no-op, and that request still reaches the backend with a pre-delete
+  // section snapshot. cancelStaleSectionAutosave hands this back to the
+  // "resume-item-deleted" dispatcher (see its awaitInFlight handling below)
+  // so a delete handler can await the in-flight request before issuing its
+  // own DELETE -- guaranteeing DELETE is the request that lands last.
+  const autoSaveInFlightRef = useRef<Promise<void> | null>(null);
   // Always-current snapshot of resumeData for memoized callbacks (avoids stale closure)
   const resumeDataRef = useRef(resumeData);
   resumeDataRef.current = resumeData;
@@ -439,7 +448,12 @@ const EditorTab: React.FC<Props> = ({
     }
 
 
-    autoSaveTimerRef.current = setTimeout(async () => {
+    autoSaveTimerRef.current = setTimeout(() => {
+      // Wrapped (rather than making the setTimeout callback itself async) so
+      // the resulting promise can be tracked in autoSaveInFlightRef for the
+      // full duration of this autosave, including the network round-trip --
+      // see the ref's own comment for why a delete handler needs to await it.
+      const run = async () => {
       const resumeId = getActiveResumeId();
 
       if (!resumeId || !sectionName || resumeId === 'null' || resumeId === 'undefined') {
@@ -632,6 +646,10 @@ const EditorTab: React.FC<Props> = ({
       } finally {
         setIsAutoSaving(false);
       }
+      };
+      autoSaveInFlightRef.current = run().finally(() => {
+        autoSaveInFlightRef.current = null;
+      });
     }, 3000);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEnhancedResume, getActiveResumeId, confirmSavedManualFixes]);
@@ -639,7 +657,11 @@ const EditorTab: React.FC<Props> = ({
 
   useEffect(() => {
     const cancelStaleSectionAutosave = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: unknown; suppressNext?: unknown }>).detail;
+      const detail = (event as CustomEvent<{
+        section?: unknown;
+        suppressNext?: unknown;
+        awaitInFlight?: { promise?: Promise<void> };
+      }>).detail;
       const section = detail?.section;
       if (typeof section !== "string" || section !== openModalSection) return;
       if (detail?.suppressNext === true) {
@@ -648,6 +670,14 @@ const EditorTab: React.FC<Props> = ({
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
+      }
+      // The timer above only cancels a QUEUED autosave. If one has already
+      // fired and its PATCH is in flight, hand its promise back so the
+      // caller (a delete handler) can await it before issuing DELETE --
+      // otherwise that stale, pre-delete PATCH can still reach the backend
+      // after DELETE and resurrect the item there.
+      if (detail?.awaitInFlight && autoSaveInFlightRef.current) {
+        detail.awaitInFlight.promise = autoSaveInFlightRef.current;
       }
     };
     window.addEventListener("resume-item-deleted", cancelStaleSectionAutosave);

@@ -466,6 +466,112 @@ describe('ResumeContext', () => {
       expect.objectContaining({ id: 'summary-manual-2', status: 'pending' }),
     ]));
   });
+  // P2 regression: a full, authoritative snapshot (a fresh GET / rescan, not
+  // a partial apply_fix response) must drop a pending card the server no
+  // longer lists -- otherwise a resolved suggestion stays pending forever,
+  // including across reloads (pending cards round-trip through localStorage).
+  it('drops a pending suggestion the server no longer lists on a full snapshot (rescan)', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    // Seed a pending suggestion directly (independent of the deduction-
+    // derivation path exercised by the initial load) so this test's
+    // premise doesn't depend on that separate, already-covered behavior.
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        suggestions: [{ id: 'suggestion-1', section: 'Summary', message: 'Add measurable results.', fix_type: 'manual' }],
+        ats_score: { final_score: 76, section_breakdown: {} },
+      });
+    });
+    await waitFor(() => expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    ));
+
+    await act(async () => {
+      latestContext.syncEnhancedScore(
+        { suggestions: [], ats_score: { final_score: 90, section_breakdown: {} } },
+        { isFullSnapshot: true },
+      );
+    });
+
+    await waitFor(() => expect(latestContext.enhancedSuggestions).not.toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1' }),
+    ));
+  });
+
+  // P2 regression: syncEnhancedResumeData used to spread every mapped
+  // section from the server over local resumeData unconditionally
+  // ({...previous, ...mapped}). autosave only sends items that already have
+  // a backend id (a brand-new, not-yet-saved entry is id-less and
+  // deliberately excluded), so a response for an UNRELATED mutation (e.g.
+  // deleting a Certification) silently wiped out a project the user just
+  // added in a different, still-open section.
+  it('preserves a local id-less entry in an unrelated section when an unrelated mutation syncs', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    // Simulate the user having just added a brand-new, not-yet-saved
+    // project (no id assigned yet -- that only happens server-side).
+    await act(async () => {
+      latestContext.setResumeData((previous) => ({
+        ...previous,
+        projects: [
+          ...(previous.projects ?? []),
+          { title: 'Unsaved Side Project', description: '', technologies: [], startDate: '', endDate: '', link: '' },
+        ],
+      }));
+    });
+    expect(latestContext.resumeData.projects).toEqual([
+      expect.objectContaining({ title: 'Unsaved Side Project' }),
+    ]);
+
+    // An unrelated mutation (e.g. a Certification delete) broadcasts its own
+    // snapshot, whose mapped `projects` is the server's (empty) array --
+    // it knows nothing about the just-added, unsaved project.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          payload: {
+            enhanced_data: enhancedResume.enhanced_data,
+            ats_score: { final_score: 80, section_breakdown: {} },
+          },
+        },
+      }));
+    });
+
+    await waitFor(() => expect(latestContext.resumeData.projects).toEqual([
+      expect.objectContaining({ title: 'Unsaved Side Project' }),
+    ]));
+  });
+
+  it('keeps a pending suggestion missing from a PARTIAL (non-full) snapshot', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        suggestions: [{ id: 'suggestion-1', section: 'Summary', message: 'Add measurable results.', fix_type: 'manual' }],
+        ats_score: { final_score: 76, section_breakdown: {} },
+      });
+    });
+    await waitFor(() => expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    ));
+
+    await act(async () => {
+      // No isFullSnapshot -- an ordinary apply/delete-fix-style response.
+      latestContext.syncEnhancedScore({
+        suggestions: [],
+        ats_score: { final_score: 90, section_breakdown: {} },
+      });
+    });
+
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'suggestion-1', status: 'pending' }),
+    );
+  });
+
   it('keeps the score and every pending card when the server rejects an auto fix', async () => {
     mockApplyFix.mockResolvedValueOnce({
       success: true,

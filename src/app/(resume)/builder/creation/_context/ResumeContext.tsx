@@ -128,6 +128,17 @@ function reconcileServerSuggestions(
   appliedFixes?: Map<string, boolean>,
   hasAppliedFixLedger = false,
   _preservePreviouslyFixed = false,
+  // A locally-pending card missing from `serverSuggestions` is kept by
+  // default (see the loop below) because most callers here are PARTIAL
+  // responses (an apply/delete-fix reply often only echoes the one item
+  // that was touched) -- an omission there is not evidence the card was
+  // resolved. Only set this true for a genuinely full, authoritative
+  // snapshot (the enhancer GET's own suggestions list on load, not an
+  // apply_fix/delete_fix response): there, a pending card the server no
+  // longer lists really has been resolved, and keeping it forever (even
+  // across reloads, since pending cards are persisted to localStorage) is
+  // the P2 bug this flag fixes.
+  dropMissingPending = false,
 ): EnhancedSuggestion[] {
   // A suggestion the server list itself already marks "fixed" (see
   // resolveRemovedSkillDeductions) must stay fixed here too -- forcing every
@@ -175,7 +186,13 @@ function reconcileServerSuggestions(
     // pending card is therefore not evidence that it was fixed. Keeping it
     // prevents one Summary auto fix from hiding the remaining manual fixes
     // and incorrectly changing the section progress to 100%.
-    if (suggestion.status === "pending") return [suggestion];
+    //
+    // dropMissingPending flips this for a full, authoritative snapshot (see
+    // the parameter's own comment): there, an omission genuinely means the
+    // server has resolved it, and keeping it would leave a resolved card
+    // stuck pending forever -- including across reloads, since pending
+    // cards round-trip through localStorage.
+    if (suggestion.status === "pending") return dropMissingPending ? [] : [suggestion];
     // A fixed card can be removed only by an explicit authoritative ledger
     // response (for example, an Undo). Legacy responses keep it visible.
     return hasAppliedFixLedger ? [] : [{ ...suggestion, status: "fixed" as const }];
@@ -189,6 +206,44 @@ function reconcileServerSuggestions(
     // unconditionally here undid that status for exactly this case.
     .map(suggestion => suggestion.status === "fixed" ? suggestion : { ...suggestion, status: "pending" as const });
   return [...retained, ...newlyIntroduced];
+}
+
+// Array-of-items sections whose entries carry an optional backend `id`.
+// syncEnhancedResumeData uses this list to avoid blindly overwriting a
+// section with the server's copy -- see mergeSectionPreservingLocalIdLess.
+const ID_KEYED_ARRAY_SECTIONS = [
+  "education", "workExperience", "projects", "certifications", "achievements",
+  "volunteering", "references", "internships", "awards", "hobbies",
+  "interests", "languages", "publications", "patents",
+] as const;
+
+/**
+ * Every skill/delete/apply broadcast used to spread the server's mapped
+ * sections wholesale over local resumeData (`{...previous, ...mapped}`).
+ * autosave only sends items that already have a backend id (a brand-new,
+ * not-yet-saved entry is id-less and deliberately excluded -- see
+ * triggerAutoSave in EditorTab.tsx), so a server response for an UNRELATED
+ * mutation (e.g. deleting a Certification) never contains a project the
+ * user just added in a different, still-open section. Overwriting that
+ * section with the server's array silently discarded it.
+ *
+ * Keeps every server item (authoritative for anything with an id) and
+ * re-appends any purely local id-less items the response doesn't know
+ * about, instead of the section-owning caller having to scope every sync
+ * to "just this one section" (the response shape varies too much across
+ * call sites -- apply_fix, delete_fix, autosave, explicit save, GET -- to
+ * do that reliably everywhere).
+ */
+function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
+  serverItems: unknown,
+  localItems: unknown,
+): unknown {
+  if (!Array.isArray(serverItems)) return serverItems;
+  if (!Array.isArray(localItems)) return serverItems;
+  const localIdLess = (localItems as T[]).filter(
+    (item) => item && typeof item === "object" && !item.id && !item._id,
+  );
+  return localIdLess.length > 0 ? [...serverItems, ...localIdLess] : serverItems;
 }
 
 function markSuggestionFixed(
@@ -379,6 +434,13 @@ interface EnhancedScoreSyncOptions {
    * instead of dropping it during the ordinary save response reconciliation.
    */
   resolvedSuggestionSections?: string[];
+  /**
+   * True when `score` is a full, authoritative enhancer snapshot (a GET),
+   * not a partial apply/delete-fix response. See reconcileServerSuggestions'
+   * dropMissingPending parameter -- only in that case is an omitted pending
+   * card real evidence it was resolved.
+   */
+  isFullSnapshot?: boolean;
 }
 
 type BackendSkillItem = { id?: string; name?: string };
@@ -1372,6 +1434,11 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           // freshly-fetched resume (mapped) no longer has at all.
           const loadedSkillNames = currentSkillNames(mapped as unknown as ResumeData);
           if (serverSuggestions.length > 0) {
+            // This is the full enhancer GET on load -- the one case where a
+            // previously-pending card (including one just re-seeded from
+            // localStorage) that the server no longer lists really has been
+            // resolved. See reconcileServerSuggestions' dropMissingPending
+            // parameter.
             setEnhancedSuggestions(previous => reconcileServerSuggestions(
               previous,
               resolveRemovedSkillDeductions(
@@ -1379,6 +1446,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
                 loadedSkillNames,
                 id => Boolean(skillUndoInfoRef.current[id]),
               ),
+              undefined,
+              false,
+              false,
+              true,
             ));
           } else {
             // A score-only or partial refresh is not evidence that every
@@ -2030,9 +2101,27 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       const serverPhone = directPhone.found;
       const phoneValue = serverPhone ? serverText(directPhone.value) : String(parsedPhone || mappedInfo.phone || "");
 
+      // This response is authoritative only for the section(s) its operation
+      // actually touched, but every mapped section gets spread below --
+      // preserve any local id-less (not-yet-saved) entry in every OTHER
+      // section instead of losing it to that overwrite. See
+      // mergeSectionPreservingLocalIdLess and ID_KEYED_ARRAY_SECTIONS.
+      const previousRecord = previous as unknown as Record<string, unknown>;
+      const mappedRecord = mapped as unknown as Record<string, unknown>;
+      const mergedArraySections: Record<string, unknown> = {};
+      for (const key of ID_KEYED_ARRAY_SECTIONS) {
+        if (key in mapped) {
+          mergedArraySections[key] = mergeSectionPreservingLocalIdLess(
+            mappedRecord[key],
+            previousRecord[key],
+          );
+        }
+      }
+
       return {
         ...previous,
         ...mapped,
+        ...mergedArraySections,
         resume_id: previous.resume_id,
         personalInfo: {
           ...previous.personalInfo,
@@ -2149,6 +2238,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         normalizedServerSuggestions,
         appliedFixes,
         clearsMissingAppliedFixes,
+        false,
+        options?.isFullSnapshot === true,
       ));
       return;
     }
@@ -2198,7 +2289,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       void getEnhancedResume(activeEnhancedId).then((latest) => {
         if (refreshVersion !== latestEnhancedRefreshRef.current) return;
         syncEnhancedResumeData(latest);
-        syncEnhancedScore(latest);
+        // A full, authoritative GET -- a pending card missing from it really
+        // has been resolved. See dropMissingPending.
+        syncEnhancedScore(latest, { isFullSnapshot: true });
       }).catch((error) => {
         logger.warn("Unable to refresh enhanced ATS score after deletion", error);
       });
