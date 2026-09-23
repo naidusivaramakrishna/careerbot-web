@@ -23,6 +23,19 @@ const SECTION_KEY_MAP: Record<string, string> = {
   "References": "references",
   "Declaration": "declaration",
 } as const;
+
+/**
+ * Email is account-managed by the API. Personal-info edits must preserve it
+ * client-side for the preview, but must never send it as a mutable field.
+ */
+function omitAccountManagedEmail(
+  sectionName: string,
+  data: Record<string, unknown> | unknown[]
+): Record<string, unknown> | unknown[] {
+  if (sectionName !== "Personal Info" || Array.isArray(data)) return data;
+  const { email: _accountEmail, ...editableFields } = data;
+  return editableFields;
+}
 import { useSearchParams } from "next/navigation";
 import {
   DragDropContext,
@@ -42,6 +55,7 @@ import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
 import { useResume, CustomSection } from "../../_context/ResumeContext";
 import { updateResume, getAllResumes, autoSaveResume } from "@/api/resumeApi";
 import { autoSaveEnhancedResume, updateEnhancedResume } from "@/api/enhancerApi";
+import { SUGGESTION_SECTION_MAP, getSectionValue, isStructuralSuggestionSatisfied, toSuggestionSectionKey } from "../../_utils/suggestionSection";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 
@@ -111,11 +125,56 @@ const EditorTab: React.FC<Props> = ({
     setCompletionStatus,
     resumeData,
     setResumeData,
+    resumeId: contextResumeId,
     addCustomSection,
     removeCustomSection,
+    resumeSource,
+    enhancedDataVersion,
+    removeEnhancedScoreSection,
+    syncEnhancedScore,
+    enhancedSuggestions,
+    applyManualFix,
+    bumpResumeSavedVersion,
   } = useResume();
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
+
+  // The section-editor modal's Component is keyed on this value (see the
+  // `key={`${openModalSection}-${modalMountVersion}`}` below) so it remounts
+  // with fresh data every time a *different* section is opened. It must NOT
+  // track the live `enhancedDataVersion`, though: that counter also bumps
+  // whenever this same section's own debounced auto-save round-trips
+  // (autoSaveEnhancedResume -> "enhanced-resume-score-sync" ->
+  // syncEnhancedResumeData), which happens seconds after any edit. Keying on
+  // the live version made the modal remount mid-edit -- e.g. clicking the
+  // pencil icon on a saved Projects entry opens the edit form, the resulting
+  // resumeData change arms the autosave debounce, and when it fires the
+  // remount reset the section's local "which entry is being edited" state,
+  // snapping the just-opened form back to the read-only list. Snapshotting
+  // the version only when the modal is opened (or switched to a different
+  // section) keeps the "fresh data on open" behavior without remounting
+  // while the same section stays open.
+  const modalMountVersionRef = useRef(enhancedDataVersion);
+
+  // Tracks the last enhancedDataVersion the autosave-triggering effect below
+  // has already accounted for, so a resumeData change caused by a server
+  // sync (ResumeProvider's syncEnhancedResumeData, which bumps this version)
+  // is never mistaken for a fresh user edit. See that effect for why.
+  const lastSyncedEnhancedVersionRef = useRef(enhancedDataVersion);
+
+  // A name only identifies a custom section when it isn't also a reserved standard
+  // section name. Standard names are a fixed, unambiguous set (SECTION_KEY_MAP);
+  // custom section names are free text and can collide with them for resumes that
+  // predate the backend's reserved-name validation. When both exist under the same
+  // name, the standard section always wins so the UI never silently misroutes a
+  // save/validate/render to the wrong entity.
+  const isCustomSectionName = useCallback(
+    (name: string | null): boolean => {
+      if (!name || SECTION_KEY_MAP[name]) return false;
+      return (resumeData.customSections || []).some((cs) => cs.sectionName === name);
+    },
+    [resumeData.customSections]
+  );
 
   useEffect(() => {
     if (!pendingOpenSection) return;
@@ -139,13 +198,60 @@ const EditorTab: React.FC<Props> = ({
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // A successful item DELETE is already persisted by its dedicated endpoint.
+  // Skip the immediately following state-driven autosave so an older full
+  // section snapshot cannot race the DELETE and restore that item.
+  const skipNextAutoSaveForSectionRef = useRef<string | null>(null);
+  // The debounced autosave PATCH currently in flight, if any. clearTimeout
+  // only cancels a QUEUED autosave -- once the timer has fired and its PATCH
+  // is awaiting a response, clearing the (already-consumed) timer ref is a
+  // no-op, and that request still reaches the backend with a pre-delete
+  // section snapshot. cancelStaleSectionAutosave hands this back to the
+  // "resume-item-deleted" dispatcher (see its awaitInFlight handling below)
+  // so a delete handler can await the in-flight request before issuing its
+  // own DELETE -- guaranteeing DELETE is the request that lands last.
+  const autoSaveInFlightRef = useRef<Promise<void> | null>(null);
   // Always-current snapshot of resumeData for memoized callbacks (avoids stale closure)
   const resumeDataRef = useRef(resumeData);
   resumeDataRef.current = resumeData;
+  // Keep the debounce callback current without recreating it on unrelated ATS
+  // state updates. The saved resume remains the source of truth for each check.
+  const enhancedSuggestionsRef = useRef(enhancedSuggestions);
+  enhancedSuggestionsRef.current = enhancedSuggestions;
+  const applyManualFixRef = useRef(applyManualFix);
+  applyManualFixRef.current = applyManualFix;
+  const pendingManualSuggestionRef = useRef<{ id: string; initialValue: string } | null>(null);
+  useEffect(() => {
+    const rememberManualTarget = (event: Event) => {
+      const detail = (event as CustomEvent<{ suggestionId?: unknown; ownerSection?: unknown }>).detail;
+      const suggestionId = detail?.suggestionId;
+      const ownerSection = typeof detail?.ownerSection === "string" ? detail.ownerSection : undefined;
+      const suggestion = typeof suggestionId === "string"
+        ? enhancedSuggestionsRef.current.find((item) => item.id === suggestionId)
+        : undefined;
+      pendingManualSuggestionRef.current = suggestion
+        ? {
+            id: suggestion.id,
+            initialValue: getSectionValue(resumeDataRef.current, suggestion.section, suggestion, ownerSection).trim(),
+          }
+        : null;
+    };
+    window.addEventListener("careerbot:ats-manual-fix-target", rememberManualTarget);
+    return () => window.removeEventListener("careerbot:ats-manual-fix-target", rememberManualTarget);
+  }, []);
   // Tracks custom section names whose backend UUID is still pending (blocks modal open)
   const pendingCustomSections = useRef<Set<string>>(new Set());
   const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  // ATS report embeds this editor without a `source=enhanced` URL parameter.
+  // The provider is the authoritative source in that case.
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
+
+  // ATS Scan edits an enhanced-resume record. Its ID is different from the
+  // normal builder ID held in browser storage, so the provider ID must win.
+  const getActiveResumeId = useCallback((): string | null => {
+    const candidate = contextResumeId ?? localStorage.getItem("current_resume_id");
+    return candidate && candidate !== "null" && candidate !== "undefined" ? candidate : null;
+  }, [contextResumeId]);
 
   useEffect(() => {
     // Skip validation for enhanced resumes — their ID is an enhanced_resume_id,
@@ -216,6 +322,16 @@ const EditorTab: React.FC<Props> = ({
   const closeModal = () => {
     setOpenModalSection(null);
   };
+
+  // Snapshot the version only on the transition into a (possibly different)
+  // open section, not on every bump while it stays open — see
+  // modalMountVersionRef's declaration for why.
+  useEffect(() => {
+    if (openModalSection) {
+      modalMountVersionRef.current = enhancedDataVersion;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openModalSection]);
 
 
   const handleToggleSection = (sectionName: string) => {
@@ -293,6 +409,36 @@ const EditorTab: React.FC<Props> = ({
   };
 
 
+  /**
+   * A successful editor save is only the first half of a Manual Fix. Confirm
+   * each objectively satisfied issue with the backend before changing its UI
+   * state; the response then refreshes score, preview, progress and Undo.
+   */
+  const confirmSavedManualFixes = useCallback(async (sectionName: string, savedResume: typeof resumeData) => {
+    if (!isEnhancedResume) return;
+    const mappedSections = SUGGESTION_SECTION_MAP[toSuggestionSectionKey(sectionName)] ?? [];
+    const candidates = enhancedSuggestionsRef.current.filter((suggestion) =>
+      suggestion.status !== "fixed"
+      && suggestion.fix_type === "manual"
+      && mappedSections.includes(suggestion.section),
+    );
+
+    for (const suggestion of candidates) {
+      const value = getSectionValue(savedResume, suggestion.section, suggestion, sectionName).trim();
+      const manualTarget = pendingManualSuggestionRef.current;
+      const wasExplicitlyTargeted = manualTarget?.id === suggestion.id;
+      // Semantic findings must be explicitly selected AND changed before any
+      // request is sent. Opening an editor or an unrelated autosave can never
+      // paint a card green on its own.
+      const changedSinceManualTarget = wasExplicitlyTargeted && value !== manualTarget?.initialValue;
+      if (!value || (wasExplicitlyTargeted
+        ? !changedSinceManualTarget
+        : !isStructuralSuggestionSatisfied(savedResume, suggestion))) continue;
+      await applyManualFixRef.current(suggestion.id, value);
+      if (wasExplicitlyTargeted) pendingManualSuggestionRef.current = null;
+    }
+  }, [isEnhancedResume]);
+
   const triggerAutoSave = useCallback(async (sectionName: string) => {
     // Skills uses individual add/delete endpoints on each chip action — no PATCH needed
     if (sectionName === "Skills") return;
@@ -302,18 +448,23 @@ const EditorTab: React.FC<Props> = ({
     }
 
 
-    autoSaveTimerRef.current = setTimeout(async () => {
-      const resumeId = localStorage.getItem("current_resume_id");
+    autoSaveTimerRef.current = setTimeout(() => {
+      // Wrapped (rather than making the setTimeout callback itself async) so
+      // the resulting promise can be tracked in autoSaveInFlightRef for the
+      // full duration of this autosave, including the network round-trip --
+      // see the ref's own comment for why a delete handler needs to await it.
+      const run = async () => {
+      const resumeId = getActiveResumeId();
 
       if (!resumeId || !sectionName || resumeId === 'null' || resumeId === 'undefined') {
         // // console.log("⏸️ Skipping auto-save: No valid resume ID");
         return;
       }
-      
+
       try {
         setIsAutoSaving(true);
         // // console.log("💾 Auto-saving:", sectionName);
-        
+
         const live = resumeDataRef.current;
         let sectionData: Record<string, unknown> | unknown[];
         if (sectionName === "Declaration") {
@@ -328,6 +479,7 @@ const EditorTab: React.FC<Props> = ({
             declSaveResponse.warnings.forEach(w => toast.warning(w, { duration: 6000 }));
           }
           setLastSaved(new Date());
+          bumpResumeSavedVersion();
           setIsAutoSaving(false);
           return;
         } else if (sectionName === "Professional Summary") {
@@ -391,19 +543,44 @@ const EditorTab: React.FC<Props> = ({
           };
           const key = sectionMap[sectionName];
           const data = key ? live[key] : undefined;
-          if (isEnhancedResume) {
-            // Enhanced: PATCH sends the full section (backend does full replace).
-            // Filtering here would wipe items that haven't been explicitly saved yet.
-            sectionData = Array.isArray(data) ? data : [];
-          } else {
-            // Builder: only send items with a backend ID so auto-save never INSERTs new
-            // rows. New items are created only on explicit Save (handleSaveForm → updateResume).
-            sectionData = Array.isArray(data)
-              ? (data as Array<Record<string, unknown>>).filter(item => item.id || item._id)
-              : [];
-          }
+          // Both builder and enhanced: only send items with a backend ID so auto-save
+          // never INSERTs new rows. New items are created only on explicit Save
+          // (handleSaveForm → updateResume / updateEnhancedResume), which is also what
+          // syncs the backend-assigned id back into resumeData for subsequent autosaves.
+          //
+          // Enhanced used to send the full, unfiltered array here on the assumption
+          // that the backend does a full replace on PATCH — it doesn't:
+          // autosave_enhanced (service.py) explicitly merges arrays by "id" and
+          // appends anything without a matching id as a brand-new entry. Since
+          // resumeData items from a fresh parse/enhance never carry the backend id
+          // (the id is only assigned server-side, and autosave's 204 response has no
+          // body to sync it back from), every autosave cycle re-sent the same
+          // id-less items and the backend kept appending duplicates of them.
+          sectionData = Array.isArray(data)
+            ? (data as Array<Record<string, unknown>>).filter(item => item.id || item._id)
+            : [];
         }
-        
+
+        sectionData = omitAccountManagedEmail(sectionName, sectionData);
+
+        // A brand-new item that hasn't been assigned a backend id yet gets filtered
+        // out above, so a section with ONLY new items computes to []. Sending that []
+        // here is indistinguishable on the backend from "the user cleared this
+        // section" -- both ARRAY_MERGE_FIELDS (builder) and autosave_enhanced's
+        // `if value == []: merged[key] = []` (enhanced) treat an explicit empty array
+        // as an intentional full clear (that rule exists so the LAST item of a
+        // section can be deleted at all). Applies to both flows equally — without
+        // this guard, autosaving a section that consists of nothing but a
+        // just-typed/just-parsed, not-yet-explicitly-saved entry wipes it entirely
+        // once the debounce fires, even though nothing was ever explicitly deleted.
+        // Deletions already go through their own endpoints
+        // (deleteResumeSectionItem/deleteSectionItemFromEnhancedResume), never
+        // through autosave, so skipping an empty payload here is always safe.
+        if (Array.isArray(sectionData) && sectionData.length === 0) {
+          setIsAutoSaving(false);
+          return;
+        }
+
         const backendKey = SECTION_KEY_MAP[sectionName] || sectionName.toLowerCase().replace(/\s+/g, "_");
 
         if (isEnhancedResume) {
@@ -417,6 +594,7 @@ const EditorTab: React.FC<Props> = ({
           };
           const camelKey = snakeToCamelSectionMap[backendKey] || backendKey;
           await autoSaveEnhancedResume(resumeId, { [camelKey]: sectionData });
+          await confirmSavedManualFixes(sectionName, live);
         } else {
           const updatePayload = { [backendKey]: sectionData };
           const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
@@ -460,25 +638,77 @@ const EditorTab: React.FC<Props> = ({
         }
 
         setLastSaved(new Date());
+        bumpResumeSavedVersion();
         // // console.log("✅ Auto-saved successfully");
-        
+
       } catch {
         // Auto-save failed silently
       } finally {
         setIsAutoSaving(false);
       }
+      };
+      autoSaveInFlightRef.current = run().finally(() => {
+        autoSaveInFlightRef.current = null;
+      });
     }, 3000);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEnhancedResume]);
+  }, [isEnhancedResume, getActiveResumeId, confirmSavedManualFixes]);
 
 
   useEffect(() => {
-    // ✅ FIXED: Auto-save for BOTH simple fields (formData) AND multi-entry sections (resumeData)
-    // Multi-entry sections (Work Experience, Education, etc.) don't update formData, they update resumeData
+    const cancelStaleSectionAutosave = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        section?: unknown;
+        suppressNext?: unknown;
+        awaitInFlight?: { promise?: Promise<void> };
+      }>).detail;
+      const section = detail?.section;
+      if (typeof section !== "string" || section !== openModalSection) return;
+      if (detail?.suppressNext === true) {
+        skipNextAutoSaveForSectionRef.current = section;
+      }
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      // The timer above only cancels a QUEUED autosave. If one has already
+      // fired and its PATCH is in flight, hand its promise back so the
+      // caller (a delete handler) can await it before issuing DELETE --
+      // otherwise that stale, pre-delete PATCH can still reach the backend
+      // after DELETE and resurrect the item there.
+      if (detail?.awaitInFlight && autoSaveInFlightRef.current) {
+        detail.awaitInFlight.promise = autoSaveInFlightRef.current;
+      }
+    };
+    window.addEventListener("resume-item-deleted", cancelStaleSectionAutosave);
+    return () => window.removeEventListener("resume-item-deleted", cancelStaleSectionAutosave);
+  }, [openModalSection]);
+
+  useEffect(() => {
+    // Multi-entry sections update resumeData instead of formData. A successful
+    // item delete has already been persisted by DELETE; do not replay the
+    // pre-delete snapshot through its debounced PATCH.
     if (openModalSection) {
+      if (skipNextAutoSaveForSectionRef.current === openModalSection) {
+        skipNextAutoSaveForSectionRef.current = null;
+        return;
+      }
+      // Defense in depth alongside the {origin:"autosave"} tag in
+      // enhancerApi.ts/ResumeContext.tsx (which stops autosave's OWN
+      // response from re-triggering this effect): enhancedDataVersion bumps
+      // whenever ResumeProvider replaces resumeData from ANY server sync
+      // (explicit Save, apply/delete fix, undo) -- see syncEnhancedResumeData.
+      // If that's what changed resumeData this render, it is not a fresh
+      // user edit, and re-arming autosave for it would both send a needless
+      // PATCH and risk the same effect-loop for those paths while a section
+      // modal happens to be open.
+      if (lastSyncedEnhancedVersionRef.current !== enhancedDataVersion) {
+        lastSyncedEnhancedVersionRef.current = enhancedDataVersion;
+        return;
+      }
       triggerAutoSave(openModalSection);
     }
-  }, [formData, resumeData, openModalSection, triggerAutoSave]);
+  }, [formData, resumeData, openModalSection, triggerAutoSave, enhancedDataVersion]);
 
 
   useEffect(() => {
@@ -546,8 +776,7 @@ const EditorTab: React.FC<Props> = ({
     if (!openModalSection) return { isValid: true, newErrors: {} };
 
     // Custom sections have no required fields — skip validation
-    const isCustom = (resumeData.customSections || []).some(cs => cs.sectionName === openModalSection);
-    if (isCustom) return { isValid: true, newErrors: {} };
+    if (isCustomSectionName(openModalSection)) return { isValid: true, newErrors: {} };
 
     // Languages validates via resume-validate-section DOM event, not formData
     if (openModalSection === "Languages") return { isValid: true, newErrors: {} };
@@ -560,6 +789,16 @@ const EditorTab: React.FC<Props> = ({
       return { isValid: !!summary, newErrors };
     }
 
+    // Skills writes directly to resumeData.skills (a categorized object) via its own
+    // picker UI, never through formData — sectionRequiredFields["Skills"] = ["skills"]
+    // has no corresponding formData["skills"] input to check, so the generic
+    // formData-based loop below always found it "empty" and blocked saving even after
+    // skills were actually added. Skills has its own dedicated save path further down
+    // in handleSaveForm, so just skip the formData check here.
+    if (openModalSection === "Skills") {
+      return { isValid: true, newErrors: {} };
+    }
+
     const sectionFields = getSectionFields(openModalSection);
     const newErrors: Record<string, string> = {};
     let hasEmptyRequiredFields = false;
@@ -567,9 +806,7 @@ const EditorTab: React.FC<Props> = ({
 
     sectionFields.forEach((key) => {
       const value = formData[key] || "";
-      // location is globally optional (Work Experience etc.) but required for Personal Info
-      const isRequired = isRequiredField(key) ||
-        (openModalSection === "Personal Info" && key.toLowerCase() === "location");
+      const isRequired = isRequiredField(key);
       if (isRequired) {
         if (!value || value.trim() === "") {
           newErrors[key] = "This field is required";
@@ -636,7 +873,7 @@ const EditorTab: React.FC<Props> = ({
         targetRole: resumeData.professionalSummary?.targetRole || "",
       };
     }
-    
+
     if (sectionName === "Skills") {
       // Backend expects CategorizedSkills with {name} objects per category
       const cats = resumeData.categorizedSkills;
@@ -653,7 +890,7 @@ const EditorTab: React.FC<Props> = ({
       }
       return {};
     }
-    
+
     if (sectionName === "Personal Info") {
       const countryCode = formData["countryCode"] || "+91";
       const rawPhone = formData["phone"] || "";
@@ -697,7 +934,7 @@ const EditorTab: React.FC<Props> = ({
         googleScholarUrl: formData["googleScholarUrl"] || null,
       };
     }
-    
+
     return {};
   };
   const handleSaveForm = async () => {
@@ -734,8 +971,13 @@ const EditorTab: React.FC<Props> = ({
     }
 
     // ✅ Step 3: Fetch resumeId safely (with fallback)
-    let resumeId = localStorage.getItem("current_resume_id");
+    let resumeId = getActiveResumeId();
     if (!resumeId || resumeId === "null" || resumeId === "undefined") {
+      if (isEnhancedResume) {
+        toast.error("Enhanced resume ID is missing. Please refresh and try again.");
+        setIsSaving(false);
+        return;
+      }
       // // console.warn("⚠️ No valid resume ID found, refetching...");
       const resumes = await getAllResumes();
       if (resumes.length > 0) {
@@ -758,19 +1000,34 @@ const EditorTab: React.FC<Props> = ({
     }
 
     // ✅ Step 4: For custom sections, save customSections array directly
-    const isCustomSection = (resumeData.customSections || []).some(
-      cs => cs.sectionName === openModalSection
-    );
+    const isCustomSection = isCustomSectionName(openModalSection);
 
     let updatePayload: Record<string, unknown>;
 
     if (isCustomSection) {
-      updatePayload = { customSections: resumeData.customSections };
+      // resumeDataRef.current, not resumeData directly: a custom section
+      // created just before this Save click goes through its own async
+      // create-then-swap-id flow (handleCreateCustomSection), and the
+      // "New field name" -> "+ Add Field" interactions happen in between.
+      // If any of those state updates landed after this render's resumeData
+      // closure was captured but before the click handler ran, `resumeData.
+      // customSections` here is stale -- sending it as the FULL replacement
+      // array silently wipes out the section that was just created (it was
+      // never in this stale snapshot to begin with), even though local UI
+      // state shows it correctly. resumeDataRef.current is kept live on
+      // every render (see the ref assignment above) specifically to avoid
+      // this class of bug -- it's already used this same way elsewhere in
+      // this file (triggerAutoSave); this save path was the one place still
+      // reading the closure directly.
+      updatePayload = { customSections: resumeDataRef.current.customSections };
     } else if (openModalSection === "Declaration") {
       // declaration, declarationDate, declarationPlace are all top-level fields — don't nest under a key
       updatePayload = transformFormDataToBackend(openModalSection) as Record<string, unknown>;
     } else {
-      const sectionData = transformFormDataToBackend(openModalSection);
+      const sectionData = omitAccountManagedEmail(
+        openModalSection,
+        transformFormDataToBackend(openModalSection) as Record<string, unknown> | unknown[]
+      );
 
       const backendKey =
         SECTION_KEY_MAP[openModalSection] ||
@@ -824,9 +1081,24 @@ const EditorTab: React.FC<Props> = ({
       const respSource = isEnhancedResume
         ? ((resp?.enhanced_resume as Record<string, unknown>) ?? resp)
         : resp;
+      const enhancedData = isEnhancedResume && respSource?.enhanced_data && typeof respSource.enhanced_data === "object"
+        ? respSource.enhanced_data as Record<string, unknown>
+        : respSource;
+      // A save can return ats_display/suggestions inside enhancer_state rather
+      // than a top-level ats_score. Pass the complete response through the
+      // normalizer so score, progress bars, and cards stay one snapshot.
+      if (isEnhancedResume) {
+        // The response is the only safe source for the freshly scored section.
+        // Tell the synchronizer which editor was saved so a deduction that is
+        // genuinely absent from its canonical breakdown remains visible as a
+        // green fixed card instead of vanishing from the ATS rail.
+        syncEnhancedScore(saveResponse, {
+          resolvedSuggestionSections: [toSuggestionSectionKey(openModalSection)],
+        });
+      }
       const respKey = sectionToRespKey[openModalSection];
-      if (respKey && Array.isArray(respSource[respKey])) {
-        const backendItems = respSource[respKey] as Array<{ id?: string; _id?: string }>;
+      if (respKey && Array.isArray(enhancedData[respKey])) {
+        const backendItems = enhancedData[respKey] as Array<{ id?: string; _id?: string }>;
         setResumeData(prev => {
           const currentItems = prev[respKey as keyof typeof prev];
           if (!Array.isArray(currentItems)) return prev;
@@ -844,6 +1116,27 @@ const EditorTab: React.FC<Props> = ({
         setResumeData(prev => ({ ...prev, customSections: syncedCustomSections }));
       }
     }
+
+    // A section removed from the sidebar is also removed from sectionOrder.
+    // Saving data into that section again must restore it to the render order;
+    // otherwise the API contains the item but every preview template hides it.
+    if (isEnhancedResume && openModalSection) {
+      setSectionOrder(previous => {
+        const alreadyPresent = previous.includes(openModalSection);
+        const restored = alreadyPresent ? previous : [...previous, openModalSection];
+        try {
+          const userEmail = typeof window !== "undefined" ? localStorage.getItem("userEmail") : null;
+          const key = userEmail ? `sectionOrder_${userEmail}` : "sectionOrder";
+          localStorage.setItem(key, JSON.stringify(restored));
+        } catch { /* storage is optional */ }
+        return alreadyPresent ? previous : restored;
+      });
+    }
+
+    // Score updates now happen purely server-side: the Save call above
+    // (bulk_update_enhanced) triggers a real AI rescore, so there is no
+    // separate client-side "guess which suggestions are now satisfied and
+    // call /enhance/apply" step here anymore.
 
     // ✅ Step 6: Mark section complete + clear all validation
     // For custom sections: only mark green when all fields have values
@@ -863,6 +1156,7 @@ const EditorTab: React.FC<Props> = ({
 
     clearErrors(sectionFields); // remove local validation
     toast.success(`${openModalSection} saved successfully!`);
+    bumpResumeSavedVersion();
     closeModal();
   } catch (error) {
     const axiosError = error as { response?: { data?: { error?: { message?: string; details?: { validation_errors?: Array<{ field: string; message: string }> } } } } };
@@ -892,19 +1186,64 @@ const EditorTab: React.FC<Props> = ({
 
 
 
+  // Custom section add/delete must save through the SAME resume the modal
+  // is actually editing. Both callers below used to always call the builder's
+  // updateResume(resumeId, ...) -- PATCH /resumes/{id} -- even when editing
+  // an enhanced resume, whose data lives in a completely different
+  // collection under a different id. The add/delete appeared to work (the
+  // optimistic local state updated immediately) but never reached the
+  // enhanced resume's stored document, so it was silently lost on reload.
+  const persistCustomSections = async (
+    resumeId: string,
+    updatedSections: typeof resumeData.customSections,
+  ): Promise<typeof resumeData.customSections | undefined> => {
+    if (isEnhancedResume) {
+      const response = await updateEnhancedResume(resumeId, {
+        enhanced_sections: { customSections: updatedSections },
+      });
+      const resp = response as unknown as Record<string, unknown>;
+      const rawEnhanced = resp?.enhanced_resume as Record<string, unknown> | undefined;
+      return (resp?.customSections ?? rawEnhanced?.customSections) as
+        | typeof resumeData.customSections
+        | undefined;
+    }
+    const response = await updateResume(resumeId, { customSections: updatedSections } as Parameters<typeof updateResume>[1]);
+    return response.customSections;
+  };
+
   const handleCreateCustomSection = (name: string) => {
-    const alreadyExists = sections.some(
-      (s) => s.name.toLowerCase() === name.toLowerCase()
-    );
+    // `sections` is only the local sidebar display-order state -- it never
+    // learns about a custom section that was created any other way than
+    // through this exact button (e.g. directly via the API/Swagger, or a
+    // section synced from the backend but not yet reflected in
+    // sectionOrder). Checking resumeData.customSections too closes that
+    // gap: it's the actual source of truth for which custom sections exist,
+    // so a name collision is caught regardless of how the existing one got
+    // there. Without this, "Strengths" already existing server-side didn't
+    // stop a second, differently-id'd "Strengths" from being created here --
+    // two real sections with the same name, both rendered in the preview.
+    const liveCustomSections = resumeDataRef.current.customSections || [];
+    const alreadyExists =
+      sections.some((s) => s.name.toLowerCase() === name.toLowerCase()) ||
+      liveCustomSections.some(
+        (cs) => cs.sectionName.toLowerCase() === name.toLowerCase()
+      );
     if (alreadyExists) {
       toast.error(`"${name}" section already exists`);
       return;
     }
     const newSection: CustomSection = {
-      id: `custom_${Date.now()}`,
+      id: `custom_${typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`,
       sectionName: name,
       fields: [],
     };
+    // `addCustomSection` schedules a React state update. Update this ref now
+    // as well, so a second create event in the same render cycle uses the
+    // first section in its full-snapshot request instead of replacing it.
+    const updatedSections = [...liveCustomSections, newSection];
+    resumeDataRef.current = { ...resumeDataRef.current, customSections: updatedSections };
     addCustomSection(newSection);
     handleAddSection({ name, ai: false });
     // Add to sectionOrder so templates render it
@@ -912,18 +1251,42 @@ const EditorTab: React.FC<Props> = ({
     // Block the section modal until the backend UUID is assigned
     pendingCustomSections.current.add(name);
     // Persist to backend (fire-and-forget)
-    const resumeId = localStorage.getItem("current_resume_id");
+    const resumeId = getActiveResumeId();
     if (resumeId && resumeId !== "null" && resumeId !== "undefined") {
-      const updatedSections = [...(resumeData.customSections || []), newSection];
-      updateResume(resumeId, { customSections: updatedSections } as Parameters<typeof updateResume>[1])
-        .then(response => {
+      // resumeDataRef.current, not resumeData: same stale-closure risk as
+      // the save/delete/render paths -- sending a stale customSections list
+      // as the full replacement here would silently drop any other very
+      // recent custom-section change along with this create.
+      persistCustomSections(resumeId, updatedSections)
+        .then(syncedCustomSections => {
           // Sync real backend UUIDs into context so subsequent saves UPDATE instead of INSERT
-          if (response.customSections && response.customSections.length > 0) {
-            setResumeData(prev => ({ ...prev, customSections: response.customSections }));
+          if (syncedCustomSections && syncedCustomSections.length > 0) {
+            resumeDataRef.current = { ...resumeDataRef.current, customSections: syncedCustomSections };
+            setResumeData(prev => ({ ...prev, customSections: syncedCustomSections }));
           }
         })
         .catch(() => {
-          toast.error("Custom section created locally but failed to save to server.");
+          // Roll back the optimistic local state applied above (
+          // addCustomSection, sectionOrder). Without this, a failed create
+          // left a permanent ghost: sectionOrder is persisted to
+          // localStorage, so the section kept reappearing as a sidebar tile
+          // on every future page load even though the backend never had it
+          // -- clicking it opened a modal with the right title (just an
+          // echo of the name) but a genuinely blank body, since
+          // resumeData.customSections (fetched fresh from the backend) had
+          // no matching entry. `sections` itself isn't touched directly
+          // here -- it's a controlled prop synced from sectionOrder by the
+          // parent (ResumeSide), so removing the name from sectionOrder
+          // reconciles the sidebar tile away on its own.
+          resumeDataRef.current = {
+            ...resumeDataRef.current,
+            customSections: (resumeDataRef.current.customSections || []).filter(
+              section => section.id !== newSection.id,
+            ),
+          };
+          removeCustomSection(newSection.id);
+          setSectionOrder(prev => prev.filter(n => n !== name));
+          toast.error(`Failed to save "${name}" to the server. Please try creating it again.`);
         })
         .finally(() => {
           pendingCustomSections.current.delete(name);
@@ -999,26 +1362,99 @@ const EditorTab: React.FC<Props> = ({
                           onToggle={() => handleToggleSection(s.name)}
                           onDelete={() => handleDeleteSection(originalIndex)}
                           onDeleteAsync={(() => {
-                            const customSection = (resumeData.customSections || []).find(
-                              cs => cs.sectionName === s.name
-                            );
+                            // Enhanced resumes do not use the builder section-delete
+                            // route. Clear the section through the enhanced PATCH API,
+                            // then update the sidebar only after persistence succeeds.
+                            if (isEnhancedResume && SECTION_KEY_MAP[s.name]) {
+                              return async () => {
+                                const rid = getActiveResumeId();
+                                if (!rid || rid === "null" || rid === "undefined") {
+                                  throw new Error("Enhanced resume ID is missing");
+                                }
+                                const enhancedSectionKeyMap: Record<string, string> = {
+                                  work_experience: "workExperience",
+                                  professional_summary: "professionalSummary",
+                                  personal_info: "personalInfo",
+                                };
+                                const backendKey = SECTION_KEY_MAP[s.name];
+                                const enhancedKey = enhancedSectionKeyMap[backendKey] || backendKey;
+                                const deleteResponse = await updateEnhancedResume(rid, {
+                                  enhanced_sections: { [enhancedKey]: [] },
+                                });
+                                // Prefer the server recalculation. The local projection is
+                                // retained only for older API deployments that return no
+                                // score snapshot at all.
+                                const responseRecord = deleteResponse as unknown as Record<string, unknown>;
+                                const containsScore = [
+                                  responseRecord.ats_display,
+                                  responseRecord.ats_breakdown,
+                                  responseRecord.ats_score,
+                                  (responseRecord.enhancer_state as Record<string, unknown> | undefined)?.ats_display,
+                                  (responseRecord.enhancer_state as Record<string, unknown> | undefined)?.ats_breakdown,
+                                ].some(Boolean);
+                                if (containsScore) syncEnhancedScore(deleteResponse);
+                                else removeEnhancedScoreSection(s.name);
+                                handleDeleteSection(originalIndex);
+                              };
+                            }
+
+                            // resumeDataRef.current, not resumeData/
+                            // isCustomSectionName's own (also resumeData-based)
+                            // check: a section created moments before this
+                            // render settles can be missing from this render's
+                            // resumeData snapshot, making this lookup a false
+                            // miss. That silently returns undefined here, which
+                            // falls SectionItem back to its generic
+                            // deleteResumeSection(sectionKey) path -- built for
+                            // fixed sections (SECTION_POLICIES), not custom
+                            // ones -- and 400s with "Unknown section", surfaced
+                            // as this exact "Failed to delete section" alert.
+                            const liveCustomSections = resumeDataRef.current.customSections || [];
+                            const customSection = !SECTION_KEY_MAP[s.name]
+                              ? liveCustomSections.find(cs => cs.sectionName === s.name)
+                              : undefined;
                             if (!customSection) return undefined;
                             return async () => {
-                              const rid = localStorage.getItem("current_resume_id");
-                              const filtered = (resumeData.customSections || []).filter(
-                                cs => cs.id !== customSection.id
+                              const rid = getActiveResumeId();
+                              // Filter by NAME, not just this one match's id. The
+                              // sidebar only ever shows ONE tile per distinct
+                              // name (sectionOrder is a flat list of names, with
+                              // no way to represent "two sections called
+                              // Strengths" as two entries) -- so if a second
+                              // customSections entry with the same name exists
+                              // (e.g. created directly via the API, bypassing
+                              // sectionOrder entirely, as happened during
+                              // testing), it's invisible in the sidebar but
+                              // still renders in the preview/export, which reads
+                              // customSections directly. Filtering by id alone
+                              // left that second entry as an unreachable ghost
+                              // the user could never delete through this UI --
+                              // clicking the one visible "delete" always has to
+                              // mean "remove every section under this name".
+                              //
+                              // resumeDataRef.current, not resumeData directly --
+                              // same stale-closure risk as handleSaveForm's
+                              // custom-section branch (see the comment there):
+                              // a section created or edited just before this
+                              // delete click can still be missing from this
+                              // render's resumeData snapshot, so filtering that
+                              // stale array and sending it as the full
+                              // replacement would silently wipe out unrelated,
+                              // very recent changes along with the deletion.
+                              const filtered = (resumeDataRef.current.customSections || []).filter(
+                                cs => cs.sectionName !== s.name
                               );
                               removeCustomSection(customSection.id);
                               setSectionOrder(prev => prev.filter(n => n !== s.name));
                               handleDeleteSection(originalIndex);
                               if (rid && rid !== "null" && rid !== "undefined") {
-                                await updateResume(rid, { customSections: filtered } as Parameters<typeof updateResume>[1]);
+                                await persistCustomSections(rid, filtered);
                               }
                             };
                           })()}
                           disableDelete={nonDeletableSections.includes(s.name)}
                           isComplete={completionStatus[s.name] || false}
-                          resumeId={localStorage.getItem("current_resume_id") || undefined}
+                          resumeId={getActiveResumeId() ?? undefined}
                           sectionKey={SECTION_KEY_MAP[s.name] || s.name.toLowerCase().replace(/\s+/g, "_")}
                         />
                       </div>
@@ -1063,9 +1499,9 @@ const EditorTab: React.FC<Props> = ({
                     </span>
                   )}
                   <div
-                    className="flex items-center justify-center w-7 h-7 rounded-full shadow-md transition-all duration-200 
+                    className="flex items-center justify-center w-7 h-7 rounded-full shadow-md transition-all duration-200
                               bg-gradient-to-br from-white-50 to-white-500 text-gray-600
-                              group-hover:from-blue-500 group-hover:to-blue-700 
+                              group-hover:from-blue-500 group-hover:to-blue-700
                               group-hover:text-white group-hover:scale-110"
                   >
                     <Plus size={14} />
@@ -1157,10 +1593,23 @@ const EditorTab: React.FC<Props> = ({
 
             <div className="flex-1 min-h-[75px] px-1 overflow-y-auto">
               {(() => {
-                // Render CustomSectionEditor if it's a custom section
-                const customSection = (resumeData.customSections || []).find(
-                  (cs) => cs.sectionName === openModalSection
-                );
+                // Render CustomSectionEditor only if it's a custom section (never for a
+                // reserved standard name).
+                //
+                // resumeDataRef.current, not resumeData: a section created
+                // moments before this modal opened can still be missing from
+                // this render's resumeData snapshot (same stale-closure class
+                // as the save/delete paths above). A false miss here doesn't
+                // error -- it silently falls through past `if (!Component)
+                // return null`, since a custom section name was never
+                // registered in sectionComponents either, rendering a
+                // completely blank modal body (no fields, no "+ Add Field"
+                // row, just Save/Cancel) instead of the actual editor.
+                const customSection = !SECTION_KEY_MAP[openModalSection ?? ""]
+                  ? (resumeDataRef.current.customSections || []).find(
+                      (cs) => cs.sectionName === openModalSection
+                    )
+                  : undefined;
                 if (customSection) {
                   return <CustomSectionEditor section={customSection} />;
                 }
@@ -1168,6 +1617,7 @@ const EditorTab: React.FC<Props> = ({
                 if (!Component) return null;
                 return (
                   <Component
+                    key={`${openModalSection}-${modalMountVersionRef.current}`}
                     formData={formData}
                     errors={errors}
                     onChange={handleChange}

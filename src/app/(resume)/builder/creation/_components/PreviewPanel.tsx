@@ -21,18 +21,27 @@ import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
 import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
-import { downloadResume } from "../../../../../api/resumeApi";
+import { downloadResume, getResumePreviewImage } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
 import { getProfile } from "@/api/userApi";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
+import { getEnhancedCurrentScore } from "../_utils/enhancedScore";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
   onOpenSidebar?: (tab: string) => void;
   resumeId?: string;
   isEnhancedResume?: boolean;
+  /** ATS workspace keeps its scope to scan fixes, not job matching. */
+  hideJobMatch?: boolean;
+  /** ATS already exposes score/editing controls in its left rail. */
+  atsMinimalToolbar?: boolean;
+  /** Allow the ATS workspace preview to use its full middle column. */
+  expandPreview?: boolean;
+  /** Use the browser page scrollbar instead of an inner resume scrollbar. */
+  pageScrollPreview?: boolean;
 }
 
 const tabs = [
@@ -40,6 +49,38 @@ const tabs = [
   { label: "Score", icon: BarChart2 },
   { label: "Job Match", icon: Shuffle },
 ];
+const PREVIEW_SECTION_ALIASES: Record<string, string[]> = {
+  contact: ["personal-info"],
+  personalinfo: ["personal-info"],
+  summary: ["summary"],
+  professionalsummary: ["summary"],
+  skills: ["skills"],
+  keywords: ["skills"],
+  education: ["education"],
+  projects: ["projects"],
+  internships: ["internships"],
+  workexperience: ["work-experience"],
+  experience: ["work-experience"],
+  certifications: ["certifications"],
+  certificates: ["certifications"],
+  achievements: ["achievements"],
+  awards: ["awards"],
+  languages: ["languages"],
+  hobbies: ["hobbies"],
+  interests: ["interests"],
+  volunteering: ["volunteering"],
+  publications: ["publications"],
+  references: ["references"],
+};
+
+const normalizeFixSection = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const isFormattingFix = (section: string, suggestionId: string): boolean => {
+  const normalizedSection = normalizeFixSection(section);
+  return normalizedSection === "format" || normalizedSection === "formatting"
+    || /^(format|formatting)[_-]/i.test(suggestionId);
+};
 
 
 const PreviewPanel: React.FC<PreviewPanelProps> = ({
@@ -48,23 +89,58 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   onOpenSidebar,
   resumeId: resumeIdProp,
   isEnhancedResume = false,
+  hideJobMatch = false,
+  atsMinimalToolbar = false,
+  expandPreview = false,
+  pageScrollPreview = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder, previewCatalogueKey } = useResume();
+  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey } = useResume();
   const { canonicalScore, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
 
   // For enhanced resumes, seed the canonical score from the enhancer's ATS score
   // so the toolbar and any other score consumers show the correct value.
   useEffect(() => {
-    if (isEnhancedResume && enhancedAtsScore?.final_score) {
-      setCanonicalScore(Math.round(enhancedAtsScore.final_score));
+    if (isEnhancedResume && enhancedAtsScore) {
+      setCanonicalScore(Math.round(getEnhancedCurrentScore(enhancedAtsScore)));
     }
   }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
 
-  const displayScore = isEnhancedResume && enhancedAtsScore?.final_score
-    ? Math.round(enhancedAtsScore.final_score)
+  const displayScore = isEnhancedResume && enhancedAtsScore
+    ? Math.round(getEnhancedCurrentScore(enhancedAtsScore))
     : (canonicalScore ?? previewScore.score);
   const scoreLabel = "Score";
+  const fixedPreviewSections = React.useMemo(() => {
+    const sections = new Set<string>();
+    for (const suggestion of enhancedSuggestions) {
+      if (suggestion.status !== "fixed" || isFormattingFix(suggestion.section, suggestion.id)) continue;
+      for (const section of PREVIEW_SECTION_ALIASES[normalizeFixSection(suggestion.section)] ?? []) {
+        sections.add(section);
+      }
+    }
+    return sections;
+  }, [enhancedSuggestions]);
+  const hasFixedFormatting = enhancedSuggestions.some(suggestion =>
+    suggestion.status === "fixed" && isFormattingFix(suggestion.section, suggestion.id),
+  );
+
+  // Every enhanced template exposes its content areas through data-section.
+  // Highlight the affected section in the screen preview only; the actual
+  // resume data and exported file are never decorated with UI-only state.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!isEnhancedResume || !root) return;
+    const marked = Array.from(root.querySelectorAll<HTMLElement>("[data-section]"));
+    for (const element of marked) {
+      element.classList.toggle(
+        "ats-enhancer-fixed-section",
+        fixedPreviewSections.has(element.dataset.section ?? ""),
+      );
+    }
+    return () => {
+      for (const element of marked) element.classList.remove("ats-enhancer-fixed-section");
+    };
+  }, [enhancedDataVersion, fixedPreviewSections, isEnhancedResume, selectedTemplate]);
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
@@ -133,6 +209,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     return 'Mid-Level';
   };
 
+  /**
+   * The enhanced-resume exporter needs the template record ID, not the display
+   * template_id used by the React cards. Keep it resume-scoped so switching
+   * between ATS reports cannot reuse another resume's chosen template.
+   */
+  const getEnhancedTemplateId = (enhancedResumeId: string): string | undefined => {
+    if (typeof window === 'undefined') return undefined;
+    return localStorage.getItem(`enhancedTemplateBackendId_${enhancedResumeId}`) ?? undefined;
+  };
+
   const handleExport = async (type: string) => {
     setIsDownloading(true);
     setDownloadError(null);
@@ -168,7 +254,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       const careerLevel = getCareerLevel();
 
       const blob = isEnhancedResume
-        ? await downloadEnhancedResume(resumeId, format)
+        ? await downloadEnhancedResume(resumeId, format, getEnhancedTemplateId(resumeId))
         : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel);
 
       // ✅ Generate filename from person's name
@@ -201,6 +287,108 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setIsDownloading(false);
     }
   };
+
+  // Backend-rendered preview: fetches a PNG rendered server-side from the
+  // exact same PDF the Export button downloads, instead of the separate
+  // React template components below (a second, hand-written renderer that
+  // kept drifting out of sync with the real export -- e.g. missing custom-
+  // section field labels). An in-browser attempt using react-pdf/pdfjs-dist
+  // to embed the actual PDF hit a persistent, environment-specific webpack
+  // bundling crash ("undefined is not a non-null object") that survived
+  // several independent fixes; rendering to a plain image server-side and
+  // showing it in a normal <img> sidesteps that whole class of problem.
+  // Debounced so it doesn't fire a backend render on every keystroke.
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
+  const [previewLoadFailed, setPreviewLoadFailed] = useState(false);
+  const previewImageUrlRef = useRef<string | null>(null);
+
+  // ResumeContext polls localStorage every ~1s and calls setSectionOrder()
+  // with a freshly JSON.parse'd array on every tick, even when the content
+  // is unchanged -- a new reference each time, not a new value. Depending on
+  // sectionOrder directly means this effect's cleanup would fire and restart
+  // the 1s debounce on every single poll tick, so the timer could never
+  // survive long enough to actually run. Comparing serialized content
+  // instead of object identity avoids that.
+  //
+  // Keyed on resumeSavedVersion, NOT resumeData: /download always renders
+  // the PERSISTED resume, never the local request state, so firing this on
+  // every resumeData keystroke fetched a pre-edit snapshot 1s later (autosave
+  // takes 3s) -- the preview was permanently one edit behind, and brand-new
+  // entries (stripped from autosave payloads until they have a backend id)
+  // never appeared until an explicit Save. resumeSavedVersion only bumps
+  // once autosave/Save actually lands, so the fetch now happens exactly
+  // when there is new persisted content to show.
+  const previewSignature = JSON.stringify({ resumeSavedVersion, resumeStyle, sectionOrder, selectedTemplate });
+  const lastPreviewSignatureRef = useRef<string | null>(null);
+  const [previewRetryTick, setPreviewRetryTick] = useState(0);
+  const retryPreview = () => {
+    lastPreviewSignatureRef.current = null; // force the effect below to treat this as a change
+    setPreviewLoadFailed(false);
+    setPreviewRetryTick((n) => n + 1);
+  };
+
+  useEffect(() => {
+    // Enhanced resumes use a different download pipeline (downloadEnhancedResume)
+    // not yet wired into this preview path -- keep those on the React renderer.
+    if (isEnhancedResume || !isEmailReady) return;
+    if (lastPreviewSignatureRef.current === previewSignature) return;
+    lastPreviewSignatureRef.current = previewSignature;
+
+    const resumeId = resumeIdProp ?? (typeof window !== 'undefined' ? localStorage.getItem("current_resume_id") : null);
+    if (!resumeId || resumeId === 'null' || resumeId === 'undefined') return;
+
+    let cancelled = false;
+    setIsPreviewRefreshing(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+        const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+        const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+        const domainTemplateId = typeof window !== 'undefined' ? localStorage.getItem(selectedTemplateKey) ?? undefined : undefined;
+        const sectionBgColor = selectedCatalogue === 'eclipse' ? resumeStyle.sectionHeaderBg : undefined;
+        const accentColor = resumeStyle.accentColor || resumeStyle.headingColor;
+        const fontFamily = resumeStyle.fontFamily || undefined;
+        const lineSpacing = resumeStyle.lineSpacing || undefined;
+        const careerLevel = getCareerLevel();
+
+        const blob = await getResumePreviewImage(
+          resumeId, catalogueTemplateId, domainTemplateId, sectionBgColor,
+          accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel,
+        );
+        if (cancelled) return;
+
+        const newUrl = window.URL.createObjectURL(blob);
+        const oldUrl = previewImageUrlRef.current;
+        previewImageUrlRef.current = newUrl;
+        setPreviewImageUrl(newUrl);
+        setPreviewLoadFailed(false);
+        // Revoke the previous blob URL only after the new one is set, so
+        // the <img> never has a moment with no valid src.
+        if (oldUrl) window.URL.revokeObjectURL(oldUrl);
+      } catch (err) {
+        logger.warn('Backend preview render failed, keeping last known preview', err);
+        if (!previewImageUrlRef.current) setPreviewLoadFailed(true);
+      } finally {
+        if (!cancelled) setIsPreviewRefreshing(false);
+      }
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewSignature, isEnhancedResume, isEmailReady, resumeIdProp, userEmail, previewRetryTick]);
+
+  // Revoke the last blob URL on unmount only (not on every dependency change --
+  // the effect above already revokes superseded URLs itself).
+  useEffect(() => {
+    return () => {
+      if (previewImageUrlRef.current) window.URL.revokeObjectURL(previewImageUrlRef.current);
+    };
+  }, []);
 
   const handleDownloadPDF = async () => {
     const el = contentRef.current;
@@ -350,8 +538,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       'compact_professional': <TemplateOne data={resumeData} style={resumeStyle} />,
       'clean_simple': <TemplateTwo data={resumeData} style={resumeStyle} />,
       'minimalist_classic': <TemplateThree data={resumeData} style={resumeStyle} />,
+      // Backwards compatibility for older picker selections. Without these
+      // aliases, selecting a valid template looked successful but the preview
+      // fell through to the default Template2 renderer.
+      'classic_horizontal_dividers': <TemplateThree data={resumeData} style={resumeStyle} />,
       'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} />,
       'classic_professional': <TemplateFive data={resumeData} style={resumeStyle} />,
+      'classic_professional_variant': <TemplateFive data={resumeData} style={resumeStyle} />,
       // Numeric IDs for backward compatibility
       '1': <TemplateOne data={resumeData} style={resumeStyle} />,
       '2': <TemplateTwo data={resumeData} style={resumeStyle} />,
@@ -391,6 +584,14 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
     logger.info('Career level logic not triggered, checking templateMap');
 
+    // ATS templates are applied to a specific enhanced resume. They do not
+    // use the normal builder's user-wide style flag, so honour the selected
+    // display ID directly and refresh the native in-app preview after Apply.
+    if (isEnhancedResume) {
+      const enhancedTemplate = templateMap[String(selectedTemplate)];
+      if (enhancedTemplate) return enhancedTemplate;
+    }
+
     // Only honour catalogue/style templates that the user explicitly applied
     // via TemplatesTab. initializeBuilder auto-sets selectedTemplate to the API
     // default ("clean_simple") on every load — without this guard that would
@@ -407,12 +608,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   };
 
   return (
-    <section className="flex flex-col flex-1 bg-[#f8fafd] px-2 items-center h-[95vh] relative">
+    <section className={`flex flex-col flex-1 bg-[#f8fafd] px-2 items-center relative ${pageScrollPreview ? "min-h-full" : "h-[95vh]"}`}>
       {/* Toolbar - When Sidebar is Open */}
       {isTemplateSidebarOpen && (
         <div
           className="flex items-center justify-between border border-gray-300 rounded px-6 py-1.5 mb-0 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out"
-          style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
+          style={{ width: expandPreview ? '100%' : (isTemplateSidebarOpen ? '99%' : '90%') }}
         >
           <div className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold">
             <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
@@ -456,15 +657,17 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       {!isTemplateSidebarOpen && (
         <div
           className="flex items-center justify-between rounded border border-gray-300 px-2 py-1.5 gap-2 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out mx-auto"
-          style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
+          style={{ width: expandPreview ? '100%' : (isTemplateSidebarOpen ? '99%' : '90%') }}
         >
-          <div className="flex items-center gap-8 ml-4">
-            <button
-              onClick={handleResumeScoreClick}
-              className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
-            >
-              <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
-            </button>
+          <div className={`flex items-center ${atsMinimalToolbar ? "ml-4" : "gap-8 ml-4"}`}>
+            {!atsMinimalToolbar && (
+              <button
+                onClick={handleResumeScoreClick}
+                className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
+              >
+                <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
+              </button>
+            )}
 
             <div className="flex items-center gap-2">
               {tabs.slice(0, 1).map((tab) => {
@@ -484,10 +687,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-0 bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden">
+          <div className="flex items-center gap-0 bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden" aria-label="Preview zoom controls">
             <button
               onClick={handleZoomOut}
-              className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 transition"
+              disabled={zoomLevel <= 0.5}
+              aria-label="Zoom out"
+              title="Zoom out"
+              className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 transition"
             >
               <ZoomOut size={16} className="text-[#2557a7]" />
             </button>
@@ -498,20 +704,25 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
             <button
               onClick={handleZoomIn}
-              className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 transition"
+              disabled={zoomLevel >= 1.5}
+              aria-label="Zoom in"
+              title="Zoom in"
+              className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 transition"
             >
               <ZoomIn size={16} className="text-[#2557a7]" />
             </button>
           </div>
 
-          <div className="flex items-center gap-8 mr-4">
-            <button
-              onClick={() => onTabClick("Job Match")}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:text-[#2557a7] hover:bg-gray-100 rounded-lg transition"
-            >
-              <Shuffle size={16} />
-              Job Match
-            </button>
+          <div className={`flex items-center ${atsMinimalToolbar ? "mr-4" : "gap-8 mr-4"}`}>
+            {!hideJobMatch && (
+              <button
+                onClick={() => onTabClick("Job Match")}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:text-[#2557a7] hover:bg-gray-100 rounded-lg transition"
+              >
+                <Shuffle size={16} />
+                Job Match
+              </button>
+            )}
 
             <div className="relative">
               <button
@@ -556,10 +767,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       <div
         ref={previewContainerRef}
         id="resume-preview"
-        className="h-225 overflow-y-auto bg-white rounded-xl shadow-lg mx-auto flex flex-col screen:overflow-auto print:overflow-visible print:h-auto print:shadow-none relative transition-all duration-300 ease-in-out"
+        className={`${pageScrollPreview ? "min-h-0 overflow-visible" : "h-225 overflow-y-auto screen:overflow-auto"} bg-white rounded-xl shadow-lg mx-auto flex flex-col print:overflow-visible print:h-auto print:shadow-none relative transition-all duration-300 ease-in-out`}
         style={{
-          width: isTemplateSidebarOpen ? '99%' : '90%',
-          maxWidth: isTemplateSidebarOpen ? '100%' : '1400px'
+          width: expandPreview ? '100%' : (isTemplateSidebarOpen ? '99%' : '90%'),
+          maxWidth: expandPreview ? 'none' : (isTemplateSidebarOpen ? '100%' : '1400px')
         }}
       >
         {/* {selectedTemplate && (
@@ -583,9 +794,20 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           </div>
         )} */}
 
+        {isEnhancedResume && hasFixedFormatting && (
+          <div
+            className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 print:hidden"
+            role="status"
+            data-testid="ats-formatting-fixed-indicator"
+          >
+            <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">✓</span>
+            <span><strong>Formatting fix recorded.</strong> This auto-fix does not edit Education, Projects, or other resume text; Undo removes this recorded status.</span>
+          </div>
+        )}
+
         <div
           ref={contentRef}
-          className="resume-content px-2 py-6"
+          className="resume-content ats-enhancer-preview px-2 py-6"
           style={{
             transform: `scale(${zoomLevel})`,
             transformOrigin: "top center",
@@ -593,10 +815,44 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             width: "100%",
           }}
         >
-          {isEmailReady ? renderTemplate() : (
+          {!isEmailReady ? (
             <div className="w-full flex items-center justify-center py-20">
               <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : !isEnhancedResume && previewLoadFailed ? (
+            <div className="w-full flex flex-col items-center justify-center py-20 gap-3">
+              <p className="text-sm text-gray-600">Couldn&apos;t load the preview.</p>
+              <button
+                onClick={retryPreview}
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#2557a7] rounded-lg hover:bg-[#1f4e98] transition"
+              >
+                Retry
+              </button>
+            </div>
+          ) : !isEnhancedResume && previewImageUrl ? (
+            <div className="relative w-full flex flex-col items-center">
+              {isPreviewRefreshing && (
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-white/90 border border-gray-200 rounded-full px-2.5 py-1 text-[11px] text-gray-600 shadow-sm">
+                  <div className="w-3 h-3 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+                  Updating preview…
+                </div>
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element -- a blob: object URL, not a static/remote asset next/image can optimize */}
+              <img
+                src={previewImageUrl}
+                alt="Resume preview"
+                className="w-full max-w-[794px] shadow-md"
+                onError={() => {
+                  if (!previewImageUrlRef.current) setPreviewLoadFailed(true);
+                }}
+              />
+            </div>
+          ) : !isEnhancedResume ? (
+            <div className="w-full flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            renderTemplate()
           )}
         </div>
       </div>
