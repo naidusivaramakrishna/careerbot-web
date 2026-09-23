@@ -126,14 +126,33 @@ export default function CodingProblemDetailPage() {
   });
 
   useEffect(() => {
+    // ── Cancel every in-flight request from the previous problem immediately.
+    // This covers Prev/Next (same component instance) AND A→B→A races where
+    // submittedSlug/runSlug would equal slugRef.current again after returning to A.
+    runAbortRef.current?.abort();
+    runAbortRef.current = null;
+    submitAbortRef.current?.abort();
+    submitAbortRef.current = null;
+    ++gradeRequestRef.current;
+    ++autoSubmitGenRef.current; // abandon any live fireAutoSubmit polling loop
+
     const ctrl = new AbortController();
     setLoadState('loading');
     setErrorMessage('');
-    // Reset all run/submit output so prior-problem results never bleed into the
-    // next problem when navigating with Prev/Next (same component instance).
+    // Reset run/submit/grading output so prior-problem results never bleed through.
     setJudgeResult(null); setActionError(null); setActionState('idle');
     setGradingResult(null); setGradingError(''); setIsGrading(false);
     setJudgeMode('run'); setShowCelebration(false);
+    // Reset assessment-session state so a fresh session is created for each problem.
+    // Without this, patchDraft would keep writing this problem's code into the
+    // previous problem's session, and fireAutoSubmit would submit the wrong session.
+    setSessionId(null);
+    sessionIdRef.current = null;
+    setSessionInit('idle');
+    setTimeUpState('idle');
+    setTimerRunning(false);
+    setTimerSeconds(TIMER_DEFAULT);
+    sessionExpiresAtRef.current = null;
     fetchProblem(slug, ctrl.signal)
       .then((res) => {
         setProblem(res);
@@ -278,12 +297,14 @@ export default function CodingProblemDetailPage() {
   useEffect(() => {
     if (isPracticeMode || !isReady || sessionInit !== 'idle') return;
     setSessionInit('loading');
+    // Capture slug so a stale createSession response (from a previous problem
+    // whose request was still in-flight) cannot overwrite this problem's session.
+    const capturedSlug = slug;
     createSession(slug, languageRef.current)
       .then((session) => {
+        if (capturedSlug !== slugRef.current) return;
         setSessionId(session.session_id);
         sessionIdRef.current = session.session_id;
-        // Store the server deadline so the timer tick can derive remaining time
-        // accurately instead of relying on a decrement that drifts under throttling.
         const expiresMs = new Date(session.expires_at).getTime();
         sessionExpiresAtRef.current = expiresMs;
         const secsLeft = Math.max(0, Math.round((expiresMs - Date.now()) / 1000));
@@ -291,7 +312,10 @@ export default function CodingProblemDetailPage() {
         setTimerRunning(true);
         setSessionInit('ready');
       })
-      .catch(() => setSessionInit('error'));
+      .catch(() => {
+        if (capturedSlug !== slugRef.current) return;
+        setSessionInit('error');
+      });
   }, [isPracticeMode, isReady, slug, sessionInit]);
 
   /* ── 2. Draft autosave every 30 s (assessment mode only) ── */
@@ -318,35 +342,41 @@ export default function CodingProblemDetailPage() {
   }, [sessionId, isPracticeMode]);
 
   /* ── 3. Auto-submit when the timer reaches 00:00 ── */
-  const fireAutoSubmit = useCallback(async (sid: string) => {
+  // `gen` is the value of autoSubmitGenRef.current at call time; incremented on
+  // every slug change so any in-flight polling loop for a previous problem exits
+  // cleanly rather than calling setTimeUpState on the wrong problem.
+  const fireAutoSubmit = useCallback(async (sid: string, gen: number) => {
     setTimeUpState('submitting');
     try {
-      // Flush latest editor state before submitting so the server has the final code.
       await patchDraft(sid, codeRef.current[languageRef.current], languageRef.current).catch(() => {});
+      if (autoSubmitGenRef.current !== gen) return;
       await submitSession(sid);
+      if (autoSubmitGenRef.current !== gen) return;
       setTimeUpState('submitted');
     } catch (err) {
+      if (autoSubmitGenRef.current !== gen) return;
       if (err instanceof SessionApiError && err.status === 409) {
-        // Already submitted (e.g. user hit Submit before timer expired)
         setTimeUpState('submitted');
         return;
       }
-      // Network failure — poll until the server sweeper confirms submitted (fires within 30 s).
       setTimeUpState('polling');
       for (let i = 0; i < 12; i++) {
         await new Promise<void>((r) => setTimeout(r, 5_000));
+        if (autoSubmitGenRef.current !== gen) return; // navigated away
         try {
           const session = await getSession(sid);
+          if (autoSubmitGenRef.current !== gen) return;
           if (session.status === 'submitted') { setTimeUpState('submitted'); return; }
         } catch { /* transient — keep polling */ }
       }
+      if (autoSubmitGenRef.current !== gen) return;
       setTimeUpState('error');
     }
   }, []);
 
   useEffect(() => {
     if (timerSeconds !== 0 || isPracticeMode || !sessionIdRef.current) return;
-    void fireAutoSubmit(sessionIdRef.current);
+    void fireAutoSubmit(sessionIdRef.current, autoSubmitGenRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timerSeconds]); // only timerSeconds triggers — refs + callback are stable
 
@@ -368,15 +398,16 @@ export default function CodingProblemDetailPage() {
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
   const tabSwitchRef = useRef(0);
-  // Identity guard for in-flight AI grading: `slug` can change (Previous/Next)
-  // while mockGrade is awaiting, and a late response must not populate the
-  // problem the user has since navigated to.
+  // Identity guard for in-flight AI grading.
   const gradeRequestRef = useRef(0);
+  // Generation counter for the fireAutoSubmit polling loop — increment on
+  // slug change to abandon any loop that is still running for the old problem.
+  const autoSubmitGenRef = useRef(0);
   const slugRef = useRef(slug);
-  // Abort controllers for in-flight run/submit requests — navigation away cancels
-  // the POST so stale results never land on a different problem.
+  // Abort controllers for in-flight run/submit requests.
   const runAbortRef    = useRef<AbortController | null>(null);
   const submitAbortRef = useRef<AbortController | null>(null);
+  // Unmount-only cleanup (belt-and-suspenders in case the component truly unmounts).
   useEffect(() => () => { runAbortRef.current?.abort();    }, []);
   useEffect(() => () => { submitAbortRef.current?.abort(); }, []);
   useEffect(() => { slugRef.current = slug; }, [slug]);
@@ -498,6 +529,9 @@ export default function CodingProblemDetailPage() {
 
   const handleRun = useCallback(async () => {
     if (isBusy || isGrading) return;
+    // Block all entry points (button AND keyboard shortcuts) when the session
+    // is broken or time is up, to prevent running/submitting in a bad state.
+    if (!isPracticeMode && (sessionInit === 'error' || timeUpState !== 'idle')) return;
     const src = code[language]?.trim();
     if (!src) { setActionError({ message: 'Write some code before running.' }); return; }
     setActionState('running'); setActionError(null); setJudgeResult(null);
@@ -523,7 +557,7 @@ export default function CodingProblemDetailPage() {
         status: err instanceof RunApiError ? err.status : undefined,
       });
     }
-  }, [isBusy, isGrading, code, language, slug]);
+  }, [isBusy, isGrading, code, language, slug, isPracticeMode, sessionInit, timeUpState]);
 
   /* ── Ctrl+R → Run (wired after handleRun to avoid TDZ) ── */
   useEffect(() => {
@@ -541,6 +575,7 @@ export default function CodingProblemDetailPage() {
 
   const handleSubmit = useCallback(async () => {
     if (isBusy) return;
+    if (!isPracticeMode && (sessionInit === 'error' || timeUpState !== 'idle')) return;
     const src = code[language]?.trim();
     if (!src) { setActionError({ message: 'Write some code before submitting.' }); return; }
     setActionState('submitting'); setActionError(null);
@@ -601,7 +636,7 @@ export default function CodingProblemDetailPage() {
     } finally {
       if (gradeToken === gradeRequestRef.current) setIsGrading(false);
     }
-  }, [isBusy, code, language, slug, router, problem, isPracticeMode]);
+  }, [isBusy, code, language, slug, router, problem, isPracticeMode, sessionInit, timeUpState]);
 
   /* Timer pill colours */
   const timerBadge = timerSeconds < 120

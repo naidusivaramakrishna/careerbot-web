@@ -8,8 +8,6 @@ import {
   BarChart2,
   Bookmark,
   BookOpen,
-  Briefcase,
-  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -209,7 +207,7 @@ function CodingProblemsListContent() {
       .then((data) => { setAllProblems(data); setState('ready'); })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        fetchProblems({}, controller.signal)
+        fetchProblems({ language: language || undefined }, controller.signal)
           .then((res) => {
             setAllProblems(res.problems.map((p) => ({ ...p, user_status: null })));
             setState('ready');
@@ -1009,24 +1007,25 @@ function CodingProblemsListContent() {
               <div>
                 <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Quick Access</p>
                 <div className="space-y-2">
-                  {[
-                    { icon: Shuffle, label: 'Random Problem', desc: 'Try a random problem', href: '/coding-test/problems', color: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' },
-                    { icon: LayoutGrid, label: 'Topic-Wise Practice', desc: 'Focus on a specific topic', href: '/coding-test/problems', color: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400' },
-                    { icon: Briefcase, label: 'Company Questions', desc: 'Practice interview questions', href: '/coding-test/problems', color: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
-                    { icon: Calendar, label: 'Daily Challenge', desc: 'Solve 1 problem daily', href: '/coding-test/problems', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
-                  ].map((item) => (
-                    <Link key={item.label} href={item.href}
-                      className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 transition-all hover:border-indigo-200 hover:shadow-sm dark:border-slate-700/60 dark:bg-slate-800 dark:hover:border-indigo-700/60">
-                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.color}`}>
-                        <item.icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{item.label}</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{item.desc}</p>
-                      </div>
-                      <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
-                    </Link>
-                  ))}
+                  <button
+                    type="button"
+                    disabled={allProblems.length === 0}
+                    onClick={() => {
+                      if (allProblems.length === 0) return;
+                      const p = allProblems[Math.floor(Math.random() * allProblems.length)];
+                      router.push(language ? `/coding-test/${p.slug}?language=${language}` : `/coding-test/${p.slug}`);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 transition-all hover:border-indigo-200 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700/60 dark:bg-slate-800 dark:hover:border-indigo-700/60"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
+                      <Shuffle className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Random Problem</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">Try a surprise challenge</p>
+                    </div>
+                    <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
+                  </button>
                 </div>
               </div>
 
@@ -1034,7 +1033,11 @@ function CodingProblemsListContent() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Recommended Topics</p>
-                  <button type="button" className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                  <button
+                    type="button"
+                    onClick={() => { setTag(''); setExpandedCategories(new Set(topicTree.map((c) => c.category))); }}
+                    className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                  >
                     View all →
                   </button>
                 </div>
