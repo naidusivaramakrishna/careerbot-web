@@ -731,6 +731,13 @@ interface ResumeContextType {
   enhancedSuggestions: EnhancedSuggestion[];
   /** Bumps only after a server-authoritative enhanced-resume mutation. */
   enhancedDataVersion: number;
+  /** Bumps after a debounced autosave or explicit Save actually lands on
+   * the backend (builder + enhanced). Use this, not resumeData, to trigger
+   * anything that re-fetches PERSISTED state (e.g. PreviewPanel's
+   * server-rendered /download preview) -- resumeData changes on every
+   * keystroke, long before the backend has the new value. */
+  resumeSavedVersion: number;
+  bumpResumeSavedVersion: () => void;
   sectionOrder: string[];
   setSectionOrder: React.Dispatch<React.SetStateAction<string[]>>;
   previewCatalogueKey: string | null;
@@ -847,6 +854,22 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   // the active editor remount from the canonical server snapshot after an
   // apply/save/delete response, without remounting on normal typing.
   const [enhancedDataVersion, setEnhancedDataVersion] = useState(0);
+
+  // Bumped by EditorTab right after a debounced autosave or an explicit Save
+  // actually lands on the backend (both builder and enhanced flows). The
+  // server-rendered builder preview (PreviewPanel's /download?... fetch)
+  // reads this instead of resumeData directly: resumeData changes on every
+  // keystroke, but /download always renders the PERSISTED resume, not the
+  // request body -- keying the fetch on resumeData made it request a
+  // pre-edit snapshot 1s after every edit (autosave takes 3s), so the
+  // preview stayed permanently one edit behind, and brand-new entries
+  // (stripped from autosave payloads until they have a backend id) never
+  // appeared until an explicit Save. Keying on this version instead means
+  // the preview only re-fetches once the backend actually has new data.
+  const [resumeSavedVersion, setResumeSavedVersion] = useState(0);
+  const bumpResumeSavedVersion = React.useCallback(() => {
+    setResumeSavedVersion((version) => version + 1);
+  }, []);
 
   // Helper function to return empty resume data
   function getEmptyResumeData(): ResumeData {
@@ -2138,7 +2161,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   useEffect(() => {
     const onEnhancedResumeSync = (event: Event) => {
       const refreshVersion = ++latestEnhancedRefreshRef.current;
-      const detail = (event as CustomEvent<{ enhancedId?: string; payload?: unknown }>).detail;
+      const detail = (event as CustomEvent<{ enhancedId?: string; payload?: unknown; origin?: string }>).detail;
       // Enhanced resumes are identified by the URL prop. The internal resumeId
       // state is only set after creating a normal builder resume, so it is null
       // on the ATS route and previously discarded every apply/undo broadcast.
@@ -2152,12 +2175,21 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         (payload.enhancer_state as Record<string, unknown> | undefined)?.ats_display,
         (payload.enhancer_state as Record<string, unknown> | undefined)?.ats_breakdown,
       ].some(Boolean);
-      const hasResumeSnapshot = syncEnhancedResumeData(payload);
+      // Autosave's own broadcast must NOT replace resumeData: resumeData is a
+      // dependency of the editor's autosave-triggering effect, so syncing it
+      // here re-arms another autosave the instant this one lands -- forever,
+      // for as long as a section modal stays open -- and each round also
+      // overwrites anything typed in the 3s window before the PATCH resolved
+      // with the pre-edit server snapshot. Score/suggestions still sync from
+      // autosave responses (separate state, not an autosave-effect dependency).
+      const isAutosaveOrigin = detail?.origin === "autosave";
+      const hasResumeSnapshot = isAutosaveOrigin ? false : syncEnhancedResumeData(payload);
 
       if (hasScoreSnapshot) {
         syncEnhancedScore(payload);
         if (hasResumeSnapshot) return;
       }
+      if (isAutosaveOrigin) return;
 
       // A few deployed delete handlers still return 204/no body. Reload only
       // in that legacy case; it restores the same score/suggestions snapshot
@@ -2637,6 +2669,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         enhancedAtsScore,
         enhancedSuggestions,
         enhancedDataVersion,
+        resumeSavedVersion,
+        bumpResumeSavedVersion,
         addCustomSection,
         removeCustomSection,
         addCustomField,

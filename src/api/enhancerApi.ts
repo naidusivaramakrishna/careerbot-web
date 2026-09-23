@@ -259,11 +259,27 @@ export async function getEnhancedResume(enhanced_id: string): Promise<EnhancedRe
  * Every enhanced mutation must notify the ResumeProvider. If an older endpoint
  * only returns an acknowledgement, the provider reloads the canonical GET
  * snapshot rather than estimating resume data, score, or suggestion state.
+ *
+ * `origin: "autosave"` marks a broadcast that came from the debounced
+ * per-section autosave PATCH rather than an explicit user action (full
+ * Save, apply/delete fix, skill add/delete). ResumeProvider's listener
+ * uses this to skip replacing `resumeData` for autosave responses --
+ * without it, autosave's own broadcast re-syncs resumeData, which is a
+ * dependency of the editor's autosave-triggering effect, which re-arms
+ * another autosave, forever, for as long as a section modal stays open
+ * (each round also overwriting anything the user typed in the meantime
+ * with the pre-edit server snapshot). Score/suggestion sync is unaffected
+ * by this tag -- it reads a separate state slice that the editor's
+ * autosave effect doesn't depend on, so it stays live during autosave.
  */
-function publishEnhancedResumeSync(enhancedId: string, payload: unknown): void {
+function publishEnhancedResumeSync(
+  enhancedId: string,
+  payload: unknown,
+  options?: { origin?: "autosave" },
+): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("enhanced-resume-score-sync", {
-    detail: { enhancedId, payload },
+    detail: { enhancedId, payload, origin: options?.origin },
   }));
 }
 
@@ -303,7 +319,7 @@ export async function autoSaveEnhancedResume(
     `/resume/enhance/${enhanced_id}/autosave`,
     sections,
   );
-  publishEnhancedResumeSync(enhanced_id, response);
+  publishEnhancedResumeSync(enhanced_id, response, { origin: "autosave" });
   return response;
 }
 

@@ -663,6 +663,71 @@ describe('ResumeContext', () => {
     ));
   });
 
+  // P1 regression: autosave's own enhanced-resume-score-sync broadcast used
+  // to replace resumeData unconditionally. resumeData is a dependency of the
+  // editor's autosave-triggering effect (EditorTab.tsx), so that replacement
+  // re-armed another autosave the instant the previous one landed -- forever,
+  // for as long as a section modal stayed open -- and each round overwrote
+  // anything typed in the meantime with the pre-edit server snapshot. Fixed
+  // by tagging the autosave broadcast {origin:"autosave"} (enhancerApi.ts)
+  // and skipping syncEnhancedResumeData for it here, while still syncing the
+  // score/suggestions (a separate state slice the autosave effect doesn't
+  // depend on, so this doesn't reintroduce the loop).
+  it('does not replace resumeData for an autosave-origin sync, but still syncs the score', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          origin: 'autosave',
+          payload: {
+            enhanced_data: {
+              ...enhancedResume.enhanced_data,
+              personalInfo: {
+                ...enhancedResume.enhanced_data.personalInfo,
+                fullname: 'AUTOSAVE MUST NOT OVERWRITE LOCAL EDITS',
+              },
+            },
+            ats_score: { final_score: 99, section_breakdown: {} },
+          },
+        },
+      }));
+    });
+
+    // Score still syncs from an autosave response.
+    await waitFor(() => expect(latestContext.enhancedAtsScore).toMatchObject({ final_score: 99 }));
+    // resumeData does not: the autosave-origin payload's name never appears.
+    expect(screen.queryByText('Name: AUTOSAVE MUST NOT OVERWRITE LOCAL EDITS')).not.toBeInTheDocument();
+    expect(screen.getByText('Name: Enhanced Avery')).toBeInTheDocument();
+  });
+
+  it('still replaces resumeData for a non-autosave sync event (regression guard)', async () => {
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('enhanced-resume-score-sync', {
+        detail: {
+          enhancedId: 'enhanced-1',
+          payload: {
+            enhanced_data: {
+              ...enhancedResume.enhanced_data,
+              personalInfo: {
+                ...enhancedResume.enhanced_data.personalInfo,
+                fullname: 'Explicit Save Updated Name',
+              },
+            },
+            ats_score: { final_score: 82, section_breakdown: {} },
+          },
+        },
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByText('Name: Explicit Save Updated Name')).toBeInTheDocument());
+  });
+
   it('clears a locally cached fixed card when the canonical undo ledger is empty', async () => {
     renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
     await screen.findByText('Name: Enhanced Avery');

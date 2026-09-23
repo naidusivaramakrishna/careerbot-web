@@ -439,29 +439,55 @@ interface BackendCustomSection {
   // which only understand fixed item slots like title/description/tags,
   // not arbitrarily-named fields) -- every distinct field TYPE collapses to
   // one fixed slot, so field NAMES never survive it, and a second field of
-  // the same type silently overwrites the first. Sending `fields` alongside
-  // `items` lets the read path (transformCustomSectionsFromBackend) restore
-  // the real names/values instead of reconstructing generic ones ("Tags",
-  // "Description") from `items`.
+  // the same type silently overwrites the first.
+  //
+  // `items` is always sent empty ([]) now, NOT populated alongside `fields`
+  // as an earlier version of this comment claimed. That is only safe
+  // because the PDF/DOCX exporters were updated to read `fields` directly
+  // -- confirmed in careerbot-api PR #184 ("fix/resume-builder-skills-
+  // export-png", commit 46f09e95, merged to develop2): both
+  // resume_export/pdf.py and resume_export/docx.py build a
+  // `renderable_fields` list from `cs.get("fields")` and render that
+  // instead of `items`. The server-rendered PNG preview (getResumePreviewImage)
+  // rasterizes the same PDF, so it inherits the same fix. If a future
+  // export path is added that only understands `items`, populate `items`
+  // again here until it too reads `fields`.
   fields?: CustomField[];
 }
 
 /**
  * Transform frontend customSections (fields-based) to backend format (items-based)
  */
-const transformCustomSectionsForBackend = (customSections: CustomSection[]): BackendCustomSection[] => {
+export const transformCustomSectionsForBackend = (customSections: CustomSection[]): BackendCustomSection[] => {
   // `fields` is the canonical, lossless custom-section model. A prior mapper
   // also synthesized one generic item from every field; two fields of different
   // types then competed for the same item keys (`tags`, `description`, etc.).
   // Keep legacy `items` empty for new saves and let the backend render `fields`
-  // directly. Legacy records that only have `items` still use the read fallback.
-  return customSections.map((section) => ({
-    ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
-    sectionName: section.sectionName,
-    icon: 'custom',
-    items: [],
-    fields: section.fields,
-  }));
+  // directly (see the BackendCustomSection.fields comment above for the
+  // backend PR that made this safe). Legacy records that only have `items`
+  // still use the read fallback.
+  return customSections
+    .filter((section) => {
+      // A section with no fields, or where every field is blank, has
+      // nothing to render. This filter existed before this file's last
+      // rewrite and was dropped as a side effect of it, not on purpose --
+      // restored so an empty "+ Add custom section" click doesn't persist
+      // a section with a heading and no content forever.
+      if (!section.fields || section.fields.length === 0) return false;
+      return section.fields.some((field) => {
+        const value = field.value;
+        if (typeof value === 'string') return value.trim() !== '';
+        if (Array.isArray(value)) return value.length > 0;
+        return !!value;
+      });
+    })
+    .map((section) => ({
+      ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
+      sectionName: section.sectionName,
+      icon: 'custom',
+      items: [],
+      fields: section.fields,
+    }));
 };
 
 /**

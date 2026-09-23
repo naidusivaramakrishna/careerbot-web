@@ -134,6 +134,7 @@ const EditorTab: React.FC<Props> = ({
     syncEnhancedScore,
     enhancedSuggestions,
     applyManualFix,
+    bumpResumeSavedVersion,
   } = useResume();
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
@@ -154,6 +155,12 @@ const EditorTab: React.FC<Props> = ({
   // section) keeps the "fresh data on open" behavior without remounting
   // while the same section stays open.
   const modalMountVersionRef = useRef(enhancedDataVersion);
+
+  // Tracks the last enhancedDataVersion the autosave-triggering effect below
+  // has already accounted for, so a resumeData change caused by a server
+  // sync (ResumeProvider's syncEnhancedResumeData, which bumps this version)
+  // is never mistaken for a fresh user edit. See that effect for why.
+  const lastSyncedEnhancedVersionRef = useRef(enhancedDataVersion);
 
   // A name only identifies a custom section when it isn't also a reserved standard
   // section name. Standard names are a fixed, unambiguous set (SECTION_KEY_MAP);
@@ -458,6 +465,7 @@ const EditorTab: React.FC<Props> = ({
             declSaveResponse.warnings.forEach(w => toast.warning(w, { duration: 6000 }));
           }
           setLastSaved(new Date());
+          bumpResumeSavedVersion();
           setIsAutoSaving(false);
           return;
         } else if (sectionName === "Professional Summary") {
@@ -616,6 +624,7 @@ const EditorTab: React.FC<Props> = ({
         }
 
         setLastSaved(new Date());
+        bumpResumeSavedVersion();
         // // console.log("✅ Auto-saved successfully");
 
       } catch {
@@ -654,9 +663,22 @@ const EditorTab: React.FC<Props> = ({
         skipNextAutoSaveForSectionRef.current = null;
         return;
       }
+      // Defense in depth alongside the {origin:"autosave"} tag in
+      // enhancerApi.ts/ResumeContext.tsx (which stops autosave's OWN
+      // response from re-triggering this effect): enhancedDataVersion bumps
+      // whenever ResumeProvider replaces resumeData from ANY server sync
+      // (explicit Save, apply/delete fix, undo) -- see syncEnhancedResumeData.
+      // If that's what changed resumeData this render, it is not a fresh
+      // user edit, and re-arming autosave for it would both send a needless
+      // PATCH and risk the same effect-loop for those paths while a section
+      // modal happens to be open.
+      if (lastSyncedEnhancedVersionRef.current !== enhancedDataVersion) {
+        lastSyncedEnhancedVersionRef.current = enhancedDataVersion;
+        return;
+      }
       triggerAutoSave(openModalSection);
     }
-  }, [formData, resumeData, openModalSection, triggerAutoSave]);
+  }, [formData, resumeData, openModalSection, triggerAutoSave, enhancedDataVersion]);
 
 
   useEffect(() => {
@@ -1104,6 +1126,7 @@ const EditorTab: React.FC<Props> = ({
 
     clearErrors(sectionFields); // remove local validation
     toast.success(`${openModalSection} saved successfully!`);
+    bumpResumeSavedVersion();
     closeModal();
   } catch (error) {
     const axiosError = error as { response?: { data?: { error?: { message?: string; details?: { validation_errors?: Array<{ field: string; message: string }> } } } } };

@@ -94,7 +94,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   expandPreview = false,
   pageScrollPreview = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, sectionOrder, previewCatalogueKey } = useResume();
+  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey } = useResume();
   const { canonicalScore, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
 
@@ -306,11 +306,20 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   // ResumeContext polls localStorage every ~1s and calls setSectionOrder()
   // with a freshly JSON.parse'd array on every tick, even when the content
   // is unchanged -- a new reference each time, not a new value. Depending on
-  // resumeData/sectionOrder directly means this effect's cleanup would fire
-  // and restart the 1s debounce on every single poll tick, so the timer
-  // could never survive long enough to actually run. Comparing serialized
-  // content instead of object identity avoids that.
-  const previewSignature = JSON.stringify({ resumeData, resumeStyle, sectionOrder, selectedTemplate });
+  // sectionOrder directly means this effect's cleanup would fire and restart
+  // the 1s debounce on every single poll tick, so the timer could never
+  // survive long enough to actually run. Comparing serialized content
+  // instead of object identity avoids that.
+  //
+  // Keyed on resumeSavedVersion, NOT resumeData: /download always renders
+  // the PERSISTED resume, never the local request state, so firing this on
+  // every resumeData keystroke fetched a pre-edit snapshot 1s later (autosave
+  // takes 3s) -- the preview was permanently one edit behind, and brand-new
+  // entries (stripped from autosave payloads until they have a backend id)
+  // never appeared until an explicit Save. resumeSavedVersion only bumps
+  // once autosave/Save actually lands, so the fetch now happens exactly
+  // when there is new persisted content to show.
+  const previewSignature = JSON.stringify({ resumeSavedVersion, resumeStyle, sectionOrder, selectedTemplate });
   const lastPreviewSignatureRef = useRef<string | null>(null);
   const [previewRetryTick, setPreviewRetryTick] = useState(0);
   const retryPreview = () => {
