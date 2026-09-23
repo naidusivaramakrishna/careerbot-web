@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
   CheckCircle2,
@@ -708,7 +708,33 @@ function ExportDropdown({
   plainText: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const anyFormatAvailable = (canDownload && (supportsPdf || supportsDocx)) || Boolean(plainText);
+
+  // onBlur alone (the previous close mechanism) is unreliable: in Safari,
+  // and in Firefox on macOS, clicking a <button> does not move focus to it.
+  // Opening the menu with a mouse leaves nothing inside it focused, so a
+  // click outside never fires a blur event at all, and the menu stays open
+  // until the trigger is clicked again. A document-level pointerdown
+  // listener works regardless of that platform focus behavior; Escape is
+  // added as the standard keyboard dismissal.
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   const options: Array<{
     key: string;
@@ -747,19 +773,20 @@ function ExportDropdown({
   ];
 
   return (
-    <div
-      className="relative"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-          setOpen(false);
-        }
-      }}
-    >
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        disabled={!anyFormatAvailable || isDownloading}
-        aria-haspopup="menu"
+        // Only !anyFormatAvailable blocks opening the panel at all -- Copy
+        // as text does not depend on isDownloading (the old single-tile
+        // Export card never blocked it either); PDF/DOCX disable
+        // themselves individually below while a download is in progress.
+        disabled={!anyFormatAvailable}
+        // Plain disclosure, not an ARIA menu: aria-haspopup/role="menu"/
+        // role="menuitem" promise arrow-key movement, Home/End, and focus
+        // moving into the panel on open -- none of which this implements.
+        // A screen reader announcing "menu" that doesn't behave like one
+        // is worse than an unstyled but honest expand/collapse control.
         aria-expanded={open}
         className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-4 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:opacity-50 2xl:h-12 2xl:gap-3 2xl:px-6 2xl:text-base"
       >
@@ -768,15 +795,11 @@ function ExportDropdown({
         <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-lg border border-[#dfe6f5] bg-white shadow-[0_18px_42px_rgba(15,23,42,0.14)]"
-        >
+        <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-lg border border-[#dfe6f5] bg-white shadow-[0_18px_42px_rgba(15,23,42,0.14)]">
           {options.map(({ key, label, icon: Icon, disabled, onSelect }) => (
             <button
               key={key}
               type="button"
-              role="menuitem"
               disabled={disabled}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
@@ -1207,30 +1230,6 @@ export function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion
     });
   }
 
-  // eligible_evidence_usage_pct (careerbot-ai PR #310/311/312): of the
-  // resume evidence relevant to THIS job, how much made it into the
-  // letter. Deliberately surfaced as an actionable suggestion, not a 4th
-  // score in the Insights panel — a low value means real, usable proof
-  // points are sitting unused, which is something to fix, not just a
-  // number to display.
-  //
-  // Placed BEFORE the generic "Improve company alignment" / "Add
-  // measurable achievements" checks below on purpose: those two fire on
-  // almost every weak letter (the same letters where evidence usage is
-  // likely under 50%), and getTopSuggestions keeps only the first 2
-  // results. With this check after them, they filled both slots on
-  // exactly the letters this suggestion exists to catch, so it was
-  // reachable only on near-perfect letters. See the regression tests
-  // below ("eligible_evidence_usage_pct visibility").
-  const eligibleEvidencePct = letter.keyword_report?.eligible_evidence_usage_pct;
-  if (eligibleEvidencePct != null && eligibleEvidencePct < 50) {
-    addSuggestion({
-      title: "Use more of your relevant experience",
-      description: "Your resume has more experience relevant to this job than the letter currently uses — consider adding it.",
-      icon: "growth",
-    });
-  }
-
   const matchPct = letter.jd_match_summary?.jd_match_pct;
   if (matchPct == null || matchPct < 90) {
     addSuggestion({
@@ -1258,6 +1257,42 @@ export function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion
     description: "Tie your strongest resume evidence more directly to the role and company priorities.",
     icon: "company",
   });
+
+  // eligible_evidence_usage_pct (careerbot-ai PR #310/311/312): of the
+  // resume evidence relevant to THIS job, how much made it into the
+  // letter. Deliberately surfaced as an actionable suggestion, not a 4th
+  // score in the Insights panel — a low value means real, usable proof
+  // points are sitting unused, which is something to fix, not just a
+  // number to display.
+  //
+  // RESERVED SLOT, not just early priority (P2 fix): moving this check
+  // earlier in the list (see the now-removed comment that used to sit
+  // here) only protected it from the two GENERIC checks below it.
+  // safe_suggestions and the keyword-coverage tip run BEFORE it and are
+  // completely unbounded -- two safe_suggestions, or one plus a missing
+  // keyword, still fill both slots before this is ever considered. A
+  // suggestion that can be silently starved by an unbounded upstream list
+  // isn't reliably surfaced by priority ordering alone, so it gets a slot
+  // outright: when its condition is true, it is always slot 2, and the
+  // single best-priority OTHER candidate (safe_suggestions and keyword
+  // coverage still rank above company alignment / measurable achievements)
+  // takes slot 1. See the regression tests below
+  // ("eligible_evidence_usage_pct visibility").
+  const eligibleEvidencePct = letter.keyword_report?.eligible_evidence_usage_pct;
+  const evidenceTip: ReviewSuggestion | undefined =
+    eligibleEvidencePct != null && eligibleEvidencePct < 50
+      ? {
+          title: "Use more of your relevant experience",
+          description: "Your resume has more experience relevant to this job than the letter currently uses — consider adding it.",
+          icon: "growth",
+        }
+      : undefined;
+
+  if (evidenceTip) {
+    const evidenceKey = evidenceTip.title.trim().toLowerCase();
+    const others = suggestions.filter((suggestion) => suggestion.title.trim().toLowerCase() !== evidenceKey);
+    return [...others.slice(0, 1), evidenceTip];
+  }
 
   return suggestions.slice(0, 2);
 }

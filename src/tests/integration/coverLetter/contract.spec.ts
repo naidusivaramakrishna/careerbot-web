@@ -100,6 +100,23 @@ function assertCoverLetterResponseShape(cl: CoverLetterResponse, label: string) 
   // value actually differs (see "failedNoModel specific").
   expect(typeof cl.metadata, `${label}: metadata is an object`).toBe("object");
 
+  // keyword_report.coverage_explanation shape, for every fixture that has a
+  // keyword_report (some, e.g. a failed-before-scoring letter, don't).
+  // Moved here from a readyToReview-only test: a plain-string fixture
+  // (the AI service's old shape, before it became Record<string,string>)
+  // slipped through undetected on every OTHER fixture, since only
+  // readyToReview was ever checked.
+  if (cl.keyword_report) {
+    expect(
+      typeof cl.keyword_report.coverage_explanation,
+      `${label}: keyword_report.coverage_explanation is an object (Record<string,string>), not a string`
+    ).toBe("object");
+    expect(
+      cl.keyword_report.coverage_explanation,
+      `${label}: keyword_report.coverage_explanation is not null`
+    ).not.toBeNull();
+  }
+
   // warnings shape.
   expect(Array.isArray(cl.warnings), `${label}: warnings is an array`).toBe(true);
 }
@@ -177,21 +194,24 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
     });
 
     it("has keyword_report with expected shape", () => {
+      // coverage_explanation's shape is asserted for every fixture with a
+      // keyword_report inside assertCoverLetterResponseShape now, not just
+      // this one.
       expect(cl.keyword_report).not.toBeNull();
       expect(Array.isArray(cl.keyword_report!.used_keywords)).toBe(true);
       expect(typeof cl.keyword_report!.keyword_coverage_pct).toBe("number");
-      // coverage_explanation is Record<string,string> on the current
-      // contract (AI service changed this from a plain string), not a
-      // bare string — a stale fixture that still had it as a string
-      // would previously slip through unnoticed with a "string" check.
-      expect(typeof cl.keyword_report!.coverage_explanation).toBe("object");
-      expect(cl.keyword_report!.coverage_explanation).not.toBeNull();
       expect(typeof cl.keyword_report!.keyword_counts).toBe("object");
     });
 
     it("has eligible_evidence_usage_pct as a number distinct from evidence_usage_pct (PR #310/311/312)", () => {
       expect(typeof cl.keyword_report!.eligible_evidence_usage_pct).toBe("number");
       expect(typeof cl.keyword_report!.evidence_usage_pct).toBe("number");
+      // The test name's own claim: these are two DIFFERENT metrics (JD-scoped
+      // vs. full resume claim catalog), not the same value under two field
+      // names. A typeof-only check would pass even if a future fixture (or a
+      // real backend regression) accidentally set them equal or copied one
+      // into the other.
+      expect(cl.keyword_report!.eligible_evidence_usage_pct).not.toBe(cl.keyword_report!.evidence_usage_pct);
     });
 
     it("has at least one jd_match_matrix entry using implied_via_broader_claim (PR #310/311/312)", () => {

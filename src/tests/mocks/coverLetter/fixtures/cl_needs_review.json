@@ -32,7 +32,10 @@
   "keyword_report": {
     "used_keywords": ["FastAPI", "MongoDB"],
     "keyword_coverage_pct": 40.0,
-    "coverage_explanation": "2 of 5 selected keywords used in the letter.",
+    "coverage_explanation": {
+      "coverage_pct": "Percent of JD requirements explicitly represented in the generated cover letter.",
+      "keyword_coverage_pct": "Percent of required and preferred JD keywords that appear in the generated cover letter."
+    },
     "keyword_counts": {"FastAPI": 1, "MongoDB": 1}
   },
   "grounding": {

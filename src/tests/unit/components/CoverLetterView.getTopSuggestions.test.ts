@@ -11,12 +11,21 @@
  * reachable only on near-perfect letters that happened to still be missing
  * a full 50%+ of relevant evidence, a near-empty intersection.
  *
- * Fix: moved the eligible_evidence_usage_pct check before those two generic
- * checks. Every test below uses a base letter that ALSO triggers both
- * "Improve company alignment" (jd_match_pct < 90) and "Add measurable
- * achievements" (high_confidence_claims < 3) — i.e. the exact starving
- * scenario from the review — to prove the new suggestion now wins a slot
- * instead of being crowded out.
+ * First fix (P1, commit bf29b7f): moved the eligible_evidence_usage_pct
+ * check ahead of "Improve company alignment" / "Add measurable
+ * achievements". Every test below (except the P2 block at the bottom) uses
+ * a base letter that ALSO triggers both of those, to prove the suggestion
+ * wins a slot instead of being crowded out by them.
+ *
+ * P2 found in review of that fix: safe_suggestions and the keyword-coverage
+ * tip run BEFORE the eligible_evidence_usage_pct check too, and are
+ * unbounded -- two safe_suggestions (or one plus a missing keyword) still
+ * fill both slots before it's ever reached. The P1 fix and its tests never
+ * caught this because baseLetter() always used safe_suggestions: []. Fixed
+ * by giving eligible_evidence_usage_pct a genuinely reserved slot instead
+ * of just higher priority: when its condition is true it is always
+ * present, as the second of the two returned suggestions, with the single
+ * best-priority other candidate as the first.
  */
 
 import { describe, it, expect } from "vitest";
@@ -114,5 +123,66 @@ describe("getTopSuggestions — eligible_evidence_usage_pct visibility (P1 regre
     });
 
     expect(getTopSuggestions(letter)).toHaveLength(2);
+  });
+});
+
+describe("getTopSuggestions — reserved slot survives an unbounded safe_suggestions list (P2 regression)", () => {
+  it("still shows the tip with 2 safe_suggestions AND a missing keyword all present", () => {
+    // The exact starving scenario from the review: two safe_suggestions
+    // (unbounded, AI-supplied) plus a missing keyword would, under simple
+    // priority ordering, fill both slots on their own before
+    // eligible_evidence_usage_pct is ever considered.
+    const letter = baseLetter({
+      keyword_report: {
+        ...baseLetter().keyword_report!,
+        eligible_evidence_usage_pct: 10,
+        missing_required: ["Kubernetes"],
+        safe_suggestions: [
+          { keyword: "Terraform", message: "Mention Terraform where relevant." },
+          { keyword: "CI/CD", message: "Mention CI/CD pipelines where relevant." },
+        ],
+      },
+    });
+
+    const result = getTopSuggestions(letter);
+    expect(result).toHaveLength(2);
+    expect(result.map((s) => s.title)).toContain("Use more of your relevant experience");
+  });
+
+  it("puts the reserved evidence tip second, and the single best other candidate first", () => {
+    const letter = baseLetter({
+      keyword_report: {
+        ...baseLetter().keyword_report!,
+        eligible_evidence_usage_pct: 10,
+        safe_suggestions: [
+          { keyword: "Terraform", message: "Mention Terraform where relevant." },
+          { keyword: "CI/CD", message: "Mention CI/CD pipelines where relevant." },
+        ],
+      },
+    });
+
+    const result = getTopSuggestions(letter);
+    expect(result.map((s) => s.title)).toEqual([
+      'Add "Terraform"',
+      "Use more of your relevant experience",
+    ]);
+  });
+
+  it("does not duplicate the evidence tip into both slots when it is also the only other candidate", () => {
+    // No safe_suggestions, no missing keywords, no company/achievements
+    // triggers -- the evidence tip is the ONLY candidate. It must appear
+    // once, not twice.
+    const letter = baseLetter({
+      jd_match_summary: { jd_match_pct: 95, total: 5, met: 5, partial: 0, missing: 0 },
+      grounding: { high_confidence_claims: 5, coverage_status: "sufficient" },
+      keyword_report: {
+        ...baseLetter().keyword_report!,
+        eligible_evidence_usage_pct: 10,
+      },
+    });
+
+    const result = getTopSuggestions(letter);
+    const evidenceTipCount = result.filter((s) => s.title === "Use more of your relevant experience").length;
+    expect(evidenceTipCount).toBe(1);
   });
 });
