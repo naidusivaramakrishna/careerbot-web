@@ -89,10 +89,13 @@ describe("getTopSuggestions — eligible_evidence_usage_pct visibility (P1 regre
   });
 
   it("does NOT show the suggestion when eligible_evidence_usage_pct is null/absent", () => {
+    // Genuinely optional per the type (P2 fix: was wrongly typed as
+    // required) — simulates an older/partial AI response, e.g. the real
+    // needsReview fixture, which predates careerbot-ai PR #310/311/312
+    // and has no eligible_evidence_usage_pct key at all.
     const letter = baseLetter({
       keyword_report: {
         ...baseLetter().keyword_report!,
-        // @ts-expect-error — simulating an older/partial AI response.
         eligible_evidence_usage_pct: null,
       },
     });

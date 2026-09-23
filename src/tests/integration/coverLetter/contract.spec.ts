@@ -95,7 +95,9 @@ function assertCoverLetterResponseShape(cl: CoverLetterResponse, label: string) 
   // grounding shape.
   expect(typeof cl.grounding, `${label}: grounding is an object`).toBe("object");
 
-  // metadata shape.
+  // metadata shape. Shallow on purpose here -- individual fields (e.g.
+  // metadata.model) are asserted per-fixture below where their expected
+  // value actually differs (see "failedNoModel specific").
   expect(typeof cl.metadata, `${label}: metadata is an object`).toBe("object");
 
   // warnings shape.
@@ -264,13 +266,25 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
   });
 
   // ── failedNoModel specific ────────────────────────────────────────────
-  // Regression test: careerbot-ai's early-failure path (pipeline aborted
-  // before any LLM call ran) sends an explicit JSON null for
-  // metadata.model. The backend's ResponseMetadata.model was previously
-  // a non-Optional str, so this response shape would fail Pydantic
-  // validation and surface as an opaque 502 UPSTREAM_CONTRACT_ERROR
-  // instead of the structured "failed" body below. Guards against that
-  // regression by asserting the FE type/contract accepts model: null.
+  // careerbot-ai's early-failure path (pipeline aborted before any LLM
+  // call ran) sends an explicit JSON null for metadata.model. The actual
+  // runtime fix for the 502 this used to cause lives in careerbot-api's
+  // Pydantic model (ResponseMetadata.model: Optional[str]) -- confirmed
+  // merged: PR #203 "fix/cover-letter-contract-drift-and-usage-metadata",
+  // commit 5d0cb3c3, on develop2. That backend fix is what actually
+  // prevents the 502; it runs in a different repo and isn't exercised by
+  // this test at all.
+  //
+  // This suite only keeps the FRONTEND TypeScript type
+  // (ResponseMetadata.model: string | null) in sync with that already-
+  // fixed backend contract. It does NOT verify the 502 is fixed, and
+  // structurally can't: the fixture below is loaded through fixtures.ts's
+  // `as unknown as CoverLetterResponse` cast, which bypasses TypeScript's
+  // structural checking entirely -- these assertions would pass
+  // identically whether or not the FE type were ever widened, since
+  // vitest/JS runtime doesn't enforce TS types at all. Confirmed by
+  // temporarily reverting the type change alone and re-running this
+  // describe block: all cases still passed.
 
   describe("failedNoModel", () => {
     const cl = CL_FIXTURES.failedNoModel;

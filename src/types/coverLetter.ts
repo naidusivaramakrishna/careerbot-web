@@ -225,8 +225,14 @@ export interface KeywordReport {
    * at least one met-or-partial JD requirement, instead of the full resume
    * claim catalog. Answers "of the evidence relevant to THIS job, how much
    * made it into the letter" — a fairer number than evidence_usage_pct for
-   * resumes with lots of content unrelated to this JD. */
-  eligible_evidence_usage_pct: number;
+   * resumes with lots of content unrelated to this JD.
+   *
+   * Optional: added in careerbot-ai PR #310/311/312, so responses from
+   * before that (and the needsReview fixture, still on the old shape)
+   * don't carry it. The consumer (CoverLetterView.getTopSuggestions)
+   * already treats it as possibly absent via a `!= null` check — this
+   * type was just wrong about the guarantee, not the runtime code. */
+  eligible_evidence_usage_pct?: number | null;
   readability_score: number;
   ats_risk: string;
   keyword_stuffing_score: number;
