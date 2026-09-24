@@ -37,7 +37,7 @@ export const VerificationRecovery: React.FC = () => {
     }
   }, [dismissed]);
 
-  if (!pending || dismissed || showOTP) {
+  if (!pending || dismissed) {
     return null;
   }
 
