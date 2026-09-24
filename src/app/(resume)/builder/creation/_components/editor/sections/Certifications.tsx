@@ -9,6 +9,13 @@ import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
+import MonthYearPicker from "../MonthYearPicker";
+
+const NEVER_EXPIRES_LABEL = "Never expires";
+const isNeverExpiresValue = (v?: string): boolean => {
+  const lower = (v ?? "").trim().toLowerCase();
+  return lower.includes("never") || lower.includes("lifetime") || lower.includes("permanent");
+};
 
 interface CertificationEntry {
   name: string;
@@ -28,9 +35,9 @@ const emptyCertification = (): CertificationEntry => ({
 });
 
 const Certifications: React.FC = () => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resumeSource } = useResume();
   const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -109,12 +116,18 @@ const Certifications: React.FC = () => {
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
-      const prevItems = (prev.certifications ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
+      // Keep builder and AI/parser field names together. The ATS apply
+      // endpoint evaluates full_name/issuing_organization while templates
+      // and ResumeData use name/issuer. An id-less entry is genuinely new
+      // and stays id-less — see Internships.tsx's sibling effect for why
+      // backfilling an id by array POSITION is unsound.
+      const merged = allEntries.map((entry) => ({
+        ...entry,
+        issuer: entry.issuedBy,
+        issueDate: entry.year,
+        full_name: entry.name,
+        issuing_organization: entry.issuedBy,
+      }));
       if (JSON.stringify(prev.certifications) === JSON.stringify(merged)) return prev;
       return { ...prev, certifications: merged };
     });
@@ -193,6 +206,19 @@ const Certifications: React.FC = () => {
 
     try {
       setDeletingIndex(index);
+      // Cancel a queued full-section autosave before DELETE starts. If one has
+      // already fired and its PATCH is in flight, clearing the timer is a
+      // no-op -- that request still reaches the backend with a pre-delete
+      // snapshot and can resurrect this exact item there. awaitInFlight is
+      // populated by EditorTab's listener when that's the case; awaiting it
+      // here guarantees DELETE is always the request that lands last.
+      const awaitInFlight: { promise?: Promise<void> } = {};
+      window.dispatchEvent(new CustomEvent("resume-item-deleted", {
+        detail: { section: "Certifications", itemId, awaitInFlight },
+      }));
+      if (awaitInFlight.promise) {
+        await awaitInFlight.promise;
+      }
       // // console.log("🗑️ Deleting certification item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
@@ -203,6 +229,17 @@ const Certifications: React.FC = () => {
       }
 
       // // console.log("✅ Certification item deleted from backend successfully");
+
+      // The delete endpoint is authoritative. Cancel any queued full-section
+      // autosave before changing local state; otherwise its pre-delete snapshot
+      // can finish after DELETE and restore this exact certification.
+      window.dispatchEvent(new CustomEvent("resume-item-deleted", {
+        detail: { section: "Certifications", itemId, suppressNext: true },
+      }));
+      setResumeData(prev => ({
+        ...prev,
+        certifications: (prev.certifications || []).filter(cert => cert.id !== itemId),
+      }));
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -416,48 +453,50 @@ const Certifications: React.FC = () => {
                         <label className="text-sm font-semibold text-[#3b3b3b]">
                           Expiry Date <span className="text-xs text-gray-500">(Optional)</span>
                         </label>
-                        <input
-                          type="text"
-                          value={certification.expiryDate || ""}
-                          placeholder="YYYY or MM/YYYY or Never expires"
-                          onChange={(e) => {
-                            handleChange(editIndex, "expiryDate", e.target.value);
-                            clearError("certification", globalIndex, "expiryDate");
-                          }}
-                          onBlur={() => {
-                            const expiry = certification.expiryDate?.trim();
-                            const issueYear = certification.year?.trim();
-                            if (!expiry || !issueYear || !/^\d{4}$/.test(issueYear)) {
-                              clearError("certification", globalIndex, "expiryDate");
-                              return;
-                            }
-                            const lower = expiry.toLowerCase();
-                            if (lower.includes("never") || lower.includes("lifetime") || lower.includes("permanent")) {
-                              clearError("certification", globalIndex, "expiryDate");
-                              return;
-                            }
-                            const issueYearNum = parseInt(issueYear, 10);
-                            let expiryYear: number | null = null;
-                            if (/^\d{4}$/.test(expiry)) {
-                              expiryYear = parseInt(expiry, 10);
-                            } else if (/^\d{1,2}\/\d{4}$/.test(expiry)) {
-                              expiryYear = parseInt(expiry.split("/")[1], 10);
-                            } else if (/^[A-Za-z]{3}\s+\d{2}$/.test(expiry)) {
-                              expiryYear = 2000 + parseInt(expiry.split(/\s+/)[1], 10);
-                            }
-                            if (expiryYear !== null && expiryYear < issueYearNum) {
-                              setFieldError("certification", globalIndex, "expiryDate", `Expiry cannot be before issue year (${issueYear})`);
-                            } else {
-                              clearError("certification", globalIndex, "expiryDate");
-                            }
-                          }}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 focus:outline-none ${errors[`certification-${globalIndex}-expiryDate`] ? "border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
-                        />
+                        {isNeverExpiresValue(certification.expiryDate) ? (
+                          <div className="w-full px-3 py-3.5 text-sm rounded-md text-black bg-[#faf9f8] border-b-2 border-transparent">
+                            {NEVER_EXPIRES_LABEL}
+                          </div>
+                        ) : (
+                          <MonthYearPicker
+                            value={certification.expiryDate}
+                            onChange={(val) => {
+                              handleChange(editIndex, "expiryDate", val);
+                              const issueYear = certification.year?.trim();
+                              if (!val || !issueYear || !/^\d{4}$/.test(issueYear)) {
+                                clearError("certification", globalIndex, "expiryDate");
+                                return;
+                              }
+                              const issueYearNum = parseInt(issueYear, 10);
+                              const expiryYear = 2000 + parseInt(val.split(/\s+/)[1], 10);
+                              if (expiryYear < issueYearNum) {
+                                setFieldError("certification", globalIndex, "expiryDate", `Expiry cannot be before issue year (${issueYear})`);
+                              } else {
+                                clearError("certification", globalIndex, "expiryDate");
+                              }
+                            }}
+                            placeholder="MMM YY"
+                            allowFutureDates
+                          />
+                        )}
                         {errors[`certification-${globalIndex}-expiryDate`] && (
                           <span className="text-xs text-red-500">
                             {errors[`certification-${globalIndex}-expiryDate`]}
                           </span>
                         )}
+                        <label className="flex items-center gap-2 mt-1">
+                          <input
+                            type="checkbox"
+                            checked={isNeverExpiresValue(certification.expiryDate)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              handleChange(editIndex, "expiryDate", checked ? NEVER_EXPIRES_LABEL : "");
+                              clearError("certification", globalIndex, "expiryDate");
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-xs font-semibold text-gray-700">Never expires</span>
+                        </label>
                       </div>
                     </div>
 
@@ -499,7 +538,7 @@ const Certifications: React.FC = () => {
             {showTips && (
               <SectionTipsPanel
                 sectionKey="Certifications"
-                entryContent={[editingEntries[0]?.name, editingEntries[0]?.issuer].filter(Boolean) as string[]}
+                entryContent={[editingEntries[0]?.name, editingEntries[0]?.issuedBy].filter(Boolean) as string[]}
                 staticTips={
                   <div className="bg-[#faf9f8] rounded-lg p-5">
                     <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>

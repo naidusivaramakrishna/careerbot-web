@@ -149,9 +149,9 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                 )}
                 {personalInfo.portfolioUrl && (
                   <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
-                    <a 
-                      href={personalInfo.portfolioUrl} 
-                      target="_blank" 
+                    <a
+                      href={personalInfo.portfolioUrl}
+                      target="_blank"
                       rel="noopener noreferrer"
                       style={linkStyle}
                       className="hover:underline"
@@ -185,17 +185,17 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
       //         <h2 className="mb-3" style={headingStyle}>
       //           SKILLS
       //         </h2>
-              
+
       //         {data.categorizedSkills ? (
       //           <div className="space-y-3">
       //             {Object.entries(data.categorizedSkills).map(([category, categorySkills]) => {
       //               if (!categorySkills || categorySkills.length === 0) return null;
-                    
+
       //               const categoryLabel = category
       //                 .split('_')
       //                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       //                 .join(' ');
-                    
+
       //               return (
       //                 <div key={category}>
       //                   <div className="font-semibold mb-1" style={baseTextStyle}>
@@ -212,7 +212,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
       //             ))}
       //           </ul>
       //         )}
-              
+
       //         <hr className="border-t border-gray-800 mt-4" />
       //       </section>
       //     )
@@ -226,17 +226,17 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
   //       <h2 className="mb-3" style={headingStyle}>
   //         SKILLS
   //       </h2>
-        
+
   //       {data.categorizedSkills ? (
   //         <div className="space-y-0.5">
   //           {Object.entries(data.categorizedSkills).map(([category, categorySkills]) => {
   //             if (!categorySkills || categorySkills.length === 0) return null;
-              
+
   //             const categoryLabel = category
   //               .split('_')
   //               .map(word => word.charAt(0).toUpperCase() + word.slice(1))
   //               .join(' ');
-              
+
   //             return (
   //               <div key={category}>
   //                 <div className="mb-1">
@@ -258,7 +258,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
   //           ))}
   //         </ul>
   //       )}
-        
+
   //       <hr className="border-t border-gray-800 mt-4" />
   //     </section>
   //   )
@@ -347,7 +347,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                 <div key={idx} className="mb-4">
                   <div className="flex justify-between items-baseline mb-1">
                     <h3 className="font-semibold flex items-center" style={titleStyle}>
-                      {intern.role}
+                      {intern.role || intern.company}
                     </h3>
                     <span className="text-sm" style={baseTextStyle}>
                       {formatDate(intern.startDate)} – {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
@@ -410,9 +410,9 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     <h3 className="font-semibold flex items-center" style={titleStyle}>
                       <span>{proj.title}</span>
                       {proj.link && (
-                        <a 
-                          href={proj.link} 
-                          target="_blank" 
+                        <a
+                          href={proj.link}
+                          target="_blank"
                           rel="noopener noreferrer"
                           style={linkIconStyle}
                           className="hover:opacity-70"
@@ -453,8 +453,8 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <span className="mr-2" style={baseTextStyle}>•</span>
                   <div style={baseTextStyle}>
                     <div>
-                      <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      {(cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
+                      <span className="font-medium" style={titleStyle}>{cert.name || cert.issuedBy || cert.issuer}</span>
+                      {cert.name && (cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
                       {(cert.year || cert.issueDate) && <span>Issued: {cert.year || cert.issueDate}</span>}
@@ -486,10 +486,10 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                 <div key={idx} className="mb-2 flex items-start">
                   <span className="mr-2" style={baseTextStyle}>•</span>
                   <div style={baseTextStyle}>
-                    <span className="font-medium" style={titleStyle}>{award.title}</span>
-                    {(award.issuedBy || award.year) && (
+                    <span className="font-medium" style={titleStyle}>{award.title || award.issuedBy}</span>
+                    {((award.title && award.issuedBy) || award.year) && (
                       <span style={baseTextStyle}>
-                        {award.issuedBy && ` — ${award.issuedBy}`}
+                        {award.title && award.issuedBy && ` — ${award.issuedBy}`}
                         {award.year && ` (${award.year})`}
                       </span>
                     )}
@@ -509,9 +509,11 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               {achievements.map((achievement, idx) => (
                 <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline mb-1">
-                    <h3 className="font-semibold" style={titleStyle}>
-                      {achievement.title}
-                    </h3>
+                    {achievement.title && (
+                      <h3 className="font-semibold" style={titleStyle}>
+                        {achievement.title}
+                      </h3>
+                    )}
                     {achievement.date && (
                       <span className="text-sm" style={baseTextStyle}>
                         {formatDate(achievement.date)}
@@ -537,11 +539,11 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               {publications.map((pub, idx) => (
                 <div key={idx} className="mb-3">
                   <h3 className="font-semibold flex items-center" style={titleStyle}>
-                    <span>{pub.title}</span>
+                    <span>{pub.title || pub.publicationName || pub.authors}</span>
                     {pub.url && (
-                      <a 
-                        href={pub.url} 
-                        target="_blank" 
+                      <a
+                        href={pub.url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         style={linkIconStyle}
                         className="hover:opacity-70"
@@ -593,7 +595,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               <h2 style={headingStyle}>HOBBIES</h2>
               {hobbies.map((hobby, idx) => (
                 <div key={idx} className="mb-2">
-                  <h3 className="font-medium inline" style={titleStyle}>{hobby.name}</h3>
+                  {hobby.name && <h3 className="font-medium inline" style={titleStyle}>{hobby.name}</h3>}
                   {/* ✅ Changed to support HTML formatting */}
                   {hobby.description && (
                     <SafeHTML as="span" content={` - ${hobby.description}`} className="resume-description" />
@@ -616,8 +618,8 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div key={idx} className="flex items-start" style={baseTextStyle}>
                     <span className="mr-2">•</span>
                     <div>
-                      <span className="font-medium" style={titleStyle}>{interest.name}</span>
-                      {interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
+                      <span className="font-medium" style={titleStyle}>{interest.name || interest.category}</span>
+                      {interest.name && interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
                       {/* ✅ Changed to support HTML formatting */}
                       {interest.description && (
                         <SafeHTML content={interest.description} className="text-sm resume-description" />
@@ -641,11 +643,13 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div className="flex justify-between items-baseline">
                     <div>
                       <h3 className="font-semibold" style={titleStyle}>
-                        {vol.role}
+                        {vol.role || vol.organization}
                       </h3>
-                      <p className="text-sm" style={baseTextStyle}>
-                        {vol.organization}
-                      </p>
+                      {vol.role && (
+                        <p className="text-sm" style={baseTextStyle}>
+                          {vol.organization}
+                        </p>
+                      )}
                     </div>
                     <span className="text-sm" style={baseTextStyle}>
                       {formatDate(vol.startDate)} – {formatDate(vol.endDate)}
@@ -666,7 +670,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               {references.map((ref, idx) => (
                 <div key={idx} className="mb-3">
                   <h3 className="font-semibold" style={titleStyle}>
-                    {ref.name}
+                    {ref.name || ref.relation}
                   </h3>
                   <p className="text-sm" style={baseTextStyle}>
                     {ref.relation}
@@ -697,6 +701,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
 
                   return (
                     <div key={field.id} className="mb-2">
+                      <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[])
@@ -741,33 +746,33 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
           font-weight: 700 !important;
           color: #1a1a1a !important;
         }
-        
+
         .resume-description i,
         .resume-description em {
           font-style: italic !important;
         }
-        
+
         .resume-description u {
           text-decoration: underline !important;
         }
-        
+
         .resume-description ul {
           list-style-type: disc;
           padding-left: 1.5rem;
           margin-top: 0.5rem;
         }
-        
+
         .resume-description ol {
           list-style-type: decimal;
           padding-left: 1.5rem;
           margin-top: 0.5rem;
         }
-        
+
         .resume-description li {
           margin-bottom: 0.25rem;
         }
       `}</style>
-      
+
       <AutoPaginator onPageCountChange={onPageCountChange}>
         {sectionOrder.map((section, idx) => (
           <React.Fragment key={idx}>{renderSection(section)}</React.Fragment>
