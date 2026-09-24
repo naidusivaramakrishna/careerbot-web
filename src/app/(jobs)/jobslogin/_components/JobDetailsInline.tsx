@@ -246,10 +246,13 @@ export default function JobDetailsInline({ job, onBack, onSaveToggle, onApplyCli
     toast.info("Thanks for reporting. We'll look into it.");
   };
 
+  // Same as JobCard.handleExternalApplyClick: opening the external posting is
+  // not an application. The record is written by JobsContents'
+  // handleConfirmApplied only if the user answers "Yes" to "Did you apply?"
+  // (onApplyClick → markPendingApply); recording here left a phantom Applied
+  // entry that "No, I didn't apply" never removed.
   const handleExternalApplyClick = () => {
     toast.success(`Redirecting to ${job.source || "Company Site"}…`);
-    recordJobApplication(job.id, job.title, job.company, job.url || job.application_url || "", userId);
-    setIsApplied(true);
     onApplyClick?.();
   };
 
