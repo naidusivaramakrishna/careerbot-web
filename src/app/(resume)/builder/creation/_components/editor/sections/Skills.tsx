@@ -12,23 +12,6 @@ import { toast } from "sonner";
 import { getSkillsForDomain, DOMAIN_SKILLS, type SkillCategory } from "@/config/domainSkills";
 import logger from "@/lib/logger";
 
-// Domains that should include general skill categories (programming_languages, frameworks, soft_skills, etc.)
-// Only truly technical domains that write code need these categories
-const DOMAINS_WITH_GENERAL_CATEGORIES = new Set([
-  'software_engineering',
-  'cybersecurity',
-  'research_scholar',
-]);
-
-// General skill categories that exist in all domains
-const GENERAL_CATEGORIES = new Set([
-  'programming_languages',
-  'frameworks',
-  'soft_skills',
-  'project_management',
-  'marketing_sales',
-]);
-
 const CATEGORY_KEY_MAP: Record<string, string> = {
   programming_languages: "programmingLanguages",
   frameworks: "frameworks",
@@ -123,7 +106,6 @@ const Skills: React.FC = () => {
   const nameInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const skillsInputRefs = useRef<Record<string, TechnologyChipsInputHandle | null>>({});
   const latestCustomIdRef = useRef<string | null>(null);
-  const prevDomainRef = useRef<string | undefined>(undefined);
 
   // Load domain-specific skill categories based on selected template domain
   // templateDomain is set when template is applied, defaults to 'general'
@@ -151,56 +133,6 @@ const Skills: React.FC = () => {
     }
   }, [resumeId, resumeData.templateDomain, setResumeData]);
 
-  // Reset skills when domain changes - only depend on rawDomain to avoid cycles
-  useEffect(() => {
-    if (prevDomainRef.current && prevDomainRef.current !== rawDomain) {
-      // Domain has changed, reset categorized skills to only include current domain's categories
-      const currentDomainKeys = SKILL_CATEGORIES.map((cat) => cat.key);
-      // Filter custom categories to only keep ones from current domain
-      const allCustomCategories = resumeData.categorizedSkills?.custom_categories || [];
-      const filteredCustomCategories = allCustomCategories.filter((cat) => {
-        const catId = (cat.id || '').toLowerCase();
-        const isCustomBackendCategory = catId.startsWith('custom_backend_');
-
-        if (isCustomBackendCategory) {
-          const originalKey = catId.replace('custom_backend_', '');
-          const isFromCurrentDomain = SKILL_CATEGORIES.some((c) => c.key === originalKey);
-          logger.info('Filtering custom category:', { catId, originalKey, isFromCurrentDomain, currentDomain: rawDomain });
-          return isFromCurrentDomain;
-        }
-        // Keep user-created custom categories (no custom_backend_ prefix)
-        return true;
-      });
-      logger.info('Domain change - filtered custom categories from', allCustomCategories.length, 'to', filteredCustomCategories.length);
-
-      const newCategorizedSkills: Record<string, string[] | CustomCategory[] | Record<string, string> | undefined> = {
-        programming_languages: [],
-        frameworks: [],
-        soft_skills: [],
-        project_management: [],
-        marketing_sales: [],
-        custom_categories: filteredCustomCategories,
-        hidden_predefined_categories: [],
-        skill_id_map: {},
-      };
-
-      // Initialize all current domain's category skills as empty arrays
-      currentDomainKeys.forEach((key) => {
-        if (!(key in newCategorizedSkills)) {
-          newCategorizedSkills[key] = [];
-        }
-      });
-
-      setResumeData({
-        ...resumeData,
-        categorizedSkills: newCategorizedSkills as typeof resumeData.categorizedSkills,
-        skills: [],
-      });
-      toast.info("Skills cleared for new domain. Please add skills relevant to this domain.");
-    }
-    prevDomainRef.current = rawDomain;
-  }, [rawDomain]);
-
   useEffect(() => {
     const id = latestCustomIdRef.current;
     if (id && nameInputRefs.current[id]) {
@@ -209,8 +141,11 @@ const Skills: React.FC = () => {
     }
   });
 
-  // Filter categorizedSkills to only include categories for the current domain
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // The domain decides which predefined categories are *displayed*
+  // (SKILL_CATEGORIES below). Stored data is never filtered: every edit spreads
+  // this object into updateSkills, so dropping keys or skill_id_map entries here
+  // would erase other categories' skills (and send [] for them on save) and
+  // break id lookups for custom-category deletes.
   const getFilteredCategorizedSkills = (): typeof resumeData.categorizedSkills => {
     const defaultSkills: typeof resumeData.categorizedSkills = {
       programming_languages: [],
@@ -223,61 +158,15 @@ const Skills: React.FC = () => {
       skill_id_map: {},
     };
     const allSkills = resumeData.categorizedSkills || defaultSkills;
-    const currentDomainCategoryKeys = SKILL_CATEGORIES.map((cat) => cat.key);
-    const allPredefinedKeys = new Set(currentDomainCategoryKeys);
-
-    // Determine if this domain should include general categories
-    const includeGeneralCategories = DOMAINS_WITH_GENERAL_CATEGORIES.has(rawDomain);
-
-    // Start with base structure
-    const filtered: Record<string, string[] | CustomCategory[] | Record<string, string> | undefined> = {
+    const withDomainKeys: Record<string, unknown> = {
+      ...allSkills,
       custom_categories: allSkills.custom_categories || [],
-      hidden_predefined_categories: [],
-      skill_id_map: {},
+      skill_id_map: allSkills.skill_id_map || {},
     };
-
-    // Add general categories only if domain supports them
-    if (includeGeneralCategories) {
-      filtered.programming_languages = [];
-      filtered.frameworks = [];
-      filtered.soft_skills = [];
-      filtered.project_management = [];
-      filtered.marketing_sales = [];
-    }
-
-    // Initialize all current domain's category skills (empty arrays)
-    currentDomainCategoryKeys.forEach((key) => {
-      // Only add if it's not a general category, OR if this domain includes general categories
-      if (!GENERAL_CATEGORIES.has(key) || includeGeneralCategories) {
-        filtered[key] = allSkills[key] || [];
-      }
+    SKILL_CATEGORIES.forEach((cat) => {
+      if (!Array.isArray(withDomainKeys[cat.key])) withDomainKeys[cat.key] = [];
     });
-
-    // Filter skill_id_map to only include skills for current domain categories
-    const skillIdMap = allSkills.skill_id_map || {};
-    const filteredSkillIdMap: Record<string, string> = {};
-    Object.entries(skillIdMap).forEach(([skillKey, skillId]) => {
-      const [categoryKey] = skillKey.split(':');
-      if (allPredefinedKeys.has(categoryKey)) {
-        // Keep skill only if category should be displayed
-        if (!GENERAL_CATEGORIES.has(categoryKey) || includeGeneralCategories) {
-          filteredSkillIdMap[skillKey] = skillId;
-        }
-      }
-    });
-    filtered.skill_id_map = filteredSkillIdMap;
-
-    // DEBUG: Log what we're filtering
-    const oldKeys = Object.keys(allSkills).filter(
-      (k) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map', 'programming_languages', 'frameworks', 'soft_skills', 'project_management', 'marketing_sales'].includes(k) && !allPredefinedKeys.has(k)
-    );
-    if (oldKeys.length > 0) {
-      logger.warn('Filtered out old domain categories:', oldKeys, 'Domain:', rawDomain);
-    }
-
-    logger.debug('Filtered categorized skills:', { domain: rawDomain, includeGeneralCategories, keys: Object.keys(filtered) });
-
-    return filtered as typeof resumeData.categorizedSkills;
+    return withDomainKeys as typeof resumeData.categorizedSkills;
   };
 
   const defaultCategorizedSkills: typeof resumeData.categorizedSkills = {
@@ -420,14 +309,14 @@ const Skills: React.FC = () => {
     latestCustomIdRef.current = newEntry.id;
     updateSkills({
       ...categorizedSkills,
-      custom_categories: [...customCategories, newEntry],
+      custom_categories: [...allCustomCategories, newEntry],
     });
   };
 
   const handleCustomCategoryNameChange = (id: string, name: string) => {
     updateSkills({
       ...categorizedSkills,
-      custom_categories: customCategories.map((c) => (c.id === id ? { ...c, name } : c)),
+      custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, name } : c)),
     });
   };
 
@@ -447,7 +336,7 @@ const Skills: React.FC = () => {
       toast.error(`"${trimmed}" category already exists`);
       updateSkills({
         ...categorizedSkills,
-        custom_categories: customCategories.map((c) => (c.id === id ? { ...c, name: "" } : c)),
+        custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, name: "" } : c)),
       });
       nameInputRefs.current[id]?.focus();
     }
@@ -456,7 +345,7 @@ const Skills: React.FC = () => {
   const handleCustomCategorySkillsChange = (id: string, skills: string[]) => {
     updateSkills({
       ...categorizedSkills,
-      custom_categories: customCategories.map((c) => (c.id === id ? { ...c, skills } : c)),
+      custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, skills } : c)),
     });
   };
 
@@ -477,7 +366,7 @@ const Skills: React.FC = () => {
     }
     updateSkills({
       ...categorizedSkills,
-      custom_categories: customCategories.filter((c) => c.id !== id),
+      custom_categories: allCustomCategories.filter((c) => c.id !== id),
     });
     toast.success("Category deleted successfully.");
   };
