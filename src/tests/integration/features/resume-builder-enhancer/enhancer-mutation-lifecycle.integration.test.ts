@@ -29,31 +29,33 @@ describe("enhancer canonical mutation lifecycle", () => {
   it("persists Education save/apply/undo snapshots across a fresh GET without duplicates", async () => {
     let state = clone(pendingEducationSnapshot);
     let applyCount = 0;
-    useHandler(
-      http.get("*/api/v1/resume/enhance/:enhancedId", () => HttpResponse.json(state)),
-      http.patch("*/api/v1/resume/enhance/:enhancedId", () => {
-        // Exact request-body shape is covered by enhancerApi.contract.test.ts.
-        // This lifecycle test models the server-owned state transition instead.
-        state = {
-          ...state,
-          revision: state.revision + 1,
-          enhanced_data: {
-            ...state.enhanced_data,
-            education: [{ ...state.enhanced_data.education[0], endDate: "May 2025" }],
-          },
-        } as typeof state;
-        return HttpResponse.json(state);
-      }),
-      http.post("*/api/v1/resume/enhance/apply", () => {
-        applyCount += 1;
-        state = clone(fixedEducationSnapshot);
-        return HttpResponse.json({ ...state, was_applied: applyCount === 1, already_applied: applyCount > 1 });
-      }),
-      http.post("*/api/v1/resume/enhance/delete-fix", () => {
-        state = clone(undoneEducationSnapshot);
-        return HttpResponse.json(state);
-      }),
-    );
+    // useHandler registers one handler per call (server.use(handler) in
+    // msw-server.ts). Passing all four handlers to a single call would only
+    // register the first — the rest are silently dropped as extra arguments —
+    // leaving the PATCH/POST routes below unhandled.
+    useHandler(http.get("*/api/v1/resume/enhance/:enhancedId", () => HttpResponse.json(state)));
+    useHandler(http.patch("*/api/v1/resume/enhance/:enhancedId", () => {
+      // Exact request-body shape is covered by enhancerApi.contract.test.ts.
+      // This lifecycle test models the server-owned state transition instead.
+      state = {
+        ...state,
+        revision: state.revision + 1,
+        enhanced_data: {
+          ...state.enhanced_data,
+          education: [{ ...state.enhanced_data.education[0], endDate: "May 2025" }],
+        },
+      } as typeof state;
+      return HttpResponse.json(state);
+    }));
+    useHandler(http.post("*/api/v1/resume/enhance/apply", () => {
+      applyCount += 1;
+      state = clone(fixedEducationSnapshot);
+      return HttpResponse.json({ ...state, was_applied: applyCount === 1, already_applied: applyCount > 1 });
+    }));
+    useHandler(http.post("*/api/v1/resume/enhance/delete-fix", () => {
+      state = clone(undoneEducationSnapshot);
+      return HttpResponse.json(state);
+    }));
 
     const initial = await getEnhancedResume("enhanced-test-1");
     expect(initial.ats_score?.final_score).toBe(60);
