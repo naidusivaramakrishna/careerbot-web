@@ -95,16 +95,12 @@ const References: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
+    // See Internships.tsx's sibling effect: an id-less entry is genuinely
+    // new and must stay id-less — backfilling by array POSITION is unsound.
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
-      const prevItems = (prev.references ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.references) === JSON.stringify(merged)) return prev;
-      return { ...prev, references: merged };
+      if (JSON.stringify(prev.references) === JSON.stringify(allEntries)) return prev;
+      return { ...prev, references: allEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -112,9 +108,14 @@ const References: React.FC = () => {
   useEffect(() => {
     if (!resumeData.references?.length) return;
     setSavedEntries(prev => {
+      // See WorkExperience.tsx's sibling effect: don't clear editingEntries
+      // when re-filtering still yields nothing valid, or both it and
+      // savedEntries end up empty and the modal renders no fields at all.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.references!.filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.references!.filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.references!.length) return prev;
@@ -247,14 +248,14 @@ const References: React.FC = () => {
                   <div className="text-base font-bold text-gray-900">
                     {reference.name || "No name"}
                   </div>
-                  
+
                   {/* Relation */}
                   {reference.relation && (
                     <div className="text-sm text-gray-700">
                       {reference.relation}
                     </div>
                   )}
-                  
+
                   {/* Contact */}
                   {reference.contact && (
                     <div className="text-xs text-gray-600">
@@ -280,8 +281,8 @@ const References: React.FC = () => {
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -309,7 +310,7 @@ const References: React.FC = () => {
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
           {/* Left Side: Scrollable Form Fields Section */}
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >

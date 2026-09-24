@@ -174,9 +174,12 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
         ...((atsScore?.suggestions as unknown[]) || (atsScore?.Suggestions as unknown[]) || (numericBreakdown.Suggestions as unknown[]) || []),
         ...Object.entries(atsDisplayRaw?.action_items ?? {}).flatMap(([section, actionItems]) =>
           Array.isArray(actionItems)
-            ? actionItems.map((actionItem) => isObject(actionItem)
-              ? { ...actionItem, section: typeof actionItem.section === "string" ? actionItem.section : section }
-              : actionItem)
+            ? actionItems
+              .filter((actionItem): actionItem is Record<string, unknown> => isObject(actionItem))
+              .map((actionItem) => ({
+                ...actionItem,
+                section: typeof actionItem.section === "string" ? actionItem.section : section,
+              }))
             : []
         ),
       ],

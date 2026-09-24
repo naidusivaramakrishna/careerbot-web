@@ -14,7 +14,7 @@ interface Props {
 
 const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
   const { resumeStyle, sectionOrder } = useResume();
-  
+
   const {
     personalInfo,
     professionalSummary,
@@ -161,10 +161,10 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                 )}
                 {/* {personalInfo.portifolioUrl && (
                   <div className="flex items-center gap-2">
-                    <a 
-                      href={personalInfo.portifolioUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={personalInfo.portifolioUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={linkStyle}
                       className="hover:underline"
                     >
@@ -177,10 +177,10 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               <div className="space-y-0.5">
                 {personalInfo.portfolioUrl && (
                   <div className="flex items-center gap-2">
-                    <a 
-                      href={personalInfo.portfolioUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={personalInfo.portfolioUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={linkStyle}
                       className="hover:underline"
                     >
@@ -289,9 +289,9 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                     <div className="font-bold flex items-center" style={titleStyle}>
                       <span>{proj.title}</span>
                       {proj.link && (
-                        <a 
-                          href={proj.link} 
-                          target="_blank" 
+                        <a
+                          href={proj.link}
+                          target="_blank"
                           rel="noopener noreferrer"
                           style={linkIconStyle}
                           className="hover:opacity-70"
@@ -330,17 +330,17 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
       //         <h2 className="mb-3" style={headingStyle}>
       //           SKILLS
       //         </h2>
-              
+
       //         {data.categorizedSkills ? (
       //           <div className="space-y-3">
       //             {Object.entries(data.categorizedSkills).map(([category, categorySkills]) => {
       //               if (!categorySkills || categorySkills.length === 0) return null;
-                    
+
       //               const categoryLabel = category
       //                 .split('_')
       //                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       //                 .join(' ');
-                    
+
       //               return (
       //                 <div key={category}>
       //                   <div className="font-semibold mb-1" style={baseTextStyle}>
@@ -357,7 +357,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
       //             ))}
       //           </ul>
       //         )}
-              
+
       //         <hr className="border-t border-gray-400 mt-4" />
       //       </section>
       //     )
@@ -413,7 +413,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div key={idx} className="mb-4 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-1">
                     <h3 className="font-bold" style={titleStyle}>
-                      {intern.role}
+                      {intern.role || intern.company}
                     </h3>
                     <span className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
                       {formatDate(intern.startDate)} – {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
@@ -445,8 +445,8 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <span className="mr-2" style={baseTextStyle}>•</span>
                   <div style={baseTextStyle}>
                     <div>
-                      <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      {(cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
+                      <span className="font-medium" style={titleStyle}>{cert.name || cert.issuedBy || cert.issuer}</span>
+                      {cert.name && (cert.issuedBy || cert.issuer) && <span style={baseTextStyle}> - {cert.issuedBy || cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
                       {(cert.year || cert.issueDate) && <span>Issued: {cert.year || cert.issueDate}</span>}
@@ -479,9 +479,11 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               {achievements.map((achievement, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-1">
-                    <span className="font-semibold" style={titleStyle}>
-                      {achievement.title}
-                    </span>
+                    {achievement.title && (
+                      <span className="font-semibold" style={titleStyle}>
+                        {achievement.title}
+                      </span>
+                    )}
                     {achievement.date && (
                       <span className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
                         {formatDate(achievement.date)}
@@ -510,9 +512,9 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div key={idx} className="mb-2 flex items-start" style={baseTextStyle}>
                   <span className="mr-2">•</span>
                   <div>
-                    <span className="font-semibold" style={titleStyle}>{award.title}</span>
+                    <span className="font-semibold" style={titleStyle}>{award.title || award.issuedBy}</span>
                     <span style={baseTextStyle}>
-                      {award.issuedBy && <> — {award.issuedBy}</>}
+                      {award.title && award.issuedBy && <> — {award.issuedBy}</>}
                       {award.year && <> ({award.year})</>}
                     </span>
                   </div>
@@ -535,11 +537,13 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <div className="flex justify-between items-baseline">
                     <div>
                       <div className="font-bold" style={titleStyle}>
-                        {vol.role}
+                        {vol.role || vol.organization}
                       </div>
-                      <div className="text-sm" style={baseTextStyle}>
-                        {vol.organization}
-                      </div>
+                      {vol.role && (
+                        <div className="text-sm" style={baseTextStyle}>
+                          {vol.organization}
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
                       {formatDate(vol.startDate)} – {formatDate(vol.endDate)}
@@ -561,7 +565,9 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               </h2>
               {hobbies.map((hobby, idx) => (
                 <div key={idx} className="mb-2">
-                  <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
+                  {hobby.name && (
+                    <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
+                  )}
                   {/* ✅ Changed to support HTML formatting */}
                   {hobby.description && (
                     <SafeHTML as="span" content={` — ${hobby.description}`} className="resume-description" />
@@ -583,8 +589,8 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               </h2>
               {interests.map((interest, idx) => (
                 <div key={idx} className="mb-2">
-                  <span className="font-semibold" style={titleStyle}>{interest.name}</span>
-                  {interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
+                  <span className="font-semibold" style={titleStyle}>{interest.name || interest.category}</span>
+                  {interest.name && interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
                   {/* ✅ Changed to support HTML formatting */}
                   {interest.description && (
                     <SafeHTML as="span" content={` — ${interest.description}`} className="resume-description" />
@@ -629,11 +635,11 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               {publications.map((pub, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="font-semibold flex items-center" style={titleStyle}>
-                    <span>{pub.title}</span>
+                    <span>{pub.title || pub.publicationName || pub.authors}</span>
                     {pub.url && (
-                      <a 
-                        href={pub.url} 
-                        target="_blank" 
+                      <a
+                        href={pub.url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         style={linkIconStyle}
                         className="hover:opacity-70"
@@ -667,9 +673,9 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               {references.map((ref, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="font-semibold" style={titleStyle}>
-                    {ref.name}
+                    {ref.name || ref.relation}
                   </div>
-                  {ref.relation && <div className="text-sm" style={baseTextStyle}>{ref.relation}</div>}
+                  {ref.name && ref.relation && <div className="text-sm" style={baseTextStyle}>{ref.relation}</div>}
                   {ref.contact && <div className="text-sm" style={baseTextStyle}>{ref.contact}</div>}
                 </div>
               ))}
@@ -694,6 +700,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
 
                   return (
                     <div key={field.id} className="mb-2">
+                      <span className="font-semibold" style={baseTextStyle}>{field.fieldName}: </span>
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[])
@@ -715,7 +722,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                       ) : field.fieldType === "textarea" ? (
                         <SafeHTML content={field.value as string} className="resume-description" />
                       ) : (
-                        <div style={baseTextStyle}>{field.value as string}</div>
+                        <span style={baseTextStyle}>{field.value as string}</span>
                       )}
                     </div>
                   );
@@ -737,33 +744,33 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
           font-weight: 700 !important;
           color: #1a1a1a !important;
         }
-        
+
         .resume-description i,
         .resume-description em {
           font-style: italic !important;
         }
-        
+
         .resume-description u {
           text-decoration: underline !important;
         }
-        
+
         .resume-description ul {
           list-style-type: disc;
           padding-left: 1.5rem;
           margin-top: 0.5rem;
         }
-        
+
         .resume-description ol {
           list-style-type: decimal;
           padding-left: 1.5rem;
           margin-top: 0.5rem;
         }
-        
+
         .resume-description li {
           margin-bottom: 0.25rem;
         }
       `}</style>
-      
+
       <AutoPaginator onPageCountChange={onPageCountChange}>
         {sectionOrder.map((section, idx) => (
           <React.Fragment key={idx}>{renderSection(section)}</React.Fragment>
