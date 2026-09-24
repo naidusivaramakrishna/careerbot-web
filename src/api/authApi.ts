@@ -250,8 +250,11 @@ export interface VerifyEmailRequest {
   otp: string;
 }
 
+// careerbot-api POST /auth/email/verify answers 200 {"message": "..."} with no
+// `success` field (app/api/v1/endpoints/auth.py verify_email); failures are
+// non-2xx. `success` stays optional for forward compatibility only.
 export interface VerifyEmailResponse {
-  success: boolean;
+  success?: boolean;
   message: string;
 }
 
