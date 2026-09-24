@@ -27,8 +27,22 @@ vi.mock('@/api/jobsApi', () => ({
 vi.mock('@/app/(jobs)/jobslogin/_components/sidebar/JobsRightSidebar', () => ({ default: () => null }));
 vi.mock('@/app/(jobs)/jobslogin/_components/chat/NancyChat', () => ({ default: () => null }));
 vi.mock('@/app/(jobs)/jobslogin/_components/JobsFilterSidebar', () => ({ default: () => null }));
-vi.mock('@/app/(jobs)/jobslogin/_components/sidebar/JobList', () => ({ default: () => null }));
-vi.mock('@/app/(jobs)/jobslogin/_components/JobDetailsInline', () => ({ default: () => null }));
+// Minimal stand-ins that expose the callbacks JobsContents wires up.
+vi.mock('@/app/(jobs)/jobslogin/_components/sidebar/JobList', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default: ({ jobs, onViewDetails }: any) => (
+    <button type="button" onClick={() => onViewDetails?.(jobs[0])}>view first job</button>
+  ),
+}));
+vi.mock('@/app/(jobs)/jobslogin/_components/JobDetailsInline', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default: ({ job, onApplyClick }: any) => (
+    <div>
+      <span data-testid="details-applied">{String(job.is_applied)}</span>
+      <button type="button" onClick={() => onApplyClick?.()}>inline apply</button>
+    </div>
+  ),
+}));
 
 import JobsContents from '@/app/(jobs)/jobslogin/_components/JobsContents';
 
@@ -123,6 +137,40 @@ describe('JobsContents — "Did you apply?" dialog keyboard handling', () => {
     render(<JobsContents />);
     const yes = await screen.findByText('Yes, I applied!');
     fireEvent.keyDown(yes, { key: 'Escape' });
+    expect(screen.queryByText('Did you apply?')).not.toBeInTheDocument();
+  });
+});
+
+describe('JobsContents — confirming an application from the inline details panel', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    mockGetSmartMatchedJobs.mockReset();
+    mockGetSmartMatchedJobs.mockResolvedValue({
+      ...EMPTY_SCORED,
+      total: 1,
+      jobs: [{ job: { id: 'job-9', title: 'Frontend Engineer', company: 'Acme', url: 'https://careers.example.com/9' }, match: { score: 80 } }],
+    });
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('marks the open job as applied only after "Yes, I applied!"', async () => {
+    render(<JobsContents />);
+    fireEvent.click(await screen.findByText('view first job'));
+    expect(screen.getByTestId('details-applied')).toHaveTextContent('false');
+
+    // Clicking the external Apply link marks a pending apply; returning to
+    // the tab (window focus) opens the confirmation dialog.
+    fireEvent.click(screen.getByText('inline apply'));
+    expect(screen.getByTestId('details-applied')).toHaveTextContent('false');
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    fireEvent.click(await screen.findByText('Yes, I applied!'));
+
+    expect(screen.getByTestId('details-applied')).toHaveTextContent('true');
     expect(screen.queryByText('Did you apply?')).not.toBeInTheDocument();
   });
 });

@@ -861,6 +861,10 @@ export default function JobsContents() {
   const handleConfirmApplied = () => {
     if (!pendingApplyJob) return;
     recordJobApplication(pendingApplyJob.id, pendingApplyJob.title, pendingApplyJob.company, pendingApplyJob.url, userId);
+    // If the confirmed job is the one open in the inline details panel, show
+    // it as applied there (JobDetailsInline syncs from job.is_applied).
+    const confirmedId = pendingApplyJob.id;
+    setDetailsJob((current) => (current?.id === confirmedId ? { ...current, is_applied: true } : current));
     toast.success("Marked as applied!");
     clearPendingApply();
     fetchAppliedJobsList();

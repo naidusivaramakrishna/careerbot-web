@@ -179,6 +179,11 @@ export default function JobDetailsInline({ job, onBack, onSaveToggle, onApplyCli
   const { userId } = useCurrentUserId();
   const [isSaved, setIsSaved] = useState(() => isJobSaved(job.id, userId));
   const [isApplied, setIsApplied] = useState(!!job.is_applied);
+  // An external application is confirmed later, by JobsContents' "Did you
+  // apply?" dialog, which marks the open job is_applied; reflect that here.
+  useEffect(() => {
+    if (job.is_applied) setIsApplied(true);
+  }, [job.is_applied]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logoError, setLogoError] = useState(false);

@@ -81,4 +81,16 @@ describe('JobDetailsInline — external Apply Now', () => {
     expect(screen.getByRole('link', { name: /apply now/i })).toBeInTheDocument();
     expect(screen.queryByText('Applied')).not.toBeInTheDocument();
   });
+
+  // After "Yes, I applied!", JobsContents re-passes the open job with
+  // is_applied: true; the panel must switch to its Applied state.
+  it('shows Applied once the parent marks the job is_applied', () => {
+    const { rerender } = render(<JobDetailsInline job={externalJob} onBack={vi.fn()} />);
+    expect(screen.queryByText('Applied')).not.toBeInTheDocument();
+
+    rerender(<JobDetailsInline job={{ ...externalJob, is_applied: true }} onBack={vi.fn()} />);
+
+    expect(screen.getByText('Applied')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /apply now/i })).not.toBeInTheDocument();
+  });
 });
