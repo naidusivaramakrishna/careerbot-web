@@ -10,7 +10,7 @@ import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/
 import { ResumeProvider } from "@/app/(resume)/builder/creation/_context/ResumeContext";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
-import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import { cacheBuilderResume, rememberEnhancedResumeId } from "./atsReportCache";
 import type { EnhancedResumeHistoryItem } from "@/types/api.types";
 
 
@@ -40,48 +40,6 @@ interface ResumeScoreData {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasResumeContent(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object") return false;
-  const data = value as Record<string, unknown>;
-  return [
-    "contact",
-    "personal_info",
-    "personalInfo",
-    "llm_data",
-    "work_experience",
-    "experience",
-    "workExperience",
-    "education",
-    "technical_skills",
-    "categorizedSkills",
-  ].some((key) => data[key] != null);
-}
-
-function cacheBuilderResume(enhancedResumeId: string, sourceData: unknown, atsScore?: unknown) {
-  if (!hasResumeContent(sourceData)) return;
-
-  const mappedData = mapParserOutputToBuilderData(sourceData);
-  localStorage.setItem(
-    "cached_resume_data",
-    JSON.stringify({
-      resumeId: enhancedResumeId,
-      data: { ...mappedData, id: enhancedResumeId, ...(atsScore ? { ats_score: atsScore } : {}) },
-    })
-  );
-}
-
-function rememberEnhancedResumeId(enhancedResumeId: string) {
-  localStorage.setItem("current_resume_id", enhancedResumeId);
-
-  const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
-  if (!existingIds.includes(enhancedResumeId)) {
-    localStorage.setItem(
-      "enhanced_resume_ids",
-      JSON.stringify([...existingIds, enhancedResumeId])
-    );
-  }
 }
 
 /* ─── HELPERS ─────────────────────────────────────────── */
@@ -285,7 +243,6 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
           resumeId={resumeId}
           initialTab="Score"
           defaultOpen={true}
-          atsFixMode
         />
         <main className="min-w-0 flex-1 bg-gray-50">
           <PreviewPanel
@@ -295,8 +252,6 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
             }}
             resumeId={resumeId}
             isEnhancedResume
-            hideJobMatch
-            atsMinimalToolbar
           />
         </main>
       </div>
@@ -326,7 +281,6 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <TemplatesTab
                 resumeId={resumeId}
-                isEnhancedResume
                 onTemplateSelect={() => setIsTemplatesOpen(false)}
               />
             </div>

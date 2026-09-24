@@ -14,9 +14,9 @@ describe('normalizeResumeScanError', () => {
     ).toBe("You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.");
   });
 
-  it('labels a backend 500 as an ATS analysis failure instead of an upload failure', () => {
+  it('does not claim the resume was parsed for a raw 500 (the failing step is unknown here)', () => {
     expect(
       normalizeResumeScanError({ success: false, error: 'Internal Server Error' })
-    ).toMatch(/ATS analysis could not be completed after your resume was parsed/i);
+    ).not.toMatch(/after your resume was parsed/i);
   });
 });

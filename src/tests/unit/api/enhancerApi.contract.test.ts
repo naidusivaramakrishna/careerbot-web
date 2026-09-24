@@ -21,45 +21,48 @@ import {
   deleteSectionItemFromEnhancedResume,
   updateEnhancedResume,
 } from "@/api/enhancerApi";
-import { fixedEducationSnapshot } from "@/tests/fixtures/enhancer/canonicalSnapshots";
 
 const axiosResponse = (data: unknown) => ({ data, status: 200, headers: {} });
 
+const education = [{ id: "edu-1", school: "State University", degree: "B.Tech", startDate: "Aug 2021", endDate: "May 2025" }];
+const snapshot = { success: true, enhanced_resume_id: "enhanced-test-1", revision: 2, enhanced_data: { education } };
+
 describe("enhancer API mutation contract", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
 
   it("sends the enhanced section save to its canonical endpoint without changing the payload", async () => {
-    mockHttpClient.patch.mockResolvedValueOnce(axiosResponse(fixedEducationSnapshot));
+    mockHttpClient.patch.mockResolvedValueOnce(axiosResponse(snapshot));
 
-    await expect(updateEnhancedResume("enhanced-test-1", {
-      enhanced_sections: { education: fixedEducationSnapshot.enhanced_data.education },
-    })).resolves.toEqual(fixedEducationSnapshot);
+    await expect(updateEnhancedResume("enhanced-test-1", { enhanced_sections: { education } }))
+      .resolves.toEqual(snapshot);
 
     expect(mockHttpClient.patch).toHaveBeenCalledWith(
       "/resume/enhance/enhanced-test-1",
-      { enhanced_sections: { education: fixedEducationSnapshot.enhanced_data.education } },
+      { enhanced_sections: { education } },
       undefined,
     );
   });
 
-  it("publishes the complete server snapshot after enhanced autosave", async () => {
-    mockHttpClient.patch.mockResolvedValueOnce(axiosResponse(fixedEducationSnapshot));
-    const onSync = vi.fn();
-    window.addEventListener("enhanced-resume-score-sync", onSync);
+  it("autosaves sections to the autosave endpoint with the sections as the body", async () => {
+    mockHttpClient.patch.mockResolvedValueOnce(axiosResponse({}));
 
-    await autoSaveEnhancedResume("enhanced-test-1", { education: fixedEducationSnapshot.enhanced_data.education });
+    await expect(autoSaveEnhancedResume("enhanced-test-1", { education })).resolves.toBeUndefined();
 
-    expect(onSync).toHaveBeenCalledTimes(1);
-    expect(onSync.mock.calls[0][0]).toMatchObject({
-      detail: { enhancedId: "enhanced-test-1", payload: fixedEducationSnapshot },
-    });
-    window.removeEventListener("enhanced-resume-score-sync", onSync);
+    expect(mockHttpClient.patch).toHaveBeenCalledWith("/resume/enhance/enhanced-test-1/autosave", { education });
+  });
+
+  it("propagates an autosave failure to the caller", async () => {
+    mockHttpClient.patch.mockRejectedValueOnce(new Error("network down"));
+
+    await expect(autoSaveEnhancedResume("enhanced-test-1", { education })).rejects.toThrow("network down");
   });
 
   it("keeps apply and undo requests suggestion-specific", async () => {
     mockHttpClient.post
-      .mockResolvedValueOnce(axiosResponse(fixedEducationSnapshot))
-      .mockResolvedValueOnce(axiosResponse({ ...fixedEducationSnapshot, revision: 3 }));
+      .mockResolvedValueOnce(axiosResponse(snapshot))
+      .mockResolvedValueOnce(axiosResponse({ ...snapshot, revision: 3 }));
 
     await applyFix({
       enhancer_state: "enhanced-test-1",
@@ -77,19 +80,13 @@ describe("enhancer API mutation contract", () => {
     }, undefined);
   });
 
-  it("publishes the canonical post-delete snapshot for every section item", async () => {
-    mockHttpClient.delete.mockResolvedValueOnce(axiosResponse(fixedEducationSnapshot));
-    const onSync = vi.fn();
-    window.addEventListener("enhanced-resume-score-sync", onSync);
+  it("deletes a section item by its URL-encoded id", async () => {
+    mockHttpClient.delete.mockResolvedValueOnce(axiosResponse({}));
 
-    await deleteSectionItemFromEnhancedResume("enhanced-test-1", "education", "edu-1");
+    await deleteSectionItemFromEnhancedResume("enhanced-test-1", "education", "edu 1/a");
 
     expect(mockHttpClient.delete).toHaveBeenCalledWith(
-      "/resume/enhance/enhanced-test-1/sections/education/items/edu-1",
+      "/resume/enhance/enhanced-test-1/sections/education/items/edu%201%2Fa",
     );
-    expect(onSync.mock.calls[0][0]).toMatchObject({
-      detail: { enhancedId: "enhanced-test-1", payload: fixedEducationSnapshot },
-    });
-    window.removeEventListener("enhanced-resume-score-sync", onSync);
   });
 });

@@ -15,7 +15,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 // for rendering, so binary image data must not be duplicated into browser
 // storage (doing so can exceed the ~5 MB localStorage quota after a successful
 // backend/AI response and incorrectly surface as a parsing failure).
-function withoutEmbeddedImages(value: unknown, key = ""): unknown {
+export function withoutEmbeddedImages(value: unknown, key = ""): unknown {
   const imageKey = /(?:^|_)(?:profile_?)?(?:picture|photo|image|avatar|thumbnail)(?:_|$)|base64|binary/i.test(key);
   if (typeof value === "string") {
     if (
@@ -58,16 +58,28 @@ function hasScoreProjectionContract(value: unknown): boolean {
     Object.prototype.hasOwnProperty.call(candidate, "estimated_score_after_fixes")
   ));
 }
+const SERVER_ERROR_PATTERN = /internal server error|status code 500|http 500/i;
+const PARSE_SERVER_ERROR_MESSAGE =
+  "We could not read your resume right now. Please try again in a moment. If the problem continues, contact support with the time of this attempt.";
+const ENHANCE_SERVER_ERROR_MESSAGE =
+  "ATS analysis could not be completed after your resume was parsed. Please try again in a moment. If the problem continues, contact support with the time of this attempt.";
+const SCANNED_RESUME_MESSAGE =
+  "This appears to be a scanned or image-based resume. Please upload a PDF or DOCX with selectable text.";
+
 function parserFailureMessage(parsed: unknown): string | null {
   if (!isObject(parsed)) return "The resume parser returned an invalid response. Please upload the file again.";
 
   const parsedData = isObject(parsed.parsed_data) ? parsed.parsed_data : null;
   const needsOcr = parsed.ocr_needed === true || parsedData?.ocr_needed === true;
-  const details = [parsedData?.error, parsed.error, parsed.message]
+  // Only error fields count as details. `message` on a response without an
+  // error is usually a success note ("Resume parsed successfully").
+  const details = [parsedData?.error, parsed.error]
     .find((value): value is string => typeof value === "string" && value.trim().length > 0);
 
   if (needsOcr) {
-    return details ?? "This appears to be a scanned or image-based resume. Please upload a PDF or DOCX with selectable text.";
+    // The backend text is diagnostic (e.g. raw JSON); users get the friendly copy.
+    if (details) logApiError("POST", "parse_resume", new Error(details));
+    return SCANNED_RESUME_MESSAGE;
   }
 
   const resumeId = parsed.resume_id;
@@ -165,7 +177,13 @@ export const clearCacheForResume = async (resumeId: string) => {
 export const processResumeComplete = async (file: File) => {
   try {
     // Step 1: Parse Resume
-    const parsed = await parseResume(file);
+    let parsed;
+    try {
+      parsed = await parseResume(file);
+    } catch (parseErr) {
+      const parseMessage = (parseErr as { message?: string })?.message ?? String(parseErr);
+      throw new Error(SERVER_ERROR_PATTERN.test(parseMessage) ? PARSE_SERVER_ERROR_MESSAGE : parseMessage);
+    }
     const parserError = parserFailureMessage(parsed);
     if (parserError) throw new Error(parserError);
 
@@ -186,7 +204,7 @@ export const processResumeComplete = async (file: File) => {
           // Old local payloads do not contain the backend projection contract.
           // Force one fresh enhancement after the backend rollout.
           if (hasScoreProjectionContract(cachedPayload)) {
-            localStorage.setItem("atsAnalysisData", cached);
+            try { localStorage.setItem("atsAnalysisData", cached); } catch { /* non-fatal: still a valid cache hit */ }
             return { success: true as const, ...cachedPayload };
           }
         } catch { /* corrupted — fall through */ }
@@ -199,7 +217,7 @@ export const processResumeComplete = async (file: File) => {
         try {
           const legacyPayload = JSON.parse(legacy);
           if (legacyPayload.resume_id === resumeId && hasScoreProjectionContract(legacyPayload)) {
-            localStorage.setItem(localKey, legacy); // migrate for future hits
+            try { localStorage.setItem(localKey, legacy); } catch { /* non-fatal migration */ }
             return { success: true as const, ...legacyPayload };
           }
         } catch { /* fall through to fresh analysis */ }
@@ -207,7 +225,13 @@ export const processResumeComplete = async (file: File) => {
     }
 
     // Step 2: Enhance — now also returns the ATS breakdown
-    const enhanceResult = await enhanceResume({ resume_id: resumeId });
+    let enhanceResult;
+    try {
+      enhanceResult = await enhanceResume({ resume_id: resumeId });
+    } catch (enhanceErr) {
+      const enhanceMessage = (enhanceErr as { message?: string })?.message ?? String(enhanceErr);
+      throw new Error(SERVER_ERROR_PATTERN.test(enhanceMessage) ? ENHANCE_SERVER_ERROR_MESSAGE : enhanceMessage);
+    }
     if (!enhanceResult || enhanceResult.success === false) {
       throw new Error("ATS analysis could not be completed after your resume was parsed. Please try again.");
     }
@@ -301,12 +325,6 @@ export const processResumeComplete = async (file: File) => {
         lowerMsg.includes("payment required") ||
         lowerMsg.includes("402")) {
       message = "You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.";
-    } else if (
-      lowerMsg.includes("internal server error") ||
-      lowerMsg.includes("status code 500") ||
-      lowerMsg.includes("http 500")
-    ) {
-      message = "ATS analysis could not be completed after your resume was parsed. Please try again in a moment. If the problem continues, contact support with the time of this attempt.";
     }
 
     return { success: false as const, error: message };

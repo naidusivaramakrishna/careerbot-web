@@ -33,18 +33,6 @@ function normalizeCreditError(message: string): string {
   return message;
 }
 
-function normalizeServiceError(message: string): string {
-  const normalized = message.toLowerCase();
-  if (
-    normalized.includes('internal server error') ||
-    normalized.includes('status code 500') ||
-    normalized.includes('http 500')
-  ) {
-    return 'ATS analysis could not be completed after your resume was parsed. Please try again in a moment. If the problem continues, contact support with the time of this attempt.';
-  }
-  return message;
-}
-
 export function normalizeResumeScanError(
   err: unknown,
   fallback = 'Unable to process your resume. Please try again.'
@@ -53,14 +41,14 @@ export function normalizeResumeScanError(
     const rawError = err.error;
 
     if (typeof rawError === 'string') {
-      return normalizeServiceError(normalizeCreditError(rawError));
+      return normalizeCreditError(rawError);
     }
 
     if (rawError && typeof rawError === 'object' && 'message' in rawError) {
       const message = String((rawError as { message?: unknown }).message ?? '');
-      if (message) return normalizeServiceError(normalizeCreditError(message));
+      if (message) return normalizeCreditError(message);
     }
   }
 
-  return normalizeServiceError(normalizeCreditError(extractErrorMessage(err, fallback)));
+  return normalizeCreditError(extractErrorMessage(err, fallback));
 }
