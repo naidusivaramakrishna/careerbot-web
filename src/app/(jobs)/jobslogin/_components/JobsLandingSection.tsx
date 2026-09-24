@@ -4,8 +4,8 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, MapPin, ChevronDown } from "lucide-react";
 
 interface JobsLandingSectionProps {
-  onSearch: (query: string, location: string, experience: string) => void;
-  onCategoryClick: (query: string, filter?: { type?: string; workModel?: string }) => void;
+  readonly onSearch: (query: string, location: string, experience: string) => void;
+  readonly onCategoryClick: (query: string, filter?: { type?: string; workModel?: string }) => void;
 }
 
 const EXPERIENCE_OPTIONS = [

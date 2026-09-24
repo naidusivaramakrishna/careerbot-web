@@ -8,8 +8,8 @@ import { X, FileText, CheckCircle, Check, } from "lucide-react";
 
 interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  job: any;
-  onClose: () => void;
+  readonly job: any;
+  readonly onClose: () => void;
 }
 
 export default function JobApplicationModal({ job, onClose }: Props) {
@@ -52,7 +52,9 @@ const router = useRouter();
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Overlay */}
-      <div
+      <button
+        type="button"
+        aria-label="Close application modal"
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
@@ -87,7 +89,7 @@ const router = useRouter();
             </div>
           </div>
 
-          <button onClick={onClose}>
+          <button type="button" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
@@ -106,7 +108,7 @@ const router = useRouter();
               ))}
             </ul>
 
-            <button className="mt-2 text-sm text-blue-600 hover:underline">
+            <button type="button" className="mt-2 text-sm text-blue-600 hover:underline">
               View full job description →
             </button>
           </div>
@@ -144,10 +146,10 @@ const router = useRouter();
 
             {/* Notice period */}
             <div className="mb-4">
-              <label className="font-medium text-sm mb-1 block">
+              <label htmlFor="notice-period" className="font-medium text-sm mb-1 block">
                 Do you have a notice period?
               </label>
-              <select className="w-full border rounded-md px-3 py-2 text-sm">
+              <select id="notice-period" className="w-full border rounded-md px-3 py-2 text-sm">
                 <option>Select notice period</option>
                 <option>Immediate</option>
                 <option>15 days</option>
@@ -158,10 +160,11 @@ const router = useRouter();
 
             {/* Portfolio */}
             <div className="mb-4">
-              <label className="font-medium text-sm mb-1 block">
+              <label htmlFor="portfolio-link" className="font-medium text-sm mb-1 block">
                 Portfolio / Project link
               </label>
               <input
+                id="portfolio-link"
                 type="text"
                 placeholder="Paste your Behance / Dribbble link"
                 className="w-full border rounded-md px-3 py-2 text-sm"
@@ -169,10 +172,10 @@ const router = useRouter();
             </div>
 
             {/* ================= RESUME (UPDATED UI ONLY) ================= */}
-            <div className="mb-4">
-              <label className="font-medium text-sm mb-2 block">
+            <div className="mb-4" role="group" aria-label="Resume">
+              <span className="font-medium text-sm mb-2 block">
                 Resume
-              </label>
+              </span>
 
               <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
                 <div className="flex items-center gap-3">
@@ -203,6 +206,7 @@ const router = useRouter();
               </div>
 
               <button
+                type="button"
                 onClick={handleReplaceResume}
                 className="mt-2 text-sm text-blue-600 hover:underline"
               >
@@ -220,10 +224,10 @@ const router = useRouter();
             </div>
 
             {/* Attachments */}
-            <div>
-              <label className="font-medium text-sm mb-1 block">
+            <div role="group" aria-label="Attachments / Project document">
+              <span className="font-medium text-sm mb-1 block">
                 Attachments / Project document
-              </label>
+              </span>
               <div className="border border-dashed rounded-md p-4 text-center text-sm text-gray-500 bg-white">
                 Upload additional documents
               </div>
@@ -233,10 +237,11 @@ const router = useRouter();
 
           {/* ================= FOOTER ================= */}
           <div className="flex justify-end gap-3 mt-6">
-            <button className="px-4 py-2 border rounded-md text-sm">
+            <button type="button" className="px-4 py-2 border rounded-md text-sm">
               Save Job for Later
             </button>
             <button
+                type="button"
                 onClick={handleSubmit}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm"
               >
@@ -296,12 +301,14 @@ const router = useRouter();
 
 
               <button
+  type="button"
   onClick={() => router.push(`/applications/${job.id}`)}
   className="px-4 py-2 border rounded-md text-sm"
 >
   Track application
 </button>
               <button
+                type="button"
                 onClick={onClose}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm"
               >

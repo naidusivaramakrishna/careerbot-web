@@ -41,18 +41,18 @@ interface JobItem {
 }
 
 type JobListProps = {
-  jobs: JobItem[];
-  onBotClick: (job: JobItem) => void;
-  onApplyClick?: (job: JobItem) => void;
-  onSaveToggle?: (jobId: string, saved: boolean) => void;
+  readonly jobs: readonly JobItem[];
+  readonly onBotClick: (job: JobItem) => void;
+  readonly onApplyClick?: (job: JobItem) => void;
+  readonly onSaveToggle?: (jobId: string, saved: boolean) => void;
   // Permanent removal — only wired up on the Applied tab (see JobsContents),
   // where it actually deletes the underlying application record, unlike
   // allowDismiss below which never persists anything.
-  onRemoveApplication?: (jobId: string) => void;
+  readonly onRemoveApplication?: (jobId: string) => void;
   // Fired when a job is quick-marked "Already Applied" from the card menu
   // (as opposed to the Apply Now → confirm-on-return flow, see onApplyClick),
   // so JobsContents can bump the Applied tab badge/list immediately.
-  onAppliedToggle?: (jobId: string) => void;
+  readonly onAppliedToggle?: (jobId: string) => void;
   // "Not interested" only makes sense for Smart Match recommendations — and
   // even there it's a transient, session-only hide (see removedIds below),
   // never persisted. Saved/Applied entries are jobs the user deliberately
@@ -60,10 +60,14 @@ type JobListProps = {
   // users "remove" one, only to see it silently reappear the next time this
   // list re-fetched (every tab revisit), since nothing was ever persisted.
   // Defaults to false so any other caller doesn't opt into that trap.
-  allowDismiss?: boolean;
+  readonly allowDismiss?: boolean;
+  // When provided, a job title click hands the job off here instead of the
+  // card opening its own preview modal — JobsContents uses this to swap the
+  // list/filters for an inline details panel.
+  readonly onViewDetails?: (job: JobItem) => void;
 };
 
-export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, onRemoveApplication, onAppliedToggle, allowDismiss = false }: JobListProps) {
+export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, onRemoveApplication, onAppliedToggle, allowDismiss = false, onViewDetails }: JobListProps) {
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const visibleJobs = jobs.filter((job) => !removedIds.has(job.id));
@@ -80,6 +84,7 @@ export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, 
           onSaveToggle={(saved) => onSaveToggle?.(job.id, saved)}
           onRemoveApplication={onRemoveApplication ? () => onRemoveApplication(job.id) : undefined}
           onAppliedToggle={onAppliedToggle ? () => onAppliedToggle(job.id) : undefined}
+          onTitleClick={onViewDetails ? () => onViewDetails(job) : undefined}
         />
       ))}
     </div>

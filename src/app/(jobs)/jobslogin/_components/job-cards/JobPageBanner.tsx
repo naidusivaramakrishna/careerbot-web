@@ -56,7 +56,7 @@ const BANNERS = [
   },
 ];
 
-export default function JobPageBanner({ pageIndex }: { pageIndex: number }) {
+export default function JobPageBanner({ pageIndex }: { readonly pageIndex: number }) {
   const b = BANNERS[pageIndex % BANNERS.length];
 
   return (
@@ -105,6 +105,7 @@ export default function JobPageBanner({ pageIndex }: { pageIndex: number }) {
 
           {/* CTA */}
           <button
+            type="button"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-opacity hover:opacity-90"
             style={{ background: b.ctaBg, color: b.ctaText }}
           >

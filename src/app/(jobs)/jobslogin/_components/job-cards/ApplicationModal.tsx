@@ -212,6 +212,12 @@ export default function ApplicationModal({
     if (e.target === e.currentTarget && !isLoading && !showSuccess) onClose();
   }
 
+  // Keyboard equivalent of clicking the backdrop — lets keyboard users dismiss
+  // the modal with Escape from anywhere inside it (event bubbles up to here).
+  function handleBackdropKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape" && !isLoading && !showSuccess) onClose();
+  }
+
   // ── Early exit when closed ────────────────────────────────────────────────
   if (!isOpen) return null;
 
@@ -232,6 +238,7 @@ export default function ApplicationModal({
       aria-label="Job application"
       className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 _appBackdrop"
       onClick={handleBackdropClick}
+      onKeyDown={handleBackdropKeyDown}
     >
       <div
         className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] relative _appModal overflow-hidden"
@@ -241,6 +248,7 @@ export default function ApplicationModal({
         {/* Close — disabled + invisible during success; pointer-events removed so
             it doesn't accidentally intercept the success overlay area */}
         <button
+          type="button"
           onClick={onClose}
           disabled={isLoading || showSuccess}
           aria-label="Close modal"

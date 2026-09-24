@@ -3,11 +3,11 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  totalItems?: number;
-  itemsPerPage?: number;
-  onPageChange: (page: number) => void;
+  readonly currentPage: number;
+  readonly totalPages: number;
+  readonly totalItems?: number;
+  readonly itemsPerPage?: number;
+  readonly onPageChange: (page: number) => void;
 }
 
 export default function Pagination({
@@ -19,10 +19,10 @@ export default function Pagination({
 }: PaginationProps) {
   if (totalPages <= 1) return null;
 
-  const getPages = (): (number | "...")[] => {
+  const getPages = (): (number | "start-ellipsis" | "end-ellipsis")[] => {
     if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
 
-    const pages: (number | "...")[] = [];
+    const pages: (number | "start-ellipsis" | "end-ellipsis")[] = [];
 
     // Always show a window of 5 consecutive pages
     let start = Math.max(1, currentPage - 2);
@@ -31,11 +31,11 @@ export default function Pagination({
 
     if (start > 1) {
       pages.push(1);
-      if (start > 2) pages.push("...");
+      if (start > 2) pages.push("start-ellipsis");
     }
     for (let i = start; i <= end; i++) pages.push(i);
     if (end < totalPages) {
-      if (end < totalPages - 1) pages.push("...");
+      if (end < totalPages - 1) pages.push("end-ellipsis");
       pages.push(totalPages);
     }
 
@@ -61,6 +61,7 @@ export default function Pagination({
       <div className="flex items-center gap-0.5">
         {/* Prev */}
         <button
+          type="button"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
           className={`flex items-center gap-0.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
@@ -73,14 +74,15 @@ export default function Pagination({
         </button>
 
         {/* Page numbers */}
-        {getPages().map((page, i) =>
-          page === "..." ? (
-            <span key={`dots-${i}`} className="px-2 text-gray-400 text-[13px] select-none">
+        {getPages().map((page) =>
+          page === "start-ellipsis" || page === "end-ellipsis" ? (
+            <span key={page} className="px-2 text-gray-400 text-[13px] select-none">
               ...
             </span>
           ) : (
             <button
               key={page}
+              type="button"
               onClick={() => onPageChange(page as number)}
               className={`min-w-8 h-8 rounded-lg text-[13px] font-semibold transition-all ${
                 page === currentPage
@@ -95,6 +97,7 @@ export default function Pagination({
 
         {/* Next */}
         <button
+          type="button"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           className={`flex items-center gap-0.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${

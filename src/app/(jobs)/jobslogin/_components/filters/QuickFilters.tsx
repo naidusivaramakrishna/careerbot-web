@@ -22,11 +22,11 @@ const Chevron = () => (
 );
 
 type Props = {
-  selected?: string[];
-  onToggle?: (f: string) => void;
-  onFilterChange?: (filters: FilterParams) => void;
+  readonly selected?: string[];
+  readonly onToggle?: (f: string) => void;
+  readonly onFilterChange?: (filters: FilterParams) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  jobs?: any[];
+  readonly jobs?: any[];
 };
 
 export interface FilterParams {
@@ -50,17 +50,17 @@ function extractSalaryPresets(jobs: any[] = []): { label: string; value: number 
 
     // Extract numeric value from salary string
     const cleaned = salaryStr.replace(/[₹,]/g, "").toLowerCase();
-    const lakhMatch = cleaned.match(/(\d+\.?\d*)\s*l/);
-    const kMatch = cleaned.match(/(\d+\.?\d*)\s*k/);
+    const lakhMatch = cleaned.match(/(\d+(?:\.\d*)?)\s*l/);
+    const kMatch = cleaned.match(/(\d+(?:\.\d*)?)\s*k/);
     const numMatch = cleaned.match(/(\d+)/);
 
     let salaryNum = 0;
     if (lakhMatch) {
-      salaryNum = Math.floor(parseFloat(lakhMatch[1]) * 100000);
+      salaryNum = Math.floor(Number.parseFloat(lakhMatch[1]) * 100000);
     } else if (kMatch) {
-      salaryNum = Math.floor(parseFloat(kMatch[1]) * 1000);
+      salaryNum = Math.floor(Number.parseFloat(kMatch[1]) * 1000);
     } else if (numMatch) {
-      salaryNum = Math.floor(parseFloat(numMatch[0]));
+      salaryNum = Math.floor(Number.parseFloat(numMatch[0]));
     }
 
     if (salaryNum > 0) {
@@ -92,19 +92,115 @@ function extractSalaryPresets(jobs: any[] = []): { label: string; value: number 
   return [{ label: "Any salary", value: 0 }, ...presets];
 }
 
+// Formats the "N selected" label shown on a dropdown trigger button.
+function formatActiveLabel(activeItems: string[], defaultLabel: string): string {
+  if (activeItems.length === 0) return defaultLabel;
+  const suffix = activeItems.length > 1 ? ` +${activeItems.length - 1}` : "";
+  return activeItems[0] + suffix;
+}
+
+// Maps a years-of-experience range to the closest experience_level bucket used by the API.
+function computeExperienceLevelFromYears(minYears: number, maxYears: number): string {
+  if (minYears <= 0 && maxYears <= 1) return "Intern/New Grad";
+  if (minYears <= 1 && maxYears <= 3) return "Entry Level";
+  if (minYears <= 3 && maxYears <= 5) return "Mid Level";
+  if (minYears <= 5 && maxYears <= 8) return "Senior Level";
+  if (minYears >= 8) return "Lead/Staff";
+  return "Entry Level";
+}
+
+type MultiSelectDropdownProps = {
+  readonly label: string;
+  readonly headerText: string;
+  readonly options: string[];
+  readonly selected: string[];
+  readonly onToggle?: (f: string) => void;
+  readonly panelWidthClass: string;
+};
+
+// Shared implementation for the Remote / Job Type / Experience Level quick filters —
+// they are identical multi-select checkbox dropdowns, differing only in their option
+// list, labels and panel width.
+function MultiSelectDropdown({ label, headerText, options, selected, onToggle, panelWidthClass }: MultiSelectDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const [temp, setTemp] = useState<string[]>([]);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = options.filter((o) => selected.includes(o));
+  const isActive = active.length > 0;
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleOpen = () => {
+    setTemp(active);
+    setOpen(true);
+  };
+
+  const handleConfirm = () => {
+    options.forEach((o) => {
+      if (selected.includes(o) && !temp.includes(o)) onToggle?.(o);
+    });
+    temp.forEach((o) => {
+      if (!selected.includes(o)) onToggle?.(o);
+    });
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={handleOpen}
+        className={`px-3 py-1.5 rounded-full border text-xs font-medium transition flex items-center gap-1 ${
+          isActive
+            ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+            : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+        }`}
+      >
+        {formatActiveLabel(active, label)}
+        <Chevron />
+      </button>
+
+      {open && (
+        <div className={`absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 ${panelWidthClass} py-2`}>
+          <p className="text-xs font-semibold text-red-500 px-3 pb-1">{headerText}</p>
+          {options.map((opt) => (
+            <label
+              key={opt}
+              className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700"
+            >
+              <input
+                type="checkbox"
+                checked={temp.includes(opt)}
+                onChange={() => setTemp((prev) =>
+                  prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
+                )}
+                className="accent-blue-600 w-3.5 h-3.5"
+              />
+              {opt}
+            </label>
+          ))}
+          <div className="px-3 pt-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="w-full py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function QuickFilters({ selected = [], onToggle, onFilterChange, jobs = [] }: Props) {
-  const [remoteOpen, setRemoteOpen] = useState(false);
-  const [tempRemote, setTempRemote] = useState<string[]>([]);
-  const remoteRef = useRef<HTMLDivElement>(null);
-
-  const [jobTypeOpen, setJobTypeOpen] = useState(false);
-  const [tempJobType, setTempJobType] = useState<string[]>([]);
-  const jobTypeRef = useRef<HTMLDivElement>(null);
-
-  const [expOpen, setExpOpen] = useState(false);
-  const [tempExp, setTempExp] = useState<string[]>([]);
-  const expRef = useRef<HTMLDivElement>(null);
-
   const [yearsOpen, setYearsOpen] = useState(false);
   const [activeYears, setActiveYears] = useState<string>("Any requirements");
   const [openToAll, setOpenToAll] = useState(true);
@@ -123,72 +219,12 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (remoteRef.current && !remoteRef.current.contains(e.target as Node)) setRemoteOpen(false);
-      if (jobTypeRef.current && !jobTypeRef.current.contains(e.target as Node)) setJobTypeOpen(false);
-      if (expRef.current && !expRef.current.contains(e.target as Node)) setExpOpen(false);
       if (yearsRef.current && !yearsRef.current.contains(e.target as Node)) setYearsOpen(false);
       if (salaryRef.current && !salaryRef.current.contains(e.target as Node)) setSalaryOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Remote dropdown
-  const activeWorkModels = WORK_MODELS.filter((w) => selected.includes(w));
-  const remoteActive = activeWorkModels.length > 0;
-
-  const handleRemoteOpen = () => {
-    setTempRemote(activeWorkModels);
-    setRemoteOpen(true);
-  };
-
-  const handleRemoteConfirm = () => {
-    WORK_MODELS.forEach((w) => {
-      if (selected.includes(w) && !tempRemote.includes(w)) onToggle?.(w);
-    });
-    tempRemote.forEach((w) => {
-      if (!selected.includes(w)) onToggle?.(w);
-    });
-    setRemoteOpen(false);
-  };
-
-  // Job Type dropdown
-  const activeJobTypes = JOB_TYPES.filter((t) => selected.includes(t));
-  const jobTypeActive = activeJobTypes.length > 0;
-
-  const handleJobTypeOpen = () => {
-    setTempJobType(activeJobTypes);
-    setJobTypeOpen(true);
-  };
-
-  const handleJobTypeConfirm = () => {
-    JOB_TYPES.forEach((t) => {
-      if (selected.includes(t) && !tempJobType.includes(t)) onToggle?.(t);
-    });
-    tempJobType.forEach((t) => {
-      if (!selected.includes(t)) onToggle?.(t);
-    });
-    setJobTypeOpen(false);
-  };
-
-  // Experience dropdown
-  const activeExpLevels = EXPERIENCE_LEVELS.filter((l) => selected.includes(l));
-  const expActive = activeExpLevels.length > 0;
-
-  const handleExpOpen = () => {
-    setTempExp(activeExpLevels);
-    setExpOpen(true);
-  };
-
-  const handleExpConfirm = () => {
-    EXPERIENCE_LEVELS.forEach((l) => {
-      if (selected.includes(l) && !tempExp.includes(l)) onToggle?.(l);
-    });
-    tempExp.forEach((l) => {
-      if (!selected.includes(l)) onToggle?.(l);
-    });
-    setExpOpen(false);
-  };
 
   // Salary dropdown
   const salaryActive = activeSalary !== "Any salary";
@@ -243,12 +279,7 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
       setActiveYears(range);
       onToggle?.(`years:${range}`);
       // Convert to experience_level for API (map years to experience level)
-      let experienceLevel = "Entry Level";
-      if (minYears <= 0 && maxYears <= 1) experienceLevel = "Intern/New Grad";
-      else if (minYears <= 1 && maxYears <= 3) experienceLevel = "Entry Level";
-      else if (minYears <= 3 && maxYears <= 5) experienceLevel = "Mid Level";
-      else if (minYears <= 5 && maxYears <= 8) experienceLevel = "Senior Level";
-      else if (minYears >= 8) experienceLevel = "Lead/Staff";
+      const experienceLevel = computeExperienceLevelFromYears(minYears, maxYears);
 
       onFilterChange?.({ years_min: minYears, years_max: maxYears, experience_level: experienceLevel });
     }
@@ -261,145 +292,34 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
       <div className="flex flex-wrap gap-2">
 
         {/* Remote Dropdown */}
-        <div className="relative" ref={remoteRef}>
-          <button
-            type="button"
-            onClick={handleRemoteOpen}
-            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition flex items-center gap-1 ${
-              remoteActive
-                ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            {remoteActive ? activeWorkModels[0] + (activeWorkModels.length > 1 ? ` +${activeWorkModels.length - 1}` : "") : "Remote"}
-            <Chevron />
-          </button>
-
-          {remoteOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 w-56 py-2">
-              <p className="text-xs font-semibold text-red-500 px-3 pb-1">*Work Model</p>
-              {WORK_MODELS.map((model) => (
-                <label
-                  key={model}
-                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={tempRemote.includes(model)}
-                    onChange={() => setTempRemote((prev) =>
-                      prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model]
-                    )}
-                    className="accent-blue-600 w-3.5 h-3.5"
-                  />
-                  {model}
-                </label>
-              ))}
-              <div className="px-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleRemoteConfirm}
-                  className="w-full py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <MultiSelectDropdown
+          label="Remote"
+          headerText="*Work Model"
+          options={WORK_MODELS}
+          selected={selected}
+          onToggle={onToggle}
+          panelWidthClass="w-56"
+        />
 
         {/* Full-time / Job Type Dropdown */}
-        <div className="relative" ref={jobTypeRef}>
-          <button
-            type="button"
-            onClick={handleJobTypeOpen}
-            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition flex items-center gap-1 ${
-              jobTypeActive
-                ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            {jobTypeActive ? activeJobTypes[0] + (activeJobTypes.length > 1 ? ` +${activeJobTypes.length - 1}` : "") : "Full-time"}
-            <Chevron />
-          </button>
-
-          {jobTypeOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 w-48 py-2">
-              <p className="text-xs font-semibold text-red-500 px-3 pb-1">*Job Type</p>
-              {JOB_TYPES.map((type) => (
-                <label
-                  key={type}
-                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={tempJobType.includes(type)}
-                    onChange={() => setTempJobType((prev) =>
-                      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-                    )}
-                    className="accent-blue-600 w-3.5 h-3.5"
-                  />
-                  {type}
-                </label>
-              ))}
-              <div className="px-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleJobTypeConfirm}
-                  className="w-full py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <MultiSelectDropdown
+          label="Full-time"
+          headerText="*Job Type"
+          options={JOB_TYPES}
+          selected={selected}
+          onToggle={onToggle}
+          panelWidthClass="w-48"
+        />
 
         {/* Experience Level Dropdown */}
-        <div className="relative" ref={expRef}>
-          <button
-            type="button"
-            onClick={handleExpOpen}
-            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition flex items-center gap-1 ${
-              expActive
-                ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            {expActive ? activeExpLevels[0] + (activeExpLevels.length > 1 ? ` +${activeExpLevels.length - 1}` : "") : "Intern/New Grad"}
-            <Chevron />
-          </button>
-
-          {expOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 w-52 py-2">
-              <p className="text-xs font-semibold text-red-500 px-3 pb-1">*Experience Level</p>
-              {EXPERIENCE_LEVELS.map((level) => (
-                <label
-                  key={level}
-                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={tempExp.includes(level)}
-                    onChange={() => setTempExp((prev) =>
-                      prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]
-                    )}
-                    className="accent-blue-600 w-3.5 h-3.5"
-                  />
-                  {level}
-                </label>
-              ))}
-              <div className="px-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleExpConfirm}
-                  className="w-full py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <MultiSelectDropdown
+          label="Intern/New Grad"
+          headerText="*Experience Level"
+          options={EXPERIENCE_LEVELS}
+          selected={selected}
+          onToggle={onToggle}
+          panelWidthClass="w-52"
+        />
 
         {/* Salary Dropdown */}
         <div className="relative" ref={salaryRef}>
@@ -421,10 +341,13 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
               {/* Header */}
               <div className="flex items-center justify-between px-3 pb-3">
                 <p className="text-xs font-semibold text-gray-800">Minimum Annual Salary</p>
-                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                <span role="group" aria-label="Open to all" className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                   <span>Open to all</span>
                   <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setOpenToAllSalary(!openToAllSalary)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenToAllSalary(!openToAllSalary); } }}
                     className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${
                       openToAllSalary ? "bg-green-500" : "bg-gray-300"
                     }`}
@@ -433,7 +356,7 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
                       openToAllSalary ? "translate-x-4" : "translate-x-0.5"
                     }`} />
                   </div>
-                </label>
+                </span>
               </div>
 
               {openToAllSalary ? (
@@ -445,7 +368,7 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
                     readOnly
                     className="accent-blue-600 w-3.5 h-3.5"
                   />
-                  Any salary
+                  {" "}Any salary
                 </label>
               ) : (
                 <div className="px-3 py-1">
@@ -505,10 +428,13 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
               {/* Header with toggle */}
               <div className="flex items-center justify-between px-3 pb-3">
                 <p className="text-xs font-semibold text-gray-800">Required Experience</p>
-                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                <span role="group" aria-label="Open to all" className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                   <span>Open to all</span>
                   <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setOpenToAll(!openToAll)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenToAll(!openToAll); } }}
                     className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${
                       openToAll ? "bg-green-500" : "bg-gray-300"
                     }`}
@@ -517,7 +443,7 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
                       openToAll ? "translate-x-4" : "translate-x-0.5"
                     }`} />
                   </div>
-                </label>
+                </span>
               </div>
 
               {openToAll ? (
@@ -530,7 +456,7 @@ export default function QuickFilters({ selected = [], onToggle, onFilterChange, 
                     readOnly
                     className="accent-blue-600 w-3.5 h-3.5"
                   />
-                  Any requirements
+                  {" "}Any requirements
                 </label>
               ) : (
                 /* Toggle OFF → Range slider + radios */

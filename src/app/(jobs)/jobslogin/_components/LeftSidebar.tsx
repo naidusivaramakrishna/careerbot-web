@@ -45,9 +45,9 @@ function SidebarItem({
   label,
   active = false,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly active?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center gap-1 cursor-pointer">

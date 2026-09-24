@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, MessageCircle, X } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
 import TopPickCard from "./TopPickCard";
 import TrendingSkillsCard from "./TrendingSkillsCard";
 
@@ -23,43 +23,19 @@ export default function JobsRightSidebar({
   onChatOpen,
   onViewAllRecommendations,
 }: {
-  topPicks?: Job[];
-  topPicksLoading?: boolean;
-  topPicksEmptyMessage?: string;
-  onChatOpen?: () => void;
-  onViewAllRecommendations?: () => void;
+  readonly topPicks?: Job[];
+  readonly topPicksLoading?: boolean;
+  readonly topPicksEmptyMessage?: string;
+  readonly onChatOpen?: () => void;
+  readonly onViewAllRecommendations?: () => void;
 }) {
   const [bubbleDismissed, setBubbleDismissed] = useState(false);
 
   return (
     <>
-      <div className="jobs-intelligence-header border-b border-slate-100 bg-[linear-gradient(135deg,#ffffff_0%,#f8faff_100%)] px-4 py-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-2xl text-white"
-              style={{ background: "linear-gradient(135deg, #5896d7, #4338CA)", boxShadow: "0 4px 10px rgba(79,70,229,0.18)" }}
-            >
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <h2 className="text-[15px] font-extrabold leading-tight text-slate-950">Career intelligence</h2>
-              <p className="mt-0.5 text-[11px] font-medium text-slate-500">Live recommendations from your job graph</p>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live
-          </span>
-        </div>
-      </div>
-
-      <div className="jobs-intelligence-body scrollbar-hide relative min-h-0 flex-1 overflow-y-auto scroll-smooth bg-[#f8fafc] px-3 py-3">
-        <div className="space-y-3 pb-3">
-          <div
-            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white"
-            style={{ boxShadow: "0 6px 20px rgba(15,23,42,0.05), 0 0 22px rgba(79,70,229,0.08)" }}
-          >
+      <div className="jobs-intelligence-body scrollbar-hide relative min-h-0 flex-1 overflow-y-auto scroll-smooth bg-white px-3 pb-3 pt-2">
+        <div className="divide-y divide-slate-100">
+          <div className="mb-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
             <TopPickCard
               jobs={topPicks}
               loading={topPicksLoading}
@@ -67,16 +43,10 @@ export default function JobsRightSidebar({
               onViewAll={onViewAllRecommendations}
             />
           </div>
-          <div
-            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white"
-            style={{ minHeight: 330, boxShadow: "0 6px 20px rgba(15,23,42,0.05), 0 0 22px rgba(79,70,229,0.08)" }}
-          >
+          <div className="my-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
             <TrendingSkillsCard />
           </div>
-          <div
-            className="rounded-2xl border border-[#4F46E5]/15 bg-white p-4"
-            style={{ boxShadow: "0 6px 20px rgba(15,23,42,0.05), 0 0 22px rgba(79,70,229,0.08)" }}
-          >
+          <div className="my-3 rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex items-start gap-3">
               <button
                 type="button"
@@ -84,8 +54,7 @@ export default function JobsRightSidebar({
                   setBubbleDismissed(false);
                   onChatOpen?.();
                 }}
-                className="relative h-12 w-12 shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 focus:outline-none"
-                style={{ boxShadow: "0 8px 24px rgba(79,70,229,0.18)" }}
+                className="relative h-10 w-10 shrink-0 rounded-full focus:outline-none"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -93,20 +62,20 @@ export default function JobsRightSidebar({
                   alt="Nancy AI"
                   className="h-full w-full rounded-full object-cover"
                 />
-                <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400" />
+                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-400" />
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[14px] font-extrabold text-slate-950">Nancy AI Assistant</h3>
-                  <span className="rounded bg-[#eef3ff] px-1.5 py-0.5 text-[9px] font-black text-[#4F46E5]">BETA</span>
+                  <h3 className="text-[15px] font-semibold text-gray-900">Nancy AI Assistant</h3>
+                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">BETA</span>
                 </div>
-                <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
+                <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
                   Ask about fit, salary, gaps, and your next best move.
                 </p>
                 <button
                   type="button"
                   onClick={onChatOpen}
-                  className="mt-3 w-full rounded-2xl border border-[#4F46E5]/20 bg-white px-4 py-2.5 text-[12px] font-bold text-[#4F46E5] transition-colors hover:bg-[#eef3ff]"
+                  className="mt-3 w-full rounded border border-slate-200 bg-white px-4 py-2 text-[13px] font-semibold text-[#4F46E5] transition-colors hover:bg-gray-50"
                 >
                   Chat with Nancy
                 </button>

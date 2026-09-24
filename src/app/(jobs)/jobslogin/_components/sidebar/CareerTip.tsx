@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { Plus, RefreshCw, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getSkillGaps } from "@/api/insightsApi";
@@ -32,6 +32,64 @@ export default function CareerTip() {
   };
 
   useEffect(() => { fetchInsights(); }, []);
+
+  let body: ReactNode;
+  if (loading) {
+    body = (
+      <div className="space-y-2">
+        <div className="h-3.5 ct-shimmer rounded-full w-3/4" />
+        <div className="h-2.5 ct-shimmer rounded-full w-full" />
+        <div className="h-2.5 ct-shimmer rounded-full w-5/6" />
+        <div className="flex gap-2 mt-3">
+          <div className="h-7 ct-shimmer rounded-full w-24" />
+          <div className="h-7 ct-shimmer rounded-full w-24" />
+        </div>
+      </div>
+    );
+  } else if (error || !gap) {
+    body = (
+      <div className="text-center py-1">
+        <p className="text-[11px] text-gray-400">Upload your resume to get skill gap suggestions.</p>
+        <button
+          type="button"
+          onClick={fetchInsights}
+          className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#4F46E5] font-semibold hover:text-[#4338CA] transition-colors"
+        >
+          <RotateCcw size={10} />
+          Try again
+        </button>
+      </div>
+    );
+  } else {
+    body = (
+      <>
+        <p className="text-[13px] font-semibold text-gray-900 leading-snug">
+          Add{" "}
+          <span className="text-[#4F46E5]">{gap.skill}</span>{" "}
+          to your profile
+        </p>
+        <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
+          It appears in {Math.round(gap.in_jobs_pct)}% of your top-matched jobs but is missing from your resume.
+        </p>
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            type="button"
+            onClick={() => router.push("/courses")}
+            className="px-3.5 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[11px] font-bold rounded-full transition-colors"
+          >
+            Start course
+          </button>
+          <button
+            type="button"
+            onClick={() => toast.info("Open your profile to add this skill.")}
+            className="px-3.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 rounded-full hover:border-gray-300 transition-colors"
+          >
+            Add to profile
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <div>
@@ -76,56 +134,7 @@ export default function CareerTip() {
 
       {/* Body */}
       <div className="px-4 py-3">
-        {loading ? (
-          <div className="space-y-2">
-            <div className="h-3.5 ct-shimmer rounded-full w-3/4" />
-            <div className="h-2.5 ct-shimmer rounded-full w-full" />
-            <div className="h-2.5 ct-shimmer rounded-full w-5/6" />
-            <div className="flex gap-2 mt-3">
-              <div className="h-7 ct-shimmer rounded-full w-24" />
-              <div className="h-7 ct-shimmer rounded-full w-24" />
-            </div>
-          </div>
-        ) : error || !gap ? (
-          <div className="text-center py-1">
-            <p className="text-[11px] text-gray-400">Upload your resume to get skill gap suggestions.</p>
-            <button
-              type="button"
-              onClick={fetchInsights}
-              className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#4F46E5] font-semibold hover:text-[#4338CA] transition-colors"
-            >
-              <RotateCcw size={10} />
-              Try again
-            </button>
-          </div>
-        ) : (
-          <>
-            <p className="text-[13px] font-semibold text-gray-900 leading-snug">
-              Add{" "}
-              <span className="text-[#4F46E5]">{gap.skill}</span>{" "}
-              to your profile
-            </p>
-            <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
-              It appears in {Math.round(gap.in_jobs_pct)}% of your top-matched jobs but is missing from your resume.
-            </p>
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => router.push("/courses")}
-                className="px-3.5 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[11px] font-bold rounded-full transition-colors"
-              >
-                Start course
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.info("Open your profile to add this skill.")}
-                className="px-3.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 rounded-full hover:border-gray-300 transition-colors"
-              >
-                Add to profile
-              </button>
-            </div>
-          </>
-        )}
+        {body}
       </div>
     </div>
   );

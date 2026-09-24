@@ -1,8 +1,8 @@
 "use client";
 
 interface PromptCardProps {
-  prompt: string;
-  onClick: (prompt: string) => void;
+  readonly prompt: string;
+  readonly onClick: (prompt: string) => void;
 }
 
 export default function PromptCard({ prompt, onClick }: PromptCardProps) {

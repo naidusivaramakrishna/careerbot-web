@@ -1,9 +1,9 @@
 "use client";
 
 interface SparklineProps {
-  points: number[];
-  stroke: string;
-  className?: string;
+  readonly points: number[];
+  readonly stroke: string;
+  readonly className?: string;
 }
 
 export default function Sparkline({ points, stroke, className = "" }: SparklineProps) {

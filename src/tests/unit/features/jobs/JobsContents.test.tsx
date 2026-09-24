@@ -36,7 +36,6 @@ describe('matchesJobFilters', () => {
         salary: '₹15-25 LPA',
         location: 'Delhi, India',
         education: 'B.Tech in Computer Science',
-        source: 'linkedin',
       },
       ['remote', 'full-time', 'years:2', 'salary:₹20 LPA+', 'location:Delhi', 'education:b tech']
     );
@@ -53,7 +52,6 @@ describe('matchesJobFilters', () => {
         salary: '₹8-12 LPA',
         location: 'Bangalore, India',
         education: 'MCA',
-        source: 'naukri',
       },
       ['salary:₹20 LPA+']
     );

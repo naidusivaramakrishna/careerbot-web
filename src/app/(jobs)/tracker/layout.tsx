@@ -8,7 +8,7 @@ import { DashboardProvider } from "@/contexts/DashboardContext";
 export default function TrackerLayout({
   children,
 }: {
-  children: React.ReactNode;
+  readonly children: React.ReactNode;
 }) {
   return (
     <DashboardProvider>

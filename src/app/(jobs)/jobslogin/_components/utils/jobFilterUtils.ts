@@ -44,7 +44,7 @@ function parseExperienceYears(expString: string | undefined): number | null {
   const nums = String(expString).match(/\d+/g);
   if (!nums || nums.length === 0) return null;
 
-  const first = parseInt(nums[0], 10);
+  const first = Number.parseInt(nums[0], 10);
   return Number.isNaN(first) ? null : first;
 }
 
@@ -52,24 +52,31 @@ function parseSalaryValue(salaryString: string | undefined): number {
   if (!salaryString) return 0;
 
   const cleaned = normalizeText(salaryString).replace(/[₹,]/g, "");
-  const rangeMatch = cleaned.match(/(\d+\.?\d*)\s*[lk]?\s*-\s*(\d+\.?\d*)\s*[lk]?/i);
+  // `\d+(?:\.\d*)?` (not `\d+\.?\d*`) — the original let \d+ and \d* both
+  // claim the same run of digits with nothing to force a single split
+  // (matches "123", "123.", "123.45" either way), which is the classic
+  // superlinear-backtracking shape: on a long run of digits with no
+  // "l"/"k"/"-" ever following, the engine retries every (\d+, \d*) length
+  // combination that consumes the same prefix. Requiring the "." literal
+  // before \d* removes the ambiguity while matching the exact same strings.
+  const rangeMatch = /(\d+(?:\.\d*)?)\s*[lk]?\s*-\s*(\d+(?:\.\d*)?)\s*[lk]?/i.exec(cleaned);
 
   if (rangeMatch) {
-    const maxVal = parseFloat(rangeMatch[2]);
-    const unit = cleaned.match(/[lk]/i)?.[0].toLowerCase();
+    const maxVal = Number.parseFloat(rangeMatch[2]);
+    const unit = /[lk]/i.exec(cleaned)?.[0].toLowerCase();
     if (unit === "l") return maxVal * 100000;
     if (unit === "k") return maxVal * 1000;
     return maxVal;
   }
 
-  const lakhMatch = cleaned.match(/(\d+\.?\d*)\s*l/i);
-  if (lakhMatch) return parseFloat(lakhMatch[1]) * 100000;
+  const lakhMatch = /(\d+(?:\.\d*)?)\s*l/i.exec(cleaned);
+  if (lakhMatch) return Number.parseFloat(lakhMatch[1]) * 100000;
 
-  const kMatch = cleaned.match(/(\d+\.?\d*)\s*k/i);
-  if (kMatch) return parseFloat(kMatch[1]) * 1000;
+  const kMatch = /(\d+(?:\.\d*)?)\s*k/i.exec(cleaned);
+  if (kMatch) return Number.parseFloat(kMatch[1]) * 1000;
 
-  const numMatch = cleaned.match(/(\d+)/);
-  if (numMatch) return parseFloat(numMatch[1]);
+  const numMatch = /(\d+)/.exec(cleaned);
+  if (numMatch) return Number.parseFloat(numMatch[1]);
 
   return 0;
 }
@@ -124,7 +131,7 @@ export function matchesExperience(jobExperience: string | undefined, yearsValue:
     return minYears === null || minYears === 0;
   }
 
-  const selectedYear = yearsValue === "11+ yrs" ? 11 : parseInt(yearsValue, 10);
+  const selectedYear = yearsValue === "11+ yrs" ? 11 : Number.parseInt(yearsValue, 10);
   if (Number.isNaN(selectedYear)) return true;
   // Unknown is NOT disqualifying. normalizeJob prefers experience_level
   // ("Senior") over the numeric `experience` ("3-5 years") that the server
@@ -152,10 +159,10 @@ export function matchesSalary(jobSalary: string | undefined, salaryLabel: string
   if (salaryNum === 0) return false;
 
   const normalizedLabel = normalizeText(salaryLabel);
-  const lpaMatch = normalizedLabel.match(/(\d+)\s*lpa\+/i);
+  const lpaMatch = /(\d+)\s*lpa\+/i.exec(normalizedLabel);
   const minVal = lpaMatch
-    ? parseInt(lpaMatch[1], 10) * 100000
-    : parseInt(normalizedLabel.replace(/[₹lpa+]/g, ""), 10) * 100000;
+    ? Number.parseInt(lpaMatch[1], 10) * 100000
+    : Number.parseInt(normalizedLabel.replace(/[₹lpa+]/g, ""), 10) * 100000;
 
   return salaryNum >= minVal;
 }
@@ -193,7 +200,7 @@ function matchesSource(jobSource: string | undefined, sourceFilterValue: string 
 // than passing by default, since "unscored" isn't "meets the threshold".
 function matchesMinScore(jobScore: number | undefined, chipLabel: string | undefined): boolean {
   if (!chipLabel) return true;
-  const threshold = parseFloat(chipLabel.replace(/\+$/, ""));
+  const threshold = Number.parseFloat(chipLabel.replace(/\+$/, ""));
   if (Number.isNaN(threshold)) return true;
   return typeof jobScore === "number" && jobScore >= threshold;
 }
@@ -232,15 +239,15 @@ export function matchesJobFilters(
   selectedFilters: string[],
   options: JobFilterOptions = {}
 ): boolean {
-  const workModelOptions = ["onsite", "hybrid", "remote", "remote anywhere in the india"].map(normalizeText);
-  const typeOptions = ["full-time", "contract", "part-time", "internship"].map(normalizeText);
+  const workModelOptions = new Set(["onsite", "hybrid", "remote", "remote anywhere in the india"].map(normalizeText));
+  const typeOptions = new Set(["full-time", "contract", "part-time", "internship"].map(normalizeText));
 
   const selectedWorkModels = selectedFilters.filter((filter) =>
-    workModelOptions.includes(normalizeText(filter))
+    workModelOptions.has(normalizeText(filter))
   );
 
   const selectedTypeFilters = selectedFilters.filter((filter) =>
-    typeOptions.includes(normalizeText(filter))
+    typeOptions.has(normalizeText(filter))
   );
 
   const yearsFilter = selectedFilters.find((filter) => filter.startsWith("years:"));

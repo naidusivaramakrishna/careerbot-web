@@ -5,7 +5,7 @@ import "./jobs-premium.css";
 export default function JobsLoginLayout({
   children,
 }: {
-  children: React.ReactNode;
+  readonly children: React.ReactNode;
 }) {
   return (
     <div className="jobs-premium-theme flex h-screen overflow-hidden bg-white" style={{ "--header-h": "56px" } as React.CSSProperties}>

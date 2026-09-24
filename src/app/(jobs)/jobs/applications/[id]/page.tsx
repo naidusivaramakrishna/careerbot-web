@@ -341,6 +341,13 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
   rejected: { bg: "bg-red-50", text: "text-red-700", label: "Not Selected" },
 };
 
+const STATUS_MESSAGES: Record<ApplicationResponse["status"], string> = {
+  pending: "Your application is under review. We'll notify you soon.",
+  interview: "You have an interview scheduled. Check your email for details.",
+  accepted: "Congratulations! You've been selected. Check your email.",
+  rejected: "Thank you for your interest. We've decided to move forward with other candidates.",
+};
+
 const progressSteps = [
   { label: "Application Submitted", key: "submitted" },
   { label: "Resume Screening", key: "screening" },
@@ -532,13 +539,7 @@ export default function ApplicationTrackingPage() {
           <div className={`p-4 rounded-lg ${statusConfig.bg}`}>
             <p className={`font-semibold ${statusConfig.text} mb-1`}>{statusConfig.label}</p>
             <p className="text-sm text-gray-700">
-              {application.status === "pending"
-                ? "Your application is under review. We'll notify you soon."
-                : application.status === "interview"
-                ? "You have an interview scheduled. Check your email for details."
-                : application.status === "accepted"
-                ? "Congratulations! You've been selected. Check your email."
-                : "Thank you for your interest. We've decided to move forward with other candidates."}
+              {STATUS_MESSAGES[application.status]}
             </p>
           </div>
         </div>

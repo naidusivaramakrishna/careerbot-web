@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import {
   Briefcase, Bookmark, ExternalLink, Trash2, MapPin,
   Search, ClipboardList, ChevronDown, TrendingUp,
@@ -13,6 +13,7 @@ import {
   JobApplication,
   SavedJob,
 } from "@/utils/jobTracking";
+import { getJobById } from "@/api/jobsApi";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { getSafeExternalUrl } from "@/utils/validators";
 
@@ -62,7 +63,7 @@ const GRAD_POOL = [
   "linear-gradient(135deg,#0369a1,#38bdf8)",
   "linear-gradient(135deg,#be185d,#f472b6)",
 ];
-const avatarGrad = (name: string) => GRAD_POOL[name.charCodeAt(0) % GRAD_POOL.length];
+const avatarGrad = (name: string) => GRAD_POOL[(name.codePointAt(0) ?? 0) % GRAD_POOL.length];
 
 type Tab = "applied" | "saved";
 
@@ -72,10 +73,12 @@ type Tab = "applied" | "saved";
 function StatusDropdown({
   jobId, status, onChange,
 }: {
-  jobId: string; status: AppStatus; onChange: (s: AppStatus) => void;
+  readonly jobId: string; readonly status: AppStatus; readonly onChange: (s: AppStatus) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const cfg = STATUS_CFG[status];
 
   useEffect(() => {
@@ -86,9 +89,30 @@ function StatusDropdown({
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!open || !ref.current || !menuRef.current) return;
+
+    const updatePlacement = () => {
+      const triggerRect = ref.current?.getBoundingClientRect();
+      const menuHeight = menuRef.current?.getBoundingClientRect().height ?? 0;
+      if (!triggerRect) return;
+
+      setDropUp(triggerRect.bottom + menuHeight > window.innerHeight - 8);
+    };
+
+    updatePlacement();
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+    return () => {
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [open]);
+
   return (
     <div className="relative shrink-0" ref={ref}>
       <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all hover:shadow-sm active:scale-[0.97]"
         style={{ background: cfg.bg, color: cfg.color, borderColor: cfg.border }}
@@ -103,7 +127,8 @@ function StatusDropdown({
 
       {open && (
         <div
-          className="absolute right-0 top-8 z-50 rounded-2xl overflow-hidden min-w-[148px] animate-in fade-in slide-in-from-top-2 duration-150"
+          ref={menuRef}
+          className={`absolute right-0 z-50 rounded-2xl overflow-hidden min-w-[148px] animate-in fade-in duration-150 ${dropUp ? "bottom-8 slide-in-from-bottom-2" : "top-8 slide-in-from-top-2"}`}
           style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06)", background: "white", border: "1px solid rgba(0,0,0,0.06)" }}
         >
           <div className="py-1.5">
@@ -113,6 +138,7 @@ function StatusDropdown({
               return (
                 <button
                   key={s}
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onChange(s); persistStatus(jobId, s); setOpen(false); }}
                   className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium transition-colors hover:bg-gray-50"
                   style={{ color: isActive ? c.color : "#374151" }}
@@ -135,7 +161,7 @@ function StatusDropdown({
 /* ══════════════════════════════════════════
    Empty State
 ══════════════════════════════════════════ */
-function EmptyState({ tab }: { tab: Tab }) {
+function EmptyState({ tab }: { readonly tab: Tab }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center px-6">
       <div
@@ -164,10 +190,10 @@ function EmptyState({ tab }: { tab: Tab }) {
 function StatCard({
   label, value, icon: Icon, iconColor, accentFrom, accentTo, subtext,
 }: {
-  label: string; value: number;
-  icon: React.ElementType; iconColor: string;
-  accentFrom: string; accentTo: string;
-  subtext?: string;
+  readonly label: string; readonly value: number;
+  readonly icon: React.ElementType; readonly iconColor: string;
+  readonly accentFrom: string; readonly accentTo: string;
+  readonly subtext?: string;
 }) {
   return (
     <div
@@ -212,7 +238,7 @@ function StatCard({
 /* ══════════════════════════════════════════
    Pipeline / Funnel
 ══════════════════════════════════════════ */
-function PipelineStrip({ counts }: { counts: Record<AppStatus, number> }) {
+function PipelineStrip({ counts }: { readonly counts: Record<AppStatus, number> }) {
   const total = Object.values(counts).reduce((s, v) => s + v, 0) || 1;
 
   return (
@@ -285,9 +311,9 @@ function PipelineStrip({ counts }: { counts: Record<AppStatus, number> }) {
 function AppliedRow({
   app, status, onStatusChange,
 }: {
-  app: JobApplication;
-  status: AppStatus;
-  onStatusChange: (id: string, s: AppStatus) => void;
+  readonly app: JobApplication;
+  readonly status: AppStatus;
+  readonly onStatusChange: (id: string, s: AppStatus) => void;
 }) {
   const cfg = STATUS_CFG[status];
   const safeUrl = getSafeExternalUrl(app.url);
@@ -345,7 +371,9 @@ function AppliedRow({
 /* ══════════════════════════════════════════
    Saved Row
 ══════════════════════════════════════════ */
-function SavedRow({ job, onRemove }: { job: SavedJob; onRemove: (id: string) => void }) {
+function SavedRow({ job, onRemove }: { readonly job: SavedJob; readonly onRemove: (id: string) => void }) {
+  const safeUrl = getSafeExternalUrl(job.url);
+
   return (
     <div className="group flex items-center gap-4 pl-0 pr-5 py-3.5 border-b border-gray-50 hover:bg-[#f8faff] transition-all relative">
       {/* Left accent */}
@@ -363,7 +391,18 @@ function SavedRow({ job, onRemove }: { job: SavedJob; onRemove: (id: string) => 
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-[13.5px] font-bold text-gray-900 truncate">{job.title}</p>
+        {safeUrl ? (
+          <a
+            href={safeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-[13.5px] font-bold text-gray-900 truncate hover:text-[#2557a7] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded-sm"
+          >
+            {job.title}
+          </a>
+        ) : (
+          <p className="text-[13.5px] font-bold text-gray-900 truncate">{job.title}</p>
+        )}
         <div className="flex items-center gap-2.5 mt-0.5">
           <span className="text-[12px] text-gray-500 truncate">{job.company}</span>
           {job.location && (
@@ -387,8 +426,22 @@ function SavedRow({ job, onRemove }: { job: SavedJob; onRemove: (id: string) => 
         <span className="text-[11px] text-gray-400">{timeSince(job.savedAt)}</span>
       </div>
 
+      {safeUrl && (
+        <a
+          href={safeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-[#2557a7] bg-[#eff6ff] border border-[#bfdbfe] hover:bg-[#dbeafe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+          title={`Open ${job.title}`}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Open job
+        </a>
+      )}
+
       {/* Remove */}
       <button
+        type="button"
         onClick={() => onRemove(job.jobId)}
         className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50"
         title="Remove from saved"
@@ -409,11 +462,33 @@ export default function JobTracker() {
   const [saved,    setSaved]    = useState<SavedJob[]>([]);
   const [statuses, setStatuses] = useState<Record<string, AppStatus>>({});
   const [search,   setSearch]   = useState("");
+  const savedHydrationRun = useRef(0);
 
   const load = useCallback(() => {
     setApplied(getApplicationHistory(userId).slice().reverse());
-    setSaved(getSavedJobs(userId).slice().reverse());
+    const loadedSaved = getSavedJobs(userId).slice().reverse();
+    setSaved(loadedSaved);
     setStatuses(loadStatuses());
+
+    const hydrationRun = ++savedHydrationRun.current;
+    void Promise.all(
+      loadedSaved
+        .filter((job) => !job.url)
+        .map(async (job) => {
+          try {
+            const response = await getJobById(job.jobId);
+            return { jobId: job.jobId, url: response.data?.url };
+          } catch {
+            return { jobId: job.jobId, url: undefined };
+          }
+        })
+    ).then((hydratedJobs) => {
+      if (savedHydrationRun.current !== hydrationRun) return;
+      setSaved((current) => current.map((job) => {
+        const hydrated = hydratedJobs.find((candidate) => candidate.jobId === job.jobId);
+        return hydrated?.url ? { ...job, url: hydrated.url } : job;
+      }));
+    });
   }, [userId]);
 
   useEffect(() => { load(); }, [load]);
@@ -443,6 +518,33 @@ export default function JobTracker() {
   const interviewCount = pipelineCounts.interview + pipelineCounts.offer;
   const today = new Date().toDateString();
   const appliedToday = applied.filter((a) => new Date(a.appliedAt).toDateString() === today).length;
+
+  let rows: React.ReactNode;
+  if (tab === "applied") {
+    rows = filteredApplied.length === 0
+      ? <EmptyState tab="applied" />
+      : filteredApplied.map((app) => (
+          <AppliedRow
+            key={app.jobId}
+            app={app}
+            status={statuses[app.jobId] ?? "applied"}
+            onStatusChange={handleStatusChange}
+          />
+        ));
+  } else {
+    rows = filteredSaved.length === 0
+      ? <EmptyState tab="saved" />
+      : filteredSaved.map((job) => (
+          <SavedRow key={job.jobId} job={job} onRemove={handleRemoveSaved} />
+        ));
+  }
+
+  let footerText: string;
+  if (tab === "applied") {
+    footerText = `${filteredApplied.length} application${filteredApplied.length !== 1 ? "s" : ""}`;
+  } else {
+    footerText = `${filteredSaved.length} saved job${filteredSaved.length !== 1 ? "s" : ""}`;
+  }
 
   return (
     <div className="px-6 py-6 max-w-5xl mx-auto space-y-4">
@@ -513,7 +615,7 @@ export default function JobTracker() {
 
       {/* ── Main Table Card ── */}
       <div
-        className="rounded-2xl overflow-hidden"
+        className="rounded-2xl overflow-visible"
         style={{
           background: "white",
           boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.06)",
@@ -531,6 +633,7 @@ export default function JobTracker() {
               return (
                 <button
                   key={t}
+                  type="button"
                   onClick={() => { setTab(t); setSearch(""); }}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] font-bold transition-all duration-200 whitespace-nowrap"
                   style={
@@ -593,35 +696,14 @@ export default function JobTracker() {
         )}
 
         {/* Rows */}
-        {tab === "applied" ? (
-          filteredApplied.length === 0 ? (
-            <EmptyState tab="applied" />
-          ) : (
-            filteredApplied.map((app) => (
-              <AppliedRow
-                key={app.jobId}
-                app={app}
-                status={statuses[app.jobId] ?? "applied"}
-                onStatusChange={handleStatusChange}
-              />
-            ))
-          )
-        ) : filteredSaved.length === 0 ? (
-          <EmptyState tab="saved" />
-        ) : (
-          filteredSaved.map((job) => (
-            <SavedRow key={job.jobId} job={job} onRemove={handleRemoveSaved} />
-          ))
-        )}
+        {rows}
 
         {/* Footer count */}
         {((tab === "applied" && filteredApplied.length > 0) ||
           (tab === "saved" && filteredSaved.length > 0)) && (
           <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/40 flex items-center justify-end">
             <p className="text-[11px] text-gray-400 font-medium">
-              {tab === "applied"
-                ? `${filteredApplied.length} application${filteredApplied.length !== 1 ? "s" : ""}`
-                : `${filteredSaved.length} saved job${filteredSaved.length !== 1 ? "s" : ""}`}
+              {footerText}
             </p>
           </div>
         )}

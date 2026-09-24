@@ -70,6 +70,12 @@ function formatDescription(raw?: string): string[] {
 const factClass =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm";
 
+const SKILL_CHIP_STATE_CLASSES: Record<"matched" | "missing" | "neutral", string> = {
+  matched: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  missing: "border-orange-200 bg-orange-50 text-orange-800",
+  neutral: "border-slate-200 bg-white text-slate-700",
+};
+
 export default function JobPreviewModal(props: JobPreviewModalProps) {
   const { onClose } = props;
   const hasMatchScore = !!props.matchScore && Math.round(props.matchScore) > 0;
@@ -111,7 +117,7 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
       if (!focusable.length) return;
 
       const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      const last = focusable.at(-1)!;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -249,7 +255,7 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
                 Job Description
               </h3>
               {paragraphs.map((paragraph, index) => (
-                <p key={index} className="max-w-[74ch] text-sm leading-7 text-slate-700">
+                <p key={`${index}-${paragraph.slice(0, 20)}`} className="max-w-[74ch] text-sm leading-7 text-slate-700">
                   {paragraph}
                 </p>
               ))}
@@ -264,7 +270,7 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
                 Responsibilities
               </h3>
               {responsibilityParagraphs.map((paragraph, index) => (
-                <p key={index} className="max-w-[74ch] text-sm leading-7 text-slate-700">
+                <p key={`${index}-${paragraph.slice(0, 20)}`} className="max-w-[74ch] text-sm leading-7 text-slate-700">
                   {paragraph}
                 </p>
               ))}
@@ -279,7 +285,7 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
               <ul className="list-disc space-y-1.5 pl-4">
                 {props.requirements.map((requirement, index) => (
                   <li
-                    key={index}
+                    key={`${index}-${requirement.slice(0, 20)}`}
                     className="text-sm leading-7 text-slate-700 marker:text-indigo-500"
                   >
                     {requirement}
@@ -297,22 +303,15 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
               <div className="flex flex-wrap gap-2">
                 {skillChips.map((skill) => {
                   const normalizedSkill = skill.toLowerCase();
-                  const state = matchedSet.has(normalizedSkill)
-                    ? "matched"
-                    : missingSet.has(normalizedSkill)
-                      ? "missing"
-                      : "neutral";
+                  let state: "matched" | "missing" | "neutral";
+                  if (matchedSet.has(normalizedSkill)) state = "matched";
+                  else if (missingSet.has(normalizedSkill)) state = "missing";
+                  else state = "neutral";
 
                   return (
                     <span
                       key={skill}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                        state === "matched"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          : state === "missing"
-                            ? "border-orange-200 bg-orange-50 text-orange-800"
-                            : "border-slate-200 bg-white text-slate-700"
-                      }`}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${SKILL_CHIP_STATE_CLASSES[state]}`}
                     >
                       {state === "matched" ? "✓ " : ""}
                       {skill}
