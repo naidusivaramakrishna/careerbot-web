@@ -162,6 +162,8 @@ export interface TemplateResponse {
   subtitle?: string;
   description?: string;
   preview_url?: string;
+  preview_html?: string;
+  preview_css?: string;
   category?: string;
   ats_friendly?: boolean;
   layout?: {
@@ -1142,6 +1144,16 @@ export const applyTemplateToResume = async (
     logger.error("❌ Error applying template:", error);
     throw error;
   }
+};
+
+/**
+ * Get one template by id, including preview_html / preview_css for iframe
+ * rendering. Backend: GET /api/v1/templates/{template_id} (TemplateOut).
+ * Errors propagate so callers can fall back to the list data.
+ */
+export const getTemplateById = async (templateId: string): Promise<TemplateResponse> => {
+  const response = await httpClient.get<TemplateResponse>(`/templates/${encodeURIComponent(templateId)}`);
+  return response.data;
 };
 
 /**
