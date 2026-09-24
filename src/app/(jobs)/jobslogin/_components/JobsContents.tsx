@@ -583,6 +583,16 @@ export default function JobsContents() {
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
   // Discards superseded Smart Match responses — see fetchSmartMatchedJobs.
   const matchedFetchTokenRef = useRef(0);
+  // Invalidate any in-flight run on unmount. The warm-up retry loop in
+  // fetchSmartMatchedJobs sleeps up to ~92s between attempts and only stops
+  // when this token changes, so without this it kept calling /jobs/scored
+  // after the user had left the page.
+  useEffect(() => {
+    const tokenRef = matchedFetchTokenRef;
+    return () => {
+      tokenRef.current++;
+    };
+  }, []);
 
   // ── Sort helper ──
   const sortJobs = useCallback((list: NormalizedJob[], sort: FilterSort): NormalizedJob[] => {
@@ -643,13 +653,16 @@ export default function JobsContents() {
         );
 
         if (normalized.length === 0 && eligibleForWarmupRetry && attempt < MATCHED_FIRST_LOAD_RETRY_DELAYS_MS.length) {
-          // Silently retry — force_refresh from here on, since a cached 0-job
-          // answer would otherwise keep coming back unchanged. matchedLoading
-          // and matchedFetched are left untouched so the caller keeps showing
-          // the "matching in progress" spinner throughout.
+          // Silently retry. matchedLoading and matchedFetched are left
+          // untouched so the caller keeps showing the "matching in progress"
+          // spinner throughout. The retries never send force_refresh: that
+          // flag is reserved for the explicit "Retry Smart Match" button (see
+          // above). careerbot-api's GET /jobs/scored does not read it today
+          // anyway; its scored-results cache key includes the profile
+          // version, so a plain retry sees a re-versioned profile.
           const delay = MATCHED_FIRST_LOAD_RETRY_DELAYS_MS[attempt];
           attempt++;
-          useForceRefresh = true;
+          useForceRefresh = false;
           await new Promise((resolve) => setTimeout(resolve, delay));
           if (matchedFetchTokenRef.current !== token) return;
           continue;
