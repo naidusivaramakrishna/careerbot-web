@@ -7,4 +7,5 @@ export const CODING_TEST_API = {
   problems: '/api/v1/coding-test/problems',
   problem: (slug: string) =>
     `/api/v1/coding-test/problems/${encodeURIComponent(slug)}`,
+  topics: '/api/v1/coding-test/topics',
 } as const;

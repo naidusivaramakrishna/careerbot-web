@@ -193,6 +193,18 @@ export default function PlaygroundPage() {
             <Terminal className="h-4 w-4 text-indigo-400" aria-hidden />
             Code Playground
           </div>
+          <div className="h-4 w-px bg-slate-600" aria-hidden />
+          {/* Language selector (previously inside CodeEditor header) */}
+          <select
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value as CodingTestLanguage)}
+            className="rounded border border-slate-600 bg-slate-700 px-2 py-1 text-xs font-medium text-slate-200 focus:outline-none hover:border-slate-400"
+            aria-label="Select language"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.value} value={l.value}>{l.label}</option>
+            ))}
+          </select>
         </div>
 
         <button
@@ -225,8 +237,6 @@ export default function PlaygroundPage() {
             value={code}
             onChange={setCode}
             onCtrlEnter={handleRun}
-            onLanguageChange={handleLanguageChange}
-            languages={LANGUAGES}
           />
         </div>
 

@@ -95,8 +95,27 @@ function assertCoverLetterResponseShape(cl: CoverLetterResponse, label: string) 
   // grounding shape.
   expect(typeof cl.grounding, `${label}: grounding is an object`).toBe("object");
 
-  // metadata shape.
+  // metadata shape. Shallow on purpose here -- individual fields (e.g.
+  // metadata.model) are asserted per-fixture below where their expected
+  // value actually differs (see "failedNoModel specific").
   expect(typeof cl.metadata, `${label}: metadata is an object`).toBe("object");
+
+  // keyword_report.coverage_explanation shape, for every fixture that has a
+  // keyword_report (some, e.g. a failed-before-scoring letter, don't).
+  // Moved here from a readyToReview-only test: a plain-string fixture
+  // (the AI service's old shape, before it became Record<string,string>)
+  // slipped through undetected on every OTHER fixture, since only
+  // readyToReview was ever checked.
+  if (cl.keyword_report) {
+    expect(
+      typeof cl.keyword_report.coverage_explanation,
+      `${label}: keyword_report.coverage_explanation is an object (Record<string,string>), not a string`
+    ).toBe("object");
+    expect(
+      cl.keyword_report.coverage_explanation,
+      `${label}: keyword_report.coverage_explanation is not null`
+    ).not.toBeNull();
+  }
 
   // warnings shape.
   expect(Array.isArray(cl.warnings), `${label}: warnings is an array`).toBe(true);
@@ -115,6 +134,10 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
 
   it("failedLowJdMatch passes full shape assertion", () => {
     assertCoverLetterResponseShape(CL_FIXTURES.failedLowJdMatch, "failedLowJdMatch");
+  });
+
+  it("failedNoModel passes full shape assertion", () => {
+    assertCoverLetterResponseShape(CL_FIXTURES.failedNoModel, "failedNoModel");
   });
 
   // ── readyToReview specific ─────────────────────────────────────────────
@@ -171,11 +194,30 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
     });
 
     it("has keyword_report with expected shape", () => {
+      // coverage_explanation's shape is asserted for every fixture with a
+      // keyword_report inside assertCoverLetterResponseShape now, not just
+      // this one.
       expect(cl.keyword_report).not.toBeNull();
       expect(Array.isArray(cl.keyword_report!.used_keywords)).toBe(true);
       expect(typeof cl.keyword_report!.keyword_coverage_pct).toBe("number");
-      expect(typeof cl.keyword_report!.coverage_explanation).toBe("string");
       expect(typeof cl.keyword_report!.keyword_counts).toBe("object");
+    });
+
+    it("has eligible_evidence_usage_pct as a number distinct from evidence_usage_pct (PR #310/311/312)", () => {
+      expect(typeof cl.keyword_report!.eligible_evidence_usage_pct).toBe("number");
+      expect(typeof cl.keyword_report!.evidence_usage_pct).toBe("number");
+      // The test name's own claim: these are two DIFFERENT metrics (JD-scoped
+      // vs. full resume claim catalog), not the same value under two field
+      // names. A typeof-only check would pass even if a future fixture (or a
+      // real backend regression) accidentally set them equal or copied one
+      // into the other.
+      expect(cl.keyword_report!.eligible_evidence_usage_pct).not.toBe(cl.keyword_report!.evidence_usage_pct);
+    });
+
+    it("has at least one jd_match_matrix entry using implied_via_broader_claim (PR #310/311/312)", () => {
+      const impliedEntry = cl.jd_match_matrix.find((e) => e.implied_via_broader_claim === true);
+      expect(impliedEntry).toBeDefined();
+      expect(impliedEntry!.used_in_letter).toBe(false);
     });
   });
 
@@ -240,6 +282,48 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
 
     it("all jd_match_matrix entries are not_found (unable to match)", () => {
       expect(cl.jd_match_matrix.every((e) => e.status === "not_found")).toBe(true);
+    });
+  });
+
+  // ── failedNoModel specific ────────────────────────────────────────────
+  // careerbot-ai's early-failure path (pipeline aborted before any LLM
+  // call ran) sends an explicit JSON null for metadata.model. The actual
+  // runtime fix for the 502 this used to cause lives in careerbot-api's
+  // Pydantic model (ResponseMetadata.model: Optional[str]) -- confirmed
+  // merged: PR #203 "fix/cover-letter-contract-drift-and-usage-metadata",
+  // commit 5d0cb3c3, on develop2. That backend fix is what actually
+  // prevents the 502; it runs in a different repo and isn't exercised by
+  // this test at all.
+  //
+  // This suite only keeps the FRONTEND TypeScript type
+  // (ResponseMetadata.model: string | null) in sync with that already-
+  // fixed backend contract. It does NOT verify the 502 is fixed, and
+  // structurally can't: the fixture below is loaded through fixtures.ts's
+  // `as unknown as CoverLetterResponse` cast, which bypasses TypeScript's
+  // structural checking entirely -- these assertions would pass
+  // identically whether or not the FE type were ever widened, since
+  // vitest/JS runtime doesn't enforce TS types at all. Confirmed by
+  // temporarily reverting the type change alone and re-running this
+  // describe block: all cases still passed.
+
+  describe("failedNoModel", () => {
+    const cl = CL_FIXTURES.failedNoModel;
+
+    it("has status failed", () => {
+      expect(cl.status).toBe("failed");
+    });
+
+    it("has metadata.model === null", () => {
+      expect(cl.metadata.model).toBeNull();
+    });
+
+    it("has metadata.llm_calls === 0 (no LLM call happened)", () => {
+      expect(cl.metadata.llm_calls).toBe(0);
+    });
+
+    it("has reason set to a non-null string", () => {
+      expect(typeof cl.reason).toBe("string");
+      expect(cl.reason).not.toBeNull();
     });
   });
 });

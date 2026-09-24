@@ -13,7 +13,7 @@ import type {
 } from "@/app/coding-test/_lib/types";
 import { fetchProblem } from "@/app/coding-test/_lib/api";
 import { mockGrade } from "@/app/coding-test/_lib/gradingApi";
-import { runCode } from "@/app/coding-test/_lib/runApi";
+import { runAsync } from "@/app/coding-test/_lib/runApi";
 
 const CodeEditor = dynamic(
   () => import("@/app/coding-test/_components/CodeEditor"),
@@ -107,14 +107,18 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
     setOutputTab("run");
     setOutputOpen(true);
     try {
-      const r = await runCode(language, code, problem.examples);
-      setRunResult(r);
-    } catch {
-      setRunResult({ stdout: "", stderr: "Execution failed.", exit_code: 1 });
+      const judgeRes = await runAsync(problemSlug, language, code);
+      setRunResult({
+        stdout: judgeRes.results.map(r => r.stdout).join('\n').trim(),
+        stderr: judgeRes.results.find(r => r.stderr)?.stderr ?? '',
+        exit_code: judgeRes.verdict === 'accepted' ? 0 : 1,
+      });
+    } catch (err) {
+      setRunResult({ stdout: "", stderr: err instanceof Error ? err.message : "Execution failed.", exit_code: 1 });
     } finally {
       setIsRunning(false);
     }
-  }, [problem, language, code, isRunning, isGrading]);
+  }, [problem, problemSlug, language, code, isRunning, isGrading]);
 
   const handleGrade = useCallback(async () => {
     if (!problem || isGrading || gradingResult) return;
