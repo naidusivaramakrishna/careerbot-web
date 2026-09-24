@@ -13,4 +13,10 @@ describe('normalizeResumeScanError', () => {
       normalizeResumeScanError({ success: false, error: 'You have insufficient credits.' })
     ).toBe("You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.");
   });
+
+  it('labels a backend 500 as an ATS analysis failure instead of an upload failure', () => {
+    expect(
+      normalizeResumeScanError({ success: false, error: 'Internal Server Error' })
+    ).toMatch(/ATS analysis could not be completed after your resume was parsed/i);
+  });
 });
