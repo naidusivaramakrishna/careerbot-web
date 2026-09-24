@@ -18,12 +18,45 @@ function cbIconFallback(parent, size) { // safe: static SVG, no user data
 const BASE_URL   = CAREERBOT_CONFIG.BASE_URL;
 const PORTAL_URL = CAREERBOT_CONFIG.PORTAL_URL;
 
+// Navigate to a CareerBot web page — reusing an already-open CareerBot tab
+// (any tab under PORTAL_URL, any path) instead of piling up a new duplicate
+// tab every time the panel sends the user to the portal. Same behavior
+// doTailor's "Improve Resume" flow already used just for its one call site;
+// every other PORTAL_URL navigation in this file was still doing a bare
+// chrome.tabs.create.
+async function openPortalUrl(url) {
+  try {
+    const existingTabs = await chrome.tabs.query({ url: `${PORTAL_URL}/*` });
+    if (existingTabs.length > 0) {
+      // tabs.query's return order is NOT "most recently viewed" — with
+      // several CareerBot tabs open (JobMatch, Mock Test, Cover Letter
+      // history, ...) blindly taking existingTabs[0] silently updates
+      // whichever tab happened to be first/opened-earliest, while the tab
+      // the user is actually looking at never navigates anywhere. Picking
+      // by lastAccessed targets the tab they were just on.
+      const target = existingTabs.reduce((best, t) =>
+        (t.lastAccessed ?? 0) > (best.lastAccessed ?? 0) ? t : best
+      );
+      await chrome.tabs.update(target.id, { url, active: true });
+      await chrome.windows.update(target.windowId, { focused: true });
+      return;
+    }
+  } catch {
+    // Reusing an existing tab is a nice-to-have — a tab that closed/got
+    // discarded between the query and the update (or any other transient
+    // failure here) must never leave the user with nothing happening at all
+    // when they click through to the portal. Fall through to opening a new
+    // tab instead of silently swallowing the click.
+  }
+  await chrome.tabs.create({ url });
+}
+
 // ─── Upload / input constraints ───────────────────────────────────────────────
 const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED_RESUME_TYPES = [
+const ALLOWED_RESUME_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-];
+]);
 const ALLOWED_RESUME_EXTENSIONS = ['.pdf', '.docx'];
 const MAX_JD_TEXT_LENGTH = 30000; // ~30k chars — generous for a real JD, caps abuse
 
@@ -33,7 +66,7 @@ function validateResumeFile(file) {
   if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume file is too large (max 10MB).';
   const name = (file.name || '').toLowerCase();
   const hasAllowedExt = ALLOWED_RESUME_EXTENSIONS.some(ext => name.endsWith(ext));
-  const hasAllowedType = !file.type || ALLOWED_RESUME_TYPES.includes(file.type);
+  const hasAllowedType = !file.type || ALLOWED_RESUME_TYPES.has(file.type);
   if (!hasAllowedExt || !hasAllowedType) return 'Only PDF and DOCX resumes are supported.';
   return null;
 }
@@ -129,6 +162,37 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
   }
 }
 
+// Backend's actual error envelope (app/core/exception_handler.py):
+//   { success: false, error: { message, error_code, ..., details: { error: 'INSUFFICIENT_CREDITS', credits_required, credits_remaining, ... } } }
+// — the specific machine-readable code lives at error.details.error (or
+// error.error_code for the generic HTTP_<status> case), NOT at a top-level
+// `detail` key like a stock FastAPI HTTPException body. Most failures still
+// stay generic to the user by design (only known-safe codes are special-
+// cased below) — but insufficient-credits and auth are meaningful and
+// actionable enough to surface directly, instead of the guess-prone
+// "make sure you're logged in" catch-all every failure used to get.
+function describeApiError(status, data) {
+  const errorObj = data?.error && typeof data.error === 'object' ? data.error : null;
+  const details = errorObj?.details && typeof errorObj.details === 'object' ? errorObj.details : null;
+  const code = details?.error || errorObj?.error_code;
+
+  // 402 Payment Required means insufficient credits by HTTP-status convention
+  // in this app regardless of whether this particular route's error body
+  // populated the INSUFFICIENT_CREDITS code — same defensive status-first
+  // check src/api/mockTestApi.ts already relies on for the same reason.
+  if (code === 'INSUFFICIENT_CREDITS' || status === 402) {
+    const need = details?.credits_required;
+    const have = details?.credits_remaining;
+    return typeof need === 'number' && typeof have === 'number'
+      ? `You don't have enough credits for this (need ${need}, have ${have}). Upgrade your plan or wait for your credits to reset.`
+      : "You don't have enough credits for this. Upgrade your plan or wait for your credits to reset.";
+  }
+  if (status === 401) {
+    return 'Please log in to CareerBot to continue.';
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 async function apiFetch(path, options = {}) {
   const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     ...options,
@@ -136,13 +200,12 @@ async function apiFetch(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...options.headers },
   });
   if (!res.ok) {
-    let detail = '';
-    try { const d = await res.json(); detail = JSON.stringify(d); } catch { /* ignore */ }
-    console.error(`[apiFetch] ${res.status} ${path}`, detail);
-    // Keep the detailed error server-side only; show a generic message to the user.
-    const err = new Error('Something went wrong. Please try again.');
+    let data = null;
+    try { data = await res.json(); } catch { /* ignore */ }
+    console.error(`[apiFetch] ${res.status} ${path}`, data);
+    const err = new Error(describeApiError(res.status, data));
     err.status = res.status;
-    err.detail = detail;
+    err.detail = data;
     throw err;
   }
   return res.json();
@@ -158,7 +221,7 @@ async function clearAuthCookies() {
     BASE_URL.replace(/\/api\/v1\/?$/, ''),
   ];
   const names = ['access_token', 'refresh_token', 'admin_access_token', 'admin_refresh_token'];
-  const results = await Promise.allSettled(
+  await Promise.allSettled(
     origins.flatMap(url =>
       names.map(name => new Promise((resolve) => {
         chrome.cookies.remove({ url, name }, (removed) => {
@@ -238,7 +301,7 @@ async function parseJDInExtension(jdText) {
       return { jd_id: data.detail.existing_id };
     }
     console.error(`[parseJDInExtension] ${res.status}`, data);
-    throw new Error('Could not analyze job description. Please try again.');
+    throw new Error(describeApiError(res.status, data));
   }
   let jdId = data.jd_id || data.id;
   if (!jdId && Array.isArray(data.results) && data.results.length) {
@@ -285,16 +348,35 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resume_id: resumeId, jd_id: jdResult.jd_id }),
     });
-    if (!matchRes.ok) throw new Error(`Match failed: ${matchRes.status}`);
-    const matchData = await matchRes.json();
+    const matchData = await matchRes.json().catch(() => null);
+    if (!matchRes.ok) {
+      console.error(`[analyzeScore] matcher/match ${matchRes.status}`, matchData);
+      throw new Error(describeApiError(matchRes.status, matchData));
+    }
 
     // Extract score — backend stores as data.ats_score e.g. "78.2%" or a number
     const atsRaw = matchData?.data?.ats_score ?? matchData?.ats_score ?? '0';
-    const score  = Math.min(100, Math.max(0, parseFloat(String(atsRaw).replace('%', '')) || 0));
+    const score  = Math.min(100, Math.max(0, Number.parseFloat(String(atsRaw).replace('%', '')) || 0));
 
-    // Extract structured missing skills from actual API response
-    const techSkills = matchData?.data?.match_result?.Technical_Skills || {};
-    const softSkills = matchData?.data?.match_result?.Soft_Skills || {};
+    // Extract structured missing skills from actual API response.
+    // The AI layer renamed these two keys (Technical_Skills -> Technical_Skills_Check,
+    // Soft_Skills -> Soft_Skills_Check); match_result documents from before the rename
+    // still carry only the old name, so both must be checked (see careerbot-api
+    // app/shared/contracts/matcher_keys.py).
+    const matchResult = matchData?.data?.match_result || {};
+
+    // Backend returns success (200) with a 0% score and eligible:false when
+    // the resume structurally can't qualify (e.g. required years of
+    // experience the candidate doesn't have) — see match_result.reason. Not
+    // an HTTP failure, so the res.ok check above doesn't catch it; without
+    // this, the panel shows a 0% "Needs Improvement" score with no
+    // explanation instead of the reason the backend already computed.
+    if (matchResult.eligible === false) {
+      throw new Error(matchResult.reason || "Your resume doesn't meet this job's requirements.");
+    }
+
+    const techSkills = matchResult.Technical_Skills_Check || matchResult.Technical_Skills || {};
+    const softSkills = matchResult.Soft_Skills_Check || matchResult.Soft_Skills || {};
 
     const toNames = arr => (arr || []).map(s => (typeof s === 'string' ? s : s?.skill)).filter(Boolean);
 
@@ -325,60 +407,94 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
 
   } catch (err) {
     // Restore previous state
-    const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+    const detectedJD = await getActiveDetectedJD();
     if (detectedJD) applyJDContent(detectedJD);
     else showState('idle');
-    alert(`Analysis failed: ${err.message}. Make sure you are logged in to CareerBot.`);
+    alert(`Analysis failed: ${err.message}`);
   }
 }
 
 // ─── Render results state ─────────────────────────────────────────────────────
-function showResultsState(score, jobMeta, structuredSkills = {}) {
-  showState('results');
-
-  // Job info
+function applyJobInfo(jobMeta) {
   const titleEl   = document.getElementById('result-job-title');
   const companyEl = document.getElementById('result-company');
   if (titleEl)   titleEl.textContent   = jobMeta?.title   || 'Job Position';
   if (companyEl) companyEl.textContent = jobMeta?.company || '';
+}
 
-  // Score percentage
+function applyScorePercent(score) {
   const pctEl = document.getElementById('score-pct');
   if (pctEl) pctEl.textContent = `${Math.round(score)}%`;
+  return pctEl;
+}
 
-  // Animate arc  (circumference for r=46 → 2*π*46 ≈ 289)
+function scoreColor(score) {
+  if (score >= 80) return '#22c55e';
+  if (score >= 60) return '#2557a7';
+  if (score >= 40) return '#f59e0b';
+  return '#ef4444';
+}
+
+// Animate arc  (circumference for r=46 → 2*π*46 ≈ 289)
+function animateScoreArc(score, pctEl) {
   const circumference = 289;
   const arc = document.getElementById('score-arc');
-  if (arc) {
-    const color = score >= 80 ? '#22c55e' : score >= 60 ? '#2557a7' : score >= 40 ? '#f59e0b' : '#ef4444';
-    arc.style.stroke = color;
-    if (pctEl) pctEl.style.color = color;
-    setTimeout(() => {
-      arc.style.strokeDashoffset = circumference - (score / 100) * circumference;
-    }, 50);
-  }
+  if (!arc) return;
+  const color = scoreColor(score);
+  arc.style.stroke = color;
+  if (pctEl) pctEl.style.color = color;
+  setTimeout(() => {
+    arc.style.strokeDashoffset = circumference - (score / 100) * circumference;
+  }, 50);
+}
 
-  // Label + tip
+function scoreLabelInfo(score) {
+  if (score >= 80) {
+    return { labelText: 'Excellent Match', labelColor: '#22c55e', tipText: 'Great! Your profile aligns well with this role.' };
+  }
+  if (score >= 60) {
+    return { labelText: 'Good Match', labelColor: '#2557a7', tipText: 'Add a few more skills to boost your score.' };
+  }
+  if (score >= 40) {
+    return { labelText: 'Fair Match', labelColor: '#f59e0b', tipText: 'Several key skills are missing. Click below to improve.' };
+  }
+  return { labelText: 'Needs Improvement', labelColor: '#ef4444', tipText: 'Many required skills are missing. Click Improve Resume to see what to add.' };
+}
+
+function applyScoreLabel(score) {
   const labelEl = document.getElementById('score-label');
   const tipEl   = document.getElementById('score-tip');
-  let labelText, labelColor, tipText;
-  if (score >= 80) {
-    labelText = 'Excellent Match'; labelColor = '#22c55e';
-    tipText = 'Great! Your profile aligns well with this role.';
-  } else if (score >= 60) {
-    labelText = 'Good Match'; labelColor = '#2557a7';
-    tipText = 'Add a few more skills to boost your score.';
-  } else if (score >= 40) {
-    labelText = 'Fair Match'; labelColor = '#f59e0b';
-    tipText = 'Several key skills are missing. Click below to improve.';
-  } else {
-    labelText = 'Needs Improvement'; labelColor = '#ef4444';
-    tipText = 'Many required skills are missing. Click Improve Resume to see what to add.';
-  }
+  const { labelText, labelColor, tipText } = scoreLabelInfo(score);
   if (labelEl) { labelEl.textContent = labelText; labelEl.style.color = labelColor; }
   if (tipEl)   tipEl.textContent = tipText;
+}
 
-  // ── Skills Section ─────────────────────────────────────────────────────────
+function makeSkillChip(text, variant) {
+  const chip = document.createElement('span');
+  chip.className = `skill-chip ${variant}`;
+  chip.textContent = text;
+  return chip;
+}
+
+function fillSkillGroup(groupId, chipsId, countId, chips, trueCount) {
+  const group = document.getElementById(groupId);
+  const chipsEl = document.getElementById(chipsId);
+  const countEl = document.getElementById(countId);
+  if (!group || !chipsEl || !chips.length) {
+    if (group) { group.style.display = 'none'; }
+    return;
+  }
+  group.style.display = 'block';
+  chipsEl.replaceChildren(...chips);
+  if (countEl) countEl.textContent = trueCount ?? chips.length;
+}
+
+// ── Skills Section ─────────────────────────────────────────────────────────
+// Returns the missing-tech-skills list (used by renderAtsImprovements below),
+// or null if the section isn't on this page — callers must skip ATS
+// improvements too in that case, matching the original all-in-one function's
+// early return.
+function renderSkillGroups(structuredSkills) {
   const tech = structuredSkills.tech || {};
   const soft = structuredSkills.soft || {};
 
@@ -388,41 +504,24 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   const allSoftMatched = soft.matched || [];
 
   const section = document.getElementById('missing-skills-section');
-  if (!section) return;
-
-  const makeChip = (text, variant) => {
-    const chip = document.createElement('span');
-    chip.className = `skill-chip ${variant}`;
-    chip.textContent = text;
-    return chip;
-  };
-
-  const fillGroup = (groupId, chipsId, countId, chips, trueCount) => {
-    const group = document.getElementById(groupId);
-    const chipsEl = document.getElementById(chipsId);
-    const countEl = document.getElementById(countId);
-    if (!group || !chipsEl || !chips.length) { if (group) group.style.display = 'none'; return; }
-    group.style.display = 'block';
-    chipsEl.replaceChildren(...chips);
-    if (countEl) countEl.textContent = trueCount ?? chips.length;
-  };
+  if (!section) return null;
 
   // Matched skills — only the first 8 chips render (popup space is limited),
   // but the count badge must reflect the true total or it reads as a lower
   // match than the full jobmatch page reports for the same result.
-  fillGroup('matched-group', 'matched-chips', 'matched-count',
-    allTechMatched.slice(0, 8).map(s => makeChip(s, 'matched')), allTechMatched.length);
+  fillSkillGroup('matched-group', 'matched-chips', 'matched-count',
+    allTechMatched.slice(0, 8).map(s => makeSkillChip(s, 'matched')), allTechMatched.length);
 
   // Missing skills — same true-total-vs-rendered-chips split as above.
-  fillGroup('missing-group', 'missing-chips', 'missing-count',
-    allTechMissing.slice(0, 8).map(s => makeChip(s, 'missing')), allTechMissing.length);
+  fillSkillGroup('missing-group', 'missing-chips', 'missing-count',
+    allTechMissing.slice(0, 8).map(s => makeSkillChip(s, 'missing')), allTechMissing.length);
 
   // Soft skills
   const softChips = [
-    ...allSoftMatched.slice(0, 4).map(s => makeChip(s, 'soft-matched')),
-    ...allSoftMissing.slice(0, 4).map(s => makeChip(s, 'soft-missing')),
+    ...allSoftMatched.slice(0, 4).map(s => makeSkillChip(s, 'soft-matched')),
+    ...allSoftMissing.slice(0, 4).map(s => makeSkillChip(s, 'soft-missing')),
   ];
-  fillGroup('soft-group', 'soft-chips', null, softChips);
+  fillSkillGroup('soft-group', 'soft-chips', null, softChips);
 
   const hasAny = allTechMissing.length || allTechMatched.length || allSoftMissing.length || allSoftMatched.length;
   section.style.display = hasAny ? 'flex' : 'none';
@@ -431,29 +530,46 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   if (emptyNoteEl) emptyNoteEl.style.display = hasAny ? 'none' : 'flex';
   document.getElementById('state-results')?.classList.toggle('is-compact', !hasAny);
 
-  // ── ATS Improvements ───────────────────────────────────────────────────────
+  return allTechMissing;
+}
+
+function makeAtsImprovementRow(text) {
+  const row = document.createElement('div');
+  row.className = 'ats-item';
+  const check = document.createElement('span');
+  check.className = 'ats-check';
+  check.innerHTML = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  row.appendChild(check);
+  const label = document.createElement('span');
+  label.textContent = text;
+  row.appendChild(label);
+  return row;
+}
+
+// ── ATS Improvements ───────────────────────────────────────────────────────
+function renderAtsImprovements(score, allTechMissing) {
   const improvements = [];
   if (allTechMissing.length > 0) improvements.push(`Add ${allTechMissing.slice(0,3).join(', ')} to Skills`);
   if (score < 70) improvements.push('Improve Professional Summary');
   if (allTechMissing.length > 3) improvements.push('Add missing ATS keywords');
+  if (!improvements.length) return;
 
   const atsSection = document.getElementById('ats-improvements');
   const atsItems   = document.getElementById('ats-items');
-  if (atsSection && atsItems && improvements.length) {
-    atsSection.style.display = 'block';
-    atsItems.replaceChildren(...improvements.map(text => {
-      const row = document.createElement('div');
-      row.className = 'ats-item';
-      const check = document.createElement('span');
-      check.className = 'ats-check';
-      check.innerHTML = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-      row.appendChild(check);
-      const label = document.createElement('span');
-      label.textContent = text;
-      row.appendChild(label);
-      return row;
-    }));
-  }
+  if (!atsSection || !atsItems) return;
+
+  atsSection.style.display = 'block';
+  atsItems.replaceChildren(...improvements.map(makeAtsImprovementRow));
+}
+
+function showResultsState(score, jobMeta, structuredSkills = {}) {
+  showState('results');
+  applyJobInfo(jobMeta);
+  const pctEl = applyScorePercent(score);
+  animateScoreArc(score, pctEl);
+  applyScoreLabel(score);
+  const allTechMissing = renderSkillGroups(structuredSkills);
+  if (allTechMissing) renderAtsImprovements(score, allTechMissing);
 }
 
 // ─── Wire up results state buttons (idempotent) ───────────────────────────────
@@ -472,7 +588,7 @@ function setupResultsState() {
   });
 
   document.getElementById('btn-result-try-again').addEventListener('click', async () => {
-    const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+    const detectedJD = await getActiveDetectedJD();
     if (detectedJD) applyJDContent(detectedJD);
     else showState('idle');
   });
@@ -483,32 +599,44 @@ function setupResultsState() {
 let selectedFile = null;
 let jdIsDetected = false;
 
-function syncIdleActions() {
-  const hasResume = Boolean(selectedFile);
-  const hasJobDescription = Boolean(document.getElementById('manual-jd-input')?.value?.trim());
-  const ready = hasResume && hasJobDescription;
+function updateIdleActionButtons(ready) {
   ['btn-idle-get-started', 'btn-manual-tailor', 'btn-cover-letter-idle'].forEach((id) => {
     const button = document.getElementById(id);
     if (button) button.disabled = !ready;
   });
-  if (!ready) closeIdleActionMenu();
+}
+
+function updateIdleStatusLabel(hasJobDescription) {
   const status = document.querySelector('#state-idle .jdt-label');
   if (status) status.textContent = hasJobDescription ? 'Job description added' : 'No job description added';
+}
+
+function idleHelpText(hasResume, hasJobDescription) {
+  if (!hasResume && !hasJobDescription) return 'Add a resume and job description to continue';
+  if (!hasResume) return 'Add a resume to continue';
+  return 'Add a job description to continue';
+}
+
+function updateIdleActionsHelp(ready, hasResume, hasJobDescription) {
+  const helpEl = document.getElementById('idle-actions-help');
+  if (!helpEl) return;
+  helpEl.hidden = ready;
+  if (!ready) helpEl.textContent = idleHelpText(hasResume, hasJobDescription);
+}
+
+function syncIdleActions() {
+  const hasResume = Boolean(selectedFile);
+  const hasJobDescription = Boolean(document.getElementById('manual-jd-input')?.value?.trim());
+  const ready = hasResume && hasJobDescription;
+
+  updateIdleActionButtons(ready);
+  if (!ready) closeIdleActionMenu();
+  updateIdleStatusLabel(hasJobDescription);
 
   document.getElementById('idle-step-number-1')?.classList.toggle('is-complete', hasResume);
   document.getElementById('idle-step-number-2')?.classList.toggle('is-complete', hasJobDescription);
 
-  const helpEl = document.getElementById('idle-actions-help');
-  if (helpEl) {
-    helpEl.hidden = ready;
-    if (!ready) {
-      helpEl.textContent = !hasResume && !hasJobDescription
-        ? 'Add a resume and job description to continue'
-        : !hasResume
-        ? 'Add a resume to continue'
-        : 'Add a job description to continue';
-    }
-  }
+  updateIdleActionsHelp(ready, hasResume, hasJobDescription);
 }
 
 function openIdleActionMenu() {
@@ -658,11 +786,17 @@ async function init() {
   // Check for auto-detected JD and show correct state
   await applyStoredJD(user);
 
-  // Live update: scraper fires AFTER popup opens
-  chrome.storage.onChanged.addListener((changes, area) => {
+  // Live update: scraper fires AFTER popup opens. This can also fire for a
+  // background tab's scraper (e.g. a delayed re-scrape on another open job
+  // tab) while the panel is showing a different, currently-active tab — so
+  // it needs the same active-tab check applyStoredJD() uses, or it silently
+  // overwrites the panel with an unrelated job's JD.
+  chrome.storage.onChanged.addListener(async (changes, area) => {
     if (area !== 'local') return;
     if (changes.detectedJD?.newValue) {
-      applyJDContent(changes.detectedJD.newValue);
+      if (await isDetectedJDForActiveTab(changes.detectedJD.newValue)) {
+        applyJDContent(changes.detectedJD.newValue);
+      }
     } else if (changes.detectedJD && !changes.detectedJD.newValue) {
       clearIdleDetectedJob();
       // JD was cleared — go back to idle
@@ -740,6 +874,27 @@ async function getActiveBrowserTab() {
   }
 }
 
+// Only true if this detection belongs to the currently active browser tab.
+// Prevents showing Naukri JD when user switches to (or is looking at) a
+// Glassdoor tab — or any other tab, including an unsupported site like Dice
+// that has no scraper of its own but still shares this one global storage key.
+async function isDetectedJDForActiveTab(detectedJD) {
+  const activeTab = await getActiveBrowserTab();
+  return !(activeTab && detectedJD.tabId && detectedJD.tabId !== activeTab.id);
+}
+
+// Storage is a single shared slot written by whichever tab's content script
+// last fired — including background tabs, whose detection can be delayed by
+// Chrome's timer throttling and land after the user has switched away. Every
+// read of 'detectedJD' must go through this so a stale write from a
+// different tab can't resurface in the panel (nav clicks, error recovery,
+// "try again"/back buttons, etc.), not just the initial load.
+async function getActiveDetectedJD() {
+  const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+  if (!detectedJD) return null;
+  return (await isDetectedJDForActiveTab(detectedJD)) ? detectedJD : null;
+}
+
 // ─── Read storage and apply the right state ────────────────────────────────────
 async function applyStoredJD(_user) {
   const { detectedJD } = await chrome.storage.local.get('detectedJD');
@@ -753,10 +908,7 @@ async function applyStoredJD(_user) {
       return false;
     }
 
-    // Only show JD if it belongs to the currently active browser tab.
-    // Prevents showing Naukri JD when user switches to a Glassdoor tab.
-    const activeTab = await getActiveBrowserTab();
-    if (activeTab && detectedJD.tabId && detectedJD.tabId !== activeTab.id) {
+    if (!(await isDetectedJDForActiveTab(detectedJD))) {
       clearIdleDetectedJob();
       showState('idle');
       return false;
@@ -823,7 +975,7 @@ function setupIdleState() {
     closeIdleActionMenu();
     const jdText = document.getElementById('manual-jd-input')?.value?.trim();
     if (!jdText) { alert('Please paste a job description.'); return; }
-    const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+    const detectedJD = await getActiveDetectedJD();
     // Only attach the stored detection's metadata when this JD text actually
     // IS that detection. A stored JD survives a tab switch (applyStoredJD
     // clears the banner and textarea but deliberately keeps storage, so
@@ -927,14 +1079,7 @@ async function doTailor(jdText, jobMeta, resumeId) {
     setStep('Opening portal…');
 
     const portalUrl = `${PORTAL_URL}/jobmatch/app?session=${session.session_id}`;
-
-    const existingTabs = await chrome.tabs.query({ url: `${PORTAL_URL}/*` });
-    if (existingTabs.length > 0) {
-      await chrome.tabs.update(existingTabs[0].id, { url: portalUrl, active: true });
-      await chrome.windows.update(existingTabs[0].windowId, { focused: true });
-    } else {
-      await chrome.tabs.create({ url: portalUrl });
-    }
+    await openPortalUrl(portalUrl);
 
     setStep('Done!');
     await chrome.storage.local.remove('detectedJD');
@@ -946,7 +1091,7 @@ async function doTailor(jdText, jobMeta, resumeId) {
 
   } catch (err) {
     showState('idle');
-    alert(`Failed: ${err.message}. Make sure you are logged in to CareerBot.`);
+    alert(`Failed: ${err.message}`);
   }
 }
 
@@ -974,7 +1119,7 @@ function setNavActive(id) {
 document.getElementById('sb-analyze')?.addEventListener('click', async () => {
   if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-analyze');
-  const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+  const detectedJD = await getActiveDetectedJD();
   if (detectedJD) applyJDContent(detectedJD);
   else showState('idle');
 });
@@ -982,14 +1127,77 @@ document.getElementById('sb-analyze')?.addEventListener('click', async () => {
 document.getElementById('sb-dashboard')?.addEventListener('click', () => {
   if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-dashboard');
-  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard` });
+  openPortalUrl(`${PORTAL_URL}/dashboard`);
 });
 
 document.getElementById('sb-profile')?.addEventListener('click', () => {
-  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
+  openPortalUrl(`${PORTAL_URL}/dashboard/profile`);
 });
 
 // ─── Profile popover: update based on auth state ──────────────────────────────
+function applySidebarProfile(displayName, email) {
+  const srpName  = document.getElementById('srp-name');
+  const srpEmail = document.getElementById('srp-email');
+  const srAvatar = document.getElementById('sr-avatar-initials');
+  if (srpName)  srpName.textContent  = displayName;
+  if (srpEmail) srpEmail.textContent = email;
+  if (srAvatar) srAvatar.textContent = (displayName[0] || 'U').toUpperCase();
+}
+
+function applySignOutButton(btnEl) {
+  if (!btnEl) return;
+  btnEl.textContent = 'Sign Out';
+  btnEl.className   = 'rpc-btn danger';
+  btnEl.onclick = async () => {
+    try {
+      await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+    } catch { /* silent */ }
+    await clearAuthCookies();
+    updateProfileCard(null);
+    unlockRail(false);
+    showState('login');
+    startLoginPoll();
+  };
+}
+
+// Avatar image if available — only allow http(s) URLs from the API response.
+function applyProfileAvatar(avatarEl, user) {
+  if (!avatarEl || !user.avatar || !isSafeHttpUrl(user.avatar)) return;
+  const img = document.createElement('img');
+  img.src = user.avatar;
+  img.alt = '';
+  img.referrerPolicy = 'no-referrer';
+  avatarEl.replaceChildren(img);
+}
+
+function applyLoggedInProfile(user, nameEl, subEl, btnEl, avatarEl) {
+  const displayName = user.name || user.full_name || user.email || 'My Account';
+  const email       = user.email || '';
+  if (nameEl) nameEl.textContent = displayName;
+  if (subEl)  subEl.textContent  = email;
+
+  // Populate sidebar profile popover and header avatar
+  applySidebarProfile(displayName, email);
+  applySignOutButton(btnEl);
+  applyProfileAvatar(avatarEl, user);
+}
+
+function applyLoggedOutProfile(nameEl, subEl, btnEl) {
+  if (nameEl) nameEl.textContent = 'Profile';
+  if (subEl)  subEl.textContent  = 'Sign in to access your profile';
+  if (btnEl) {
+    btnEl.textContent = 'Sign In';
+    btnEl.className   = 'rpc-btn';
+    btnEl.onclick = () => openPortalUrl(`${PORTAL_URL}/?showLogin=true`);
+  }
+  const srpName  = document.getElementById('srp-name');
+  const srpEmail = document.getElementById('srp-email');
+  const srAvatar = document.getElementById('sr-avatar-initials');
+  if (srpName)  srpName.textContent  = 'My Account';
+  if (srpEmail) srpEmail.textContent = '';
+  if (srAvatar) srAvatar.textContent = '';
+}
+
 function updateProfileCard(user) {
   const nameEl   = document.getElementById('rpc-name');
   const subEl    = document.getElementById('rpc-sub');
@@ -997,56 +1205,9 @@ function updateProfileCard(user) {
   const avatarEl = document.getElementById('rpc-avatar-wrap');
 
   if (user) {
-    // Logged in
-    const displayName = user.name || user.full_name || user.email || 'My Account';
-    const email       = user.email || '';
-    if (nameEl)   nameEl.textContent   = displayName;
-    if (subEl)    subEl.textContent    = email;
-
-    // Populate sidebar profile popover and header avatar
-    const srpName      = document.getElementById('srp-name');
-    const srpEmail     = document.getElementById('srp-email');
-    const srAvatar     = document.getElementById('sr-avatar-initials');
-    if (srpName)  srpName.textContent  = displayName;
-    if (srpEmail) srpEmail.textContent = email;
-    if (srAvatar) srAvatar.textContent = (displayName[0] || 'U').toUpperCase();
-    if (btnEl) {
-      btnEl.textContent = 'Sign Out';
-      btnEl.className   = 'rpc-btn danger';
-      btnEl.onclick = async () => {
-        try {
-          await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
-        } catch { /* silent */ }
-        await clearAuthCookies();
-        updateProfileCard(null);
-        unlockRail(false);
-        showState('login');
-        startLoginPoll();
-      };
-    }
-    // Avatar image if available — only allow http(s) URLs from the API response.
-    if (avatarEl && user.avatar && isSafeHttpUrl(user.avatar)) {
-      const img = document.createElement('img');
-      img.src = user.avatar;
-      img.alt = '';
-      img.referrerPolicy = 'no-referrer';
-      avatarEl.replaceChildren(img);
-    }
+    applyLoggedInProfile(user, nameEl, subEl, btnEl, avatarEl);
   } else {
-    // Logged out
-    if (nameEl) nameEl.textContent = 'Profile';
-    if (subEl)  subEl.textContent  = 'Sign in to access your profile';
-    if (btnEl) {
-      btnEl.textContent = 'Sign In';
-      btnEl.className   = 'rpc-btn';
-      btnEl.onclick = () => chrome.tabs.create({ url: `${PORTAL_URL}/?showLogin=true` });
-    }
-    const srpName  = document.getElementById('srp-name');
-    const srpEmail = document.getElementById('srp-email');
-    const srAvatar = document.getElementById('sr-avatar-initials');
-    if (srpName)  srpName.textContent  = 'My Account';
-    if (srpEmail) srpEmail.textContent = '';
-    if (srAvatar) srAvatar.textContent = '';
+    applyLoggedOutProfile(nameEl, subEl, btnEl);
   }
 }
 
@@ -1060,7 +1221,7 @@ document.addEventListener('click', () => profilePopover?.classList.remove('open'
 
 document.getElementById('srp-dashboard')?.addEventListener('click', () => {
   profilePopover?.classList.remove('open');
-  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard` });
+  openPortalUrl(`${PORTAL_URL}/dashboard`);
 });
 
 document.getElementById('srp-signout')?.addEventListener('click', async () => {
@@ -1079,17 +1240,17 @@ document.getElementById('srp-signout')?.addEventListener('click', async () => {
 
 document.getElementById('sb-feedback')?.addEventListener('click', () => {
   setNavActive('sb-feedback');
-  chrome.tabs.create({ url: `${PORTAL_URL}/feedback` });
+  openPortalUrl(`${PORTAL_URL}/feedback`);
 });
 
 document.getElementById('sb-settings')?.addEventListener('click', () => {
-  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
+  openPortalUrl(`${PORTAL_URL}/dashboard/profile`);
 });
 
 
 // ─── Auth buttons ─────────────────────────────────────────────────────────────
 function openLoginTab() {
-  chrome.tabs.create({ url: `${PORTAL_URL}/?showLogin=true` });
+  openPortalUrl(`${PORTAL_URL}/?showLogin=true`);
 }
 
 document.getElementById('btn-login')?.addEventListener('click', openLoginTab);
@@ -1097,10 +1258,10 @@ document.getElementById('btn-login-simple')?.addEventListener('click', openLogin
 document.getElementById('btn-login-new')?.addEventListener('click', openLoginTab);
 document.getElementById('btn-login-link')?.addEventListener('click', openLoginTab);
 document.getElementById('btn-signup')?.addEventListener('click', () => {
-  chrome.tabs.create({ url: `${PORTAL_URL}/signup` });
+  openPortalUrl(`${PORTAL_URL}/signup`);
 });
 document.getElementById('btn-signup-new')?.addEventListener('click', () => {
-  chrome.tabs.create({ url: `${PORTAL_URL}/signup` });
+  openPortalUrl(`${PORTAL_URL}/signup`);
 });
 document.getElementById('footer-logout')?.addEventListener('click', async () => {
   try {
@@ -1113,21 +1274,60 @@ document.getElementById('footer-logout')?.addEventListener('click', async () => 
   startLoginPoll();
 });
 document.getElementById('footer-settings')?.addEventListener('click', () => {
-  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
+  openPortalUrl(`${PORTAL_URL}/dashboard/profile`);
 });
 
 // ─── Cover Letter ─────────────────────────────────────────────────────────────
-let clLetterId = null;
-
-async function generateCoverLetter() {
-  const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  const typedJd = document.getElementById('manual-jd-input')?.value?.trim();
-  const jdText  = clampJdText(typedJd || detectedJD?.jd || '');
+function resolveJdTextAndMeta(typedJd, detectedJD) {
+  const jdText = clampJdText(typedJd || detectedJD?.jd || '');
   // Same gate as the Analyze path: the stored metadata only describes the
   // stored JD. It applies when the text came from storage (empty textarea) or
   // when the textarea still holds that untouched detection — never to a JD
   // the user pasted themselves.
   const jobMeta = (!typedJd || jdIsDetected) ? (detectedJD?.meta || {}) : {};
+  return { jdText, jobMeta };
+}
+
+function setCoverLetterHeaderLabel(jobMeta) {
+  const label = [jobMeta.title, jobMeta.company].filter(Boolean).join(' · ');
+  const labelEl = document.getElementById('cl-job-label');
+  if (labelEl) labelEl.textContent = label || 'Cover Letter';
+}
+
+// Step 1: resolve parsed_resume_id.
+// Priority: cachedResumeId (set after Analyze) → upload selectedFile
+async function resolveParsedResumeId() {
+  let parsedResumeId = cachedResumeId || null;
+  if (!parsedResumeId && selectedFile) {
+    parsedResumeId = await uploadResume(selectedFile);
+  }
+  if (!parsedResumeId) throw new Error('No resume found. Please upload a resume first.');
+  return parsedResumeId;
+}
+
+function showCoverLetterError(err, errorEl) {
+  const errMsgEl = document.getElementById('cl-error-msg');
+  if (errMsgEl) errMsgEl.textContent = err?.message || 'Failed to generate. Please try again.';
+  errorEl.classList.remove('hidden');
+}
+
+// Hands off to the web app's own Cover Letter form (pre-filled with the
+// scraped JD + resume) instead of calling /cover-letter/generate directly
+// from here. This used to be a second, independently-maintained request
+// builder — and it kept drifting from the web form's request (missing
+// candidate name, tone, company location, ...), producing worse letters
+// than the exact same resume+JD generated through the web app. Reusing the
+// web form as the single generation code path makes that class of drift
+// impossible instead of chasing each missing field one at a time.
+//
+// Uses the same /extension/prefill → session_id handoff that "Improve
+// Resume" already uses to open JobMatch (see doTailor above) — a server-
+// side session avoids URL-length limits (a JD can be up to 50k chars) and
+// the web page already knows how to resolve one.
+async function generateCoverLetter() {
+  const detectedJD = await getActiveDetectedJD();
+  const typedJd = document.getElementById('manual-jd-input')?.value?.trim();
+  const { jdText, jobMeta } = resolveJdTextAndMeta(typedJd, detectedJD);
 
   if (!jdText) {
     alert('No job description found. Please paste a job description first.');
@@ -1135,87 +1335,51 @@ async function generateCoverLetter() {
   }
 
   showState('coverLetter');
+  setCoverLetterHeaderLabel(jobMeta);
 
-  // Set header label
-  const label = [jobMeta.title, jobMeta.company].filter(Boolean).join(' · ');
-  const labelEl = document.getElementById('cl-job-label');
-  if (labelEl) labelEl.textContent = label || 'Cover Letter';
-
-  // Show generating spinner
-  const genEl    = document.getElementById('cl-generating');
-  const outputEl = document.getElementById('cl-output');
-  const errorEl  = document.getElementById('cl-error');
+  const genEl   = document.getElementById('cl-generating');
+  const errorEl = document.getElementById('cl-error');
   genEl.classList.remove('hidden');
-  outputEl.classList.add('hidden');
   errorEl.classList.add('hidden');
 
   try {
-    // Step 1: resolve parsed_resume_id.
-    // Priority: cachedResumeId (set after Analyze) → upload selectedFile
-    let parsedResumeId = cachedResumeId || null;
-    if (!parsedResumeId && selectedFile) {
-      parsedResumeId = await uploadResume(selectedFile);
-    }
-    if (!parsedResumeId) throw new Error('No resume found. Please upload a resume first.');
-
-    // Step 2: resolve jd_id — use cached if available, else parse now
-    let jdId = cachedJdId || null;
-    if (!jdId) {
-      const jdResult = await parseJDInExtension(jdText);
-      if (!jdResult.jd_id) throw new Error('Could not parse job description. Please try again.');
-      jdId = jdResult.jd_id;
+    // A resume isn't required to open the form — if none is cached/uploaded
+    // yet, the web form's own upload/picker UI handles it, same as a user
+    // landing on that page directly.
+    let parsedResumeId = null;
+    try {
+      parsedResumeId = await resolveParsedResumeId();
+    } catch {
+      parsedResumeId = null;
     }
 
-    const idempotencyKey = `ext-cl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    const res = await apiFetch('/cover-letter/generate', {
+    const session = await apiFetch('/extension/prefill', {
       method: 'POST',
-      headers: {
-        'Content-Type':   'application/json',
-        'Idempotency-Key': idempotencyKey,
-      },
       body: JSON.stringify({
-        parsed_resume_id: parsedResumeId,
-        jd_id:            jdId,
-        ...(jobMeta.title || jobMeta.company ? {
-          application_context: {
-            ...(jobMeta.company && { company_name: jobMeta.company }),
-            ...(jobMeta.title   && { role_title:   jobMeta.title }),
-            source: 'user',
-          },
-        } : {}),
-        options: { include_debug_metadata: false },
+        job_description: jdText,
+        job_title:       jobMeta?.title    || null,
+        company:         jobMeta?.company  || null,
+        job_location:    jobMeta?.location || null,
+        job_url:         jobMeta?.url      || null,
+        resume_id:       parsedResumeId,
       }),
     });
 
-    clLetterId = res?.letter_id || res?.id || null;
-    // plain_text is the ready-to-display string; cover_letter is a structured object
-    const content = res?.plain_text || res?.content || res?.letter || '';
-
-    genEl.classList.add('hidden');
-
-    // If we have a letter_id, open directly in CareerBot web app instead of showing raw text
-    if (clLetterId) {
-      chrome.tabs.create({ url: `${PORTAL_URL}/cover-letter/${clLetterId}` });
-      window.close();
-      return;
-    }
-
-    outputEl.value = content;
-    outputEl.classList.remove('hidden');
-
+    // Must finish BEFORE closing the panel — window.close() is not reliably
+    // a no-op here, and closing while the tab query/update is still in
+    // flight can kill that pending navigation.
+    await openPortalUrl(`${PORTAL_URL}/cover-letter/new?session=${session.session_id}`);
+    window.close();
   } catch (err) {
     genEl.classList.add('hidden');
-    const errMsgEl = document.getElementById('cl-error-msg');
-    if (errMsgEl) errMsgEl.textContent = err?.message || 'Failed to generate. Please try again.';
-    errorEl.classList.remove('hidden');
+    showCoverLetterError(err, errorEl);
   }
 }
 
 document.getElementById('btn-cl-regenerate')?.addEventListener('click', generateCoverLetter);
 
 document.getElementById('btn-cl-back')?.addEventListener('click', async () => {
-  const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+  const detectedJD = await getActiveDetectedJD();
   if (detectedJD) applyJDContent(detectedJD);
   else showState('idle');
 });
@@ -1237,10 +1401,7 @@ document.getElementById('btn-cl-copy')?.addEventListener('click', () => {
 });
 
 document.getElementById('btn-cl-open-web')?.addEventListener('click', () => {
-  const url = clLetterId
-    ? `${PORTAL_URL}/cover-letter/${clLetterId}`
-    : `${PORTAL_URL}/cover-letter`;
-  chrome.tabs.create({ url });
+  openPortalUrl(`${PORTAL_URL}/cover-letter`);
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

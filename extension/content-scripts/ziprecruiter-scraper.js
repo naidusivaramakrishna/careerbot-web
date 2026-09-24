@@ -54,13 +54,15 @@
   }
 
   function extractMeta() {
-    const titleEl   = document.querySelector('h1[class*="jobTitle"], h1[class*="title"], [data-testid="job-title"]');
-    const companyEl = document.querySelector('[class*="hiring_company"] a, [class*="company"] a, [data-testid="company-name"]');
+    const titleEl    = document.querySelector('h1[class*="jobTitle"], h1[class*="title"], [data-testid="job-title"]');
+    const companyEl  = document.querySelector('[class*="hiring_company"] a, [class*="company"] a, [data-testid="company-name"]');
+    const locationEl = document.querySelector('[data-testid="job-location"], [class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'ziprecruiter',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'ziprecruiter',
     };
   }
 
@@ -71,7 +73,11 @@
     const jd = extractJobDescription();
     if (!jd) return;
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();

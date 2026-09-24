@@ -1,10 +1,15 @@
-// LinkedIn JD scraper
+// Zippia JD scraper
+// Zippia has no stable, documented class names for job detail views (aggregator
+// pages mix listing cards and detail panels under the same markup family), so
+// this uses generic heuristics instead of guessed selectors: a real job
+// description reads as a long block of prose containing JD-shaped language
+// ("responsibilities", "requirements", etc.), while listing-page job cards are
+// short blurbs that won't pass the length + keyword bar below.
 
 (function () {
-  if (window.__careerbotLinkedIn) return;
-  window.__careerbotLinkedIn = true;
+  if (window.__careerbotZippia) return;
+  window.__careerbotZippia = true;
 
-  // Inject critical CSS to lock banner positioning
   const style = document.createElement('style');
   style.textContent = `
     #careerbot-banner {
@@ -32,100 +37,51 @@
   `;
   (document.head || document.documentElement).appendChild(style);
 
+  const JD_MARKERS = /responsibilit|requirement|qualification|about the (job|role|position)|job description|what you.ll (do|need)|who you are|preferred skills|nice to have/i;
+
   function isJobPage() {
-    return /\/jobs\/view\/\d+/.test(window.location.pathname) ||
-           /\/jobs\/collections\//.test(window.location.pathname) ||
-           /\/jobs\/search\//.test(window.location.pathname) ||
-           /\/jobs\//.test(window.location.pathname);
-  }
-
-  function extractByFixedSelectors() {
-    const selectors = [
-      // Current LinkedIn selectors (2024-2025)
-      '#job-details',
-      '#job-details span',
-      '.jobs-description__container',
-      '.jobs-description__content',
-      '.jobs-description-content__text',
-      '.jobs-description-content__text--stretch',
-      // Older selectors as fallback
-      '.description__text',
-      '[class*="job-description"]',
-      '.jobs-box__html-content',
-    ];
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el && el.innerText.trim().length > 100) return el.innerText.trim();
-    }
-    return null;
-  }
-
-  // LinkedIn labels this section "About the job" on every layout (standalone
-  // /jobs/view/ page and the /jobs/search-results/ split-pane preview alike),
-  // even when the surrounding CSS class names differ between them — anchoring
-  // on that heading text survives LinkedIn's frequent class renames better
-  // than any fixed selector list.
-  // textContent, not innerText — innerText forces a synchronous layout on
-  // every call, and this scan runs across every leaf element in the page
-  // each time the mutation observer below fires (LinkedIn mutates the DOM
-  // constantly). For a leaf node's exact-string test, textContent is
-  // equivalent; innerText is only needed (and only used) on the final
-  // matched container below, where layout-aware visibility actually matters.
-  function extractByAboutTheJobHeading() {
-    const heading = Array.from(document.querySelectorAll('h1, h2, h3, h4, strong, span, div'))
-      .find(el => el.children.length === 0 && /^about the job$/i.test(el.textContent?.trim() || ''));
-    if (!heading) return null;
-    const container = (heading.parentElement || heading).closest('section, article, div');
-    const text = container?.innerText?.trim();
-    return text && text.length > 100 ? text : null;
-  }
-
-  // A candidate IS nav/header chrome itself, or contains a nav/header
-  // descendant with enough links to be real site navigation (a proxy for
-  // "this wraps the whole page" — e.g. the global nav plus the signed-in
-  // user's profile card) — but not on ANY nested <nav>/<header>, since
-  // LinkedIn's small card sub-widgets use those tags too and over-rejecting
-  // on that previously disqualified otherwise-valid candidates.
-  function isChromeElement(el) {
-    if (el.tagName === 'NAV' || el.tagName === 'HEADER') return true;
-    return el.querySelectorAll('nav a, header a').length > 5;
-  }
-
-  // Last resort: find any element with substantial text near "job-details" or
-  // "description".
-  function extractByLargestTextCandidate() {
-    const candidates = document.querySelectorAll('article, section, div[id*="job"], div[class*="description"]');
-    for (const el of candidates) {
-      if (isChromeElement(el)) continue;
-      const text = el.innerText?.trim();
-      if (text && text.length > 200) return text;
-    }
-    return null;
+    return /zippia\.com\/.*\bjobs?\b/i.test(window.location.href);
   }
 
   function extractJobDescription() {
-    return extractByFixedSelectors()
-      || extractByAboutTheJobHeading()
-      || extractByLargestTextCandidate();
+    const candidates = document.querySelectorAll('div, section, article');
+    let best = null;
+    for (const el of candidates) {
+      if (el.querySelector('nav') || el.querySelector('header') || el.querySelector('footer')) continue;
+      const text = el.innerText?.trim();
+      if (!text || text.length < 300) continue;
+      if (!JD_MARKERS.test(text)) continue;
+      if (!best || text.length < best.length) best = text; // smallest qualifying block = most specific container
+    }
+    return best;
   }
 
   function extractMeta() {
-    const titleEl = document.querySelector(
-      '.job-details-jobs-unified-top-card__job-title h1, .jobs-unified-top-card__job-title h1, h1.t-24'
-    );
-    const companyEl = document.querySelector(
-      '.job-details-jobs-unified-top-card__company-name a, .jobs-unified-top-card__company-name a, .topcard__org-name-link'
-    );
-    const locationEl = document.querySelector(
-      '.job-details-jobs-unified-top-card__primary-description-container .tvm__text, .jobs-unified-top-card__bullet, .topcard__flavor--bullet'
-    );
-    return {
-      title:    titleEl?.innerText?.trim()   || document.title,
-      company:  companyEl?.innerText?.trim() || '',
-      location: locationEl?.innerText?.trim() || '',
-      url:      window.location.href,
-      source:   'linkedin',
-    };
+    const titleEl = document.querySelector('h1');
+    const title = titleEl?.innerText?.trim() || document.title.replace(/\s*\|\s*Zippia.*$/i, '').trim();
+
+    // Company/location are usually short text siblings near the H1 (e.g.
+    // "Acme Corp - San Jose, CA"). Look for a short line near the title
+    // rather than guessing a class name.
+    let company = '';
+    let location = '';
+    if (titleEl) {
+      let node = titleEl.nextElementSibling;
+      let hops = 0;
+      while (node && hops < 4) {
+        const t = node.innerText?.trim();
+        if (t && t.length > 0 && t.length < 120 && !JD_MARKERS.test(t)) {
+          const parts = t.split(/\s+[-|•]\s+/);
+          company = company || parts[0]?.trim() || '';
+          if (parts[1]) location = location || parts[1].trim();
+          break;
+        }
+        node = node.nextElementSibling;
+        hops++;
+      }
+    }
+
+    return { title, company, location, url: window.location.href, source: 'zippia' };
   }
 
   let lastDetectedJd = null;
@@ -347,13 +303,15 @@
     });
   }
 
-  // Wait for dynamic content - try multiple times in case content loads late
-  setTimeout(tryDetect, 1500);
-  setTimeout(tryDetect, 3000);
-  setTimeout(tryDetect, 5000);
+  // Zippia's job detail content can hydrate well after document_idle, so retry
+  // detection on a schedule instead of a single fixed-delay attempt (tryDetect
+  // is idempotent once a JD is found — see the lastDetectedJd guard above).
+  [1000, 2500, 4500, 7000, 10000, 14000].forEach((delay) => setTimeout(tryDetect, delay));
 
-  // Re-run for both URL changes and in-place job-panel replacements. LinkedIn
-  // can update the selected job without replacing the whole page.
+  // Re-run for both URL changes and in-place job-panel replacements — clicking
+  // a different job card on a listing page often swaps the visible JD without
+  // a full page navigation, so a one-time detection on initial load would
+  // otherwise never see it.
   let lastUrl = location.href;
   const urlObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
