@@ -161,7 +161,7 @@ export const useUserManagement = () => {
             toast.dismiss(toastId)
             toast.success(`Users exported as ${format.toUpperCase()} (${totalToExport} rows)`)
         } catch (error) {
-            toast.dismiss()
+            toast.dismiss(toastId)
             toast.error('Failed to export users')
             logger.error('Export error:', error)
         }

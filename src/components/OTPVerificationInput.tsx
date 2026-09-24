@@ -39,9 +39,8 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
 
   // Cleanup post-verify timeout on unmount
   useEffect(() => {
-    const timeoutId = verifyTimeoutRef.current
     return () => {
-      if (timeoutId) clearTimeout(timeoutId)
+      if (verifyTimeoutRef.current) clearTimeout(verifyTimeoutRef.current)
     }
   }, [])
 
@@ -66,16 +65,25 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
     }
 
     const newOtp = [...otp]
-    // Handle multi-digit input (from autofill) by spreading across boxes
-    for (let i = 0; i < digits.length && i + index < 6; i++) {
-      newOtp[i + index] = digits[i]
+
+    // If box was already filled and user typed (2 chars total), replace the digit
+    if (otp[index] && digits.length === 2) {
+      newOtp[index] = digits[1]
+    } else {
+      // Handle multi-digit input (from autofill/paste) by spreading across boxes
+      for (let i = 0; i < digits.length && i + index < 6; i++) {
+        newOtp[i + index] = digits[i]
+      }
     }
+
     setOtp(newOtp)
     setErrorMessage("")
 
     // Auto-focus next empty input or verify button if all filled
     if (digits.length === 1 && index < 5) {
       inputRefs.current[index + 1]?.focus()
+    } else if (digits.length === 2 && otp[index]) {
+      // User typed into filled box: keep focus
     } else if (digits.length > 1) {
       // Multi-digit paste: focus the next empty field after filled ones
       const lastFilledIndex = Math.min(index + digits.length - 1, 5)

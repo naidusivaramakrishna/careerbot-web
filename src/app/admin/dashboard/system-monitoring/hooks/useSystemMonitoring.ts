@@ -135,10 +135,11 @@ export const useSystemMonitoring = ({
         if (autoRefresh === "On") {
             const interval = setInterval(() => {
                 fetchAllData()
+                fetchLogs()
             }, 30000) // Refresh every 30 seconds
             return () => clearInterval(interval)
         }
-    }, [autoRefresh, fetchAllData])
+    }, [autoRefresh, fetchAllData, fetchLogs])
 
     return {
         systemOverview,
@@ -149,6 +150,7 @@ export const useSystemMonitoring = ({
         loading,
         isRefreshing,
         lastRefreshed,
-        fetchAllData
+        fetchAllData,
+        fetchLogs
     }
 }

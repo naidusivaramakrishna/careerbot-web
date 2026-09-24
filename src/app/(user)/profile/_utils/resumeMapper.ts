@@ -202,6 +202,10 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                     .filter((exp) => exp.company || exp.role)
                     .map((exp) => {
                         let start = '', end = '';
+                        const endDateRaw = asStr(exp.end_date || exp.duration);
+                        const isCurrentExplicit = endDateRaw.toLowerCase().includes('present') ||
+                                                  endDateRaw.toLowerCase().includes('currently');
+
                         if (exp.start_date) {
                             start = parseResumeDate(asStr(exp.start_date));
                             end = parseResumeDate(asStr(exp.end_date));
@@ -218,7 +222,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                                 exp.achievements as Array<{ text: string }> | undefined,
                                 exp.responsibilities as Array<{ text: string }> | undefined
                             ),
-                            currently_working: !end,
+                            currently_working: isCurrentExplicit || !end,
                         };
                     });
                 allWorkExperience.push(...mapped);

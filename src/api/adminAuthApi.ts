@@ -1,6 +1,7 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
 import { clearAdminRoleCache } from '@/app/admin/_hooks/adminRoleCache';
+import { getTenantId } from '@/lib/tenantStorage';
 // ==================== INTERFACES ====================
 
 /** Status code only -- never the axios error object, which carries credentials. */
@@ -316,7 +317,9 @@ export const adminLogout = async (): Promise<void> => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Tenant-Id': getTenantId(),
       },
+      credentials: 'include',
     });
   } catch (error) {
     logger.error('Error logging out admin:', error);

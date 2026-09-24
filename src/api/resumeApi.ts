@@ -1069,22 +1069,7 @@ export const downloadResume = async (
   }
 };
 
-// Get a single template by ID with full details including preview HTML/CSS
-export const getTemplateById = async (templateId: string): Promise<TemplateResponse> => {
-  try {
-    logger.debug("📋 Fetching template by ID:", templateId);
-
-    const response = await httpClient.get<TemplateResponse>(`/templates/${templateId}`);
-
-    logger.info("✅ Template fetched:", response.data);
-    return response.data;
-  } catch (error) {
-    logger.error("❌ Error fetching template by ID:", error);
-    throw error;
-  }
-};
-
-// Keep your existing getTemplatesByCategory function
+// getTemplatesByCategory function
 export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
   
   try {

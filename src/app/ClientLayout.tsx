@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Toaster } from "sonner";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { TenantProvider } from "@/contexts/TenantContext";
+import { VerificationRecovery } from "@/components/VerificationRecovery";
 
 export default function ClientLayout({
   children,
@@ -103,6 +104,7 @@ export default function ClientLayout({
   return (
     <TenantProvider>
       <Toaster richColors position="bottom-right" />
+      <VerificationRecovery />
       {children}
     </TenantProvider>
   );

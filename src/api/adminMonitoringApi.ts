@@ -114,7 +114,7 @@ export interface SystemLogsResponse {
 }
 
 export type MonitoringPeriod = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days';
-export type LogLevel = 'WARNING' | 'CRITICAL';
+export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
 export type LogSource = 'System' | 'Database'
 
 export interface LogsQueryParams {

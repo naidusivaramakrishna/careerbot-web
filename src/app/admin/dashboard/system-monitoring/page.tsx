@@ -46,7 +46,8 @@ const SystemMonitoring = () => {
         loading,
         isRefreshing,
         lastRefreshed,
-        fetchAllData
+        fetchAllData,
+        fetchLogs
     } = useSystemMonitoring({
         activeTab: activeTabs.api,
         cpuActiveTab: activeTabs.cpu,
@@ -61,7 +62,8 @@ const SystemMonitoring = () => {
     const handleRefresh = useCallback(() => {
         logger.info('Refreshing system monitoring data')
         fetchAllData()
-    }, [fetchAllData])
+        fetchLogs()
+    }, [fetchAllData, fetchLogs])
 
     const handleAutoRefreshChange = useCallback((value: string) => {
         logger.debug(`Auto-refresh changed to: ${value}`)

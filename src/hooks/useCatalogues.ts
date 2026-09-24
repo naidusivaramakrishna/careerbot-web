@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import logger from '@/lib/logger';
+import httpClient from '@/lib/http';
 
 export interface CatalogueConfig {
   key: string;
@@ -64,13 +65,21 @@ export const useCatalogues = () => {
         }
 
         // Fetch from API
-        const response = await fetch(CATALOGUES_API_URL);
+        const response = await httpClient.get<CatalogueConfig[] | CataloguesResponse>(CATALOGUES_API_URL);
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch catalogues: ${response.statusText}`);
+        // Validate and normalize response (handle both direct array and wrapper object)
+        let data: CatalogueConfig[];
+        if (Array.isArray(response.data)) {
+          data = response.data;
+        } else if (response.data && typeof response.data === 'object' && 'catalogues' in response.data) {
+          data = (response.data as CataloguesResponse).catalogues;
+        } else {
+          throw new Error('Invalid catalogues response format');
         }
 
-        const data: CatalogueConfig[] = await response.json();
+        if (!Array.isArray(data)) {
+          throw new Error('Catalogues data is not an array');
+        }
 
         // Cache the result
         localStorage.setItem(CACHE_KEY, JSON.stringify({

@@ -8,7 +8,7 @@ import { signUp, signIn } from "@/api/authApi"
 import { SignUpForm as ISignUpForm, LoginForm, ErrorState, LoadingState, FormType } from "@/types/authTypes"
 import SocialLoginButtons from "./SocialLoginButtons"
 import { mapAuthError, AUTH_ERROR_MESSAGES } from "@/lib/authMessages"
-import { sanitizeAuthRedirect } from "@/lib/authRedirect"
+import { sanitizeAuthRedirect, DEFAULT_AUTH_REDIRECT } from "@/lib/authRedirect"
 import OTPVerificationInput from "./OTPVerificationInput"
 
 interface Props {
@@ -75,6 +75,13 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
             if (response.id) {
                 toast.success("Account created! Verification email sent.")
+                // Store pending verification in localStorage for recovery if user closes modal
+                localStorage.setItem('pendingEmailVerification', JSON.stringify({
+                    userId: response.id,
+                    email: signUpForm.email,
+                    pendingVerification: true,
+                    timestamp: Date.now(),
+                }))
                 setVerificationData({
                     userId: response.id,
                     email: signUpForm.email,
@@ -304,6 +311,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     email={verificationData.email}
                     password={verificationData.password}
                     onSuccess={() => {
+                        // Clear pending verification from localStorage on success
+                        localStorage.removeItem('pendingEmailVerification')
                         setIsVerifyingEmail(false)
                         setLoading((prev) => ({ ...prev, signUp: false }))
                         // Call parent onSuccess callback if provided
@@ -315,7 +324,6 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             // was intended (not the default), append it as ?next= so onboarding
                             // can forward them after profile setup.
                             onClose()
-                            const DEFAULT_AUTH_REDIRECT = "/dashboard"
                             if (authRedirectTo !== DEFAULT_AUTH_REDIRECT) {
                                 window.location.href = `/onboarding?next=${encodeURIComponent(authRedirectTo)}`
                             } else {
@@ -324,6 +332,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                         }
                     }}
                     onClose={() => {
+                        // Keep pending verification in localStorage so user can recover
+                        // (Don't clear it - let user resume from recovery option if they closed modal)
                         setIsVerifyingEmail(false)
                         setVerificationData(null)
                         setFormType("signup")
