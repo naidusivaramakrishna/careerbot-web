@@ -149,12 +149,20 @@ export function useResumeProfileFill(userId?: string) {
           }
         }
 
-        // Auto-fill employment status if experience found
+        // Auto-fill employment status based on current work experience
+        // Only set 'employed' if there's an active job (no end_date or end_date in future)
         try {
+          const now = new Date();
+          const hasCurrentJob = profileData.workExperience.some(exp => {
+            if (!exp.end_date) return true; // Currently employed (no end date)
+            const endDate = new Date(exp.end_date);
+            return endDate > now; // End date is in the future
+          });
+
           const existingInfo = await getEmploymentInfo();
           await updateEmploymentInfo({
             ...existingInfo,
-            employment_status: 'employed'
+            employment_status: hasCurrentJob ? 'employed' : existingInfo.employment_status
           });
         } catch {
           // non-fatal: continue with other sections

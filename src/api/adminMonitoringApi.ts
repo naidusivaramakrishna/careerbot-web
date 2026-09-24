@@ -483,7 +483,9 @@ export const getLogLevelColor = (level: LogLevel): string => {
 export const formatTimestamp = (isoString: string): string => {
     try {
         // Ensure timestamp is treated as UTC by appending 'Z' if missing
-        const utcString = isoString.includes('Z') || isoString.includes('+') ? isoString : `${isoString}Z`;
+        // Check for Z, +/-HH:MM, or +/-HHMM timezone offsets
+        const hasTimezoneOffset = /[zZ]|[+-]\d{2}:?\d{2}$/.test(isoString);
+        const utcString = hasTimezoneOffset ? isoString : `${isoString}Z`;
         const date = new Date(utcString);
 
         // Use Intl.DateTimeFormat for explicit timezone conversion to IST

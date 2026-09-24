@@ -51,7 +51,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder, previewCatalogueKey } = useResume();
   const { canonicalScore, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
-  const { catalogues, getCataloguesMap } = useCatalogues();
+  const { getCataloguesMap } = useCatalogues();
 
   // For enhanced resumes, seed the canonical score from the enhancer's ATS score
   // so the toolbar and any other score consumers show the correct value.

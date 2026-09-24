@@ -81,6 +81,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     password: signUpForm.password,
                 })
                 setIsVerifyingEmail(true)
+            } else {
+                setLoading((prev) => ({ ...prev, signUp: false }))
+                setErrors({ email: "", username: "", password: "", login: "Account creation failed. Please try again." })
+                toast.error("Account creation failed. Please try again.")
             }
         } catch (err) {
             handleApiError(err, false)
@@ -301,8 +305,14 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     password={verificationData.password}
                     onSuccess={() => {
                         setIsVerifyingEmail(false)
-                        onClose()
-                        window.location.href = "/onboarding"
+                        // Call parent onSuccess callback if provided
+                        if (onSuccess) {
+                            onSuccess()
+                        } else {
+                            // Default: redirect to authRedirectTo or /onboarding
+                            onClose()
+                            window.location.href = authRedirectTo
+                        }
                     }}
                     onClose={() => {
                         setIsVerifyingEmail(false)

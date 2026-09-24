@@ -68,6 +68,27 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
     }
   }
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+    e.preventDefault()
+    const pastedData = e.clipboardData.getData('text')
+    const digits = pastedData.replace(/\D/g, '').substring(0, 6)
+
+    if (digits.length > 0) {
+      const newOtp = [...otp]
+      for (let i = 0; i < digits.length && i + index < 6; i++) {
+        newOtp[index + i] = digits[i]
+      }
+      setOtp(newOtp)
+      setErrorMessage("")
+
+      // Focus the last filled input or the next empty one
+      const lastFilledIndex = Math.min(index + digits.length - 1, 5)
+      if (lastFilledIndex < 5) {
+        inputRefs.current[lastFilledIndex + 1]?.focus()
+      }
+    }
+  }
+
   const handleResend = async () => {
     try {
       await resendVerificationEmail({ email })
@@ -219,9 +240,11 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
             type="text"
             inputMode="numeric"
             maxLength={1}
+            autoComplete={index === 0 ? "one-time-code" : "off"}
             value={digit}
             onChange={(e) => handleChange(index, e.target.value)}
             onKeyDown={(e) => handleKeyDown(index, e)}
+            onPaste={(e) => handlePaste(e, index)}
             data-testid={`otp-input-${index}`}
             className={`w-14 h-14 text-2xl font-bold text-center border-2 rounded-lg outline-none transition-all ${
               errorMessage

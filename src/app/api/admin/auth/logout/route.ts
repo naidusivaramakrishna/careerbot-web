@@ -23,19 +23,20 @@ export async function POST(request: NextRequest) {
 
     // Clear all auth cookies by setting them to expire immediately
     // The Max-Age=0 approach works even for httpOnly cookies because we're setting from the server
+    // Refresh tokens are stored with Path=/api (for security), so they must be cleared with the same path
     response.headers.append('Set-Cookie', 'admin_access_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'admin_refresh_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+    response.headers.append('Set-Cookie', 'admin_refresh_token=; Path=/api; Max-Age=0; HttpOnly; SameSite=Lax');
     response.headers.append('Set-Cookie', 'access_token=; Path=/; Max-Age=0; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'refresh_token=; Path=/; Max-Age=0; SameSite=Lax');
+    response.headers.append('Set-Cookie', 'refresh_token=; Path=/api; Max-Age=0; SameSite=Lax');
 
     return response;
   } catch (error) {
     // Even if backend call fails, return response to clear cookies
     const response = NextResponse.json({ success: true });
     response.headers.append('Set-Cookie', 'admin_access_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'admin_refresh_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+    response.headers.append('Set-Cookie', 'admin_refresh_token=; Path=/api; Max-Age=0; HttpOnly; SameSite=Lax');
     response.headers.append('Set-Cookie', 'access_token=; Path=/; Max-Age=0; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'refresh_token=; Path=/; Max-Age=0; SameSite=Lax');
+    response.headers.append('Set-Cookie', 'refresh_token=; Path=/api; Max-Age=0; SameSite=Lax');
     return response;
   }
 }

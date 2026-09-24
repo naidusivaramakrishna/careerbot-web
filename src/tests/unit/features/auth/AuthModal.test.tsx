@@ -44,9 +44,13 @@ vi.mock('next/navigation', () => ({
 
 const mockSignUp = vi.fn();
 const mockSignIn = vi.fn();
+const mockVerifyEmail = vi.fn();
+const mockResendVerificationEmail = vi.fn();
 vi.mock('@/api/authApi', () => ({
   signUp: (...args: unknown[]) => mockSignUp(...args),
   signIn: (...args: unknown[]) => mockSignIn(...args),
+  verifyEmail: (...args: unknown[]) => mockVerifyEmail(...args),
+  resendVerificationEmail: (...args: unknown[]) => mockResendVerificationEmail(...args),
 }));
 
 const mockToast = vi.hoisted(() => ({
@@ -177,11 +181,9 @@ describe('AuthModal — forgot password', () => {
 describe('AuthModal — sign up happy path', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('calls signUp then signIn with form values', async () => {
-    mockSignUp.mockResolvedValue({ success: true });
-    mockSignIn.mockResolvedValue({ access_token: 'tok' });
-    const onSuccess = vi.fn();
-    renderSignup({ onSuccess });
+  it('calls signUp with form values', async () => {
+    mockSignUp.mockResolvedValue({ id: 'user-123', success: true });
+    renderSignup();
 
     fireEvent.change(screen.getByTestId('signup-username-input'), { target: { value: 'jdoe' } });
     fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: 'j@example.com' } });
@@ -192,34 +194,30 @@ describe('AuthModal — sign up happy path', () => {
       expect(mockSignUp).toHaveBeenCalledWith(
         expect.objectContaining({ username: 'jdoe', email: 'j@example.com', password: 'Secret1!' })
       );
-      expect(mockSignIn).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'j@example.com', password: 'Secret1!' })
-      );
     });
   });
 
-  it('shows success toast and calls onSuccess after signup', async () => {
-    mockSignUp.mockResolvedValue({ success: true });
-    mockSignIn.mockResolvedValue({ access_token: 'tok' });
-    const onSuccess = vi.fn();
-    renderSignup({ onSuccess });
+  it('shows success toast and displays OTP verification after successful signup', async () => {
+    mockSignUp.mockResolvedValue({ id: 'user-123' });
+    renderSignup();
 
     fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: 'j@example.com' } });
     fireEvent.change(screen.getByTestId('signup-password-input'), { target: { value: 'Secret1!' } });
     fireEvent.click(screen.getByTestId('auth-submit-btn'));
 
     await waitFor(() => {
-      expect(mockToast.success).toHaveBeenCalledWith('Account created! Redirecting...');
-      expect(onSuccess).toHaveBeenCalled();
+      expect(mockToast.success).toHaveBeenCalledWith('Account created! Verification email sent.');
+      // OTPVerificationInput should be shown
+      expect(screen.getByText(/verify your email/i)).toBeInTheDocument();
     });
   });
 
-  it('shows "Signing up..." while the request is in flight', async () => {
+  it('shows "Creating account..." while the request is in flight', async () => {
     mockSignUp.mockReturnValue(new Promise(() => {}));
     renderSignup();
 
     fireEvent.click(screen.getByTestId('auth-submit-btn'));
-    expect(await screen.findByText('Signing up...')).toBeInTheDocument();
+    expect(await screen.findByText('Creating account...')).toBeInTheDocument();
   });
 });
 

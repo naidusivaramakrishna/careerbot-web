@@ -265,12 +265,20 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     }
                     sectionResults.experience = 'ok';
 
-                    // Auto-fill employment status if experience found
+                    // Auto-fill employment status based on current work experience
+                    // Only set 'employed' if there's an active job (no end_date or end_date in future)
                     try {
+                        const now = new Date();
+                        const hasCurrentJob = mapped.workExperience?.some((exp: Record<string, unknown>) => {
+                            if (!exp.end_date) return true; // Currently employed (no end date)
+                            const endDate = new Date(exp.end_date as string);
+                            return endDate > now; // End date is in the future
+                        });
+
                         const existingInfo = await getEmploymentInfo();
                         await updateEmploymentInfo({
                             ...existingInfo,
-                            employment_status: 'employed'
+                            employment_status: hasCurrentJob ? 'employed' : existingInfo.employment_status
                         });
                     } catch (err) {
                         logger.warn("Could not update employment status:", err);

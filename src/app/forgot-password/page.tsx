@@ -11,7 +11,7 @@ const ForgotPasswordPage = () => {
     errorContext: "password_reset",
     successMessage: "Password reset email sent successfully!",
     rateLimitSeconds: 60,
-    redirectDelayMs: 999999,
+    disableAutoRedirect: true, // User must click "Back to Sign In" button manually
   });
 
   const [resendCountdown, setResendCountdown] = useState(30);

@@ -68,9 +68,9 @@ describe('ForgotPasswordPage — rendering', () => {
     expect(screen.getByTestId('send-reset-link-btn')).toHaveTextContent('Send Reset Link');
   });
 
-  it('renders "Back to Sign In" button', () => {
+  it('renders "Sign in" link to return to signin', () => {
     render(<ForgotPasswordPage />);
-    expect(screen.getByTestId('back-to-signin-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('remember-password-signin-btn')).toBeInTheDocument();
   });
 });
 
@@ -152,9 +152,9 @@ describe('ForgotPasswordPage — error handling', () => {
 describe('ForgotPasswordPage — navigation', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('"Back to Sign In" button navigates to /?showLogin=true', () => {
+  it('"Sign in" link navigates to /?showLogin=true', () => {
     render(<ForgotPasswordPage />);
-    fireEvent.click(screen.getByTestId('back-to-signin-btn'));
+    fireEvent.click(screen.getByTestId('remember-password-signin-btn'));
     expect(mockPush).toHaveBeenCalledWith('/?showLogin=true');
   });
 
