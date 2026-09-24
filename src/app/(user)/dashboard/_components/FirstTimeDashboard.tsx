@@ -277,27 +277,11 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
     { label: "Resume Builder", detail: "Create, parse, and maintain your resume workspace", href: "/builder/start", Icon: FileText, metric: `${data.usage_counts.resumes_created + data.usage_counts.resumes_parsed} used` },
     { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
     { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
-    { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobs", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
-    // RESOLUTION NOTE (merge of feature/all-updated-features into this branch):
-    // the incoming side used per-feature counters — mock_interviews_taken,
-    // mock_tests_taken, coding_tests_taken. NONE of those exist on
-    // DashboardSummary.usage_counts (see src/types/dashboard.types.ts), so
-    // `?? 0` made all three tiles read "0" permanently. tsc would normally
-    // have caught it, but next.config.ts sets ignoreBuildErrors: true and CI
-    // runs tsc with `|| true`.
-    //
-    // Kept this side: a static "Practice" label is honest, whereas "0 sessions"
-    // for a user who has done ten is not. assessments_taken is used only where
-    // the wording matches what it actually counts — see the comment on that
-    // field: it is english_assessment + mock_test COMBINED, so it must not be
-    // presented as either one alone.
-    //
-    // To show real per-feature numbers, add the counters to the backend's
-    // UsageCounts model first, then declare them in dashboard.types.ts.
-    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: "Practice" },
-    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: "Practice" },
-    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} assessments` },
-    { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: "Practice" },
+    { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobslogin", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
+    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: `${data.usage_counts.mock_interviews_taken ?? 0} sessions` },
+    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} sessions` },
+    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.mock_tests_taken ?? 0} tests` },
+    { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: `${data.usage_counts.coding_tests_taken ?? 0} sessions` },
   ];
 
   return (
@@ -355,7 +339,7 @@ const ExtensionsPanel = () => (
       <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Install browser tools</h2>
       <p className="mt-2 text-sm leading-6 text-gray-500">Move job context into CareerBot workflows faster.</p>
     </div>
-    <Link href="/extension" className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3.5 transition hover:bg-gray-50 sm:px-6">
+    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3.5 sm:px-6">
       <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2557a7]">
         <Briefcase size={17} />
       </span>
@@ -364,7 +348,7 @@ const ExtensionsPanel = () => (
         <span className="mt-1 block text-xs leading-5 text-gray-500">Capture job descriptions, open job match, and generate cover letters directly from any job board.</span>
       </span>
       <span className="hidden text-sm font-black text-[#2557a7] sm:inline">Install now</span>
-    </Link>
+    </div>
   </section>
 );
 
@@ -737,7 +721,7 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
               detail: "Your core setup is ready. Browse matched roles and continue your application momentum.",
               cta: "Browse jobs",
               meta: `${data.usage_counts.job_applications} applications`,
-              href: "/jobs",
+              href: "/jobslogin",
               Icon: Briefcase,
             };
 
@@ -792,7 +776,6 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
 };
 
 export default DashboardContent;
-
 
 
 

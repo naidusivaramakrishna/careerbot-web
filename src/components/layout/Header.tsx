@@ -19,10 +19,10 @@ import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
 import { getDashboardSummary } from '@/api/dashboardApi';
+import { logger } from '@/lib/logger';
 import { signOut } from '@/api/authApi';
 import { Notification } from '@/api/notificationsApi';
 import { resolveNotificationRoute } from '@/lib/notificationRoute';
-import { logger } from '@/lib/logger';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -195,13 +195,10 @@ export default function Header() {
   useEffect(() => {
     const fetchProfile = async () => {
       // Fetch profile and dashboard summary in parallel.
-      // Dashboard summary is ALWAYS the authoritative source for display name
-      // and email — it is tied directly to the authenticated user's JWT identity
-      // and is proven to return the correct user after any sign-in flow (including
-      // OAuth account switches). getProfile() is used for supplementary fields
-      // (username, headline, etc.) but must NOT override the identity fields from
-      // the summary, because it can return stale data when tenant scoping or
-      // session sequencing causes it to resolve the wrong account.
+      // Summary is the authoritative identity source — tied to the JWT,
+      // proven correct after OAuth account switches. getProfile() can
+      // resolve the previous account after a switch and is only used when
+      // its identity is positively verified against the summary.
       const [profileResult, summaryResult] = await Promise.allSettled([
         getProfile({ skipAuthRedirect: true }),
         getDashboardSummary({ skipAuthRedirect: true }),
@@ -216,8 +213,12 @@ export default function Header() {
           : null;
 
       const summaryEmail = summaryUser?.email?.trim().toLowerCase();
-      const profileEmail = profile?.email?.trim().toLowerCase();
+      const profileEmail  = profile?.email?.trim().toLowerCase();
 
+      // Identity check: summary email/id is ground truth.
+      // If summary returned no email, profile is unverifiable — discard it.
+      // This prevents a switched-away account's username, name and email
+      // from persisting in the dropdown after an OAuth account switch.
       const identityVerified =
         !!summaryEmail &&
         (profileEmail === summaryEmail ||
@@ -225,50 +226,35 @@ export default function Header() {
 
       if (!identityVerified) {
         if (summaryResult.status === 'rejected') {
-          logger.error(
-            '[Header] dashboard summary failed; identity could not be verified',
-            summaryResult.reason,
-          );
+          logger.error('[Header] dashboard summary failed; identity could not be verified', summaryResult.reason);
         }
         profile = null;
       }
 
-      // Dashboard summary wins for name and email. The `||` fallbacks are safe
-      // only because of the discard above: `profile` here is either the same
-      // account or null, so an empty name on the authoritative record can no
-      // longer resurrect the previous account's name.
+      // Summary wins for name and email. username is kept from getProfile()
+      // since it is the user's chosen signup name, not an identity field.
       if (summaryUser?.name || summaryUser?.email) {
         profile = {
           ...(profile ?? {}),
           full_name: summaryUser.name || profile?.full_name,
-          email: summaryUser.email || profile?.email,
+          email:     summaryUser.email || profile?.email,
         };
       }
 
-      // Publish the computed value INCLUDING null. `if (profile)` left the
-      // previous render's state in place, which is how a switched-away user
-      // keeps seeing the old identity.
+      // Always call setUserProfile — including with null. Skipping the call
+      // when profile is null leaves the previous render's state in place,
+      // which after an account switch is the previous user's identity.
       setUserProfile(profile);
 
-      // Step 3: the avatar. It is an identity field, so it comes from the
-      // authoritative record first.
-      //
-      // getProfilePicture() reads the same /profile/* surface as getProfile()
-      // -- the one this whole block treats as untrusted -- so it is only asked
-      // when the profile above survived the check. Otherwise the dropdown
-      // showed the new user's name and email beside the PREVIOUS user's photo:
-      // the same stale-identity bug, moved to the picture.
-      const summaryPic = summaryUser?.profile_picture_url;
+      // Avatar: every path must call setProfilePicUrl, including with null.
+      // Leaving the setter uncalled after a switch keeps the previous user's
+      // photo rendered — cross-account PII disclosure.
       const toAbsolute = (u: string) =>
         u.startsWith('http')
           ? u
           : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${u}`;
 
-      // EVERY path assigns, including the empty ones. Leaving the setter
-      // uncalled keeps whatever the previous render put there -- which after
-      // an account switch is the previous user's face, the exact thing this
-      // block exists to prevent. "No picture" is an answer and has to be
-      // written down.
+      const summaryPic = summaryUser?.profile_picture_url;
       if (summaryPic) {
         setProfilePicUrl(toAbsolute(summaryPic));
       } else if (identityVerified) {
@@ -276,11 +262,10 @@ export default function Header() {
         try {
           const picRes = await getProfilePicture({ skipAuthRedirect: true });
           if (picRes?.picture_url) resolved = toAbsolute(picRes.picture_url);
-        } catch { /* the avatar is not worth failing the header over */ }
+        } catch { /* avatar is not worth failing the header over */ }
         setProfilePicUrl(resolved);
       } else {
-        // Nobody we can attribute a photo to. Show the initial, never someone
-        // else's face.
+        // No verified identity to attribute a photo to — clear stale avatar.
         setProfilePicUrl(null);
       }
     };
@@ -292,7 +277,6 @@ export default function Header() {
     const onProfileUpdate = (e: CustomEvent) => {
       setUserProfile((prev) => prev ? {
         ...prev,
-        username: e.detail?.username ?? prev.username,
         full_name: e.detail?.full_name ?? prev.full_name,
         email: e.detail?.email ?? prev.email,
       } : prev);
@@ -334,9 +318,9 @@ export default function Header() {
     refetchUnreadCount();
   };
 
-  const displayName    = userProfile?.full_name || userProfile?.username || 'User';
+  const displayName    = userProfile?.username || userProfile?.full_name || 'User';
   const displayEmail   = userProfile?.email || '';
-  const displayInitial = (userProfile?.full_name || userProfile?.username || 'U')[0].toUpperCase();
+  const displayInitial = (userProfile?.username || userProfile?.full_name || 'U')[0].toUpperCase();
   const creditPct = balance?.credits_total
     ? Math.min(100, Math.max(0, (balance.credits_remaining / balance.credits_total) * 100))
     : 0;
@@ -607,9 +591,6 @@ export default function Header() {
               <div className="absolute right-0 top-10 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
-                  {userProfile?.username && userProfile.username !== displayName && (
-                    <p className="text-[12px] text-gray-500 truncate">@{userProfile.username}</p>
-                  )}
                   {displayEmail && (
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>
                   )}

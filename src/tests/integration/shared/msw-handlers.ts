@@ -91,30 +91,6 @@ export const handlers = [
     return HttpResponse.json(mockResponses.communication.scoreResult);
   }),
 
-  // ==================== Mock Interview API ====================
-  http.post(`${API_BASE}/mock-interview/generate-notes`, () => {
-    return HttpResponse.json(mockResponses.mockInterview.notesGenerated);
-  }),
-
-  http.post(`${API_BASE}/mock-interview/start`, () => {
-    return HttpResponse.json({
-      session_id: 'session-123',
-      stage: 'practice-round-1',
-      question_count: 10,
-    });
-  }),
-
-  http.post(`${API_BASE}/mock-interview/:sessionId/submit-answer`, () => {
-    return HttpResponse.json({
-      answer_recorded: true,
-      feedback: 'Good response',
-    });
-  }),
-
-  http.get(`${API_BASE}/mock-interview/:sessionId/report`, () => {
-    return HttpResponse.json(mockResponses.mockInterview.interviewComplete);
-  }),
-
   // ==================== Jobs API ====================
   http.get(`${API_BASE}/v1/jobs/all`, () => {
     return HttpResponse.json(mockResponses.jobs.jobList);

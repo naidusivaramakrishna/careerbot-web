@@ -83,23 +83,25 @@ export default function ReadinessPage() {
 
   if (loading) {
     return (
-      <div className="max-w-sm mx-auto px-4 py-16 text-center">
-        <Loader2 size={24} className="text-[#2557a7] animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-500">Checking your practice recommendation...</p>
+      <div className="mx-auto flex min-h-[60vh] max-w-sm items-center justify-center px-4 text-center">
+        <div className="w-full rounded-lg border border-gray-200 bg-white p-7 shadow-sm">
+          <Loader2 size={24} className="mx-auto mb-3 animate-spin text-[#2557a7]" />
+          <p className="text-sm text-gray-500">Checking your practice recommendation...</p>
+        </div>
       </div>
     );
   }
 
   if (error || !readiness) {
     return (
-      <div className="max-w-sm mx-auto px-4 py-8">
+      <div className="mx-auto max-w-md px-4 py-8">
         <button
           onClick={() => router.push("/mock-interview")}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
         >
           <ChevronLeft size={14} /> Back
         </button>
-        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
           <AlertCircle size={24} className="text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-600">{error ?? "Unable to load practice recommendation."}</p>
           <button
@@ -120,7 +122,7 @@ export default function ReadinessPage() {
   // ── Ready state ──
   if (ready) {
     return (
-      <div className="max-w-sm mx-auto px-4 py-8">
+      <div className="mx-auto max-w-md px-4 py-8">
         <button
           onClick={() => router.push("/mock-interview")}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
@@ -128,13 +130,13 @@ export default function ReadinessPage() {
           <ChevronLeft size={14} /> Back
         </button>
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
           {/* Score + status */}
           <div className="px-5 pt-6 pb-4 text-center">
             <div className="inline-block mb-3">
               <ScoreRing score={criteria.current_avg} />
             </div>
-            <h1 className="text-lg font-bold text-gray-900">Practice Looks Strong</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-gray-900">Practice Looks Strong</h1>
             <p className="text-xs text-gray-500 mt-1">
               {criteria.rounds_completed} rounds · Avg {criteria.current_avg.toFixed(1)}/10
             </p>
@@ -147,13 +149,13 @@ export default function ReadinessPage() {
           <div className="px-5 pb-5 space-y-2">
             <button
               onClick={() => router.push("/mock-interview/live")}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f]"
             >
               Start Live Interview <ArrowRight size={14} />
             </button>
             <button
               onClick={() => router.push("/notes/managerial")}
-              className="w-full py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 py-2.5 text-xs font-semibold text-gray-600 transition-all hover:bg-gray-100"
             >
               <RotateCcw size={12} className="text-gray-400" />
               Optional Practice
@@ -166,7 +168,7 @@ export default function ReadinessPage() {
 
   // ── Not-ready state ──
   return (
-    <div className="max-w-sm mx-auto px-4 py-8">
+    <div className="mx-auto max-w-md px-4 py-8">
       <button
         onClick={() => router.push("/mock-interview")}
         className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
@@ -174,7 +176,7 @@ export default function ReadinessPage() {
         <ChevronLeft size={14} /> Back
       </button>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         {/* Score + status */}
         <div className="px-5 pt-6 pb-4 text-center">
           <div className="inline-block mb-3">
@@ -183,7 +185,7 @@ export default function ReadinessPage() {
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-full text-[10px] font-semibold text-gray-500 mb-2">
             <AlertCircle size={10} /> Practice recommended
           </div>
-          <h1 className="text-lg font-bold text-gray-900">Live Interview Is Available</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-gray-900">Live Interview Is Available</h1>
           <p className="text-xs text-gray-400 mt-1">
             {criteria.current_avg.toFixed(1)}/10 avg. Practice can help, but you can start the live mock now.
           </p>
@@ -228,13 +230,13 @@ export default function ReadinessPage() {
           <div className="space-y-2">
             <button
               onClick={() => router.push("/mock-interview/live")}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f]"
             >
               Start Live Interview <ArrowRight size={14} />
             </button>
             <button
               onClick={() => router.push("/notes/managerial")}
-              className="w-full flex items-center justify-center gap-2 py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 py-2.5 text-xs font-semibold text-gray-600 transition-all hover:bg-gray-100"
             >
               <RotateCcw size={13} />
               Practice First (Optional)

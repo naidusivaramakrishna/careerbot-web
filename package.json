@@ -64,6 +64,7 @@
     "js-cookie": "^3.0.5",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
+    "livekit-client": "^2.22.3",
     "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.545.0",
     "mammoth": "^1.11.0",

@@ -19,7 +19,7 @@ function buildStages(state: MockStageState): Stage[] {
   return [
     {
       id: "generate",
-      label: "Interview Notes",
+      label: "Generate Notes",
       shortLabel: "Notes",
       href: "/notes/generate",
       icon: FileText,
@@ -103,7 +103,7 @@ export default function NotesSidebar() {
         {/* Left: context label */}
         <div className="hidden lg:flex items-center gap-2 shrink-0">
           <span className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
-            Interview Prep
+            Notes with Practice
           </span>
         </div>
 
@@ -124,7 +124,7 @@ export default function NotesSidebar() {
                 key={stage.id}
                 onClick={() => !isLocked && router.push(stage.href)}
                 disabled={isLocked}
-                title={isLocked ? `Complete Interview Notes first` : stage.label}
+                title={isLocked ? `Complete Generate Notes first` : stage.label}
                 className={[
                   "relative flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all duration-200 select-none whitespace-nowrap",
                   isActive

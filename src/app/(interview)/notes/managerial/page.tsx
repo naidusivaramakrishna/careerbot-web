@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart2, Mic, MessageSquare, Users } from "lucide-react";
-import { generateMrTrQuestions } from "@/api/mockInterviewApi";
+import { generateMrTrQuestions } from "@/api/interviewPrepApi";
 import PracticeLandingPage from "../_components/PracticeLandingPage";
 
 // Not exported: see notes/technical/page.tsx. Nothing imports this -

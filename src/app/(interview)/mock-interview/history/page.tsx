@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getLiveHistory, LiveSession } from "@/api/mockInterviewApi";
+import { getLiveHistory, getReport, LiveSession } from "@/api/mockInterviewApi";
 import { useMockInterview } from "../_context/MockInterviewContext";
 import {
   LineChart,
@@ -26,7 +26,21 @@ import {
 
 // ─── Score badge ──────────────────────────────────────────────────────────────
 
-function ScoreBadge({ score }: { score: number }) {
+function ScoreBadge({ score, loading, failed }: { score: number; loading?: boolean; failed?: boolean }) {
+  if (loading) {
+    return (
+      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-400 animate-pulse">
+        …/100
+      </span>
+    );
+  }
+  if (failed) {
+    return (
+      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-400">
+        —/100
+      </span>
+    );
+  }
   const cls =
     score >= 70
       ? "bg-[#2557a7]/10 text-[#2557a7]"
@@ -84,7 +98,11 @@ function mapLiveSession(s: LiveSession) {
     }),
     duration_min: s.duration_s ? Math.round(s.duration_s / 60) : 0,
     question_count: typeof s.question_count === "number" ? s.question_count : null,
-    overall_score: s.score != null ? Math.round(s.score * 10) : 0,
+    // GET /live/history currently always returns score: null (backend known
+    // gap) — resolved lazily per visible row from GET /report/{id} below.
+    overall_score: 0,
+    score_loaded: false,
+    score_failed: false,
     improvement_pct: null as number | null,
     pressure: s.pressure_tag === "pressure_affected" ? "Pressure affected" : null,
     status: s.status,
@@ -116,9 +134,71 @@ export default function HistoryPage() {
   const filtered = sessions.filter((s) => s.type === "mock");
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIdsKey = paginated.map((s) => s.session_id).join(",");
 
-  const liveSessions = sessions.filter((s) => s.type === "mock");
-  const totalSessions = userProgress?.live_sessions ?? liveSessions.length;
+  // GET /live/history returns score: null for every row (backend known gap).
+  // Resolve the real score per visible row from GET /report/{id} instead —
+  // only for the current page, to stay well under that endpoint's 10/min cap.
+  useEffect(() => {
+    const idsToFetch = paginated.filter((s) => !s.score_loaded).map((s) => s.session_id);
+    if (idsToFetch.length === 0) return;
+
+    let cancelled = false;
+    Promise.allSettled(
+      idsToFetch.map((id) => getReport(id).then((r) => ({ id, score: Math.round(r.overall_score) })))
+    ).then((results) => {
+      if (cancelled) return;
+      setSessions((prev) =>
+        prev.map((s) => {
+          const idx = idsToFetch.indexOf(s.session_id);
+          if (idx === -1) return s;
+          const result = results[idx];
+          if (result.status === "fulfilled") {
+            return { ...s, overall_score: result.value.score, score_loaded: true, score_failed: false };
+          }
+          // Report fetch failed (still processing, rate-limited, etc.) — mark
+          // as loaded so we don't refetch every render, but flag it as failed
+          // so it renders "—" and is excluded from stats/chart below, rather
+          // than silently scoring it 0.
+          return { ...s, score_loaded: true, score_failed: true };
+        })
+      );
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdsKey]);
+
+  // Manual retry for a single failed row. Kept independent of the paginated
+  // fetch effect above (which only re-runs when the visible page's id set
+  // changes) so re-fetching one row doesn't require touching that effect's
+  // dependencies or risk re-fetching every unresolved row on the page.
+  const retryScore = useCallback((sessionId: string) => {
+    let cancelled = false;
+    setSessions((prev) =>
+      prev.map((s) => (s.session_id === sessionId ? { ...s, score_loaded: false, score_failed: false } : s))
+    );
+    getReport(sessionId)
+      .then((r) => {
+        if (cancelled) return;
+        const score = Math.round(r.overall_score);
+        setSessions((prev) =>
+          prev.map((s) => (s.session_id === sessionId ? { ...s, overall_score: score, score_loaded: true, score_failed: false } : s))
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSessions((prev) =>
+          prev.map((s) => (s.session_id === sessionId ? { ...s, score_loaded: true, score_failed: true } : s))
+        );
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Only sessions whose real score has resolved feed the stats/chart —
+  // otherwise every unscored row's placeholder 0 would drag these down.
+  const liveSessions = sessions.filter((s) => s.type === "mock" && s.score_loaded && !s.score_failed);
+  const totalSessions = userProgress?.live_sessions ?? sessions.filter((s) => s.type === "mock").length;
   const avgScore = liveSessions.length > 0
     ? Math.round(liveSessions.reduce((s, r) => s + r.overall_score, 0) / liveSessions.length)
     : 0;
@@ -137,27 +217,60 @@ export default function HistoryPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {/* ── Page header ─────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="mb-8 flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           {/* Icon container */}
-          <div className="w-12 h-12 bg-[#2557a7]/8 border border-[#2557a7]/15 rounded-xl flex items-center justify-center shrink-0">
-            <History size={22} className="text-[#2557a7]" />
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5">
+              <History size={22} className="text-[#2557a7]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2557a7]">Mock interview archive</p>
+              <h1 className="mt-1 text-2xl font-semibold leading-tight tracking-tight text-gray-900">
+                Session History
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Track completed live mock interviews, report status, and score movement.
+              </p>
+            </div>
           </div>
-
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 leading-tight">
-              Session History
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Track your completed live mock interview sessions.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/mock-interview/live")}
+            className="inline-flex items-center justify-center rounded-lg bg-[#2557a7] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f]"
+          >
+            New mock interview
+          </button>
         </div>
 
         {/* ── Stats row ───────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-6 lg:self-start">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Readiness ledger</p>
+            <div className="mt-5">
+              <p className="text-5xl font-semibold tracking-tight text-gray-950">{bestScore}</p>
+              <p className="mt-1 text-sm text-gray-500">best score out of 100</p>
+            </div>
+            <div className="mt-6 rounded-lg border border-gray-200">
+              <div className="border-b border-gray-100 px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Average</p>
+                <p className="mt-1 text-lg font-semibold text-gray-950">{avgScore}/100</p>
+              </div>
+              <div className="border-b border-gray-100 px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Sessions</p>
+                <p className="mt-1 text-lg font-semibold text-gray-950">{totalSessions}</p>
+              </div>
+              <div className="px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Latest change</p>
+                <p className="mt-1 text-lg font-semibold text-gray-950">{latestDelta >= 0 ? "+" : ""}{latestDelta}</p>
+              </div>
+            </div>
+          </aside>
+
+          <section className="min-w-0">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
             {
               label: "Total Sessions",
@@ -180,7 +293,7 @@ export default function HistoryPage() {
           ].map(({ label, value, sub, icon: Icon }) => (
             <div
               key={label}
-              className="bg-white border border-gray-200 rounded-xl px-5 py-4 hover:border-[#2557a7]/20 transition-colors"
+              className="rounded-lg border border-gray-200 bg-white px-5 py-4 transition-colors hover:border-[#2557a7]/25"
               style={{
                 boxShadow:
                   "0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)",
@@ -190,7 +303,7 @@ export default function HistoryPage() {
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                   {label}
                 </p>
-                <div className="w-9 h-9 bg-[#2557a7]/8 border border-[#2557a7]/10 rounded-xl flex items-center justify-center">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#2557a7]/10 bg-[#2557a7]/5">
                   <Icon size={15} className="text-[#2557a7]" />
                 </div>
               </div>
@@ -204,7 +317,7 @@ export default function HistoryPage() {
 
         {/* ── Progress chart ───────────────────────────────────────────────── */}
         <div
-          className="bg-white border border-gray-200 rounded-xl p-5 mb-5"
+          className="mb-5 rounded-lg border border-gray-200 bg-white p-5"
           style={{
             boxShadow:
               "0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)",
@@ -268,7 +381,7 @@ export default function HistoryPage() {
 
         {/* ── Session list ─────────────────────────────────────────────────── */}
         <div
-          className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5"
+          className="mb-5 overflow-hidden rounded-lg border border-gray-200 bg-white"
           style={{
             boxShadow:
               "0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)",
@@ -298,21 +411,31 @@ export default function HistoryPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-14 text-center">
-              <p className="text-sm text-gray-400">No live interview sessions found.</p>
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
+                <Mic size={18} className="text-gray-400" />
+              </div>
+              <p className="text-sm font-semibold text-gray-800">No live interview sessions found.</p>
+              <p className="mt-1 text-xs text-gray-500">Start a mock interview to build your report history.</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
               {paginated.map((session) => (
-                <button
+                <div
                   key={session.session_id}
-                  onClick={() =>
-                    router.push(`/mock-interview/report/${session.session_id}`)
-                  }
-                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left group"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/mock-interview/report/${session.session_id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/mock-interview/report/${session.session_id}`);
+                    }
+                  }}
+                  className="group flex w-full cursor-pointer items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
                 >
                   {/* Type icon container */}
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors ${
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
                       session.type === "mock"
                         ? "bg-[#2557a7]/8 border-[#2557a7]/15 group-hover:bg-[#2557a7]/15"
                         : "bg-gray-100 border-gray-200 group-hover:bg-gray-200"
@@ -347,8 +470,28 @@ export default function HistoryPage() {
 
                   {/* Score + improvement */}
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <ScoreBadge score={session.overall_score} />
+                    <ScoreBadge score={session.overall_score} loading={!session.score_loaded} failed={session.score_failed} />
                     <div className="flex items-center gap-1.5">
+                      {session.score_failed && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            retryScore(session.session_id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              retryScore(session.session_id);
+                            }
+                          }}
+                          className="text-[10px] font-semibold text-[#2557a7] underline-offset-2 hover:underline cursor-pointer"
+                        >
+                          Retry
+                        </span>
+                      )}
                       {session.improvement_pct !== null && (
                         <span
                           className={`text-[10px] font-bold flex items-center gap-0.5 ${
@@ -367,7 +510,7 @@ export default function HistoryPage() {
                       )}
                     </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -409,9 +552,8 @@ export default function HistoryPage() {
             </div>
           )}
         </div>
-
-
-
+          </section>
+        </div>
       </div>
     </div>
   );

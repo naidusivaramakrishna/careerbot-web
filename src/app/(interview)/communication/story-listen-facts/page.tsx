@@ -324,6 +324,7 @@ export default function StoryListenFactsPage() {
 
                   <div className="flex justify-end max-w-2xl">
                     <button
+                      type="button"
                       onClick={handleStartQuestions}
                       disabled={!audioCompleted}
                       className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
@@ -407,6 +408,7 @@ export default function StoryListenFactsPage() {
                     </p>
 
                     <button
+                      type="button"
                       onClick={handleNext}
                       disabled={!answerSaved || loading}
                       className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${

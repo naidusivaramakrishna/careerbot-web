@@ -5,7 +5,7 @@ import {
   TrendingUp, ThumbsUp, ThumbsDown, AlertTriangle, Mic, Clock, Zap, Pause,
   ChevronDown, ChevronUp, RotateCcw, Star, WifiOff,
 } from "lucide-react";
-import { rateAnswerFeedback } from "@/api/mockInterviewApi";
+import { rateAnswerFeedback } from "@/api/interviewPrepApi";
 
 interface ScoreDimension { label: string; score: number; weight: string; }
 

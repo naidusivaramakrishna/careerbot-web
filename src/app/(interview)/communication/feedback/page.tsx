@@ -141,11 +141,11 @@ function FeedbackPageContent() {
 
               {/* Rating */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
+                <span id="rating-label" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
                   How would you rate this assessment? <span className="text-red-500 normal-case font-normal">*</span>
-                </label>
+                </span>
 
-                <div className="flex gap-2 justify-center mb-3">
+                <div role="group" aria-labelledby="rating-label" className="flex gap-2 justify-center mb-3">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
@@ -199,6 +199,7 @@ function FeedbackPageContent() {
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3 mt-5">
             <button
+              type="button"
               onClick={handleSubmitFeedback}
               disabled={isSubmitting || isSkipping}
               className="flex-1 py-3.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
@@ -214,6 +215,7 @@ function FeedbackPageContent() {
             </button>
 
             <button
+              type="button"
               onClick={handleSkip}
               disabled={isSubmitting || isSkipping}
               className="sm:w-auto px-7 py-3.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl font-bold text-sm transition-colors flex items-center gap-2"
