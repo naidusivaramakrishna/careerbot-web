@@ -19,6 +19,7 @@ interface ResumePreviewProps {
   addedFields?: Record<string, string[]>;
   /** Missing-skill suggestions not yet added — rendered as red "ghost" chips until added. */
   pendingSkills?: string[];
+  matchedKeywords?: string[];
   pendingSoftSkills?: string[];
   /** Same shape as addedFields, for suggestions (title/summary/bullets) not yet applied — red instead of green. */
   pendingFields?: Record<string, string[]>;
@@ -45,6 +46,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   editOverrides,
   addedFields,
   pendingSkills,
+  matchedKeywords,
   pendingSoftSkills,
   pendingFields,
   onEditSection,
@@ -91,6 +93,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         const url = URL.createObjectURL(blob);
         setDocxPreview(url);
       } catch (err) {
+        console.error("DOCX preview conversion failed:", err);
         setDocxError("Unable to preview DOCX file. Please convert to PDF for better preview.");
       }
     };
@@ -142,7 +145,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // When parsedData is available, render the HTML template for section navigation
   if (parsedData) {
     return (
-      <div className="relative" style={{ backgroundColor: "#F8FAFD" }}>
+      <div data-resume-preview="true" className="relative" style={{ backgroundColor: "#F8FAFD" }}>
         {isUpdating && (
           <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3">
@@ -152,7 +155,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           </div>
         )}
         <div ref={scrollContainerRef}>
-          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} pendingSkills={pendingSkills} pendingSoftSkills={pendingSoftSkills} pendingFields={pendingFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
+          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} pendingSkills={pendingSkills} matchedKeywords={matchedKeywords} pendingSoftSkills={pendingSoftSkills} pendingFields={pendingFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
         </div>
       </div>
     );
@@ -183,6 +186,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           <p className="text-amber-700 text-sm mb-4">{docxError}</p>
           {onRegenerate && (
             <button
+              type="button"
               onClick={onRegenerate}
               className="px-4 py-2 bg-[#2557a7] text-white rounded hover:bg-[#1a3f7a] text-sm font-medium"
             >
@@ -197,6 +201,60 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Priority 1: Show backend PDF preview (ALWAYS use backend, never frontend template)
   // Priority 2: Show DOCX preview if available
   // Priority 3: Show "No preview available" message
+  let previewContent: React.ReactNode;
+  if (isLoading && !pdfBlobUrl && !docxPreview) {
+    previewContent = (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557a7] border-t-transparent mx-auto mb-4" />
+          <p className="text-gray-500 font-medium">Loading resume preview...</p>
+          <p className="text-sm text-gray-400 mt-2">
+            Please wait while we fetch your resume
+          </p>
+        </div>
+      </div>
+    );
+  } else if (displayUrl) {
+    // Priority 1: Show backend PDF (ALWAYS prefer backend)
+    previewContent = (
+      <iframe
+        key={`pdf-preview-${iframeKey}`}
+        // Disable PDF toolbar to show only custom download button (toolbar=0)
+        src={`${displayUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+        className="w-full h-full border-none"
+        title="Resume PDF Preview"
+      />
+    );
+  } else if (docxPreview) {
+    // Priority 2: Show DOCX preview
+    previewContent = (
+      <iframe
+        key={docxPreview}
+        src={docxPreview}
+        // blob: URLs are scoped to the origin that created them — a fully
+        // opaque sandbox (no allow-same-origin) can fail to load them at
+        // all in some browsers. allow-scripts is deliberately still
+        // excluded, so no script execution is possible either way; the
+        // content itself is already DOMPurify-sanitized before being
+        // wrapped into this blob.
+        sandbox="allow-same-origin"
+        className="w-full h-full border-none"
+        title="Resume DOCX Preview"
+      />
+    );
+  } else {
+    previewContent = (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-500 font-medium">No preview available</p>
+          <p className="text-sm text-gray-400 mt-2">
+            Resume data could not be loaded
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full bg-linear-to-br from-white to-[#f9fbff] rounded-lg overflow-hidden border border-[#e0eaf5]">
       {isUpdating && (
@@ -210,50 +268,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         </div>
       )}
 
-      {isLoading && !pdfBlobUrl && !docxPreview ? (
-        <div className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557a7] border-t-transparent mx-auto mb-4" />
-            <p className="text-gray-500 font-medium">Loading resume preview...</p>
-            <p className="text-sm text-gray-400 mt-2">
-              Please wait while we fetch your resume
-            </p>
-          </div>
-        </div>
-      ) : displayUrl ? (
-        // Priority 1: Show backend PDF (ALWAYS prefer backend)
-        <iframe
-          key={`pdf-preview-${iframeKey}`}
-          // Disable PDF toolbar to show only custom download button (toolbar=0)
-          src={`${displayUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-          className="w-full h-full border-none"
-          title="Resume PDF Preview"
-        />
-      ) : docxPreview ? (
-        // Priority 2: Show DOCX preview
-        <iframe
-          key={docxPreview}
-          src={docxPreview}
-          // blob: URLs are scoped to the origin that created them — a fully
-          // opaque sandbox (no allow-same-origin) can fail to load them at
-          // all in some browsers. allow-scripts is deliberately still
-          // excluded, so no script execution is possible either way; the
-          // content itself is already DOMPurify-sanitized before being
-          // wrapped into this blob.
-          sandbox="allow-same-origin"
-          className="w-full h-full border-none"
-          title="Resume DOCX Preview"
-        />
-      ) : (
-        <div className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-gray-500 font-medium">No preview available</p>
-            <p className="text-sm text-gray-400 mt-2">
-              Resume data could not be loaded
-            </p>
-          </div>
-        </div>
-      )}
+      {previewContent}
     </div>
   );
 };

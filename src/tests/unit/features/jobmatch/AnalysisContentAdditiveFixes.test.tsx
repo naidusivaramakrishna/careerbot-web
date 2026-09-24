@@ -1,0 +1,123 @@
+import React from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import AnalysisContent from "@/app/(jobs)/jobmatch/_components/analysis/AnalysisContent";
+import JobMatchTemplateThree from "@/app/(jobs)/jobmatch/_components/resume/JobMatchTemplateThree";
+import { matcherEnhanceApply, matcherEnhanceRemove } from "@/api/parserApi";
+
+vi.mock("@/api/parserApi", () => ({ matcherEnhanceApply: vi.fn(), matcherEnhanceRemove: vi.fn(), matcherUpdateSections: vi.fn(), downloadResumePdf: vi.fn() }));
+vi.mock("@/app/(jobs)/jobmatch/_components/resume/ResumePreview", () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default: (p: any) => <pre data-testid="preview">{JSON.stringify({ certifications: p.editOverrides?.certifications, experience: p.editOverrides?.experience, added: p.addedFields })}</pre>,
+}));
+vi.mock("@/app/(jobs)/jobmatch/_components/resume/JobMatchSectionEditor", () => ({ default: () => null }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+
+beforeEach(() => {
+  vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, score_diff: { after: 83 } });
+  vi.mocked(matcherEnhanceRemove).mockResolvedValue({ score_diff: { after: 78 } });
+});
+afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); });
+
+const parsedResumeData = {
+  id: "resume-test",
+  parsed_data: {
+    contact: { name: "Test Candidate" },
+    skills: ["React"],
+    summary: "Developer",
+    certifications: [
+      { name: "AWS Certified Solutions Architect - Associate", issuedBy: "AWS" },
+      "Certified Kubernetes Administrator (CKA)",
+    ],
+    experience: [{ company: "Acme", role: "Engineer", responsibilities: ["Built APIs"] }],
+  },
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderWithPenalty(penalty: Record<string, any>) {
+  return render(
+    <AnalysisContent
+      jdText="A role requiring stakeholder management."
+      onBackToUpload={vi.fn()}
+      parsedResumeData={parsedResumeData}
+      matchResults={{ data: { id: "match-test", ats_score: 78, resume_id: "resume-test", match_result: { Match_Penalties: { penalties: [penalty] } } } }}
+    />
+  );
+}
+
+const preview = () => JSON.parse(screen.getByTestId("preview").textContent ?? "{}");
+
+describe("additive fixes reach the resume preview", () => {
+  it("shows an applied missing certification and removes it again on undo", async () => {
+    renderWithPenalty({
+      suggestion_id: "suggest_add_cert_1", category: "certifications", target: "CBAP certification",
+      fix_type: "auto", severity: "critical", penalty: -4.75,
+      message: "Add 'CBAP certification' to your resume — this required certification is missing and costs ~4.8 pts.",
+    });
+    expect(preview().certifications).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Recommendations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Fix" }));
+
+    await waitFor(() => expect(preview().certifications).toContain("CBAP certification"));
+    expect(preview().certifications).toHaveLength(3);
+    expect(preview().added.certifications).toEqual(["2"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Undo applied fix" }));
+    await waitFor(() => expect(preview().certifications).not.toContain("CBAP certification"));
+    expect(preview().certifications).toHaveLength(2);
+    expect(preview().added.certifications ?? []).toEqual([]);
+  });
+
+  it("shows a generated capability bullet in the first experience entry and removes it on undo", async () => {
+    renderWithPenalty({
+      suggestion_id: "combined_fix_1", category: "capabilities", fix_type: "auto", severity: "important", penalty: -1.2,
+      message: "Demonstrate stakeholder workshops",
+      after_example: "Led stakeholder workshops that cut delivery time by 20%", mapping_section: "experience",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Recommendations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Fix" }));
+
+    await waitFor(() => expect(preview().experience[0].responsibilities).toHaveLength(2));
+    expect(preview().experience[0].responsibilities[1]).toBe("Led stakeholder workshops that cut delivery time by 20%");
+    expect(preview().added.experience).toEqual(["0"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Undo applied fix" }));
+    await waitFor(() => expect(preview().experience[0].responsibilities).toEqual(["Built APIs"]));
+  });
+});
+
+describe("resume template renders fix-added content", () => {
+  it("lists every certification including the added one", () => {
+    render(<JobMatchTemplateThree data={{ parsed_data: { contact: { name: "T" } } }} editOverrides={{ certifications: ["Certified Kubernetes Administrator (CKA)", "CBAP certification"] }} />);
+    expect(screen.getByText("CBAP certification")).toBeTruthy();
+    expect(screen.getByText("Certified Kubernetes Administrator (CKA)")).toBeTruthy();
+  });
+
+  it("shows bullets that only live in achievements next to a project or internship description", () => {
+    render(
+      <JobMatchTemplateThree
+        data={{ parsed_data: { contact: { name: "T" } } }}
+        editOverrides={{
+          projects: [{ title: "Side project", description: "Built the thing", achievements: ["Led stakeholder workshops"] }],
+          internships: [{ company: "Intern Co", description: "Assisted the team", responsibilities: ["Wrote reports"] }],
+        }}
+      />
+    );
+    expect(screen.getByText("Built the thing")).toBeTruthy();
+    expect(screen.getByText("Led stakeholder workshops")).toBeTruthy();
+    expect(screen.getByText("Assisted the team")).toBeTruthy();
+    expect(screen.getByText("Wrote reports")).toBeTruthy();
+  });
+
+  it("does not duplicate a bullet that is already in the description", () => {
+    render(
+      <JobMatchTemplateThree
+        data={{ parsed_data: { contact: { name: "T" } } }}
+        editOverrides={{ projects: [{ title: "P", description: ["Shipped v1", "Cut costs"], achievements: ["Cut costs"] }] }}
+      />
+    );
+    expect(screen.getAllByText("Cut costs")).toHaveLength(1);
+  });
+});

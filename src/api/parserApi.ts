@@ -201,28 +201,36 @@ const JD_TEXT_SKIP_KEYS = new Set([
   'file_name', 'filename', 'url', 'trace_id', 'request_id', 'status', 'error', 'message',
 ]);
 
+function betterCandidate(current: string | null, candidate: string | null): string | null {
+  if (!candidate) return current;
+  if (!current || candidate.length > current.length) return candidate;
+  return current;
+}
+
+function findLongestInArray(data: unknown[], depth: number): string | null {
+  let best: string | null = null;
+  for (const item of data) {
+    best = betterCandidate(best, findLongestString(item, depth + 1));
+  }
+  return best;
+}
+
+function findLongestInObject(data: Record<string, unknown>, depth: number): string | null {
+  let best: string | null = null;
+  for (const [key, val] of Object.entries(data)) {
+    if (JD_TEXT_SKIP_KEYS.has(key.toLowerCase())) continue;
+    best = betterCandidate(best, findLongestString(val, depth + 1));
+  }
+  return best;
+}
+
 function findLongestString(data: unknown, depth = 0): string | null {
   if (depth > 4) return null;
   if (typeof data === 'string') {
     return data.trim().length >= JD_TEXT_MIN_LENGTH ? data : null;
   }
-  if (Array.isArray(data)) {
-    let best: string | null = null;
-    for (const item of data) {
-      const candidate = findLongestString(item, depth + 1);
-      if (candidate && (!best || candidate.length > best.length)) best = candidate;
-    }
-    return best;
-  }
-  if (isObject(data)) {
-    let best: string | null = null;
-    for (const [key, val] of Object.entries(data)) {
-      if (JD_TEXT_SKIP_KEYS.has(key.toLowerCase())) continue;
-      const candidate = findLongestString(val, depth + 1);
-      if (candidate && (!best || candidate.length > best.length)) best = candidate;
-    }
-    return best;
-  }
+  if (Array.isArray(data)) return findLongestInArray(data, depth);
+  if (isObject(data)) return findLongestInObject(data, depth);
   return null;
 }
 
@@ -356,19 +364,47 @@ export async function downloadResumePdf(
   options: PreviewOptions & { format?: 'pdf' | 'docx' } = {}
 ): Promise<void> {
   const { format = 'pdf', ...previewOpts } = options;
-  const response = await httpClient.get(`/parser/download/${resume_id}`, {
-    params: {
-      format,
-      use_original: previewOpts.use_original ?? false,
-      preserve_template: previewOpts.preserve_template ?? false,
-      ...(previewOpts.preserve_exact != null && { preserve_exact: previewOpts.preserve_exact }),
-      ...(previewOpts.use_run_level_formatting != null && { use_run_level_formatting: previewOpts.use_run_level_formatting }),
-      ...(previewOpts.template_json && { template_json: previewOpts.template_json }),
-      ...(previewOpts.template_id && { template_id: previewOpts.template_id }),
-      ...(match_id ? { match_id } : {}),
-    },
-    responseType: "blob",
-  });
+  let response;
+  try {
+    response = await httpClient.get(`/parser/download/${resume_id}`, {
+      params: {
+        format,
+        use_original: previewOpts.use_original ?? false,
+        preserve_template: previewOpts.preserve_template ?? false,
+        ...(previewOpts.preserve_exact != null && { preserve_exact: previewOpts.preserve_exact }),
+        ...(previewOpts.use_run_level_formatting != null && { use_run_level_formatting: previewOpts.use_run_level_formatting }),
+        ...(previewOpts.template_json && { template_json: previewOpts.template_json }),
+        ...(previewOpts.template_id && { template_id: previewOpts.template_id }),
+        ...(match_id ? { match_id } : {}),
+      },
+      responseType: "blob",
+    });
+  } catch (err: unknown) {
+    // responseType: "blob" means a JSON error body (FastAPI's {"detail": "..."}) still
+    // arrives as an opaque Blob, not parsed JSON — axios (and http.ts's own
+    // extractBackendMessage) can't read it, so callers only ever saw a generic
+    // "Request failed with status code 500" with no way to tell WHY the download
+    // failed. Decode the blob here so the real backend reason reaches the caller.
+    if (axios.isAxiosError(err) && err.response?.data instanceof Blob) {
+      const raw = await err.response.data.text();
+      let message = raw;
+      try {
+        const parsed = JSON.parse(raw) as { detail?: unknown; message?: unknown; error?: { message?: unknown } };
+        // Mirrors http.ts's extractBackendMessage shape order: this backend's
+        // own error responses use {"error":{"message": "..."}} (see the
+        // download endpoint's own 500 body), checked before the plain
+        // FastAPI {"detail": ...} shapes below.
+        if (parsed.error && typeof parsed.error === 'object' && typeof parsed.error.message === 'string') {
+          message = parsed.error.message;
+        } else if (typeof parsed.detail === 'string') message = parsed.detail;
+        else if (Array.isArray(parsed.detail) && typeof (parsed.detail[0] as { msg?: unknown })?.msg === 'string') {
+          message = (parsed.detail[0] as { msg: string }).msg;
+        } else if (typeof parsed.message === 'string') message = parsed.message;
+      } catch { /* not JSON — fall back to the raw text above */ }
+      throw new Error(message || err.message);
+    }
+    throw err;
+  }
   const contentDisposition = (response.headers as Record<string, string>)["content-disposition"] ?? "";
   const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/)?.[1];
   const mimeType = format === 'docx'

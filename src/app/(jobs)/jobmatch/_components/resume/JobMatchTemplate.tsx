@@ -31,6 +31,32 @@ function deepSanitize(val: any): any {
   return result;
 }
 
+const SectionActions = ({ sectionKey, onEditSection, onDeleteSection }: { sectionKey: string; onEditSection?: (key: string) => void; onDeleteSection?: (key: string) => void }) =>
+  (onEditSection || onDeleteSection) ? (
+    <div className="absolute top-1/2 -translate-y-1/2 right-0 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-10 flex items-center gap-1">
+      {onEditSection && (
+        <button
+          type="button"
+          onClick={() => onEditSection(sectionKey)}
+          title="Edit section"
+          className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-blue-50 hover:border-blue-400 transition-colors"
+        >
+          <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+        </button>
+      )}
+      {onDeleteSection && (
+        <button
+          type="button"
+          onClick={() => onDeleteSection(sectionKey)}
+          title="Remove section"
+          className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-red-50 hover:border-red-400 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+        </button>
+      )}
+    </div>
+  ) : null;
+
 const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, activeSection, editOverrides, addedFields, onEditSection, onDeleteSection, deletedSections, fontFamily }) => {
   const data = deepSanitize(rawData);
   const deleted = deletedSections ?? [];
@@ -60,30 +86,6 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
     `mb-5 rounded transition-colors duration-200 relative group/section ${activeSection === key ? "bg-blue-50 ring-1 ring-blue-100 px-2 -mx-2" : ""}`;
   const ov = editOverrides ?? {};
 
-  /* ── action buttons – appear on section hover ── */
-  const SectionActions = ({ sectionKey }: { sectionKey: string }) =>
-    (onEditSection || onDeleteSection) ? (
-      <div className="absolute top-1/2 -translate-y-1/2 right-0 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-10 flex items-center gap-1">
-        {onEditSection && (
-          <button
-            onClick={() => onEditSection(sectionKey)}
-            title="Edit section"
-            className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-blue-50 hover:border-blue-400 transition-colors"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-          </button>
-        )}
-        {onDeleteSection && (
-          <button
-            onClick={() => onDeleteSection(sectionKey)}
-            title="Remove section"
-            className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-red-50 hover:border-red-400 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-red-500" />
-          </button>
-        )}
-      </div>
-    ) : null;
   // Extract parsed_data - this is where your backend stores the resume content
   const parsedData = data?.parsed_data || data || {};
   const llmData = parsedData?.llm_data || {};
@@ -412,7 +414,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
     if (/^\d{4}-\d{2}$/.test(dateString)) {
       const [year, month] = dateString.split("-");
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const monthIndex = parseInt(month, 10) - 1;
+      const monthIndex = Number.parseInt(month, 10) - 1;
       return `${monthNames[monthIndex]} ${year}`;
     }
 
@@ -463,7 +465,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* HEADER / PERSONAL INFO */}
         {/* ============================================ */}
         <div id="resume-section-contact" className={`text-center pb-4 mb-5 border-b-2 border-gray-800 ${sc("contact")}`}>
-          <SectionActions sectionKey="contact" />
+          <SectionActions sectionKey="contact" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
           <h1 className="text-2xl font-bold text-gray-900 uppercase tracking-wide mb-1">
             {hl('contact', 'name', name)}
           </h1>
@@ -513,7 +515,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('summary') && professionalSummary && (
           <div id="resume-section-summary" className={sc("summary")}>
-            <SectionActions sectionKey="summary" />
+            <SectionActions sectionKey="summary" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>SUMMARY</h2>
             <p className="text-sm text-gray-700 leading-relaxed text-justify">
               {hl('summary', 'text', professionalSummary)}
@@ -526,14 +528,14 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('skills') && skills.length > 0 && (
           <div id="resume-section-skills" className={sc("skills")}>
-            <SectionActions sectionKey="skills" />
+            <SectionActions sectionKey="skills" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>TECHNICAL SKILLS</h2>
             <ul className="list-disc pl-5 grid grid-cols-3 gap-x-6 gap-y-1 text-sm text-gray-700">
               {skills.map((skill: string, idx: number) => {
                 const editorAdded = new Set((af.skills || []).map((s: string) => s.toLowerCase()));
                 const isNew = newlyAddedSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
                 return (
-                  <li key={idx}>
+                  <li key={`${skill}-${idx}`}>
                     {isNew ? (
                       <span style={hlStyle}>{skill}</span>
                     ) : skill}
@@ -549,14 +551,14 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('softSkills') && softSkills.length > 0 && (
           <div id="resume-section-softSkills" className={sc("softSkills")}>
-            <SectionActions sectionKey="softSkills" />
+            <SectionActions sectionKey="softSkills" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>SOFT SKILLS</h2>
             <ul className="list-disc pl-5 grid grid-cols-3 gap-x-6 gap-y-1 text-sm text-gray-700">
               {softSkills.map((skill: string, idx: number) => {
                 const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
                 const isNew = newlyAddedSoftSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
                 return (
-                  <li key={idx}>
+                  <li key={`${skill}-${idx}`}>
                     {isNew ? (
                       <span style={hlStyle}>{skill}</span>
                     ) : skill}
@@ -572,7 +574,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('experience') && workExperience.length > 0 && (
           <div id="resume-section-experience" className={sc("experience")}>
-            <SectionActions sectionKey="experience" />
+            <SectionActions sectionKey="experience" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>WORK EXPERIENCE</h2>
             {workExperience.map((exp: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const role = toStr(exp.role || exp.title || exp.position);
@@ -584,7 +586,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
               const itemChanged = hlIdx('experience', idx);
               return (
-                <div key={idx} className="mb-4" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
+                <div key={`${company}-${role}-${startDate}-${idx}`} className="mb-4" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
                   <div className="flex justify-between items-start mb-1">
                     <div>
                       <div className="font-bold text-sm text-gray-900">{role}</div>
@@ -597,7 +599,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   {description.length > 0 && (
                     <ul className="list-disc pl-5 mt-1 space-y-1 text-sm text-gray-700">
                       {description.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
+                        <li key={`${item}-${i}`}>{item}</li>
                       ))}
                     </ul>
                   )}
@@ -612,7 +614,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('education') && education.length > 0 && (
           <div id="resume-section-education" className={sc("education")}>
-            <SectionActions sectionKey="education" />
+            <SectionActions sectionKey="education" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>EDUCATION</h2>
             {education.map((edu: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const degree = toStr(edu.degree || edu.qualification || edu.program);
@@ -624,7 +626,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
               const itemChanged = hlIdx('education', idx);
               return (
-                <div key={idx} className="mb-3" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
+                <div key={`${school}-${degree}-${startDate}-${idx}`} className="mb-3" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-bold text-sm text-gray-900">
@@ -648,7 +650,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('projects') && projects.length > 0 && (
           <div id="resume-section-projects" className={sc("projects")}>
-            <SectionActions sectionKey="projects" />
+            <SectionActions sectionKey="projects" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>PROJECTS</h2>
             {projects.map((proj: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const title = toStr(proj.title || proj.name || proj.projectName);
@@ -657,14 +659,19 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               const endDate = toStr(proj.endDate || proj.end_date || proj.date || proj.period);
               const description = toStr(proj.description || proj.summary);
               const rawTech = proj.technologies || proj.techStack || proj.tools;
-              const technologies: string[] = Array.isArray(rawTech)
-                ? rawTech.map((t: any) => toStr(t)).filter(Boolean) // eslint-disable-line @typescript-eslint/no-explicit-any
-                : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
+              let technologies: string[];
+              if (Array.isArray(rawTech)) {
+                technologies = rawTech.map((t: any) => toStr(t)).filter(Boolean); // eslint-disable-line @typescript-eslint/no-explicit-any
+              } else if (rawTech) {
+                technologies = [toStr(rawTech)].filter(Boolean);
+              } else {
+                technologies = [];
+              }
               const responsibilities = parseDescription(proj.responsibilities || proj.key_contributions || proj.contributions || proj.bullets || proj.bullet_points || proj.points || proj.highlights || proj.details);
 
               const itemChanged = hlIdx('projects', idx);
               return (
-                <div key={idx} className="mb-4" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
+                <div key={`${title}-${startDate}-${idx}`} className="mb-4" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
                   <div className="flex justify-between items-start mb-1">
                     <div className="font-bold text-sm text-gray-900 flex items-center gap-2">
                       {title}
@@ -684,7 +691,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   {responsibilities.length > 0 && (
                     <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
                       {responsibilities.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
+                        <li key={`${item}-${i}`}>{item}</li>
                       ))}
                     </ul>
                   )}
@@ -705,7 +712,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('internships') && internships.length > 0 && (
           <div id="resume-section-internships" className={sc("internships")}>
-            <SectionActions sectionKey="internships" />
+            <SectionActions sectionKey="internships" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>INTERNSHIPS</h2>
             {internships.map((intern: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const role = toStr(intern.role || intern.title || intern.position);
@@ -717,7 +724,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
               const itemChanged = hlIdx('internships', idx);
               return (
-                <div key={idx} className="mb-4" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
+                <div key={`${company}-${role}-${startDate}-${idx}`} className="mb-4" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
                   <div className="flex justify-between items-start mb-1">
                     <div>
                       <div className="font-bold text-sm text-gray-900">{company}</div>
@@ -730,7 +737,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   {description.length > 0 && (
                     <ul className="list-disc pl-5 mt-1 space-y-1 text-sm text-gray-700">
                       {description.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
+                        <li key={`${item}-${i}`}>{item}</li>
                       ))}
                     </ul>
                   )}
@@ -745,7 +752,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('certifications') && certifications.length > 0 && (
           <div id="resume-section-certifications" className={sc("certifications")}>
-            <SectionActions sectionKey="certifications" />
+            <SectionActions sectionKey="certifications" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>CERTIFICATIONS</h2>
             {certifications.map((cert: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const certName = typeof cert === 'string' ? cert : toStr(cert.name || cert.title || cert.certification || cert.course_name || cert.course || cert.program || cert.text);
@@ -760,7 +767,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
               const itemChanged = hlIdx('certifications', idx);
               return (
-                <div key={idx} className="mb-3" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
+                <div key={`${certName}-${issuedBy}-${year}-${idx}`} className="mb-3" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
                   <div className="flex items-start text-sm text-gray-700">
                     <span className="mr-2 mt-0.5">•</span>
                     <div className="flex-1">
@@ -771,7 +778,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                       {credentialId && <div className="text-xs text-gray-500 mt-0.5">Credential ID: {credentialId}</div>}
                       {certBullets.length > 0 && (
                         <ul className="list-disc pl-5 mt-1 space-y-0.5 text-sm text-gray-700">
-                          {certBullets.map((b, i) => <li key={i}>{b}</li>)}
+                          {certBullets.map((b, i) => <li key={`${b}-${i}`}>{b}</li>)}
                         </ul>
                       )}
                     </div>
@@ -787,7 +794,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('achievements') && achievements.length > 0 && (
           <div id="resume-section-achievements" className={sc("achievements")}>
-            <SectionActions sectionKey="achievements" />
+            <SectionActions sectionKey="achievements" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>ACHIEVEMENTS</h2>
             {achievements.map((achievement: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const title = typeof achievement === 'string' ? achievement : toStr(achievement.title || achievement.name);
@@ -798,7 +805,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
               const itemChanged = hlIdx('achievements', idx);
               return (
-                <div key={idx} className="mb-2" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
+                <div key={`${title}-${date}-${idx}`} className="mb-2" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
                   <div className="flex justify-between items-start">
                     <span className="font-semibold text-sm text-gray-900">{title}</span>
                     {date && <span className="text-sm text-gray-600">{formatDate(date)}</span>}
@@ -815,7 +822,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('awards') && awards.length > 0 && (
           <div id="resume-section-awards" className={sc("awards")}>
-            <SectionActions sectionKey="awards" />
+            <SectionActions sectionKey="awards" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>AWARDS</h2>
             {awards.map((award: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const title = typeof award === 'string' ? award : toStr(award.title || award.name);
@@ -825,7 +832,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               if (!title) return null;
               const itemChanged = hlIdx('awards', idx);
               return (
-                <div key={idx} className="mb-2 flex items-start text-sm text-gray-700" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
+                <div key={`${title}-${year}-${idx}`} className="mb-2 flex items-start text-sm text-gray-700" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
                   <span className="mr-2">•</span>
                   <div>
                     <span className="font-semibold">{title}</span>
@@ -843,7 +850,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('volunteering') && volunteering.length > 0 && (
           <div id="resume-section-volunteering" className={sc("volunteering")}>
-            <SectionActions sectionKey="volunteering" />
+            <SectionActions sectionKey="volunteering" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>VOLUNTEERING</h2>
             {volunteering.map((vol: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const role = toStr(vol.role || vol.title || vol.position);
@@ -853,7 +860,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               const description = toStr(vol.description);
               const itemChanged = hlIdx('volunteering', idx);
               return (
-                <div key={idx} className="mb-3" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
+                <div key={`${organization}-${role}-${startDate}-${idx}`} className="mb-3" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-bold text-sm text-gray-900">{role}</div>
@@ -875,7 +882,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('hobbies') && hobbies.length > 0 && (
           <div id="resume-section-hobbies" className={sc("hobbies")}>
-            <SectionActions sectionKey="hobbies" />
+            <SectionActions sectionKey="hobbies" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>HOBBIES</h2>
             <div className="text-sm text-gray-700">
               {hobbies.map((hobby: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -885,7 +892,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
                 if (!hobbyName) return null;
                 return (
-                  <div key={idx} className="mb-1">
+                  <div key={`${hobbyName}-${idx}`} className="mb-1">
                     <span className="font-semibold">{hobbyName}</span>
                     {description && <span> — {description}</span>}
                     {proficiencyLevel && <span className="text-xs text-gray-500"> ({proficiencyLevel})</span>}
@@ -901,7 +908,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('interests') && interests.length > 0 && (
           <div id="resume-section-interests" className={sc("interests")}>
-            <SectionActions sectionKey="interests" />
+            <SectionActions sectionKey="interests" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>INTERESTS</h2>
             <div className="text-sm text-gray-700">
               {interests.map((interest: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -911,7 +918,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
                 if (!interestName) return null;
                 return (
-                  <div key={idx} className="mb-1">
+                  <div key={`${interestName}-${idx}`} className="mb-1">
                     <span className="font-semibold">{interestName}</span>
                     {category && <span className="text-xs text-gray-500"> ({category})</span>}
                     {description && <span> — {description}</span>}
@@ -927,7 +934,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('languages') && languages.length > 0 && (
           <div id="resume-section-languages" className={sc("languages")}>
-            <SectionActions sectionKey="languages" />
+            <SectionActions sectionKey="languages" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>LANGUAGES</h2>
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
               {languages.map((lang: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -938,7 +945,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
 
                 const itemChanged = hlIdx('languages', idx);
                 return (
-                  <div key={idx} className="flex items-start" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
+                  <div key={`${langName}-${idx}`} className="flex items-start" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
                     <span className="mr-2">•</span>
                     <div>
                       <span className="font-semibold">{langName}</span>
@@ -956,7 +963,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('publications') && publications.length > 0 && (
           <div id="resume-section-publications" className={sc("publications")}>
-            <SectionActions sectionKey="publications" />
+            <SectionActions sectionKey="publications" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>PUBLICATIONS</h2>
             {publications.map((pub: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const title = toStr(pub.title || pub.name);
@@ -968,7 +975,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               if (!title) return null;
 
               return (
-                <div key={idx} className="mb-3">
+                <div key={`${title}-${idx}`} className="mb-3">
                   <div className="font-semibold text-sm text-gray-900 flex items-center gap-2">
                     {title}
                     {getSafeExternalUrl(url) && (
@@ -993,7 +1000,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('references') && references.length > 0 && (
           <div id="resume-section-references" className={sc("references")}>
-            <SectionActions sectionKey="references" />
+            <SectionActions sectionKey="references" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>REFERENCES</h2>
             {references.map((ref: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const refName = typeof ref === 'string' ? ref : toStr(ref.name);
@@ -1003,7 +1010,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               if (!refName) return null;
 
               return (
-                <div key={idx} className="mb-3">
+                <div key={`${refName}-${idx}`} className="mb-3">
                   <div className="font-semibold text-sm text-gray-900">{refName}</div>
                   {relation && <div className="text-sm text-gray-700">{relation}</div>}
                   {refContact && <div className="text-sm text-gray-600">{refContact}</div>}
@@ -1018,13 +1025,13 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
         {/* ============================================ */}
         {!deleted.includes('extracurricular') && participations.length > 0 && (
           <div id="resume-section-extracurricular" className={sc("extracurricular")}>
-            <SectionActions sectionKey="extracurricular" />
+            <SectionActions sectionKey="extracurricular" onEditSection={onEditSection} onDeleteSection={onDeleteSection} />
             <h2 style={headingStyle}>EXTRACURRICULAR ACTIVITIES</h2>
             <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
               {participations.map((item: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                 const text = typeof item === 'string' ? item : toStr(item.name || item.title || item.description);
                 if (!text) return null;
-                return <li key={idx}>{text}</li>;
+                return <li key={`${text}-${idx}`}>{text}</li>;
               })}
             </ul>
           </div>

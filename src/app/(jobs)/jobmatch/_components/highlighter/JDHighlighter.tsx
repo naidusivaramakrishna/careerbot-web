@@ -4,14 +4,6 @@ import React, { useMemo } from "react";
 import { highlightJD } from "../_lib/utils/highlighter";
 import { JDHighlighterProps } from "../_types";
 
-const HIGHLIGHT_COLORS: Record<string, string> = {
-  'matched-tech':  '#DCFCE7',
-  'missing-tech':  '#FEE2E2',
-  'matched-soft':  '#DBEAFE',
-  'missing-soft':  '#FEF9C3',
-  'matched-cap':   '#EDE9FE',
-};
-
 const JDHighlighter: React.FC<JDHighlighterProps> = ({
   text,
   matchedSkills,
@@ -31,16 +23,26 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
 
   return (
     <p className="w-full text-[13px] leading-normal text-gray-900 whitespace-pre-wrap wrap-break-word">
-      {spans.map((s, i) =>
-        s.match ? (
+      {spans.map((s, i) => {
+        // Spans have no unique id — they're plain text fragments (values can
+        // repeat) freshly rebuilt as a whole in order from `text` on every
+        // change (useMemo above), never reordered/filtered/sorted after the
+        // fact — so a composite of the fragment's own text plus its index is
+        // a safe, stable key (typescript:S6479).
+        const key = `${s.text}-${i}`;
+        if (!s.match) {
+          return <span key={key}>{s.text}</span>;
+        }
+        const clickable = isMissing(s.matchType) && !!onMissingSkillClick;
+        return (
           <mark
-            key={i}
+            key={key}
             style={{
-              background: HIGHLIGHT_COLORS[s.matchType ?? 'missing-tech'],
-              color: "inherit",
+              background: isMissing(s.matchType) ? "#fff3f5" : "#d8fae9",
+              color: isMissing(s.matchType) ? "#ed2346" : "#087a52",
               padding: "1px 3px",
               borderRadius: "3px",
-              cursor: isMissing(s.matchType) && onMissingSkillClick ? "pointer" : "default",
+              cursor: clickable ? "pointer" : "default",
             }}
             title={isMissing(s.matchType) ? "Click to add to resume" : undefined}
             onClick={
@@ -48,13 +50,26 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
                 ? () => onMissingSkillClick(s.text)
                 : undefined
             }
+            // Keyboard equivalent for the click above, added only for spans
+            // that are actually clickable (typescript:S1082/S6847/S6848) —
+            // non-clickable marks are unchanged.
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onKeyDown={
+              isMissing(s.matchType) && onMissingSkillClick
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onMissingSkillClick(s.text);
+                    }
+                  }
+                : undefined
+            }
           >
             {s.text}
           </mark>
-        ) : (
-          <span key={i}>{s.text}</span>
-        )
-      )}
+        );
+      })}
     </p>
   );
 };

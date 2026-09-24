@@ -9,15 +9,14 @@ import {
   CircleAlert,
   Info,
   MessageCircle,
-  Sparkles,
   Flame,
   Star,
+  Code2,
   Briefcase,
   UsersRound,
   Target,
   ListChecks,
   Tag,
-  History,
   FileText,
   GraduationCap,
   Award,
@@ -27,14 +26,16 @@ import {
   ThumbsUp,
   Crown,
   Zap,
+  Plus,
+  Loader2,
 } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseScore(raw: any): number {
   if (typeof raw === "number") return Math.min(100, Math.max(0, raw));
   if (typeof raw === "string") {
-    const n = parseFloat(raw.replace("%", ""));
-    return isNaN(n) ? 0 : Math.min(100, Math.max(0, n));
+    const n = Number.parseFloat(raw.replace("%", ""));
+    return Number.isNaN(n) ? 0 : Math.min(100, Math.max(0, n));
   }
   return 0;
 }
@@ -52,9 +53,9 @@ type PriorityLevel = "high" | "medium" | "low";
 // Card-level priority accent — icon circle, badge colors. Text labels stay
 // exactly what each call site passes; this only drives color/icon.
 const PRIORITY_STYLES: Record<PriorityLevel, { Icon: LucideIcon; text: string; bg: string; border: string }> = {
-  high:   { Icon: Flame, text: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
-  medium: { Icon: Star,  text: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-  low:    { Icon: Info,  text: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  high:   { Icon: Flame, text: "#B42318", bg: "#FEF3F2", border: "#fecaca" },
+  medium: { Icon: Star,  text: "#92400E", bg: "#FFFBEB", border: "#fde68a" },
+  low:    { Icon: Info,  text: "#2257A7", bg: "#EEF3FB", border: "#bfdbfe" },
 };
 
 type ChipTone = "red" | "blue" | "green";
@@ -62,21 +63,45 @@ type ChipTone = "red" | "blue" | "green";
 const CHIP_TONE_STYLES: Record<ChipTone, { text: string; chipBg: string; chipBorder: string; dot: string }> = {
   red:   { text: "text-[#c2413a]", chipBg: "bg-[#fff5f4]", chipBorder: "border-[#f5d5d2]", dot: "bg-[#df5b54]" },
   blue:  { text: "text-[#3A4F7A]", chipBg: "bg-[#f3f6fb]", chipBorder: "border-[#dce5f1]", dot: "bg-[#5d759f]" },
-  green: { text: "text-[#16803c]", chipBg: "bg-[#f0fdf4]", chipBorder: "border-[#bbf7d0]", dot: "bg-[#22c55e]" },
+  green: { text: "text-[#16803c]", chipBg: "bg-[#f0fdf4]", chipBorder: "border-[#bbf7d0]", dot: "bg-[#167044]" },
 };
 
+/** Points + suggestion id an individual missing-skill chip can be added from, looked up by skill name. */
+interface ChipAddInfo {
+  suggestionId: string;
+  points: number;
+}
+
 // Modern rounded chips for a labeled skill group (Required / Nice to have / Missing).
+// When `resolveAdd` is given (Hard/Soft Skills only — see ScoreBreakdown below;
+// Capabilities has no one-click add route), each chip becomes a small button
+// showing its own point value on the right with an inline "Add"/"Added" state,
+// instead of a plain read-only pill.
 function SkillChipGroup({
-  heading, count, icon: Icon, items, tone,
+  heading, count, icon: Icon, items, tone, resolveAdd, addedIds, onAdd,
 }: {
-  heading: string;
-  count: number;
-  icon: LucideIcon;
-  items: string[];
-  tone: ChipTone;
+  readonly heading: string;
+  readonly count: number;
+  readonly icon: LucideIcon;
+  readonly items: string[];
+  readonly tone: ChipTone;
+  readonly resolveAdd?: (item: string) => ChipAddInfo | undefined;
+  readonly addedIds?: Set<string>;
+  readonly onAdd?: (item: string, suggestionId: string) => Promise<boolean> | boolean;
 }) {
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   if (items.length === 0) return null;
   const s = CHIP_TONE_STYLES[tone];
+
+  const handleAdd = async (item: string, info: ChipAddInfo) => {
+    if (!onAdd || loadingId) return;
+    setLoadingId(info.suggestionId);
+    try {
+      await onAdd(item, info.suggestionId);
+    } finally {
+      setLoadingId(null);
+    }
+  };
 
   return (
     <div>
@@ -85,163 +110,195 @@ function SkillChipGroup({
         {heading} <span className="font-semibold text-slate-400">· {count}</span>
       </p>
       <div className="flex flex-wrap gap-2">
-        {items.map((item, index) => (
-          <span
-            key={`${item}-${index}`}
-            className={`inline-flex items-center gap-1.5 rounded-full border ${s.chipBorder} ${s.chipBg} px-3 py-1.5 text-[12.5px] font-medium text-[#2f2f2f]`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-            {item}
-          </span>
-        ))}
+        {items.map((item, index) => {
+          const addInfo = resolveAdd?.(item);
+          const isAdded = !!addInfo && !!addedIds?.has(addInfo.suggestionId);
+          const isLoading = !!addInfo && loadingId === addInfo.suggestionId;
+
+          if (!addInfo) {
+            return (
+              <span
+                key={`${item}-${index}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border ${s.chipBorder} ${s.chipBg} px-3 py-1.5 text-[12.5px] font-medium text-[#2f2f2f]`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                {item}
+              </span>
+            );
+          }
+
+          return (
+            <button
+              key={`${item}-${index}`}
+              type="button"
+              onClick={() => handleAdd(item, addInfo)}
+              disabled={isAdded || isLoading}
+              className={`inline-flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+                isAdded
+                  ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#16803c]"
+                  : `${s.chipBorder} ${s.chipBg} text-[#2f2f2f] hover:brightness-95`
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${isAdded ? "bg-[#167044]" : s.dot}`} />
+              {item}
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
+                  isAdded ? "bg-[#167044] text-white" : "bg-white/70 text-[#526174]"
+                }`}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                ) : isAdded ? (
+                  <CheckCircle2 className="h-2.5 w-2.5" />
+                ) : (
+                  <Plus className="h-2.5 w-2.5" />
+                )}
+                {isAdded ? "Added" : `+${addInfo.points.toFixed(1)} pts`}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 interface SectionCardProps {
-  label: string;
-  subtitle: string;
-  icon: LucideIcon;
-  priorityLabel: string;
-  priorityLevel: PriorityLevel;
-  score: number;
-  passText: string;
-  children?: React.ReactNode;
-  missingCount?: number;
+  readonly label: string;
+  readonly subtitle: string;
+  readonly icon: LucideIcon;
+  readonly priorityLabel: string;
+  readonly priorityLevel: PriorityLevel;
+  readonly score: number;
+  readonly passText: string;
+  readonly children?: React.ReactNode;
+  readonly missingCount?: number;
   /** This check crashed server-side — the score is not a real measurement, so render as a recoverable state instead of "0% failed". */
-  errorMessage?: string;
+  readonly errorMessage?: string;
 }
 
+// The errorMessage early-return branch of SectionCard, below, used to be a
+// large inline JSX block that counted toward SectionCard's own cognitive
+// complexity. Extracted verbatim (same markup, same props) as its own
+// component so SectionCard's complexity reflects only its normal-path logic.
+// Renders as one compact row (icon + title + meta + status tag) inside the
+// shared divide-y list, matching the other rows' height — not its own boxed
+// card — with the explanation always shown below since there's no score to
+// expand/collapse.
+function ErrorSectionCard({
+  label, subtitle, icon: Icon, errorMessage,
+}: {
+  readonly label: string;
+  readonly subtitle: string;
+  readonly icon: LucideIcon;
+  readonly errorMessage: string;
+}) {
+  return (
+    <div className="bg-[#fffdf7] px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+          <Icon className="h-4 w-4 text-amber-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-bold leading-tight text-slate-900">{label}</p>
+          <p className="mt-0.5 truncate text-[12px] text-[#526174]">{subtitle}</p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-[12px] font-bold text-amber-800">
+          <Info className="h-3 w-3" />
+          Couldn&apos;t check
+        </span>
+      </div>
+
+      <div className="mt-3 ml-12 flex items-start gap-2.5 rounded-lg border border-dashed border-amber-300 bg-white/70 px-4 py-3">
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100">
+          <MessageCircle className="h-3 w-3 text-amber-600" />
+        </span>
+        <p className="text-[12.5px] leading-relaxed text-slate-700">{errorMessage}</p>
+      </div>
+    </div>
+  );
+}
+
+// scoreColor: SectionCard used to compute this with a nested ternary inline
+// (passed ? A : score >= 60 ? B : C). Same three-way logic, same literal
+// values, just named and taken out of the render body so the ternary
+// nesting doesn't count against SectionCard's own complexity.
+function scoreColor(score: number, passed: boolean): string {
+  if (passed) return "#167044";
+  if (score >= 60) return "#92400E";
+  return "#B42318";
+}
+
+// One compact row (icon + title + meta on the left, score % + chevron on the
+// right) — collapsed by default so the list reads as a single dense scan,
+// matching the reference layout's row height. Expanding a row reveals the
+// same detail content as before, indented under it.
 function SectionCard({
-  label, subtitle, icon: Icon, priorityLabel, priorityLevel, score, passText, children, missingCount, errorMessage,
+  label, subtitle, icon: Icon, priorityLevel, score, passText, children, missingCount, errorMessage,
 }: SectionCardProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const prio = PRIORITY_STYLES[priorityLevel];
 
   // Recoverable AI-processing issue (e.g. Soft Skills scoring crashed) — warm,
   // calm amber treatment, not a red "error" state.
   if (errorMessage) {
-    return (
-      <div className="overflow-hidden rounded-[14px] border border-amber-200 bg-[#fffdf7] shadow-[0_2px_8px_rgba(15,23,42,0.035)]">
-        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 sm:px-5">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 sm:h-11 sm:w-11">
-              <Icon className="h-5 w-5 text-amber-600" />
-            </div>
-            <div className="min-w-0 pt-0.5">
-              <p className="text-[15px] font-bold leading-tight text-slate-900">{label}</p>
-              <p className="mt-0.5 text-[12.5px] text-slate-500">{subtitle}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
-              style={{ color: prio.text, background: prio.bg, borderColor: prio.border }}
-            >
-              <prio.Icon className="h-3 w-3" />
-              {priorityLabel}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800">
-              Couldn&apos;t check
-              <Info className="h-3 w-3" />
-            </span>
-          </div>
-        </div>
-
-        <div className="mx-4 mb-4 flex items-start gap-2.5 rounded-xl border border-dashed border-amber-300 bg-white/70 px-4 py-3.5 sm:mx-5">
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100">
-            <MessageCircle className="h-3.5 w-3.5 text-amber-600" />
-          </span>
-          <p className="text-[13px] leading-relaxed text-slate-700">{errorMessage}</p>
-        </div>
-      </div>
-    );
+    return <ErrorSectionCard label={label} subtitle={subtitle} icon={Icon} errorMessage={errorMessage} />;
   }
 
   const passed = score >= 100;
   const hasDetails = !!children && !passed;
 
-  const barColor  = passed ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
-  const iconBg    = passed ? "#dcfce7" : prio.bg;
-  const iconColor = passed ? "#16a34a" : prio.text;
+  const color     = scoreColor(score, passed);
+
+  let meta: React.ReactNode;
+  if (passed) {
+    meta = (
+      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-green-700">
+        <CheckCircle2 className="h-3 w-3 shrink-0" /> {passText}
+      </span>
+    );
+  } else if (missingCount !== undefined) {
+    meta = <span className="text-[12px] text-[#526174]">{missingCount} missing</span>;
+  } else {
+    meta = <p className="text-[12px] leading-4 text-[#526174]">{subtitle}</p>;
+  }
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_2px_8px_rgba(15,23,42,0.035)] transition-shadow hover:shadow-[0_5px_18px_rgba(58,79,122,0.07)]">
-      <div className="px-4 py-4 sm:px-5">
-        {/* Header row */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full sm:h-11 sm:w-11" style={{ background: iconBg }}>
-              <Icon className="h-5 w-5" style={{ color: iconColor }} />
-            </div>
-            <div className="min-w-0 pt-0.5">
-              <p className="text-[15px] font-bold leading-tight text-slate-900">{label}</p>
-              <p className="mt-0.5 text-[12.5px] text-slate-500">{subtitle}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0 sm:gap-2.5">
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
-              style={{ color: prio.text, background: prio.bg, borderColor: prio.border }}
-            >
-              <prio.Icon className="h-3 w-3" />
-              {priorityLabel}
-            </span>
-
-            {missingCount !== undefined ? (
-              <div className="flex items-center gap-2.5 text-[12px] whitespace-nowrap">
-                <span className="font-extrabold" style={{ color: barColor }}>
-                  {Math.round(score)}% <span className="font-semibold text-slate-500">matched</span>
-                </span>
-                <span className="h-4 w-px bg-slate-200" aria-hidden="true" />
-                <span className="font-semibold text-slate-500">
-                  <span className="font-extrabold text-slate-900">{missingCount}</span> missing
-                </span>
-              </div>
-            ) : (
-              <span
-                className="text-[12.5px] font-extrabold px-2.5 py-1 rounded-full"
-                style={{
-                  color: barColor,
-                  background: passed ? "#dcfce7" : score >= 60 ? "#fef3c7" : "#fee2e2",
-                  border: `1px solid ${passed ? "#bbf7d0" : score >= 60 ? "#fde68a" : "#fecaca"}`,
-                }}
-              >
-                {score.toFixed(score % 1 === 0 ? 0 : 1)}%
-              </span>
-            )}
-
-            {hasDetails && (
-              <button
-                type="button"
-                onClick={() => setExpanded(v => !v)}
-                aria-expanded={expanded}
-                aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2"
-              >
-                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-            )}
-          </div>
+    <div className="overflow-hidden rounded-md border border-[#DCE3EB] bg-white">
+      <div
+        role={hasDetails ? "button" : undefined}
+        aria-expanded={hasDetails ? expanded : undefined}
+        tabIndex={hasDetails ? 0 : undefined}
+        onClick={hasDetails ? () => setExpanded((v) => !v) : undefined}
+        onKeyDown={hasDetails ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded((v) => !v); } } : undefined}
+        className={`flex items-center gap-2.5 bg-white px-3 ${passed ? "min-h-12 py-2" : "min-h-16 py-2.5"} ${hasDetails ? "cursor-pointer hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600" : ""}`}
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EEF3FB] text-[#2257A7]">
+          <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
         </div>
-
-        {/* Pass message */}
-        {passed && (
-          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl bg-green-50 border border-green-100">
-            <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-            <p className="text-[12.5px] text-green-700">
-              <span className="font-semibold">Way to go!</span> {passText}
-            </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-[14px] font-semibold leading-tight text-slate-800">{label}</p>
+            {!passed && <span className="rounded px-2 py-1 text-[12px] font-semibold" style={{ background: prio.bg, color: prio.text }}>{priorityLevel === "high" ? "High Impact" : priorityLevel === "medium" ? "Medium Impact" : "Low Impact"}</span>}
           </div>
-        )}
+          <div className="mt-0.5">{meta}</div>
+        </div>
+        <div className="flex w-[76px] shrink-0 items-center justify-between gap-2">
+          <span className="min-w-10 text-right text-[16px] font-bold tabular-nums" style={{ color }}>{Math.round(score)}%</span>
+          {hasDetails && (
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400"
+            >
+              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Details */}
       {hasDetails && expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-4">
+        <div className="border-t border-[#DCE3EB] bg-white p-3 sm:p-4">
           {children}
         </div>
       )}
@@ -249,15 +306,42 @@ function SectionCard({
   );
 }
 
-export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
+export default function ScoreBreakdown({
+  matchResult, currentSummary = "", onAddSkill, appliedSuggestionIds,
+}: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  matchResult: any;
-  currentSummary?: string;
+  readonly matchResult: any;
+  readonly currentSummary?: string;
+  /** When given, missing Hard/Soft Skill chips below become one-click "+pts / Add" buttons instead of plain pills. */
+  readonly onAddSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
+  readonly appliedSuggestionIds?: string[];
 }) {
   if (!matchResult) return null;
 
-  const tech = matchResult.Technical_Skills ?? {};
-  const soft = matchResult.Soft_Skills ?? {};
+  const appliedIdSet = new Set(appliedSuggestionIds ?? []);
+  // Same source MatchPenalties itself reads — each entry carries the point
+  // value and suggestion_id a chip's one-click "Add" needs. Capabilities gets
+  // no such lookup: its missing items resolve to a resume-section edit, not a
+  // one-click add, same as MatchPenalties treats them (see AnalysisContent's
+  // findSkillSuggestionId, which this mirrors for exactly technical/soft skills).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const penalties: any[] = matchResult.Match_Penalties?.penalties ?? [];
+  const resolveSkillAdd = (category: "technical_skills" | "soft_skills") => (skillName: string): ChipAddInfo | undefined => {
+    const target = skillName.trim().toLowerCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = penalties.find((item: any) => item.category === category && item.target?.trim().toLowerCase() === target);
+    return p ? { suggestionId: p.suggestion_id, points: Math.abs(p.penalty ?? 0) } : undefined;
+  };
+  const resolveHardSkillAdd = resolveSkillAdd("technical_skills");
+  const resolveSoftSkillAdd = resolveSkillAdd("soft_skills");
+
+  // AI layer renamed these two keys (Technical_Skills -> Technical_Skills_Check,
+  // Soft_Skills -> Soft_Skills_Check) but match_result documents stored before
+  // the rename keep the old name forever (see careerbot-api
+  // app/shared/contracts/matcher_keys.py) — the score is mirrored under both
+  // names, these two blocks are not, so both must be checked here.
+  const tech = matchResult.Technical_Skills_Check ?? matchResult.Technical_Skills ?? {};
+  const soft = matchResult.Soft_Skills_Check ?? matchResult.Soft_Skills ?? {};
   const cap  = matchResult.Capabilities_Check ?? {};
   const star = matchResult.STAR_Pattern_Check ?? {};
   const summary = matchResult.Summary_Check ?? {};
@@ -307,23 +391,12 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
   const missingVerbs: string[] = (req.missing_verbs ?? []).map((v: { verb: string }) => v.verb);
 
   return (
-    <section className="space-y-4" aria-labelledby="jobmatch-suggestions-heading">
-      {/* Section header */}
-      <div className="flex items-start gap-3 px-1">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eaf0f8]">
-          <Sparkles className="h-5 w-5 text-[#3A4F7A]" />
-        </div>
-        <div className="pt-0.5">
-          <h3 id="jobmatch-suggestions-heading" className="text-[19px] font-extrabold text-[#1f2937] leading-tight">Suggestion</h3>
-          <p className="mt-0.5 text-[13px] text-slate-500">Improve your match score by addressing these suggestions.</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
+    <section aria-label="Score breakdown by category">
+      <div className="space-y-2">
         <SectionCard
           label="Hard Skills"
           subtitle="Skills & technical abilities"
-          icon={Briefcase}
+          icon={Code2}
           priorityLabel="High priority"
           priorityLevel="high"
           score={techScore}
@@ -338,6 +411,9 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
                 icon={ClipboardCheck}
                 tone="red"
                 items={requiredTech.map((item) => item.skill)}
+                resolveAdd={onAddSkill ? resolveHardSkillAdd : undefined}
+                addedIds={appliedIdSet}
+                onAdd={onAddSkill}
               />
               {requiredTech.length > 0 && optionalTech.length > 0 && (
                 <div className="border-t border-dashed border-slate-200" aria-hidden="true" />
@@ -348,6 +424,9 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
                 icon={ThumbsUp}
                 tone="green"
                 items={optionalTech.map((item) => item.skill)}
+                resolveAdd={onAddSkill ? resolveHardSkillAdd : undefined}
+                addedIds={appliedIdSet}
+                onAdd={onAddSkill}
               />
             </div>
           )}
@@ -365,7 +444,16 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           errorMessage={softError}
         >
           {missingSoft.length > 0 && (
-            <SkillChipGroup heading="Missing" count={missingSoft.length} icon={CircleAlert} tone="red" items={missingSoft} />
+            <SkillChipGroup
+              heading="Missing"
+              count={missingSoft.length}
+              icon={CircleAlert}
+              tone="red"
+              items={missingSoft}
+              resolveAdd={onAddSkill ? resolveSoftSkillAdd : undefined}
+              addedIds={appliedIdSet}
+              onAdd={onAddSkill}
+            />
           )}
         </SectionCard>
 
@@ -398,12 +486,12 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
               {(starSuggestion || starSeniority) && (
                 <div className="flex items-start justify-between gap-3">
                   {starSuggestion && (
-                    <p className="text-[13px] text-gray-600 leading-relaxed flex-1">
+                    <p className="text-[14px] text-gray-600 leading-relaxed flex-1">
                       <span className="font-semibold text-gray-800">Tip:</span> {starSuggestion}
                     </p>
                   )}
                   {starSeniority && (
-                    <span className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                    <span className="shrink-0 text-[12px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
                       {starSeniority}
                     </span>
                   )}
@@ -412,13 +500,13 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
               {weakBullets.length > 0 && (
                 <ul className="space-y-3">
                   {weakBullets.map((b, i) => (
-                    <li key={i} className="rounded-xl overflow-hidden border border-gray-100 shadow-sm">
+                    <li key={`${b.original}-${i}`} className="rounded-lg overflow-hidden border border-gray-100 shadow-sm">
                       <div className="flex items-start gap-2 px-3.5 py-2.5 bg-red-50 border-b border-red-100">
-                        <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider mt-0.5 shrink-0">Before</span>
+                        <span className="text-[12px] font-bold text-red-400 uppercase tracking-wider mt-0.5 shrink-0">Before</span>
                         <p className="text-[12px] text-red-500 line-through leading-snug">{b.original}</p>
                       </div>
                       <div className="flex items-start gap-2 px-3.5 py-2.5 bg-green-50">
-                        <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider mt-0.5 shrink-0">After</span>
+                        <span className="text-[12px] font-bold text-green-600 uppercase tracking-wider mt-0.5 shrink-0">After</span>
                         <p className="text-[12px] text-green-700 leading-snug font-medium">{b.improved}</p>
                       </div>
                     </li>
@@ -461,19 +549,19 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           {(summary.reason || summary.suggested_summary) && (
             <div className="space-y-3">
               {summary.reason && (
-                <p className="text-[13px] text-gray-600 leading-relaxed">{summary.reason}</p>
+                <p className="text-[14px] text-gray-600 leading-relaxed">{summary.reason}</p>
               )}
               {summary.suggested_summary && (
                 <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
                   {currentSummary && (
-                    <div className="rounded-xl border border-[#f3d3d0] bg-[#fff6f5] px-4 py-3">
-                      <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#c2413a]">Before · Current</p>
+                    <div className="rounded-lg border border-[#f3d3d0] bg-[#fff6f5] px-4 py-3">
+                      <p className="mb-1.5 text-[12px] font-extrabold uppercase tracking-[0.08em] text-[#c2413a]">Before · Current</p>
                       <p className="text-[12px] leading-relaxed text-[#6d3a37]">{currentSummary}</p>
                     </div>
                   )}
                   {currentSummary && <div className="hidden items-center text-[#90a0b8] md:flex">→</div>}
-                  <div className="rounded-xl border border-[#ccebd8] bg-[#f1fbf5] px-4 py-3">
-                    <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#16803c]">After · Suggested</p>
+                  <div className="rounded-lg border border-[#ccebd8] bg-[#f1fbf5] px-4 py-3">
+                    <p className="mb-1.5 text-[12px] font-extrabold uppercase tracking-[0.08em] text-[#16803c]">After · Suggested</p>
                     <p className="text-[12px] font-medium leading-relaxed text-[#245a38]">{summary.suggested_summary}</p>
                   </div>
                 </div>
@@ -498,7 +586,7 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           {(job.reason || job.matched_title || job.jd_title) && (
             <div className="space-y-1.5">
               {job.reason && (
-                <p className="text-[13px] text-gray-600 leading-relaxed">{job.reason}</p>
+                <p className="text-[14px] text-gray-600 leading-relaxed">{job.reason}</p>
               )}
               {(job.matched_title || job.jd_title) && (
                 <p className="text-[12px] text-gray-500">
@@ -513,13 +601,13 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
         <SectionCard
           label="Experience"
           subtitle="Years and depth of relevant experience"
-          icon={History}
+          icon={Briefcase}
           priorityLabel="Low priority"
           priorityLevel="low"
           score={expScore}
           passText="Your experience level matches the role requirements."
         >
-          {exp.reason && expScore < 100 && <p className="text-[13px] text-gray-600 leading-relaxed">{exp.reason}</p>}
+          {exp.reason && expScore < 100 && <p className="text-[14px] text-gray-600 leading-relaxed">{exp.reason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -531,7 +619,7 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           score={eduScore}
           passText="Your education meets the role requirements."
         >
-          {edu.reason && eduScore < 100 && <p className="text-[13px] text-gray-600 leading-relaxed">{edu.reason}</p>}
+          {edu.reason && eduScore < 100 && <p className="text-[14px] text-gray-600 leading-relaxed">{edu.reason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -543,7 +631,7 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           score={certScore}
           passText="Your certifications meet the role requirements."
         >
-          {cert.reason && certScore < 100 && <p className="text-[13px] text-gray-600 leading-relaxed">{cert.reason}</p>}
+          {cert.reason && certScore < 100 && <p className="text-[14px] text-gray-600 leading-relaxed">{cert.reason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -558,7 +646,7 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           {fmt.reason && fmtScore < 100 && (
             <ul className="space-y-2">
               {fmt.reason.split(".,").filter(Boolean).map((r: string, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-[13px] text-gray-600 leading-relaxed">
+                <li key={`${r}-${i}`} className="flex items-start gap-2 text-[14px] text-gray-600 leading-relaxed">
                   <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                   {r.trim().replace(/\.$/, "")}
                 </li>
@@ -579,16 +667,16 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           >
             {careerProg.reason && careerProgScore < 100 && (
               <div className="space-y-1.5">
-                <p className="text-[13px] text-gray-600 leading-relaxed">{careerProg.reason}</p>
+                <p className="text-[14px] text-gray-600 leading-relaxed">{careerProg.reason}</p>
                 {(growthQuality.progression_type || growthQuality.job_stability) && (
                   <div className="flex flex-wrap gap-1.5">
                     {growthQuality.progression_type && (
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                      <span className="text-[12px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
                         {prettify(growthQuality.progression_type)}
                       </span>
                     )}
                     {growthQuality.job_stability && (
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="text-[12px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                         {prettify(growthQuality.job_stability)} job stability
                       </span>
                     )}
