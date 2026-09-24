@@ -710,18 +710,51 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             </div>
           )}
 
-          {!careerLevelData && (
-            <div className="flex items-center justify-center py-16">
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-12 h-12 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-gray-600">Loading career level templates...</p>
-              </div>
-            </div>
-          )}
-
-          {careerLevelData && careerLevelData.length === 0 && (
-            <div className="text-sm text-gray-500 text-center py-8">
-              No career level templates available
+          {/* No career-level data: the user chose a style template (user_chose_style_<email>),
+              or auto-populate / parsing failed. careerLevelData stays null in those cases, so
+              show the general template grid instead of a spinner that never resolves. */}
+          {(!careerLevelData || careerLevelData.length === 0) && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-6">
+              {loading ? (
+                <div className="col-span-2 flex items-center justify-center py-12">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm text-gray-600">Loading templates...</p>
+                  </div>
+                </div>
+              ) : templates.length > 0 ? (
+                templates.map((tpl) => (
+                  <div
+                    key={tpl.template_id}
+                    onClick={() => handleTemplateClick(tpl)}
+                    className={`relative flex flex-col items-center rounded-lg shadow-sm border ${String(selectedTemplate) === tpl.template_id ? "border-[#2557a7]" : "border-gray-200"
+                      } bg-white overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200`}
+                  >
+                    {tpl.atsFriendly && (
+                      <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-1 rounded-full shadow-sm border border-[#2557a7]">
+                        100% ATS Friendly
+                      </span>
+                    )}
+                    <Image
+                      src={tpl.preview_url}
+                      alt={`template-${tpl.template_id}`}
+                      width={160}
+                      height={200}
+                      className="w-full h-44 mt-6 object-contain bg-gray-100"
+                    />
+                    <div className="w-full px-2 py-2 flex flex-col items-center">
+                      <p className="text-xs font-semibold text-gray-700">{tpl.subtitle}</p>
+                      {String(selectedTemplate) === tpl.template_id && (
+                        <span className="mt-1 text-[10px] text-[#2557a7] font-semibold">✓ Selected</span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-2 text-sm text-gray-500 text-center py-8">
+                  No templates found
+                </div>
+              )}
             </div>
           )}
 
