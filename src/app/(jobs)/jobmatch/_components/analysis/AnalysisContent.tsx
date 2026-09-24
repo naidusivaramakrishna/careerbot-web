@@ -797,6 +797,13 @@ export default function AnalysisContent({
     // decide the confident "Added to resume" state, so it must reflect the
     // mirror, not just whether the network call itself succeeded.
     let mirrored = true;
+    // careerbot-api reports `resume_updated: false` when it wrote nothing to
+    // the stored resume (e.g. suggest_add_cert_* and a bare
+    // suggest_demonstrate_* gap resolve no resume edit there). The additive
+    // branches below must not invent content the backend never saved, or the
+    // preview would disagree with the stored resume and the export. Absent
+    // (older responses) is treated as "wrote it", the previous behaviour.
+    const backendWroteResume = res?.resume_updated !== false;
 
     if (category === "job_title") {
       const newTitle = penalty?.target || jobTitle?.jd_title;
@@ -858,14 +865,15 @@ export default function AnalysisContent({
         } else {
           mirrored = false;
         }
-      } else if (category === "certifications" && suggestion_id.startsWith("suggest_add_cert_") && typeof penalty?.target === "string") {
+      } else if (backendWroteResume && category === "certifications" && suggestion_id.startsWith("suggest_add_cert_") && typeof penalty?.target === "string") {
         // Additive fixes have no `before` to replace, so the rewrite above
-        // never touches them — yet the backend still writes them into the
-        // stored resume (add_resume_certification / append_resume_bullet),
-        // which is why the exported PDF had the certification and the preview
-        // did not. Same precedence as _resolve_one_text_edit: a certification
-        // by id prefix (name = penalty.target), then a new bullet placed by
-        // mapping_section.
+        // never touches them. careerbot-api develop2 writes a generated
+        // bullet (append_resume_bullet) but has no certification write yet,
+        // so it reports resume_updated:false for suggest_add_cert_* and this
+        // branch is skipped by the backendWroteResume gate. It mirrors a
+        // certification only once the backend says it saved one. Order: a
+        // certification by id prefix (name = penalty.target), then a new
+        // bullet placed by mapping_section.
         const added = addCertification(resumeSectionsRef.current, penalty.target);
         if (added.status === "added") {
           resumeSectionsRef.current = added.sections;
@@ -874,7 +882,7 @@ export default function AnalysisContent({
           setActiveSectionIds((prev) => (prev.includes("certifications") ? prev : [...prev, "certifications"]));
           appliedTextRef.current[suggestion_id] = penalty.target.trim();
         }
-      } else if (!before && after && penalty?.mapping_section) {
+      } else if (backendWroteResume && !before && after && penalty?.mapping_section) {
         const added = addBullet(resumeSectionsRef.current, penalty.mapping_section, after);
         if (added.status === "added") {
           resumeSectionsRef.current = added.sections;
@@ -886,6 +894,15 @@ export default function AnalysisContent({
           // entry to append to), so nothing was written to either copy.
           mirrored = false;
         }
+      } else if (!penalty?.is_bulk_parent) {
+        // No branch could mirror this fix (e.g. a bare "Demonstrate
+        // capability: X" gap that carries only a `target`). The preview did
+        // not change, so the row must not claim the confident "Added" state.
+        // The score change above still stands -- the backend recorded it.
+        // Bulk parents are excluded: their caller (applyBulkTextFix) already
+        // marks the children as "applied, not yet confirmed in preview".
+        mirrored = false;
+        toast.info("Score updated, but this fix couldn't be added to your resume automatically. Add the details in the editor to complete it.");
       }
     }
 
