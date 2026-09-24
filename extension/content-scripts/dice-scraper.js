@@ -179,7 +179,6 @@
   }
 
   let lastDetectedJd = null;
-  let staleJdAfterNavigation = null;
   // The JD the user explicitly closed the banner for. Closing it (host.remove())
   // is itself a DOM mutation, which the MutationObserver below picks up and
   // re-runs tryDetect() from — without this, the "already showing" guard
@@ -202,11 +201,7 @@
     // React app hasn't rendered the job panel yet (a race, not a real
     // "not a job page" result) — retry the same way as a failed extraction.
     const jd = isJobPage() ? extractJobDescription() : null;
-    // Dice updates selectedJobId in the URL before the split-view panel
-    // finishes swapping in the newly selected job's content. Don't publish
-    // the previous job under the newly selected job's URL while that
-    // asynchronous replacement is still in progress.
-    if (!jd || (staleJdAfterNavigation && jd === staleJdAfterNavigation)) {
+    if (!jd) {
       detectionAttempts++;
       if (detectionAttempts < MAX_ATTEMPTS) {
         scheduleRetry();
@@ -214,13 +209,13 @@
       return;
     }
 
-    // Checking only the JD text (not banner presence) means a closed banner
-    // stays closed for this job — checking document.getElementById
-    // ('cb-shadow-host') here treated the user's own close click as "not
-    // shown yet" and reopened the banner on the next retry/mutation.
+    // Dice updates selectedJobId in the URL before the split-view panel finishes
+    // swapping in the newly selected job's content. lastDetectedJd is kept across
+    // URL changes, so the previous job's text is not published again under the
+    // new URL, and a closed banner stays closed for this job. The mutation
+    // observer below picks up the new content as soon as it renders.
     if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
-    staleJdAfterNavigation = null;
     detectionAttempts = 0;
     clearTimeout(retryTimer);
 
@@ -455,10 +450,14 @@
   const pollUrl = () => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
-      staleJdAfterNavigation = lastDetectedJd;
-      lastDetectedJd = null;
       detectionAttempts = 0;
-      document.getElementById('cb-shadow-host')?.remove();
+      // Keep the banner and lastDetectedJd: a URL change doesn't always mean the
+      // job changed. tryDetect() swaps in a new job as soon as different content
+      // shows up. Leaving the job page clears both.
+      if (!isJobPage()) {
+        lastDetectedJd = null;
+        document.getElementById('cb-shadow-host')?.remove();
+      }
       tryDetect();
     }
   };

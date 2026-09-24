@@ -1311,19 +1311,9 @@ function showCoverLetterError(err, errorEl) {
   errorEl.classList.remove('hidden');
 }
 
-// Hands off to the web app's own Cover Letter form (pre-filled with the
-// scraped JD + resume) instead of calling /cover-letter/generate directly
-// from here. This used to be a second, independently-maintained request
-// builder — and it kept drifting from the web form's request (missing
-// candidate name, tone, company location, ...), producing worse letters
-// than the exact same resume+JD generated through the web app. Reusing the
-// web form as the single generation code path makes that class of drift
-// impossible instead of chasing each missing field one at a time.
-//
-// Uses the same /extension/prefill → session_id handoff that "Improve
-// Resume" already uses to open JobMatch (see doTailor above) — a server-
-// side session avoids URL-length limits (a JD can be up to 50k chars) and
-// the web page already knows how to resolve one.
+// Generates the letter through /cover-letter/generate and opens it in the web
+// app. Handing off to /cover-letter/new?session=<id> instead needs that page
+// to resolve the session, which it does not do yet — keep this flow until it does.
 async function generateCoverLetter() {
   const detectedJD = await getActiveDetectedJD();
   const typedJd = document.getElementById('manual-jd-input')?.value?.trim();
@@ -1337,39 +1327,62 @@ async function generateCoverLetter() {
   showState('coverLetter');
   setCoverLetterHeaderLabel(jobMeta);
 
-  const genEl   = document.getElementById('cl-generating');
-  const errorEl = document.getElementById('cl-error');
+  const genEl    = document.getElementById('cl-generating');
+  const outputEl = document.getElementById('cl-output');
+  const errorEl  = document.getElementById('cl-error');
   genEl.classList.remove('hidden');
+  outputEl.classList.add('hidden');
   errorEl.classList.add('hidden');
 
   try {
-    // A resume isn't required to open the form — if none is cached/uploaded
-    // yet, the web form's own upload/picker UI handles it, same as a user
-    // landing on that page directly.
-    let parsedResumeId = null;
-    try {
-      parsedResumeId = await resolveParsedResumeId();
-    } catch {
-      parsedResumeId = null;
+    const parsedResumeId = await resolveParsedResumeId();
+
+    // Step 2: resolve jd_id — use cached if available, else parse now
+    let jdId = cachedJdId || null;
+    if (!jdId) {
+      const jdResult = await parseJDInExtension(jdText);
+      if (!jdResult.jd_id) throw new Error('Could not parse job description. Please try again.');
+      jdId = jdResult.jd_id;
     }
 
-    const session = await apiFetch('/extension/prefill', {
+    const idempotencyKey = `ext-cl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const res = await apiFetch('/cover-letter/generate', {
       method: 'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
       body: JSON.stringify({
-        job_description: jdText,
-        job_title:       jobMeta?.title    || null,
-        company:         jobMeta?.company  || null,
-        job_location:    jobMeta?.location || null,
-        job_url:         jobMeta?.url      || null,
-        resume_id:       parsedResumeId,
+        parsed_resume_id: parsedResumeId,
+        jd_id:            jdId,
+        ...(jobMeta.title || jobMeta.company ? {
+          application_context: {
+            ...(jobMeta.company && { company_name: jobMeta.company }),
+            ...(jobMeta.title   && { role_title:   jobMeta.title }),
+            source: 'user',
+          },
+        } : {}),
+        options: { include_debug_metadata: false },
       }),
     });
 
-    // Must finish BEFORE closing the panel — window.close() is not reliably
-    // a no-op here, and closing while the tab query/update is still in
-    // flight can kill that pending navigation.
-    await openPortalUrl(`${PORTAL_URL}/cover-letter/new?session=${session.session_id}`);
-    window.close();
+    const letterId = res?.letter_id || res?.id || null;
+    // plain_text is the ready-to-display string; cover_letter is a structured object
+    const content = res?.plain_text || res?.content || res?.letter || '';
+
+    genEl.classList.add('hidden');
+
+    // With a letter_id, open it in the CareerBot web app instead of showing raw text.
+    // Must finish BEFORE closing the panel, or closing can kill the pending navigation.
+    if (letterId) {
+      await openPortalUrl(`${PORTAL_URL}/cover-letter/${letterId}`);
+      window.close();
+      return;
+    }
+
+    outputEl.value = content;
+    outputEl.classList.remove('hidden');
   } catch (err) {
     genEl.classList.add('hidden');
     showCoverLetterError(err, errorEl);

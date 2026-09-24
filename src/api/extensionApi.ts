@@ -7,7 +7,6 @@ export interface ExtensionSession {
   user_id: string;
   job_title: string | null;
   company: string | null;
-  job_location: string | null;
   job_description: string | null;
   job_url: string | null;
   resume_id: string | null;

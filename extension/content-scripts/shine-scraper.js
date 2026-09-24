@@ -104,24 +104,18 @@
   }
 
   let lastDetectedJd = null;
-  let staleJdAfterNavigation = null;
   let mutationTimer = null;
 
   function tryDetect() {
     if (!isJobPage()) return;
     const jd = extractJobDescription();
     if (!jd) return;
-    if (staleJdAfterNavigation && jd === staleJdAfterNavigation) return;
 
-    // Avoid re-sending the same JD / re-injecting the banner on repeated
-    // retries or rapid SPA navigation callbacks.
-    // Checking only the JD text (not banner presence) means a closed banner
-    // stays closed for this job — checking document.getElementById
-    // ('cb-shadow-host') here treated the user's own close click as "not
-    // shown yet" and reopened the banner on the next retry/mutation.
+    // Same JD as the one already published: nothing to do. lastDetectedJd is kept
+    // across URL changes, so the previous job's text is never published again
+    // under a new URL, and a closed banner stays closed for this job.
     if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
-    staleJdAfterNavigation = null;
 
     const meta = extractMeta();
     chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
@@ -335,9 +329,13 @@
   const urlObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      staleJdAfterNavigation = lastDetectedJd;
-      lastDetectedJd = null;
-      document.getElementById('cb-shadow-host')?.remove();
+      // A URL change (even only the hash or query) doesn't mean the job changed,
+      // so keep the banner and lastDetectedJd; tryDetect swaps in a new job as
+      // soon as different content shows up. Leaving the job page clears both.
+      if (!isJobPage()) {
+        lastDetectedJd = null;
+        document.getElementById('cb-shadow-host')?.remove();
+      }
     }
 
     clearTimeout(mutationTimer);

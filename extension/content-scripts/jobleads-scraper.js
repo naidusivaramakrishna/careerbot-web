@@ -41,17 +41,42 @@
     return /jobleads\.com\/[a-z]{2}\/job\//i.test(window.location.href);
   }
 
+  // The popup accepts a JD of up to 50k characters.
+  const MAX_JD_CHARS = 50000;
+
+  // textContent, not innerText — innerText forces a synchronous layout, and this
+  // runs for every div/section/article on the page. innerText is read only for
+  // the block that wins (see extractJobDescription).
+  function isJdBlock(el) {
+    if (el.querySelector('nav, header, footer')) return false;
+    const text = el.textContent?.trim();
+    return !!text && text.length >= 300 && JD_MARKERS.test(text);
+  }
+
+  // A JD is usually several sections (Responsibilities, Requirements, ...), each
+  // in its own block that passes the length + keyword bar on its own, so keeping
+  // the smallest passing block returned just one section. Instead: find the
+  // individual sections (passing blocks that contain no other passing block) and
+  // return their closest shared container, i.e. the whole description. A
+  // page-level wrapper is never chosen because blocks holding nav/header/footer
+  // don't pass.
   function extractJobDescription() {
-    const candidates = document.querySelectorAll('div, section, article');
-    let best = null;
-    for (const el of candidates) {
-      if (el.querySelector('nav') || el.querySelector('header') || el.querySelector('footer')) continue;
-      const text = el.innerText?.trim();
-      if (!text || text.length < 300) continue;
-      if (!JD_MARKERS.test(text)) continue;
-      if (!best || text.length < best.length) best = text; // smallest qualifying block = most specific container
+    const blocks = Array.from(document.querySelectorAll('div, section, article')).filter(isJdBlock);
+    const sections = blocks.filter((el) => !blocks.some((other) => other !== el && el.contains(other)));
+    if (sections.length === 0) return null;
+
+    let container = sections[0];
+    while (container && !sections.every((section) => container.contains(section))) {
+      container = container.parentElement;
     }
-    return best;
+    if (container && isJdBlock(container)) {
+      const whole = container.innerText.trim();
+      if (whole.length <= MAX_JD_CHARS) return whole;
+    }
+
+    // No clean shared container: fall back to the largest single section.
+    const largest = sections.reduce((a, b) => (b.textContent.length > a.textContent.length ? b : a));
+    return largest.innerText.trim();
   }
 
   // Fall back to the URL slug (title--location--id) when the page gates the
@@ -88,24 +113,29 @@
   }
 
   let lastDetectedJd = null;
-  let staleJdAfterNavigation = null;
   let mutationTimer = null;
+  // After a detection or a URL change, keep looking for a different JD for this
+  // long (the page may still be swapping content in). Once it passes, stop
+  // scanning until the URL changes again — otherwise every DOM change on a busy
+  // page (ads, lazy content) would rescan the whole document.
+  const WATCH_MS = 8000;
+  let watchUntil = 0;
+
+  function shouldScan() {
+    return !lastDetectedJd || Date.now() <= watchUntil;
+  }
 
   function tryDetect() {
-    if (!isJobPage()) return;
+    if (!isJobPage() || !shouldScan()) return;
     const jd = extractJobDescription();
     if (!jd) return;
-    if (staleJdAfterNavigation && jd === staleJdAfterNavigation) return;
 
-    // Avoid re-sending the same JD / re-injecting the banner on repeated
-    // retries or rapid SPA navigation callbacks.
-    // Checking only the JD text (not banner presence) means a closed banner
-    // stays closed for this job — checking document.getElementById
-    // ('cb-shadow-host') here treated the user's own close click as "not
-    // shown yet" and reopened the banner on the next retry/mutation.
+    // Same JD as the one already published: nothing to do. lastDetectedJd is kept
+    // across URL changes, so the previous job's text is never published again
+    // under a new URL, and a closed banner stays closed for this job.
     if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
-    staleJdAfterNavigation = null;
+    watchUntil = Date.now() + WATCH_MS;
 
     const meta = extractMeta();
     chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
@@ -311,19 +341,23 @@
   // is idempotent once a JD is found — see the lastDetectedJd guard above).
   [1000, 2500, 4500, 7000, 10000, 14000].forEach((delay) => setTimeout(tryDetect, delay));
 
-  // Re-run for both URL changes and in-place job-panel replacements — clicking
-  // a different job card on a listing page often swaps the visible JD without
-  // a full page navigation, so a one-time detection on initial load would
-  // otherwise never see it.
+  // Re-run when the page changes (SPA navigation, content hydrating). Scanning
+  // stops once a JD is found, until the URL changes again (see shouldScan).
   let lastUrl = location.href;
   const urlObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      staleJdAfterNavigation = lastDetectedJd;
-      lastDetectedJd = null;
-      document.getElementById('cb-shadow-host')?.remove();
+      watchUntil = Date.now() + WATCH_MS;
+      // A URL change (even only the hash or query) doesn't mean the job changed,
+      // so keep the banner and lastDetectedJd; tryDetect swaps in a new job as
+      // soon as different content shows up. Leaving the job page clears both.
+      if (!isJobPage()) {
+        lastDetectedJd = null;
+        document.getElementById('cb-shadow-host')?.remove();
+      }
     }
 
+    if (!shouldScan()) return;
     clearTimeout(mutationTimer);
     mutationTimer = setTimeout(tryDetect, 250);
   });
