@@ -16,7 +16,7 @@ import {
 } from '@/api/adminMonitoringApi'
 import { logger } from '@/lib/logger'
 
-interface LogsFilters {
+export interface LogsFilters {
     level: LogLevel | ''
     source: LogSource | ''
     search: string
@@ -65,14 +65,9 @@ export const useSystemMonitoring = ({
         return periodMap[tab] || "today"
     }, [])
 
-    // Fetch all data
-    const fetchAllData = useCallback(async () => {
-        setIsRefreshing(true)
+    // Fetch logs with filters (debounced by effect)
+    const fetchLogs = useCallback(async () => {
         try {
-            const apiPeriod = getPeriodFromTab(activeTab)
-            const cpuPeriod = getPeriodFromTab(cpuActiveTab || activeTab)
-            const memoryPeriod = getPeriodFromTab(memoryActiveTab || activeTab)
-
             const logsParams: Record<string, any> = { page: 1, page_size: 10 }
             if (logsFilters?.level) logsParams.level = logsFilters.level
             if (logsFilters?.source) logsParams.source = logsFilters.source
@@ -80,19 +75,41 @@ export const useSystemMonitoring = ({
             if (logsFilters?.startDate) logsParams.start_date = logsFilters.startDate
             if (logsFilters?.endDate) logsParams.end_date = logsFilters.endDate
 
-            const [overview, api, cpu, memory, logs] = await Promise.all([
+            const logs = await getSystemLogs(logsParams)
+            setSystemLogs(logs)
+        } catch (error) {
+            logger.error('Error fetching logs:', error)
+        }
+    }, [logsFilters])
+
+    // Debounce logs filter changes (500ms)
+    useEffect(() => {
+        const debounceTimer = setTimeout(() => {
+            fetchLogs()
+        }, 500)
+
+        return () => clearTimeout(debounceTimer)
+    }, [logsFilters, fetchLogs])
+
+    // Fetch all data (without logs)
+    const fetchAllData = useCallback(async () => {
+        setIsRefreshing(true)
+        try {
+            const apiPeriod = getPeriodFromTab(activeTab)
+            const cpuPeriod = getPeriodFromTab(cpuActiveTab || activeTab)
+            const memoryPeriod = getPeriodFromTab(memoryActiveTab || activeTab)
+
+            const [overview, api, cpu, memory] = await Promise.all([
                 getSystemOverview(),
                 getApiRequestMetrics(apiPeriod, apiShowComparison),
                 getCpuUsage(cpuPeriod, cpuShowComparison),
-                getMemoryUsage(memoryPeriod, memoryShowComparison),
-                getSystemLogs(logsParams)
+                getMemoryUsage(memoryPeriod, memoryShowComparison)
             ])
 
             setSystemOverview(overview)
             setApiMetrics(api)
             setCpuMetrics(cpu)
             setMemoryMetrics(memory)
-            setSystemLogs(logs)
             setLastRefreshed(
                 new Date().toLocaleTimeString('en-US', {
                     hour: '2-digit',
@@ -106,7 +123,7 @@ export const useSystemMonitoring = ({
             setLoading(false)
             setIsRefreshing(false)
         }
-    }, [activeTab, cpuActiveTab, memoryActiveTab, apiShowComparison, cpuShowComparison, memoryShowComparison, logsFilters, getPeriodFromTab])
+    }, [activeTab, cpuActiveTab, memoryActiveTab, apiShowComparison, cpuShowComparison, memoryShowComparison, getPeriodFromTab])
 
     // Initial fetch
     useEffect(() => {

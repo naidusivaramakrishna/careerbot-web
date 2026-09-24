@@ -23,7 +23,6 @@ const publicRoutes = [
     '/auth/google/success',
     '/auth/linkedin/success',
     '/auth/error',
-    '/verify-email',
     '/reset-password',
     '/forgot-password',
     '/resend-verification',
@@ -93,8 +92,8 @@ function redirectToLogin(request: NextRequest): NextResponse {
 
     const response = NextResponse.redirect(target);
 
-    // Add no-cache headers when redirecting from protected admin pages
-    if (pathname.startsWith(ADMIN_PREFIX)) {
+    // Add no-cache headers when redirecting from protected admin/recruiter pages
+    if (pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX)) {
         response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         response.headers.set('Pragma', 'no-cache');
         response.headers.set('Expires', '0');

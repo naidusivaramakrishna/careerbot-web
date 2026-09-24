@@ -3,40 +3,44 @@ import { NextRequest, NextResponse } from 'next/server';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export async function POST(request: NextRequest) {
-  const tenantId = request.headers.get('X-Tenant-Id') || 'public';
+  // Best-effort: blacklist the token on the backend. 3s timeout so a slow/hung
+  // backend never delays the cookie-clear response that the browser is waiting on.
+  await fetch(`${BACKEND_URL}/api/v1/admin/auth/logout`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(3000),
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': request.headers.get('cookie') ?? '',
+      ...(request.headers.get('X-Tenant-Id')
+        ? { 'X-Tenant-Id': request.headers.get('X-Tenant-Id')! }
+        : {}),
+    },
+  }).catch(() => {});
 
-  try {
-    // Call backend logout to invalidate tokens on server
-    await fetch(`${BACKEND_URL}/api/v1/admin/auth/logout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-Id': tenantId,
-        'Cookie': request.headers.get('cookie') || '',
-      },
-    }).catch(() => {
-      // Ignore backend errors - we still need to clear cookies on frontend
-    });
+  // Clear EVERY (name, path) pair this origin can have written.
+  // A cookie's identity is (name, domain, path), so one Set-Cookie per pair is
+  // required and missing one leaves a live session.
+  //
+  // The paths, per name:
+  //   Path=/                       access tokens and refresh tokens from pre-cookieUtils flows
+  //   Path=/api                    refresh tokens today (REFRESH_COOKIE_PATH)
+  //   Path=/api/v1/auth/refresh    backend-set, when a rewrite forwards the response without sanitising it
+  //   Path=/api/v1/admin/auth/refresh   same for admin auth endpoints
+  const res = NextResponse.json({ success: true });
+  const expire = (name: string, path: string) =>
+    res.headers.append(
+      'Set-Cookie',
+      `${name}=; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=0`,
+    );
 
-    // Create response that clears all auth cookies
-    const response = NextResponse.json({ success: true });
-
-    // Clear all auth cookies by setting them to expire immediately
-    // The Max-Age=0 approach works even for httpOnly cookies because we're setting from the server
-    // Refresh tokens are stored with Path=/api (for security), so they must be cleared with the same path
-    response.headers.append('Set-Cookie', 'admin_access_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'admin_refresh_token=; Path=/api; Max-Age=0; HttpOnly; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'access_token=; Path=/; Max-Age=0; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'refresh_token=; Path=/api; Max-Age=0; SameSite=Lax');
-
-    return response;
-  } catch (error) {
-    // Even if backend call fails, return response to clear cookies
-    const response = NextResponse.json({ success: true });
-    response.headers.append('Set-Cookie', 'admin_access_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'admin_refresh_token=; Path=/api; Max-Age=0; HttpOnly; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'access_token=; Path=/; Max-Age=0; SameSite=Lax');
-    response.headers.append('Set-Cookie', 'refresh_token=; Path=/api; Max-Age=0; SameSite=Lax');
-    return response;
+  for (const name of ['admin_access_token', 'access_token']) {
+    expire(name, '/');
   }
+  for (const name of ['admin_refresh_token', 'refresh_token']) {
+    expire(name, '/');
+    expire(name, '/api');
+    expire(name, '/api/v1/auth/refresh');
+    expire(name, '/api/v1/admin/auth/refresh');
+  }
+  return res;
 }

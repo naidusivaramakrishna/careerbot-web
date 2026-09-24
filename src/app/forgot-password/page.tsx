@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Mail, CircleCheck } from "lucide-react";
+import { toast } from "sonner";
 import { requestPasswordReset } from "@/api/authApi";
 import { useEmailForm } from "@/hooks/useEmailForm";
 
@@ -14,18 +15,21 @@ const ForgotPasswordPage = () => {
     disableAutoRedirect: true, // User must click "Back to Sign In" button manually
   });
 
-  const [resendCountdown, setResendCountdown] = useState(30);
+  const [resendCountdown, setResendCountdown] = useState(0);
   const [isResending, setIsResending] = useState(false);
+  const lastResendTimeRef = useRef(0);
+  const RESEND_RATE_LIMIT = 60; // Same as main form rate limit
 
   useEffect(() => {
-    if (status !== "success") {
-      setResendCountdown(30);
-      return;
+    if (status === "success") {
+      // On initial success, set countdown to rate limit
+      lastResendTimeRef.current = Date.now();
+      setResendCountdown(RESEND_RATE_LIMIT);
     }
   }, [status]);
 
   useEffect(() => {
-    if (status !== "success" || resendCountdown === 0) {
+    if (resendCountdown <= 0) {
       return;
     }
 
@@ -39,7 +43,7 @@ const ForgotPasswordPage = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [status, resendCountdown]);
+  }, [resendCountdown]);
 
   const formatCountdown = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -49,12 +53,24 @@ const ForgotPasswordPage = () => {
 
   const handleResendEmail = async () => {
     if (!email) return;
+
+    const now = Date.now();
+    const timeSinceLastAttempt = now - lastResendTimeRef.current;
+    const remainingSeconds = Math.ceil((RESEND_RATE_LIMIT * 1000 - timeSinceLastAttempt) / 1000);
+
+    if (timeSinceLastAttempt < RESEND_RATE_LIMIT * 1000) {
+      toast.error(`Please wait ${remainingSeconds}s before resending`);
+      return;
+    }
+
     setIsResending(true);
     try {
       await requestPasswordReset({ email });
-      setResendCountdown(30);
-    } catch (error) {
-      console.error("Error resending email:", error);
+      lastResendTimeRef.current = now;
+      setResendCountdown(RESEND_RATE_LIMIT);
+      toast.success("Reset link resent to your email");
+    } catch {
+      toast.error("Failed to resend reset link. Please try again.");
     } finally {
       setIsResending(false);
     }

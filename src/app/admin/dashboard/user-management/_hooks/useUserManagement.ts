@@ -140,13 +140,10 @@ export const useUserManagement = () => {
                 return
             }
 
-            // Use pagination to fetch all users (max 100 per page)
-            const pageSize = 100
-            const totalPages = Math.ceil(totalToExport / pageSize)
-
+            // Fetch all users at once (up to 10,000 per backend limit)
             const exportParams: Record<string, unknown> = {
                 page: 1,
-                page_size: pageSize,
+                page_size: 10000,
             }
 
             // Add current filters to export
@@ -157,17 +154,12 @@ export const useUserManagement = () => {
             if (filters.created_from) exportParams.created_from = filters.created_from
             if (filters.created_to) exportParams.created_to = filters.created_to
 
-            // For now, export first page (backend should support full export)
-            // TODO: When backend supports streaming/full export, fetch all pages
+            // Export all users (up to 10,000 limit checked above)
             const blob = await exportUsers(exportParams, format)
             downloadExportedFile(blob, format)
 
             toast.dismiss(toastId)
-            if (totalPages > 1) {
-                toast.warning(`Export contains page 1 of ${totalPages}. Export ${totalToExport} rows via backend streaming.`)
-            } else {
-                toast.success(`Users exported as ${format.toUpperCase()}`)
-            }
+            toast.success(`Users exported as ${format.toUpperCase()} (${totalToExport} rows)`)
         } catch (error) {
             toast.dismiss()
             toast.error('Failed to export users')

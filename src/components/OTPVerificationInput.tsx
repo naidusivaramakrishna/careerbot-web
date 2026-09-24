@@ -25,16 +25,24 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
   onClose,
 }) => {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  const verifyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""])
   const [status, setStatus] = useState<VerificationStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
-  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null)
   const [resendCountdown, setResendCountdown] = useState(0)
 
   useEffect(() => {
     inputRefs.current[0]?.focus()
     // Start resend countdown when component mounts (OTP just sent)
     setResendCountdown(30)
+  }, [])
+
+  // Cleanup post-verify timeout on unmount
+  useEffect(() => {
+    const timeoutId = verifyTimeoutRef.current
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }, [])
 
   useEffect(() => {
@@ -45,16 +53,35 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
   }, [resendCountdown])
 
   const handleChange = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return
+    // Extract only digits and limit to reasonable autofill length
+    const digits = value.replace(/\D/g, '').substring(0, 6)
+
+    if (digits.length === 0) {
+      // Clear the current field if input is empty
+      const newOtp = [...otp]
+      newOtp[index] = ''
+      setOtp(newOtp)
+      setErrorMessage("")
+      return
+    }
 
     const newOtp = [...otp]
-    newOtp[index] = value
+    // Handle multi-digit input (from autofill) by spreading across boxes
+    for (let i = 0; i < digits.length && i + index < 6; i++) {
+      newOtp[i + index] = digits[i]
+    }
     setOtp(newOtp)
     setErrorMessage("")
 
-    // Auto-focus next input
-    if (value && index < 5) {
+    // Auto-focus next empty input or verify button if all filled
+    if (digits.length === 1 && index < 5) {
       inputRefs.current[index + 1]?.focus()
+    } else if (digits.length > 1) {
+      // Multi-digit paste: focus the next empty field after filled ones
+      const lastFilledIndex = Math.min(index + digits.length - 1, 5)
+      if (lastFilledIndex < 5) {
+        inputRefs.current[lastFilledIndex + 1]?.focus()
+      }
     }
   }
 
@@ -125,12 +152,12 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
 
       logger.info("Email verification response received")
 
-      if (response && response.message) {
+      if (response?.success) {
         setStatus("success")
         toast.success(response.message || "Email verified successfully!")
 
         // Auto-signin after verification
-        setTimeout(async () => {
+        verifyTimeoutRef.current = setTimeout(async () => {
           try {
             await signIn({ email, password })
             localStorage.setItem("token_last_refreshed_at", Date.now().toString())
@@ -157,7 +184,6 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
       logger.error("Email verification error:", error)
 
       let errorMsg = "Email verification failed. Please try again."
-      let attempts: number | null = null
 
       if (axios.isAxiosError(error)) {
         const apiError = error.response?.data as unknown as Record<string, unknown>
@@ -166,7 +192,7 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
         const detail = (errorObj?.message as string) || (apiError?.detail as string) || ""
 
         if (errorCode === "OTP_INVALID") {
-          attempts = (errorObj?.attempts_remaining as number) || null
+          const attempts = (errorObj?.attempts_remaining as number) || null
           errorMsg = attempts
             ? `Invalid OTP. ${attempts} attempt${attempts !== 1 ? "s" : ""} remaining.`
             : "Invalid OTP."
@@ -181,7 +207,6 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
         } else {
           errorMsg = detail || errorMsg
         }
-        setRemainingAttempts(attempts)
       } else if (error instanceof Error) {
         errorMsg = error.message
       }
@@ -239,7 +264,6 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
             }}
             type="text"
             inputMode="numeric"
-            maxLength={1}
             autoComplete={index === 0 ? "one-time-code" : "off"}
             value={digit}
             onChange={(e) => handleChange(index, e.target.value)}
@@ -257,17 +281,10 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
         ))}
       </div>
 
-      {/* Error Message */}
+      {/* Error Message (includes attempts if available) */}
       {errorMessage && (
         <p className="text-red-600 text-sm text-center">
           {errorMessage}
-        </p>
-      )}
-
-      {/* Remaining Attempts Info */}
-      {remainingAttempts !== null && (
-        <p className="text-xs text-red-500 text-center">
-          {remainingAttempts} attempt{remainingAttempts !== 1 ? "s" : ""} remaining
         </p>
       )}
 

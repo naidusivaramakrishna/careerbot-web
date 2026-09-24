@@ -295,10 +295,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         const appliedTemplate = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
         logger.info('Applied template found:', appliedTemplate);
         if (appliedTemplate) {
-          // Use current domain from resumeData instead of template's original domain
-          const currentDomain = resumeData.templateDomain || appliedTemplate.domain_family || 'software_engineering';
-          logger.info('Rendering career level template with domain:', currentDomain);
-          return getTemplateByDomain(currentDomain);
+          // Use template's domain family for career level filtering
+          const templateDomain = appliedTemplate.domain_family || 'software_engineering';
+          logger.info('Rendering career level template with domain:', templateDomain);
+          return getTemplateByDomain(templateDomain);
         }
       } catch (err) {
         logger.warn('Error checking career level template:', err);

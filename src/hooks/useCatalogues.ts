@@ -47,15 +47,12 @@ export const useCatalogues = () => {
   useEffect(() => {
     const fetchCatalogues = async () => {
       try {
-        console.warn('[useCatalogues] Fetching catalogues...');
-
         // Check cache first
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
           try {
             const { data, timestamp } = JSON.parse(cached);
             if (Date.now() - timestamp < CACHE_DURATION) {
-              console.warn('[useCatalogues] Loaded from cache');
               setCatalogues(data);
               setLoading(false);
               logger.info('Catalogues loaded from cache');
@@ -67,16 +64,13 @@ export const useCatalogues = () => {
         }
 
         // Fetch from API
-        console.warn('[useCatalogues] Fetching from API:', CATALOGUES_API_URL);
         const response = await fetch(CATALOGUES_API_URL);
-        console.warn('[useCatalogues] Response status:', response.status, response.statusText);
 
         if (!response.ok) {
           throw new Error(`Failed to fetch catalogues: ${response.statusText}`);
         }
 
         const data: CatalogueConfig[] = await response.json();
-        console.warn('[useCatalogues] Received data:', data?.length || 0, 'catalogues');
 
         // Cache the result
         localStorage.setItem(CACHE_KEY, JSON.stringify({

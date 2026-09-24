@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import Dropdown from '@/components/common/CustomDropdown'
 import { LoadingSpinner } from '../_components/LoadingSpinner'
-import { useSystemMonitoring } from './hooks/useSystemMonitoring'
+import { useSystemMonitoring, type LogsFilters } from './hooks/useSystemMonitoring'
 import { ApiRequestsSection } from './_components/ApiRequestsSection'
 import { HealthCards } from './_components/HealthCards'
 import { CpuUsageSection } from './_components/CpuUsageSection'
@@ -13,15 +13,6 @@ import { PerformanceMetrics } from './_components/PerformanceMetrics'
 import { logger } from '@/lib/logger'
 import { useAdminAccess } from '../../_hooks/useAdminAccess'
 import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
-import type { LogLevel, LogSource } from '@/api/adminMonitoringApi'
-
-interface LogsFilters {
-    level: LogLevel | ''
-    source: LogSource | ''
-    search: string
-    startDate: string
-    endDate: string
-}
 
 const SystemMonitoring = () => {
     const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('system-monitoring');

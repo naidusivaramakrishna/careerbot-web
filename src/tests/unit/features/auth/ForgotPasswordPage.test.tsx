@@ -65,7 +65,7 @@ describe('ForgotPasswordPage — rendering', () => {
   it('renders email input and submit button', () => {
     render(<ForgotPasswordPage />);
     expect(screen.getByTestId('forgot-email-input')).toBeInTheDocument();
-    expect(screen.getByTestId('send-reset-link-btn')).toHaveTextContent('Send Reset Link');
+    expect(screen.getByTestId('send-reset-link-btn')).toHaveTextContent(/send reset link/i);
   });
 
   it('renders "Sign in" link to return to signin', () => {
@@ -112,13 +112,13 @@ describe('ForgotPasswordPage — happy path', () => {
     });
   });
 
-  it('shows success state ("Check Your Email") after successful request', async () => {
+  it('shows success state ("Check your email") after successful request', async () => {
     mockRequestPasswordReset.mockResolvedValue({ message: 'Reset email sent' });
     render(<ForgotPasswordPage />);
     fireEvent.change(screen.getByTestId('forgot-email-input'), { target: { value: 'user@example.com' } });
     fireEvent.click(screen.getByTestId('send-reset-link-btn'));
     await waitFor(() => {
-      expect(screen.getByText('Check Your Email')).toBeInTheDocument();
+      expect(screen.getByText(/check your email/i)).toBeInTheDocument();
       expect(screen.getByTestId('goto-signin-btn')).toBeInTheDocument();
     });
   });

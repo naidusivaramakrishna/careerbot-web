@@ -53,7 +53,7 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // every cost field for this role, so the split is enforced there and merely
   // reflected here.
   'ai-usage': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN'],
-  'settings': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
+  'settings': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'PLATFORM_ADMIN'],
 };
 
 /**

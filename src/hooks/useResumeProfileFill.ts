@@ -150,20 +150,20 @@ export function useResumeProfileFill(userId?: string) {
         }
 
         // Auto-fill employment status based on current work experience
-        // Only set 'employed' if there's an active job (no end_date or end_date in future)
+        // Only set 'employed' if there's an active job (currently_working flag from mapper)
         try {
-          const now = new Date();
-          const hasCurrentJob = profileData.workExperience.some(exp => {
-            if (!exp.end_date) return true; // Currently employed (no end date)
-            const endDate = new Date(exp.end_date);
-            return endDate > now; // End date is in the future
-          });
+          const hasCurrentJob = profileData.workExperience.some(exp => exp.currently_working);
 
           const existingInfo = await getEmploymentInfo();
-          await updateEmploymentInfo({
-            ...existingInfo,
-            employment_status: hasCurrentJob ? 'employed' : existingInfo.employment_status
-          });
+          const newStatus = hasCurrentJob ? 'employed' : existingInfo.employment_status;
+
+          // Skip update if status hasn't changed
+          if (newStatus !== existingInfo.employment_status) {
+            await updateEmploymentInfo({
+              ...existingInfo,
+              employment_status: newStatus
+            });
+          }
         } catch {
           // non-fatal: continue with other sections
         }

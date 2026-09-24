@@ -394,10 +394,11 @@ export default function BrowseTemplatesPage() {
                         <div
                           className={`h-full bg-gradient-to-r ${color} rounded-full transition-all duration-700 ease-out`}
                           style={{
+                            '--target-width': `${percentage}%`,
                             width: `${percentage}%`,
                             animation: `expandWidth 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards`,
                             animationDelay: `${i * 40}ms`,
-                          }}
+                          } as React.CSSProperties & { '--target-width': string }}
                         />
                       </div>
                     </div>

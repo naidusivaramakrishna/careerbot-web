@@ -217,7 +217,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
                 {/* Email Field */}
                 <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Email address</label>
+                    <label htmlFor="login-email" className="text-sm font-semibold text-gray-900 mb-2 block">Email address</label>
                     <div className="relative">
                         <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
@@ -237,7 +237,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
                 {/* Password Field */}
                 <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
+                    <label htmlFor="login-password" className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
                     <div className="relative">
                         <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
@@ -305,13 +305,22 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     password={verificationData.password}
                     onSuccess={() => {
                         setIsVerifyingEmail(false)
+                        setLoading((prev) => ({ ...prev, signUp: false }))
                         // Call parent onSuccess callback if provided
                         if (onSuccess) {
                             onSuccess()
-                        } else {
-                            // Default: redirect to authRedirectTo or /onboarding
                             onClose()
-                            window.location.href = authRedirectTo
+                        } else {
+                            // New users always go to onboarding first. If a specific redirect
+                            // was intended (not the default), append it as ?next= so onboarding
+                            // can forward them after profile setup.
+                            onClose()
+                            const DEFAULT_AUTH_REDIRECT = "/dashboard"
+                            if (authRedirectTo !== DEFAULT_AUTH_REDIRECT) {
+                                window.location.href = `/onboarding?next=${encodeURIComponent(authRedirectTo)}`
+                            } else {
+                                window.location.href = "/onboarding"
+                            }
                         }
                     }}
                     onClose={() => {
@@ -360,7 +369,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 {/* Username Field (Signup Only) */}
                 {formType === "signup" && (
                     <div className="mb-4">
-                        <label className="text-sm font-semibold text-gray-900 mb-2 block">Username</label>
+                        <label htmlFor="signup-username" className="text-sm font-semibold text-gray-900 mb-2 block">Username</label>
                         <div className="relative">
                             <User className="absolute left-3 top-3.5 text-gray-400" size={18} />
                             <input
@@ -381,7 +390,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
                 {/* Email Field */}
                 <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Email</label>
+                    <label htmlFor="signup-email" className="text-sm font-semibold text-gray-900 mb-2 block">Email</label>
                     <div className="relative">
                         <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
@@ -400,7 +409,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
                 {/* Password Field */}
                 <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
+                    <label htmlFor="signup-password" className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
                     <div className="relative">
                         <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
