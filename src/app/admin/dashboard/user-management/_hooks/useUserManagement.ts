@@ -115,8 +115,10 @@ export const useUserManagement = () => {
 
     // Handle export
     const handleExport = useCallback(async (format: 'csv' | 'xlsx') => {
+        // Declared outside `try` so the `catch` below can dismiss it.
+        let toastId: string | number | undefined
         try {
-            const toastId = toast.loading('Preparing export...')
+            toastId = toast.loading('Preparing export...')
 
             // Get total count to warn user if over 10000 rows
             const countParams: Record<string, unknown> = {
