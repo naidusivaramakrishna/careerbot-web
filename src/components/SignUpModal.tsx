@@ -354,8 +354,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                         onChange={handleChange}
                         data-testid="signup-email-input"
                         id="signup-email"
-                        className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
-                        style={(errors.email || errors.login) ? { boxShadow: '0 0 0 1000px #fef2f2 inset', WebkitBoxShadow: '0 0 0 1000px #fef2f2 inset' } : undefined}
+                        className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.email ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                        style={errors.email ? { boxShadow: '0 0 0 1000px #fef2f2 inset', WebkitBoxShadow: '0 0 0 1000px #fef2f2 inset' } : undefined}
                     />
                     {errors.email && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
 
@@ -368,7 +368,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="signup-password-input"
                             id="signup-password"
-                            className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                            className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.password ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
                         />
                         <button
                             type="button"
@@ -381,7 +381,16 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                         </button>
                     </div>
                     {errors.password && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-                    {errors.login && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+
+                    {/* Non-field error (timeout, network, server error) — shown as a banner, not tied to any field */}
+                    {errors.login && (
+                        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+                            <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-sm text-red-600">{errors.login}</p>
+                        </div>
+                    )}
                 </div>
 
                 {formType === "signin" && (

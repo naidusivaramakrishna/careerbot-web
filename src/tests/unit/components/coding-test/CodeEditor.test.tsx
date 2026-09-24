@@ -17,7 +17,7 @@ vi.mock('@monaco-editor/react', () => ({
           addCommand: vi.fn(),
           getDomNode: () => document.createElement('div'),
         },
-        { KeyMod: { CtrlCmd: 2048 }, KeyCode: { Enter: 3, KeyV: 52 } },
+        { KeyMod: { CtrlCmd: 2048 }, KeyCode: { Enter: 3, KeyV: 52, KeyS: 49 } },
       );
     }
     return (
@@ -109,6 +109,18 @@ describe('CodeEditor', () => {
       );
       expect(mockAddAction).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'run-code' }),
+      );
+    });
+  });
+
+  describe('onCtrlS', () => {
+    it('registers a save-code action on mount when onCtrlS is provided', () => {
+      mockAddAction.mockClear();
+      render(
+        <CodeEditor language="python" value="" onChange={onChange} onCtrlS={() => {}} />,
+      );
+      expect(mockAddAction).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'save-code' }),
       );
     });
   });
