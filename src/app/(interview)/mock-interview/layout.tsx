@@ -29,7 +29,11 @@ export default function MockInterviewLayout({
       >
         <div className="flex h-full">
           <MockSidebar />
-          <div className="flex-1 min-h-0 overflow-auto min-w-0">
+          {/* relative: makes this scroller the containing block for absolutely
+              positioned descendants (e.g. sr-only text). Without it they are
+              placed against the viewport, escape overflow-hidden above, and
+              stretch the document into a blank scroll area below the layout. */}
+          <div className="relative flex-1 min-h-0 overflow-auto min-w-0">
             {children}
           </div>
         </div>

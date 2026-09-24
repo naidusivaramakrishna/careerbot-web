@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getLiveHistory, getReport, LiveSession } from "@/api/mockInterviewApi";
+import { getLiveHistory, getReport, LiveSession, ReportResponse } from "@/api/mockInterviewApi";
 import { useMockInterview } from "../_context/MockInterviewContext";
 import {
   LineChart,
@@ -21,7 +21,6 @@ import {
   TrendingUp,
   TrendingDown,
   Mic,
-  History,
 } from "lucide-react";
 
 // ─── Score badge ──────────────────────────────────────────────────────────────
@@ -86,22 +85,71 @@ function getInterviewLabel(type: string): string {
   return "Mock Interview";
 }
 
-function mapLiveSession(s: LiveSession) {
+// ─── Report loading ───────────────────────────────────────────────────────────
+// GET /live/history returns score: null for finished sessions (a backend known
+// gap) and 0.0 for sessions that never finished - neither is a real score. The
+// score, duration and question count only exist in GET /report/{id}, and only
+// for "completed" sessions. That endpoint is limited to ~10/min, so reports
+// are fetched in small batches, and each result is remembered on this device
+// (a finished report never changes) so later visits are instant.
+
+const REPORT_CACHE_KEY = "mock_interview_report_summaries_v1";
+const REPORT_BATCH_SIZE = 8;
+const REPORT_BATCH_GAP_MS = 60_000;
+
+interface ReportSummary {
+  score: number;
+  duration_min: number | null;
+  question_count: number | null;
+}
+
+function readReportCache(): Record<string, ReportSummary> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REPORT_CACHE_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function cacheReportSummary(sessionId: string, summary: ReportSummary) {
+  try {
+    localStorage.setItem(REPORT_CACHE_KEY, JSON.stringify({ ...readReportCache(), [sessionId]: summary }));
+  } catch {
+    /* storage unavailable or full - it just isn't remembered */
+  }
+}
+
+function summarizeReport(r: ReportResponse): ReportSummary {
+  return {
+    score: Math.round(r.overall_score),
+    duration_min: typeof r.duration_seconds === "number"
+      ? Math.round(r.duration_seconds / 60)
+      : typeof r.duration_min === "number" ? r.duration_min : null,
+    question_count: Array.isArray(r.answers) ? r.answers.length : null,
+  };
+}
+
+function mapLiveSession(s: LiveSession, cache: Record<string, ReportSummary> = {}) {
+  const hasReport = s.status === "completed";
+  const cached = hasReport ? cache[s.session_id] : undefined;
   return {
     session_id: s.session_id,
     type: s.type.startsWith("live_") ? "mock" : "practice",
     interview_label: getInterviewLabel(s.type),
+    timestamp: new Date(s.created_at).getTime() || 0,
     date: new Date(s.created_at).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     }),
-    duration_min: s.duration_s ? Math.round(s.duration_s / 60) : 0,
-    question_count: typeof s.question_count === "number" ? s.question_count : null,
-    // GET /live/history currently always returns score: null (backend known
-    // gap) — resolved lazily per visible row from GET /report/{id} below.
-    overall_score: 0,
-    score_loaded: false,
+    // null = unknown (the list sends null); filled in from the report.
+    duration_min: cached?.duration_min ?? (s.duration_s ? Math.round(s.duration_s / 60) : null),
+    question_count: cached?.question_count ?? (typeof s.question_count === "number" ? s.question_count : null),
+    // Only completed sessions have a report and therefore a score.
+    has_report: hasReport,
+    overall_score: cached?.score ?? 0,
+    score_loaded: cached !== undefined,
     score_failed: false,
     improvement_pct: null as number | null,
     pressure: s.pressure_tag === "pressure_affected" ? "Pressure affected" : null,
@@ -123,7 +171,8 @@ export default function HistoryPage() {
   useEffect(() => {
     getLiveHistory(50)
       .then((data) => {
-        setSessions(data.sessions.map(mapLiveSession));
+        const cache = readReportCache();
+        setSessions(data.sessions.map((s) => mapLiveSession(s, cache)));
       })
       .catch(() => {
         setHistoryError("Could not load session history. Please try again.");
@@ -131,74 +180,90 @@ export default function HistoryPage() {
       .finally(() => setHistoryLoading(false));
   }, []);
 
-  const filtered = sessions.filter((s) => s.type === "mock");
+  // The list, pagination and stats cover completed sessions only. Sessions that
+  // never finished (active / recovering / abandoned) have no report to show.
+  const mockSessions = sessions.filter((s) => s.type === "mock");
+  const filtered = mockSessions.filter((s) => s.has_report);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageIdsKey = paginated.map((s) => s.session_id).join(",");
+  const completedIdsKey = filtered.filter((s) => s.has_report).map((s) => s.session_id).join(",");
+  const inflightRef = useRef<Set<string>>(new Set());
 
-  // GET /live/history returns score: null for every row (backend known gap).
-  // Resolve the real score per visible row from GET /report/{id} instead —
-  // only for the current page, to stay well under that endpoint's 10/min cap.
+  const applyReportResult = useCallback((id: string, summary: ReportSummary | null) => {
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.session_id !== id) return s;
+        // A failed fetch is flagged, never scored as 0, and excluded from stats.
+        if (!summary) return { ...s, score_loaded: true, score_failed: true };
+        return {
+          ...s,
+          overall_score: summary.score,
+          duration_min: summary.duration_min ?? s.duration_min,
+          question_count: summary.question_count ?? s.question_count,
+          score_loaded: true,
+          score_failed: false,
+        };
+      })
+    );
+  }, []);
+
+  const fetchReport = useCallback((id: string) => {
+    if (inflightRef.current.has(id)) return;
+    inflightRef.current.add(id);
+    getReport(id)
+      .then((r) => {
+        const summary = summarizeReport(r);
+        cacheReportSummary(id, summary);
+        applyReportResult(id, summary);
+      })
+      .catch(() => applyReportResult(id, null))
+      .finally(() => inflightRef.current.delete(id));
+  }, [applyReportResult]);
+
+  // Load every completed session's report, current page first, in batches that
+  // stay under the report endpoint's ~10/min limit. Sessions that never
+  // finished have no report and are not requested.
   useEffect(() => {
-    const idsToFetch = paginated.filter((s) => !s.score_loaded).map((s) => s.session_id);
-    if (idsToFetch.length === 0) return;
+    if (historyLoading) return;
+    const onPage = new Set(paginated.map((s) => s.session_id));
+    const ids = filtered
+      .filter((s) => s.has_report && !s.score_loaded)
+      .sort((a, b) => Number(onPage.has(b.session_id)) - Number(onPage.has(a.session_id)))
+      .map((s) => s.session_id);
+    if (ids.length === 0) return;
 
-    let cancelled = false;
-    Promise.allSettled(
-      idsToFetch.map((id) => getReport(id).then((r) => ({ id, score: Math.round(r.overall_score) })))
-    ).then((results) => {
-      if (cancelled) return;
-      setSessions((prev) =>
-        prev.map((s) => {
-          const idx = idsToFetch.indexOf(s.session_id);
-          if (idx === -1) return s;
-          const result = results[idx];
-          if (result.status === "fulfilled") {
-            return { ...s, overall_score: result.value.score, score_loaded: true, score_failed: false };
-          }
-          // Report fetch failed (still processing, rate-limited, etc.) — mark
-          // as loaded so we don't refetch every render, but flag it as failed
-          // so it renders "—" and is excluded from stats/chart below, rather
-          // than silently scoring it 0.
-          return { ...s, score_loaded: true, score_failed: true };
-        })
-      );
-    });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const runBatch = (start: number) => {
+      ids.slice(start, start + REPORT_BATCH_SIZE).forEach(fetchReport);
+      if (start + REPORT_BATCH_SIZE < ids.length) {
+        timer = setTimeout(() => runBatch(start + REPORT_BATCH_SIZE), REPORT_BATCH_GAP_MS);
+      }
+    };
+    runBatch(0);
 
-    return () => { cancelled = true; };
+    return () => { if (timer) clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageIdsKey]);
+  }, [historyLoading, completedIdsKey]);
 
-  // Manual retry for a single failed row. Kept independent of the paginated
-  // fetch effect above (which only re-runs when the visible page's id set
-  // changes) so re-fetching one row doesn't require touching that effect's
-  // dependencies or risk re-fetching every unresolved row on the page.
+  // Manual retry for a single failed row, independent of the batch loader.
   const retryScore = useCallback((sessionId: string) => {
-    let cancelled = false;
     setSessions((prev) =>
       prev.map((s) => (s.session_id === sessionId ? { ...s, score_loaded: false, score_failed: false } : s))
     );
-    getReport(sessionId)
-      .then((r) => {
-        if (cancelled) return;
-        const score = Math.round(r.overall_score);
-        setSessions((prev) =>
-          prev.map((s) => (s.session_id === sessionId ? { ...s, overall_score: score, score_loaded: true, score_failed: false } : s))
-        );
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSessions((prev) =>
-          prev.map((s) => (s.session_id === sessionId ? { ...s, score_loaded: true, score_failed: true } : s))
-        );
-      });
-    return () => { cancelled = true; };
-  }, []);
+    fetchReport(sessionId);
+  }, [fetchReport]);
 
-  // Only sessions whose real score has resolved feed the stats/chart —
-  // otherwise every unscored row's placeholder 0 would drag these down.
-  const liveSessions = sessions.filter((s) => s.type === "mock" && s.score_loaded && !s.score_failed);
-  const totalSessions = userProgress?.live_sessions ?? sessions.filter((s) => s.type === "mock").length;
+  // Stats, average, best and the chart use every completed session whose real
+  // score has resolved. Unfinished sessions have no score and failed fetches
+  // are excluded, so no placeholder 0 drags the numbers down.
+  const completedSessions = filtered;
+  const liveSessions = completedSessions
+    .filter((s) => s.score_loaded && !s.score_failed)
+    .sort((a, b) => b.timestamp - a.timestamp); // newest first
+  const completedCount = completedSessions.length;
+  const pendingCount = completedSessions.filter((s) => !s.score_loaded).length;
+  const failedCount = completedSessions.filter((s) => s.score_failed).length;
+  const totalSessions = userProgress?.live_sessions ?? mockSessions.length;
   const avgScore = liveSessions.length > 0
     ? Math.round(liveSessions.reduce((s, r) => s + r.overall_score, 0) / liveSessions.length)
     : 0;
@@ -210,7 +275,8 @@ export default function HistoryPage() {
       ? liveSessions[0].overall_score - liveSessions[1].overall_score
       : 0;
 
-  const progressData = liveSessions.map((s, i) => ({
+  // Oldest to newest, so "over time" reads left to right.
+  const progressData = [...liveSessions].reverse().map((s, i) => ({
     date: s.date,
     score: s.overall_score,
     label: `Session ${i + 1}`,
@@ -221,14 +287,9 @@ export default function HistoryPage() {
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {/* ── Page header ─────────────────────────────────────────────────── */}
         <div className="mb-8 flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          {/* Icon container */}
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5">
-              <History size={22} className="text-[#2557a7]" />
-            </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2557a7]">Mock interview archive</p>
-              <h1 className="mt-1 text-2xl font-semibold leading-tight tracking-tight text-gray-900">
+              <h1 className="text-2xl font-semibold leading-tight tracking-tight text-gray-900">
                 Session History
               </h1>
               <p className="mt-1 text-sm text-gray-500">
@@ -259,8 +320,8 @@ export default function HistoryPage() {
                 <p className="mt-1 text-lg font-semibold text-gray-950">{avgScore}/100</p>
               </div>
               <div className="border-b border-gray-100 px-3 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Sessions</p>
-                <p className="mt-1 text-lg font-semibold text-gray-950">{totalSessions}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Completed sessions</p>
+                <p className="mt-1 text-lg font-semibold text-gray-950">{completedCount}</p>
               </div>
               <div className="px-3 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Latest change</p>
@@ -275,13 +336,13 @@ export default function HistoryPage() {
             {
               label: "Total Sessions",
               value: totalSessions.toString(),
-              sub: "sessions completed",
+              sub: `${completedCount} completed`,
               icon: Mic,
             },
             {
               label: "Avg Score",
               value: `${avgScore}`,
-              sub: "/ 100 across sessions",
+              sub: `/ 100 across ${liveSessions.length} completed session${liveSessions.length === 1 ? "" : "s"}`,
               icon: TrendingUp,
             },
             {
@@ -314,6 +375,14 @@ export default function HistoryPage() {
             </div>
           ))}
         </div>
+
+        {(pendingCount > 0 || failedCount > 0) && (
+          <p role="status" className="mb-4 text-xs text-gray-500">
+            {pendingCount > 0
+              ? `Loading scores for ${pendingCount} completed session${pendingCount === 1 ? "" : "s"}. The report service limits how many can load per minute; scores are remembered on this device.`
+              : `${failedCount} completed session${failedCount === 1 ? "" : "s"} could not be scored and ${failedCount === 1 ? "is" : "are"} left out of these figures. Use Retry on the row.`}
+          </p>
+        )}
 
         {/* ── Progress chart ───────────────────────────────────────────────── */}
         <div
@@ -392,7 +461,7 @@ export default function HistoryPage() {
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
               Sessions
             </p>
-            <p className="text-sm font-bold text-gray-800">Live Interview Sessions</p>
+            <p className="text-sm font-bold text-gray-800">Mock Interview Completed Sessions</p>
           </div>
 
           {historyLoading ? (
@@ -403,7 +472,7 @@ export default function HistoryPage() {
             <div className="py-14 text-center px-4">
               <p className="text-sm text-gray-500 mb-3">{historyError}</p>
               <button
-                onClick={() => { setHistoryError(null); setHistoryLoading(true); getLiveHistory(50).then((d) => setSessions(d.sessions.map(mapLiveSession))).catch(() => setHistoryError("Could not load session history. Please try again.")).finally(() => setHistoryLoading(false)); }}
+                onClick={() => { setHistoryError(null); setHistoryLoading(true); getLiveHistory(50).then((d) => { const cache = readReportCache(); setSessions(d.sessions.map((s) => mapLiveSession(s, cache))); }).catch(() => setHistoryError("Could not load session history. Please try again.")).finally(() => setHistoryLoading(false)); }}
                 className="text-xs text-[#2557a7] underline-offset-2 hover:underline"
               >
                 Retry
@@ -414,7 +483,10 @@ export default function HistoryPage() {
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
                 <Mic size={18} className="text-gray-400" />
               </div>
-              <p className="text-sm font-semibold text-gray-800">No live interview sessions found.</p>
+              <p className="text-sm font-semibold text-gray-800">No completed interview sessions found.</p>
+              {mockSessions.length > 0 && (
+                <p className="mt-1 text-xs text-gray-400">Sessions you started but did not finish are not listed.</p>
+              )}
               <p className="mt-1 text-xs text-gray-500">Start a mock interview to build your report history.</p>
             </div>
           ) : (
@@ -460,19 +532,25 @@ export default function HistoryPage() {
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-gray-400">
                       <span>{session.date}</span>
-                      <span className="flex items-center gap-1">
-                        <Clock size={10} />
-                        {session.duration_min} min
-                      </span>
+                      {session.duration_min !== null && (
+                        <span className="flex items-center gap-1">
+                          <Clock size={10} />
+                          {session.duration_min} min
+                        </span>
+                      )}
                       <span>{session.question_count !== null ? `${session.question_count} questions` : "Questions pending"}</span>
                     </div>
                   </div>
 
                   {/* Score + improvement */}
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <ScoreBadge score={session.overall_score} loading={!session.score_loaded} failed={session.score_failed} />
+                    <ScoreBadge
+                      score={session.overall_score}
+                      loading={session.has_report && !session.score_loaded}
+                      failed={session.score_failed || !session.has_report}
+                    />
                     <div className="flex items-center gap-1.5">
-                      {session.score_failed && (
+                      {session.has_report && session.score_failed && (
                         <span
                           role="button"
                           tabIndex={0}

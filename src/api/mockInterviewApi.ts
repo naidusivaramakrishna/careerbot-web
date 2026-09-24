@@ -144,9 +144,16 @@ export const getLiveSessions = async (): Promise<{ sessions: LiveSession[] }> =>
 export interface ReportAnswer {
   question_text: string;
   score: number;
-  feedback: string;
-  key_points_hit: number;
-  key_points_total: number;
+  // The live realtime backend sends a short `note` per answer; older payloads
+  // sent `feedback`. Read both.
+  feedback?: string;
+  note?: string;
+  question_id?: string;
+  // Per-competency scores for this answer (live realtime backend, 0-100).
+  competency_scores?: Record<string, number>;
+  performance_level?: string;
+  key_points_hit?: number;
+  key_points_total?: number;
   transcript?: string;
   duration_s?: number;
   filler_count?: number;
@@ -158,15 +165,34 @@ export interface ReportResponse {
   user_id: string;
   type: string;
   overall_score: number;
+  // Older payloads use overall/hr/communication/confidence on a 0-10 scale;
+  // the live realtime backend sends hr_score/communication_score/
+  // confidence_score on a 0-100 scale.
   scores: {
-    overall: number;
+    overall?: number;
     hr?: number;
     communication?: number;
     confidence?: number;
     technical?: number;
+    hr_score?: number;
+    communication_score?: number;
+    confidence_score?: number;
+    technical_score?: number;
     [key: string]: number | undefined;
   };
   answers: ReportAnswer[];
+  duration_seconds?: number;
+  // Live realtime backend fields.
+  not_scored?: boolean;
+  performance_level?: string;
+  end_reason?: string;
+  time_limit_seconds?: number;
+  // Overall competency scores (0-10 scale on the current backend).
+  competency_scores?: Record<string, number>;
+  interview_readiness?: {
+    ready_for_interview?: boolean;
+    recommended_practice_areas?: string[];
+  };
   recommendations?: string[];
   pressure_tag: 'pressure_affected' | null;
   grade?: string;
@@ -360,8 +386,14 @@ export type WsServerMessage =
   | { type: 'question_next'; question_text?: string; text?: string; question?: { question_text?: string } }
   | { type: 'candidate_turn_open' }
   | { type: 'candidate_turn_closed' }
-  | { type: 'transcript_partial'; text: string }
-  | { type: 'transcript_final'; text: string }
+  // item_id groups the partials of one spoken item; a transcript_final replaces them.
+  | { type: 'transcript_partial'; text: string; item_id?: string }
+  | { type: 'transcript_final'; text: string; item_id?: string }
+  | { type: 'transcription_error'; message?: string }
+  // Never shown as captions — ignored on purpose.
+  | { type: 'transcript_partial_ignored' }
+  | { type: 'transcript_late' }
+  | { type: 'candidate_turn_late' }
   | { type: 'turn_timeout' }
   | { type: 'answer_scored'; question_id: string; evaluation: AnswerEvaluation }
   | { type: 'session_closing' }
