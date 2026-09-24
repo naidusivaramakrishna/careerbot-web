@@ -38,17 +38,36 @@ export function cacheBuilderResume(enhancedResumeId: string, sourceData: unknown
   }
 }
 
+/** Known enhanced-resume IDs; a corrupted or non-array cache value reads as empty. */
+export function readEnhancedResumeIds(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return []; // corrupted list — start over
+  }
+}
+
+/**
+ * Best-effort write of an ATS report to both storages. Readers prefer
+ * localStorage, so when the localStorage write fails (quota) the old entry is
+ * removed; otherwise a stale copy would shadow the fresh sessionStorage one.
+ */
+export function writeReportCache(key: string, payload: unknown) {
+  const serialized = JSON.stringify(withoutEmbeddedImages(payload));
+  try {
+    localStorage.setItem(key, serialized);
+  } catch {
+    try { localStorage.removeItem(key); } catch { /* non-fatal */ }
+  }
+  try { sessionStorage.setItem(key, serialized); } catch { /* non-fatal cache write */ }
+}
+
 export function rememberEnhancedResumeId(enhancedResumeId: string) {
   try {
     localStorage.setItem("current_resume_id", enhancedResumeId);
 
-    let existingIds: string[] = [];
-    try {
-      const parsed = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
-      if (Array.isArray(parsed)) existingIds = parsed.filter((id): id is string => typeof id === "string");
-    } catch {
-      // corrupted list — start over
-    }
+    const existingIds = readEnhancedResumeIds();
     if (!existingIds.includes(enhancedResumeId)) {
       localStorage.setItem("enhanced_resume_ids", JSON.stringify([...existingIds, enhancedResumeId]));
     }

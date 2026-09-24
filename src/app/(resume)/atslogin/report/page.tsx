@@ -10,7 +10,7 @@ import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/
 import { ResumeProvider } from "@/app/(resume)/builder/creation/_context/ResumeContext";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
-import { cacheBuilderResume, rememberEnhancedResumeId } from "./atsReportCache";
+import { cacheBuilderResume, readEnhancedResumeIds, rememberEnhancedResumeId, writeReportCache } from "./atsReportCache";
 import type { EnhancedResumeHistoryItem } from "@/types/api.types";
 
 
@@ -331,9 +331,8 @@ function ATSLoginReport() {
 
       if (data) {
         if (requestedResumeId) {
-          const serialized = JSON.stringify(data);
-          try { localStorage.setItem(`atsAnalysis_${requestedResumeId}`, serialized); } catch { /* non-fatal cache recovery */ }
-          try { sessionStorage.setItem(`atsAnalysis_${requestedResumeId}`, serialized); } catch { /* non-fatal cache recovery */ }
+          // Non-fatal cache recovery; also strips images from reports cached before image stripping existed.
+          writeReportCache(`atsAnalysis_${requestedResumeId}`, data);
         }
         setReportPayload(data);
         setScoreData(transformData(data));
@@ -351,16 +350,12 @@ function ATSLoginReport() {
 
   const persistReport = (payload: Record<string, unknown>) => {
     const resumeId = typeof payload.resume_id === "string" ? payload.resume_id : undefined;
-    const serialized = JSON.stringify(payload);
     // Quota/availability is a cache concern only -- it must never turn a
-    // server-confirmed fix into an uncaught error (see the same pattern in
-    // resumeatsapi.ts's storeAtsAnalysis and the recovery block above).
-    try { localStorage.setItem("atsAnalysisData", serialized); } catch { /* non-fatal cache write */ }
-    try { sessionStorage.setItem("atsAnalysisData", serialized); } catch { /* non-fatal cache write */ }
-    if (resumeId) {
-      try { localStorage.setItem(`atsAnalysis_${resumeId}`, serialized); } catch { /* non-fatal cache write */ }
-      try { sessionStorage.setItem(`atsAnalysis_${resumeId}`, serialized); } catch { /* non-fatal cache write */ }
-    }
+    // server-confirmed fix into an uncaught error. writeReportCache strips
+    // embedded images (as storeAtsAnalysis does) and drops a stale
+    // localStorage copy when the fresh write fails.
+    writeReportCache("atsAnalysisData", payload);
+    if (resumeId) writeReportCache(`atsAnalysis_${resumeId}`, payload);
     setReportPayload(payload);
     setScoreData(transformData(payload));
   };
@@ -377,7 +372,7 @@ function ATSLoginReport() {
       ? d.enhanced_resume_id.trim()
       : undefined;
     if (!enhancedResumeId) {
-      const knownIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+      const knownIds = readEnhancedResumeIds();
       const results = await Promise.allSettled(knownIds.map((id) => getEnhancedResume(id)));
       for (const result of results) {
         if (result.status === "fulfilled" && result.value.original_resume_id === resumeId) {
@@ -397,7 +392,6 @@ function ATSLoginReport() {
       cacheBuilderResume(enhancedResumeId, sourceData);
       rememberEnhancedResumeId(enhancedResumeId);
       const updated = { ...d, enhanced_resume_id: enhancedResumeId, enhanced_resume: sourceData };
-      persistReport(updated);
       return { enhancedResumeId, report: updated };
     }
 
@@ -412,7 +406,6 @@ function ATSLoginReport() {
     cacheBuilderResume(result.enhanced_resume_id, sourceData);
     rememberEnhancedResumeId(result.enhanced_resume_id);
     const updated = { ...d, ...response, enhanced_resume_id: result.enhanced_resume_id, enhanced_resume: sourceData };
-    persistReport(updated);
     return { enhancedResumeId: result.enhanced_resume_id, report: updated };
   };
 
@@ -422,15 +415,20 @@ function ATSLoginReport() {
     if (!reportPayload || atsWorkspaceId || workspaceError) return;
     let active = true;
     ensureEnhancedResumeForReport()
-      .then(({ enhancedResumeId }) => {
-        if (active) setAtsWorkspaceId(enhancedResumeId);
+      .then(({ enhancedResumeId, report }) => {
+        if (!active) return;
+        // Persist here, in the same batch as setAtsWorkspaceId: calling
+        // setReportPayload inside the setup itself re-triggered this effect
+        // before the ID was set (an endless loop under React act()).
+        persistReport(report);
+        setAtsWorkspaceId(enhancedResumeId);
       })
       .catch((error) => {
         if (active) setWorkspaceError(error instanceof Error ? error.message : "Could not prepare the ATS editing workspace.");
       });
     return () => { active = false; };
-    // reportPayload is replaced only after a server-confirmed save; once an ID
-    // is available the guard above prevents a second enhancement request.
+    // reportPayload is replaced only together with atsWorkspaceId (above), so
+    // the guard prevents a second setup/enhancement request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportPayload, atsWorkspaceId, workspaceError]);
 
