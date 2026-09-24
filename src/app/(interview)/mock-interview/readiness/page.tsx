@@ -154,7 +154,7 @@ export default function ReadinessPage() {
               Start Live Interview <ArrowRight size={14} />
             </button>
             <button
-              onClick={() => router.push("/notes/managerial")}
+              onClick={() => router.push("/notes/generate")}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 py-2.5 text-xs font-semibold text-gray-600 transition-all hover:bg-gray-100"
             >
               <RotateCcw size={12} className="text-gray-400" />
@@ -235,7 +235,7 @@ export default function ReadinessPage() {
               Start Live Interview <ArrowRight size={14} />
             </button>
             <button
-              onClick={() => router.push("/notes/managerial")}
+              onClick={() => router.push("/notes/generate")}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 py-2.5 text-xs font-semibold text-gray-600 transition-all hover:bg-gray-100"
             >
               <RotateCcw size={13} />

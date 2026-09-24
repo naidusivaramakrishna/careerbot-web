@@ -349,6 +349,15 @@ function decodeBase64(b64: string): Uint8Array {
 
 const INTERVIEWER_AUDIO_SAMPLE_RATE = 24000;
 
+// Candidate partial captions with no transcript_final after this long are dropped.
+const PARTIAL_STALE_MS = 5000;
+
+// Client-side noise gate for mic upload. Gated chunks are still sent, as
+// digital silence, so the server's turn detection keeps seeing continuous
+// audio and can still detect the end of an answer; only the noise is removed.
+const MIC_GATE_RMS_THRESHOLD = 0.008; // about -42 dBFS, below normal quiet speech
+const MIC_GATE_HANGOVER_CHUNKS = 5;   // ~500 ms of tail after speech so word endings aren't clipped
+
 interface InterviewerAudioPlayer {
   context: AudioContext;
   gainNode: GainNode;
@@ -418,6 +427,18 @@ export default function LiveInterviewSessionPage() {
   const [isSessionClosing, setIsSessionClosing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [partialTranscript, setPartialTranscript] = useState("");
+  const [transcriptionError, setTranscriptionError] = useState(false);
+  // Partials are temporary UI only: dropped if no transcript_final follows
+  // within PARTIAL_STALE_MS.
+  const partialStaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const partialItemIdRef = useRef<string | null>(null);
+  const clearPartialTranscript = useCallback(() => {
+    if (partialStaleTimerRef.current) clearTimeout(partialStaleTimerRef.current);
+    partialStaleTimerRef.current = null;
+    partialItemIdRef.current = null;
+    setPartialTranscript("");
+  }, []);
+  useEffect(() => () => { if (partialStaleTimerRef.current) clearTimeout(partialStaleTimerRef.current); }, []);
   const [wsConnected, setWsConnected] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [micLevel, setMicLevel] = useState(0);
@@ -789,6 +810,7 @@ export default function LiveInterviewSessionPage() {
         // server's 60 frames/s cap. ScriptProcessorNode requires a power-of-2 buffer size.
         const nativeBufSize = Math.pow(2, Math.round(Math.log2(RATIO * 2400))) as 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384;
         processor = ctx.createScriptProcessor(nativeBufSize, 1, 1);
+        let gateHangover = 0;
         processor.onaudioprocess = (event) => {
           const float32 = event.inputBuffer.getChannelData(0);
 
@@ -803,10 +825,35 @@ export default function LiveInterviewSessionPage() {
             resampled[i] = float32[lo] + (float32[hi] - float32[lo]) * (pos - lo);
           }
 
+          // Noise gate + interviewer-speaking mute. Gated chunks are sent as
+          // digital silence (a zeroed Int16Array), not dropped — see
+          // MIC_GATE_* above. Speech opens the gate for a short hangover.
+          let sumSquares = 0;
+          for (let i = 0; i < resampled.length; i++) sumSquares += resampled[i] * resampled[i];
+          const rms = resampled.length ? Math.sqrt(sumSquares / resampled.length) : 0;
+          if (rms >= MIC_GATE_RMS_THRESHOLD) gateHangover = MIC_GATE_HANGOVER_CHUNKS;
+          else if (gateHangover > 0) gateHangover--;
+
+          // Mute only while interviewer audio is genuinely playing through this
+          // page's own player: the context must be running (a suspended one
+          // never advances currentTime, which would mute the mic forever) and
+          // audio must still be scheduled ahead. Deliberately NOT keyed on
+          // `phase` or avatar_state: the avatar stays "talking" until the AI
+          // hears the candidate, so muting on it deadlocks — the AI hears
+          // silence, times the answer out and moves to the next question.
+          const player = interviewerAudioPlayerRef.current;
+          const interviewerAudible =
+            !!player &&
+            player.context.state === "running" &&
+            player.playAt > player.context.currentTime;
+          const gated = interviewerAudible || gateHangover === 0;
+
           // Float32 → signed Int16 PCM (little-endian, as expected by backend)
           const int16 = new Int16Array(resampled.length);
-          for (let i = 0; i < resampled.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, Math.round(resampled[i] * 32767)));
+          if (!gated) {
+            for (let i = 0; i < resampled.length; i++) {
+              int16[i] = Math.max(-32768, Math.min(32767, Math.round(resampled[i] * 32767)));
+            }
           }
 
           // Uint8Array view of the Int16 buffer → base64 (loop avoids spread stack overflow on large buffers)
@@ -867,6 +914,30 @@ export default function LiveInterviewSessionPage() {
   // message. Read current values through refs instead.
   const questionNumberRef = useRef(1);
   useEffect(() => { questionNumberRef.current = questionNumber; }, [questionNumber]);
+  // Count of question_next frames received; after a resume it is re-seeded to
+  // the question the candidate is currently on.
+  const questionsAnnouncedRef = useRef(0);
+
+  // The server tells us when the interviewer finishes (turn_complete), but that
+  // can be late or missing, which left the UI on "Interviewer speaking" long
+  // after the voice stopped and hid the live-transcript panel. So also switch
+  // to "listening" once the interviewer's audio has actually finished playing.
+  // The clock restarts on session_ready / each audio delta / each new question
+  // so a gap before the next question's audio is not mistaken for the end.
+  const lastInterviewerActivityRef = useRef(0);
+  useEffect(() => {
+    if (phase !== "ai-talking") return;
+    const timer = setInterval(() => {
+      const player = interviewerAudioPlayerRef.current;
+      if (!player) return; // avatar audio: not observable here, rely on server events
+      const stillPlaying = player.context.state === "running" && player.playAt > player.context.currentTime;
+      const quietFor = Date.now() - lastInterviewerActivityRef.current;
+      if (!stillPlaying && quietFor > 1500) {
+        setPhase((p) => (p === "ai-talking" ? "listening" : p));
+      }
+    }, 300);
+    return () => clearInterval(timer);
+  }, [phase]);
 
   // Track last mic activity so the inactivity banner uses real silence,
   // not transcript updates (STT latency can exceed 30s so transcript is
@@ -941,6 +1012,7 @@ export default function LiveInterviewSessionPage() {
         setServerError(null);
         setWsConnected(true);
         setVisibleQuestionText("");
+        lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
         break;
       case "session_resumed": {
@@ -951,6 +1023,7 @@ export default function LiveInterviewSessionPage() {
         lastEventIdRef.current = msg.resumed_from_event_id ?? 0;
 
         setQuestionNumber(msg.questions_asked + 1);
+        questionsAnnouncedRef.current = msg.questions_asked + 1;
         // Restore the current question text (not just the number)
         if (msg.current_question) {
           setCurrentQuestion({ number: msg.questions_asked + 1, text: msg.current_question });
@@ -965,6 +1038,7 @@ export default function LiveInterviewSessionPage() {
         break;
       }
       case "interviewer_audio_delta": {
+        lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
         // The server always sends these whether or not the avatar is up, so
         // it can switch instantly if the avatar drops. While the avatar's
@@ -1003,39 +1077,67 @@ export default function LiveInterviewSessionPage() {
       case "question_next": {
         const text = msg.question_text ?? msg.text ?? msg.question?.question_text ?? "";
         setServerError(null);
-        setQuestionNumber((n) => n + 1);
-        setCurrentQuestion((q) => ({ number: (q?.number ?? questionNumberRef.current) + 1, text }));
+        // The backend announces every question, including the first, via
+        // question_next — so the Nth frame is question N. Incrementing from the
+        // initial value of 1 would show the opening question as "2".
+        const announced = ++questionsAnnouncedRef.current;
+        setQuestionNumber(announced);
+        setCurrentQuestion({ number: announced, text });
         setTranscript("");
-        setPartialTranscript("");
+        clearPartialTranscript();
+        setTranscriptionError(false);
         setVisibleQuestionText(text);
+        lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
         break;
       }
       case "candidate_turn_open":
         setIsCandidateSpeaking(true);
+        // The candidate is speaking, so it is their turn even if the server
+        // never sent turn_complete. Never overrides processing/completed.
+        setPhase((p) => (p === "ai-talking" ? "listening" : p));
         break;
       case "candidate_turn_closed":
         setIsCandidateSpeaking(false);
         setPhase("processing");
-        // Finalize whatever partial transcript we had — transcript_final may
-        // still arrive after this and will overwrite it, which is fine.
-        setPartialTranscript((partial) => {
-          if (partial) setTranscript(partial);
-          return "";
-        });
+        // Do NOT promote the partial to the final answer: a partial is
+        // temporary UI only. It stays visible until transcript_final replaces
+        // it or the stale timer drops it.
         break;
-      case "transcript_partial":
+      case "transcript_partial": {
         setServerError(null);
-        setPartialTranscript(msg.text);
+        setTranscriptionError(false);
+        // A live transcript piece means the candidate is answering (see candidate_turn_open).
+        setPhase((p) => (p === "ai-talking" ? "listening" : p));
+        // The backend sends only the NEW piece in each partial, so pieces of the
+        // same item_id are appended. A different item_id starts a fresh caption.
+        const itemId = msg.item_id ?? null;
+        const startsNewItem = itemId !== null && partialItemIdRef.current !== null && itemId !== partialItemIdRef.current;
+        if (itemId !== null) partialItemIdRef.current = itemId;
+        setPartialTranscript((prev) => (startsNewItem ? msg.text : prev + msg.text));
+        if (partialStaleTimerRef.current) clearTimeout(partialStaleTimerRef.current);
+        partialStaleTimerRef.current = setTimeout(clearPartialTranscript, PARTIAL_STALE_MS);
         break;
+      }
       case "transcript_final":
         setServerError(null);
+        setTranscriptionError(false);
         setTranscript(msg.text);
-        setPartialTranscript("");
+        clearPartialTranscript();
+        break;
+      case "transcription_error":
+        console.warn("[STT] transcription_error", msg.message ?? "");
+        clearPartialTranscript();
+        setTranscriptionError(true);
+        break;
+      // Never shown as captions.
+      case "transcript_partial_ignored":
+      case "transcript_late":
+      case "candidate_turn_late":
         break;
       case "turn_timeout":
         setTranscript("");
-        setPartialTranscript("");
+        clearPartialTranscript();
         break;
       case "answer_scored": {
         const { evaluation } = msg;
@@ -1056,6 +1158,8 @@ export default function LiveInterviewSessionPage() {
       // Purely presentational — safe to ignore, but a good "I'm listening" cue.
       case "avatar_state":
         setAvatarActivity(msg.state);
+        // "listening" means the AI detected the candidate speaking.
+        if (msg.state === "listening") setPhase((p) => (p === "ai-talking" ? "listening" : p));
         break;
       // The avatar never returns in the same session — switch to the audio
       // deltas and show no error, per interview-avatar.txt §6.
@@ -1085,7 +1189,7 @@ export default function LiveInterviewSessionPage() {
       default:
         break;
     }
-  }, [showScoreToast, disconnectAvatarRoom]);
+  }, [showScoreToast, disconnectAvatarRoom, clearPartialTranscript]);
 
   const openWebSocket = useCallback((wsUrl: string) => {
     if (wsRef.current) {
@@ -1448,33 +1552,6 @@ export default function LiveInterviewSessionPage() {
         {phase !== "coding" && (
         <div className="min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4">
           <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-3">
-            {/* Question progress — the realtime protocol doesn't report a total
-                question count, so this shows a running counter rather than a
-                fixed-length bar when totalQuestions is unknown (0). */}
-            <div className="flex shrink-0 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
-              {totalQuestions > 0 ? (
-                <>
-                  <div className="flex flex-1 gap-1.5">
-                    {Array.from({ length: totalQuestions }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-1.5 flex-1 rounded-full transition-all ${
-                          i <= questionNumber - 1 ? "bg-[#2557a7]" : "bg-gray-200"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="shrink-0 text-xs font-medium text-gray-500">
-                    {questionNumber}/{totalQuestions}
-                  </span>
-                </>
-              ) : (
-                <span className="shrink-0 text-xs font-medium text-gray-500">
-                  Question {questionNumber}
-                </span>
-              )}
-            </div>
-
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)_280px] lg:overflow-hidden">
               {/* Interviewer */}
               <section
@@ -1611,6 +1688,8 @@ export default function LiveInterviewSessionPage() {
                             {partialTranscript || transcript}
                             <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7]" />
                           </p>
+                        ) : transcriptionError ? (
+                          <p className="text-sm text-gray-500">Transcription unavailable right now. You can keep answering.</p>
                         ) : (
                           <p className="text-sm italic text-gray-400">
                             {micLevel > 8 ? "Transcribing your speech..." : "Start speaking... transcript will appear here."}
@@ -1618,10 +1697,10 @@ export default function LiveInterviewSessionPage() {
                         )}
                       </div>
                     </div>
-                  ) : phase === "processing" && transcript ? (
+                  ) : phase === "processing" && (transcript || partialTranscript) ? (
                     <div className="flex h-full min-h-0 flex-col">
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Your answer</p>
-                      <p className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-gray-50 px-3 py-3 text-sm leading-relaxed text-gray-700">{transcript}</p>
+                      <p className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-gray-50 px-3 py-3 text-sm leading-relaxed text-gray-700">{transcript || partialTranscript}</p>
                     </div>
                   ) : (
                     <div className="flex h-full min-h-[160px] items-center justify-center rounded-lg bg-gray-50 px-4 text-center text-sm text-gray-500">
