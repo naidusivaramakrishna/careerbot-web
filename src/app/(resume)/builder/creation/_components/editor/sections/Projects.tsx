@@ -38,6 +38,10 @@ interface ProjectEntry {
 }
 
 const emptyProject = (): ProjectEntry => ({
+  // Stable client id makes repeated autosave/Save calls idempotent. Without
+  // it, the backend correctly treats every id-less item as a new row and the
+  // same project is appended a second time.
+  id: globalThis.crypto?.randomUUID?.() ?? `project-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   title: "",
   description: "",
   technologies: [],
@@ -166,19 +170,16 @@ const Projects: React.FC = () => {
     ];
     const allTechnologies = validEntries.flatMap(entry => entry.technologies);
     const uniqueTechnologies = Array.from(new Set(allTechnologies));
+    // An id-less entry is genuinely new and must stay id-less — see
+    // Internships.tsx's sibling effect for why backfilling an id by array
+    // POSITION is unsound.
     setResumeData(prev => {
-      const prevItems = (prev.projects ?? []) as Array<Record<string, unknown>>;
-      const merged = validEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
       const currentSkills = Array.isArray(prev.skills) ? prev.skills : [];
       const mergedSkills = Array.from(new Set([...currentSkills, ...uniqueTechnologies]));
-      const projectsChanged = JSON.stringify(prev.projects) !== JSON.stringify(merged);
+      const projectsChanged = JSON.stringify(prev.projects) !== JSON.stringify(validEntries);
       const skillsChanged = JSON.stringify([...currentSkills].sort()) !== JSON.stringify([...mergedSkills].sort());
       if (!projectsChanged && !skillsChanged) return prev;
-      return { ...prev, projects: merged, skills: skillsChanged ? mergedSkills : currentSkills };
+      return { ...prev, projects: validEntries, skills: skillsChanged ? mergedSkills : currentSkills };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -362,7 +363,7 @@ const Projects: React.FC = () => {
 
     const descBox = descriptionRefs.current[editIndex];
     const formContainer = formScrollRef.current;
-    
+
     if (descBox && formContainer) {
       const descBoxTop = descBox.offsetTop;
       formContainer.scrollTo({
@@ -458,7 +459,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                   <div className="text-base font-bold text-gray-900">
                     {project.title || "No title"}
                   </div>
-                  
+
                   {project.technologies.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-1">
                       {project.technologies.map((tech, techIndex) => (
@@ -471,13 +472,13 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                       ))}
                     </div>
                   )}
-                  
+
                   <div className="text-xs text-gray-600">
-                    {project.startDate ? startToLabel(project.startDate) : ""} 
+                    {project.startDate ? startToLabel(project.startDate) : ""}
                     {project.startDate && project.endDate && " - "}
                     {project.endDate ? startToLabel(project.endDate) : ""}
                   </div>
-                  
+
                   {project.link && (
                     <div className="text-xs text-blue-600 hover:underline">
                       <a href={project.link} target="_blank" rel="noopener noreferrer">
@@ -485,11 +486,11 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                       </a>
                     </div>
                   )}
-                  
+
                   {project.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: project.description }} 
+                    <div
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      dangerouslySetInnerHTML={{ __html: project.description }}
                     />
                   )}
                 </div>
@@ -511,8 +512,8 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -538,7 +539,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
       {/* Editing Form */}
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >

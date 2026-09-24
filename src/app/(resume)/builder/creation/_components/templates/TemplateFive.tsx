@@ -285,7 +285,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               {internships.map((intern, idx) => (
                 <div key={idx} className="mb-4 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-0.5">
-                    <span className="font-bold" style={titleStyle}>{intern.role}</span>
+                    <span className="font-bold" style={titleStyle}>{intern.role || intern.company}</span>
                     <span className="whitespace-nowrap ml-4" style={{ ...baseTextStyle, fontSize: "9px" }}>
                       {formatDate(intern.startDate)} – {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
                     </span>
@@ -309,7 +309,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div key={idx} className="mb-2 flex items-start">
                   <span className="mr-2" style={baseTextStyle}>–</span>
                   <div style={baseTextStyle}>
-                    <span className="font-semibold" style={titleStyle}>{cert.name}</span>
+                    <span className="font-semibold" style={titleStyle}>{cert.name || cert.issuedBy || cert.issuer}</span>
                     {(cert.issuedBy || cert.issuer) && <span> — {cert.issuedBy || cert.issuer}</span>}
                     {(cert.year || cert.issueDate) && <span> ({cert.year || cert.issueDate})</span>}
                   </div>
@@ -327,7 +327,9 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               {achievements.map((achievement, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-0.5">
-                    <span className="font-semibold" style={titleStyle}>{achievement.title}</span>
+                    {achievement.title && (
+                      <span className="font-semibold" style={titleStyle}>{achievement.title}</span>
+                    )}
                     {achievement.date && (
                       <span className="whitespace-nowrap ml-4" style={{ ...baseTextStyle, fontSize: "9px" }}>
                         {formatDate(achievement.date)}
@@ -352,7 +354,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div key={idx} className="mb-2 flex items-start" style={baseTextStyle}>
                   <span className="mr-2">–</span>
                   <div>
-                    <span className="font-semibold" style={titleStyle}>{award.title}</span>
+                    <span className="font-semibold" style={titleStyle}>{award.title || award.issuedBy}</span>
                     {award.issuedBy && <span> — {award.issuedBy}</span>}
                     {award.year && <span> ({award.year})</span>}
                   </div>
@@ -371,8 +373,8 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline">
                     <div>
-                      <div className="font-bold" style={titleStyle}>{vol.role}</div>
-                      <div style={baseTextStyle}>{vol.organization}</div>
+                      <div className="font-bold" style={titleStyle}>{vol.role || vol.organization}</div>
+                      {vol.role && <div style={baseTextStyle}>{vol.organization}</div>}
                     </div>
                     <div className="whitespace-nowrap ml-4" style={{ ...baseTextStyle, fontSize: "9px" }}>
                       {formatDate(vol.startDate)} – {formatDate(vol.endDate)}
@@ -409,7 +411,9 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               <h2 style={headingStyle}>HOBBIES</h2>
               {hobbies.map((hobby, idx) => (
                 <div key={idx} className="mb-1">
-                  <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
+                  {hobby.name && (
+                    <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
+                  )}
                   {hobby.description && (
                     <span className="resume-description" style={baseTextStyle} dangerouslySetInnerHTML={{ __html: ` — ${hobby.description}` }} />
                   )}
@@ -426,7 +430,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               <h2 style={headingStyle}>INTERESTS</h2>
               {interests.map((interest, idx) => (
                 <div key={idx} className="mb-1">
-                  <span className="font-semibold" style={titleStyle}>{interest.name}</span>
+                  <span className="font-semibold" style={titleStyle}>{interest.name || interest.category}</span>
                   {interest.category && <span style={baseTextStyle}> ({interest.category})</span>}
                   {interest.description && (
                     <span className="resume-description" style={baseTextStyle} dangerouslySetInnerHTML={{ __html: ` — ${interest.description}` }} />
@@ -445,7 +449,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               {publications.map((pub, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="font-semibold flex items-center" style={titleStyle}>
-                    <span>{pub.title}</span>
+                    <span>{pub.title || pub.publicationName || pub.authors}</span>
                     {pub.url && (
                       <a href={pub.url} target="_blank" rel="noopener noreferrer" style={linkIconStyle} className="hover:opacity-70">
                         <ExternalLink size={13} />
@@ -470,7 +474,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               <h2 style={headingStyle} className="page-break-after-avoid">REFERENCES</h2>
               {references.map((ref, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
-                  <div className="font-semibold" style={titleStyle}>{ref.name}</div>
+                  <div className="font-semibold" style={titleStyle}>{ref.name || ref.relation}</div>
                   {ref.relation && <div style={baseTextStyle}>{ref.relation}</div>}
                   {ref.contact && <div style={baseTextStyle}>{ref.contact}</div>}
                 </div>
@@ -493,6 +497,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                   if (!hasValue) return null;
                   return (
                     <div key={field.id}>
+                      <span className="font-semibold" style={baseTextStyle}>{field.fieldName}: </span>
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[]).filter(v => v.trim() !== "").map((item, i) => (
@@ -506,7 +511,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                       ) : field.fieldType === "textarea" ? (
                         <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: field.value as string }} />
                       ) : (
-                        <div style={baseTextStyle}>{field.value as string}</div>
+                        <span style={baseTextStyle}>{field.value as string}</span>
                       )}
                     </div>
                   );

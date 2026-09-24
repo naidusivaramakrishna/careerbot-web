@@ -16,6 +16,12 @@ interface Props {
 
 const CORPORATE_DOMAINS = ['software_engineering', 'cybersecurity', 'finance', 'sales_business_development', 'core_engineering', 'electronics_and_vlsi', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources', 'logistics_warehouse_operations'];
 
+const formatEducationScoreValue = (scoreValue?: string, scoreType?: string): string => {
+  const value = (scoreValue || "").trim();
+  if (scoreType !== "Percentage") return value;
+  return `${value.replace(/\s*(?:%|percent(?:age)?)\s*$/i, "").trim()}%`;
+};
+
 const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", domainFamily = "healthcare", sectionOrder = [], layoutVariant = "centered" }) => {
   const {
     personalInfo,
@@ -400,7 +406,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                       {edu.school}
                     </div>
                     {edu.scoreValue && (
-                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {edu.scoreValue}</p>
+                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {formatEducationScoreValue(edu.scoreValue, edu.scoreType)}</p>
                     )}
                   </>
                 ) : layoutVariant === "classic" ? (
@@ -412,7 +418,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                       {formatDate(edu.startDate)}{edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
                     </div>
                     {edu.scoreValue && (
-                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {edu.scoreValue}</p>
+                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {formatEducationScoreValue(edu.scoreValue, edu.scoreType)}</p>
                     )}
                   </>
                 ) : layoutVariant === "classic-formal" ? (
@@ -425,7 +431,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     </div>
                     <p style={{ ...baseTextStyle, fontSize: "11px", fontStyle: "italic", margin: "2px 0" }}>{edu.degree}</p>
                     {edu.scoreValue && (
-                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {edu.scoreValue}</p>
+                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {formatEducationScoreValue(edu.scoreValue, edu.scoreType)}</p>
                     )}
                   </>
                 ) : layoutVariant === "slate" ? (
@@ -435,7 +441,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     </div>
                     <div style={{ ...baseTextStyle, fontSize: "11px", marginBottom: "2px" }}>{edu.school}</div>
                     {edu.scoreValue && (
-                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {edu.scoreValue}</p>
+                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {formatEducationScoreValue(edu.scoreValue, edu.scoreType)}</p>
                     )}
                   </>
                 ) : layoutVariant === "pillar" || layoutVariant === "ember" ? (
@@ -444,7 +450,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "2px" }}>{edu.school}</div>
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "4px" }}>
                       {formatDate(edu.startDate)}{edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
-                      {edu.scoreValue && ` | ${edu.scoreType}: ${edu.scoreValue}`}
+                      {edu.scoreValue && ` | ${edu.scoreType}: ${formatEducationScoreValue(edu.scoreValue, edu.scoreType)}`}
                     </div>
                   </>
                 ) : layoutVariant === "aether" ? (
@@ -457,7 +463,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     </div>
                     <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px", fontStyle: "italic" }}>{edu.school}</p>
                     {edu.scoreValue && (
-                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>{edu.scoreType}: {edu.scoreValue}</p>
+                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>{edu.scoreType}: {formatEducationScoreValue(edu.scoreValue, edu.scoreType)}</p>
                     )}
                   </>
                 ) : (
@@ -470,7 +476,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     </div>
                     <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px", fontWeight: "500", fontStyle: "italic" }}>{edu.school}</p>
                     {edu.scoreValue && (
-                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>{edu.scoreType}: {edu.scoreValue}</p>
+                      <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>{edu.scoreType}: {formatEducationScoreValue(edu.scoreValue, edu.scoreType)}</p>
                     )}
                   </>
                 )}
@@ -487,8 +493,8 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={{ paddingLeft: "20px" }}>
               {certifications.map((cert, idx) => (
                 <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
-                  • <span style={{ ...titleStyle }}>{cert.name}</span>
-                  {(cert.issuer) && <span> - {cert.issuer}</span>}
+                  • <span style={{ ...titleStyle }}>{cert.name || cert.issuer}</span>
+                  {cert.name && cert.issuer && <span> - {cert.issuer}</span>}
                   {((cert.issueDate) || cert.expiryDate) && <span> | </span>}
                   {(cert.issueDate) && <span>{cert.issueDate}</span>}
                   {(cert.issueDate) && cert.expiryDate && <span> – </span>}
@@ -509,7 +515,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 {layoutVariant === "executive" ? (
                   <>
                     <div style={{ marginBottom: "2px" }}>
-                      <span style={{ ...titleStyle, fontSize: "12px" }}>{intern.role}</span>
+                      <span style={{ ...titleStyle, fontSize: "12px" }}>{intern.role || intern.company}</span>
                       <span style={{ ...baseTextStyle, fontSize: "11px" }}>, {formatDate(intern.startDate)} - {intern.currentlyWorking ? "Current" : formatDate(intern.endDate)}</span>
                     </div>
                     <div style={{ ...titleStyle, fontSize: "11px", marginBottom: "4px" }}>
@@ -519,7 +525,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant === "classic" ? (
                   <>
                     <div style={{ marginBottom: "2px" }}>
-                      <span style={{ ...titleStyle, fontSize: "12px", color: style.headingColor }}>{intern.role}</span>
+                      <span style={{ ...titleStyle, fontSize: "12px", color: style.headingColor }}>{intern.role || intern.company}</span>
                       <span style={{ ...baseTextStyle, fontSize: "11px" }}> | {formatDate(intern.startDate)} — {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}</span>
                     </div>
                     <div style={{ ...baseTextStyle, fontSize: "11px", marginBottom: "4px" }}>
@@ -529,7 +535,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant === "classic-formal" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{intern.role}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{intern.role || intern.company}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px", whiteSpace: "nowrap", marginLeft: "8px" }}>
                         {formatDate(intern.startDate)} — {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
                       </span>
@@ -540,7 +546,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "slate" ? (
                   <>
-                    <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 2px 0" }}>{intern.role}</h3>
+                    <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 2px 0" }}>{intern.role || intern.company}</h3>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
                       <span style={{ ...baseTextStyle, fontSize: "11px", fontStyle: "italic" }}>
                         {intern.company}{intern.location ? `, ${intern.location}` : ""}
@@ -552,7 +558,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "pillar" || layoutVariant === "ember" ? (
                   <>
-                    <div style={{ ...titleStyle, fontSize: "12px", marginBottom: "2px" }}>{intern.role}</div>
+                    <div style={{ ...titleStyle, fontSize: "12px", marginBottom: "2px" }}>{intern.role || intern.company}</div>
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "2px" }}>
                       {intern.company}{intern.location ? ` | ${intern.location}` : ""}
                     </div>
@@ -563,7 +569,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant !== "centered" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{intern.role}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{intern.role || intern.company}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px", whiteSpace: "nowrap", marginLeft: "8px" }}>
                         {formatDate(intern.startDate)} – {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
                       </span>
@@ -666,8 +672,8 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               <div key={idx} style={{ marginBottom: "8px", display: "flex", alignItems: "flex-start" }}>
                 <span style={{ marginRight: "8px", ...baseTextStyle }}>•</span>
                 <div style={baseTextStyle}>
-                  <span style={{ ...titleStyle, fontSize: "12px" }}>{award.title}</span>
-                  <span style={{ fontSize: "12px" }}> - {award.issuedBy} ({award.year})</span>
+                  <span style={{ ...titleStyle, fontSize: "12px" }}>{award.title || award.issuedBy}</span>
+                  <span style={{ fontSize: "12px" }}> {award.title && award.issuedBy && `- ${award.issuedBy} `}{award.year && `(${award.year})`}</span>
                 </div>
               </div>
             ))}
@@ -682,7 +688,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {achievements.map((achievement, idx) => (
               <div key={idx} style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", alignItems: "baseline" }}>
-                  <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{achievement.title}</h3>
+                  {achievement.title && <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{achievement.title}</h3>}
                   {achievement.date && (
                     <span style={{ ...baseTextStyle, fontSize: "12px" }}>
                       {formatDate(achievement.date)}
@@ -707,7 +713,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {publications.map((pub, idx) => (
               <div key={idx} style={{ marginBottom: "12px" }}>
                 <h3 style={{ ...titleStyle, margin: "0 0 4px 0", fontSize: "12px" }}>
-                  {pub.title}
+                  {pub.title || pub.publicationName || pub.authors}
                 </h3>
                 {pub.authors && (
                   <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
@@ -744,7 +750,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {patents.map((pat, idx) => (
               <div key={idx} style={{ marginBottom: "12px" }}>
                 <h3 style={{ ...titleStyle, margin: "0 0 4px 0", fontSize: "12px" }}>
-                  {pat.title}
+                  {pat.title || pat.patentNumber}
                 </h3>
                 {pat.patentNumber && (
                   <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
@@ -779,7 +785,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {hobbies.map((hobby, idx) => (
               <div key={idx} style={{ marginBottom: "10px" }}>
                 <div className="flex gap-2">
-                  <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 4px 0" }}>{hobby.name}</h3>
+                  {hobby.name && <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 4px 0" }}>{hobby.name}</h3>}
                   {hobby.proficiencyLevel && (
                     <span style={{ ...baseTextStyle, fontSize: "11px" }}> - ({hobby.proficiencyLevel})</span>
                   )}
@@ -802,8 +808,8 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {interests.map((interest, idx) => (
               <div key={idx} style={{ ...baseTextStyle }}>
                 <div className="flex gap-2">
-                  <div style={{ ...titleStyle, fontSize: "12px" }}>{interest.name}</div>
-                  {interest.category && (
+                  <div style={{ ...titleStyle, fontSize: "12px" }}>{interest.name || interest.category}</div>
+                  {interest.name && interest.category && (
                     <div style={{ fontSize: "11px" }}> - ({interest.category})</div>
                   )}
                 </div>
@@ -826,10 +832,12 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               <div key={idx} style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <div>
-                    <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px" }}>{vol.role}</h3>
-                    <p style={{ ...baseTextStyle, fontSize: "12px", margin: "4px 0 0 0" }}>
-                      {vol.organization}
-                    </p>
+                    <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px" }}>{vol.role || vol.organization}</h3>
+                    {vol.role && (
+                      <p style={{ ...baseTextStyle, fontSize: "12px", margin: "4px 0 0 0" }}>
+                        {vol.organization}
+                      </p>
+                    )}
                   </div>
                   <span style={{ ...baseTextStyle, fontSize: "12px" }}>
                     {formatDate(vol.startDate)} – {formatDate(vol.endDate)}
@@ -847,7 +855,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={sectionBorderStyle("12px")} />
             {references.map((ref, idx) => (
               <div key={idx} style={{ marginBottom: "12px" }}>
-                <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px" }}>{ref.name}</h3>
+                <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px" }}>{ref.name || ref.relation}</h3>
                 <p style={{ ...baseTextStyle, fontSize: "12px", margin: "4px 0 2px 0" }}>{ref.relation}</p>
                 <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>{ref.contact}</p>
               </div>
@@ -1374,6 +1382,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
 
                 return (
                   <div key={field.id} style={{ marginBottom: "8px" }}>
+                    <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>
                     {Array.isArray(field.value) ? (
                       <ul style={{ ...baseTextStyle, margin: 0, paddingLeft: "20px", fontSize: "12px" }}>
                         {(field.value as string[])

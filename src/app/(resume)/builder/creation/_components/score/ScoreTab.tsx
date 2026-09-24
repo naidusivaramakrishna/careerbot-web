@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { useScore } from "../../_context/ScoreContext";
 import { useResume } from "../../_context/ResumeContext";
 import { useResumeScorePreview } from "../../_hooks/useResumeScorePreview";
-import { Clock, Loader2, RefreshCw, Zap } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, Loader2, Pencil, RefreshCw, Undo2, Zap } from "lucide-react";
+import { getEnhancedCurrentScore } from "../../_utils/enhancedScore";
+import { getScoreSectionAction } from "../../_utils/scoreSectionRouting";
 
 const AUTO_CALC_THRESHOLD = 7;
 
@@ -28,118 +30,286 @@ function parseEntryIndex(message: string): number | undefined {
 }
 
 // ─── Enhanced resume panel ────────────────────────────────────────────────────
+function normalizedSectionToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * A card belongs only to the exact backend ATS section that named it. We do
+ * not infer ownership from editor routing: that can make a Summary finding
+ * appear under Headline or a diagnostic appear under an unrelated section.
+ */
+function belongsToScoreSection(
+  suggestion: { section: string },
+  sectionName: string,
+): boolean {
+  return normalizedSectionToken(suggestion.section) === normalizedSectionToken(sectionName);
+}
+function getSectionPercentage(section: unknown): number {
+  const score = section as { percentage?: number; score_pct?: number; score?: number; weighted_pts?: number; max_pts?: number };
+  const raw = score.percentage
+    ?? score.score_pct
+    ?? score.score
+    ?? (typeof score.weighted_pts === "number" && typeof score.max_pts === "number" && score.max_pts > 0
+      ? (score.weighted_pts / score.max_pts) * 100
+      : 0);
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
 function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIndex?: number) => void }) {
-  const { enhancedAtsScore } = useResume();
+  const { enhancedAtsScore, enhancedSuggestions, applyAutoFix, undoFix } = useResume();
+  const [applyingSuggestionId, setApplyingSuggestionId] = useState<string | null>(null);
+  const [undoingSuggestionId, setUndoingSuggestionId] = useState<string | null>(null);
+  const [targetPickerSuggestionId, setTargetPickerSuggestionId] = useState<string | null>(null);
+  // Sections intentionally begin collapsed so the report stays scannable and
+  // the user can address one focused group of recommendations at a time.
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   if (!enhancedAtsScore) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-2">
-        <p className="text-[13px] text-[#9CA3AF]">Score data not available.</p>
-      </div>
-    );
+    return <div className="flex flex-col items-center justify-center gap-2 py-16"><p className="text-[13px] text-[#9CA3AF]">Score data not available.</p></div>;
   }
 
-  const score = enhancedAtsScore.final_score ?? enhancedAtsScore.Percentage ?? 0;
   const profile = enhancedAtsScore.profile;
   const breakdown = enhancedAtsScore.section_breakdown ?? {};
-  const penalties = enhancedAtsScore.intelligence_penalties ?? [];
-  const tc = tier(score);
-  const sections = Object.entries(breakdown).filter(([, sec]) => sec.weight > 0);
+  const score = getEnhancedCurrentScore(enhancedAtsScore);
+  const scoreColor = tier(score);
+  const trackedSuggestions = enhancedSuggestions.filter((suggestion) => {
+    if (suggestion.status !== "pending" && suggestion.status !== "fixed") return false;
+    // A stale bulk action has no remaining server IDs after its concrete
+    // recommendations are already fixed. This applies to every ATS section
+    // (for example, Leadership bullets and Keywords). Hiding it prevents a
+    // dead Auto Fix click and does not hide any pending individual finding.
+    const isBulkBulletAction = suggestion.fix_type === "auto"
+      && /^(?:apply|add)\s+all(?:\s+at\s+once)?\b/i.test(suggestion.message);
+    if (!isBulkBulletAction) return true;
+    const sectionToken = normalizedSectionToken(suggestion.section);
+    const hasFixedPeer = enhancedSuggestions.some((item) =>
+      item.id !== suggestion.id
+      && normalizedSectionToken(item.section) === sectionToken
+      && item.status === "fixed",
+    );
+    const hasPendingIndividualAutoFix = enhancedSuggestions.some((item) =>
+      item.id !== suggestion.id
+      && normalizedSectionToken(item.section) === sectionToken
+      && item.status === "pending"
+      && item.fix_type === "auto"
+      && !/^(?:apply|add)\s+all(?:\s+at\s+once)?\b/i.test(item.message),
+    );
+    return !hasFixedPeer || hasPendingIndividualAutoFix;
+  });
+  const fixedSuggestionCount = trackedSuggestions.filter(
+    (suggestion) => suggestion.status === "fixed",
+  ).length;
+  const overallEnhancementProgress = trackedSuggestions.length > 0
+    ? Math.round((fixedSuggestionCount / trackedSuggestions.length) * 100)
+    : 100;
+  // Only server-provided, actionable suggestions become enhancement sections.
+  // Pending items rank before resolved work; ties use the backend's lower ATS
+  // section score first, so the most urgent work is easiest to find.
+  const sectionEntries = Object.entries(breakdown)
+    .filter(([name]) => trackedSuggestions.some((suggestion) => belongsToScoreSection(suggestion, name)))
+    .sort(([nameA, sectionA], [nameB, sectionB]) => {
+      const pendingA = trackedSuggestions.filter((suggestion) =>
+        suggestion.status === "pending" && belongsToScoreSection(suggestion, nameA),
+      ).length;
+      const pendingB = trackedSuggestions.filter((suggestion) =>
+        suggestion.status === "pending" && belongsToScoreSection(suggestion, nameB),
+      ).length;
+      if (pendingA !== pendingB) return pendingB - pendingA;
+      const scoreDifference = getSectionPercentage(sectionA) - getSectionPercentage(sectionB);
+      return scoreDifference || nameA.localeCompare(nameB);
+    });
+
+const openManualFix = (suggestionId: string, section: string, entryIndex?: number) => {
+    // The chosen issue travels with the editor navigation. This lets the save
+    // flow ask the backend to validate this exact semantic/manual change.
+    window.dispatchEvent(new CustomEvent("careerbot:ats-manual-fix-target", {
+      detail: { suggestionId, ownerSection: section },
+    }));
+    onFixNow?.(section, entryIndex);
+  };
+
+  const handleApplyAutoFix = async (suggestionId: string) => {
+    setApplyingSuggestionId(suggestionId);
+    try {
+      const result = await applyAutoFix(suggestionId);
+      toast.success(
+        result.scoreConfirmed
+          ? `Fix applied. ATS score updated from ${result.beforeScore} to ${result.afterScore}.`
+          : "Fix applied. Your updated ATS score will appear when the server refreshes it.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to apply this fix.");
+    } finally {
+      setApplyingSuggestionId(null);
+    }
+  };
+
+  const handleUndo = async (suggestionId: string) => {
+    setUndoingSuggestionId(suggestionId);
+    try {
+      await undoFix(suggestionId);
+      toast.success("Fix undone. Your ATS score has been refreshed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to undo this fix.");
+    } finally {
+      setUndoingSuggestionId(null);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 p-4">
-
-      {/* Score hero */}
-      <div
-        className="bg-white rounded-2xl border border-[#EAECF0] p-5 flex flex-col items-center gap-3"
-        style={{ borderTop: `3px solid ${tc.arc}` }}
-      >
-        <MultiColorCircularScore value={score} precision={2} />
-        <div className="flex flex-col items-center gap-1.5">
-          <span className="text-[13px] font-semibold text-[#111827]">ATS Score</span>
-          {profile && (
-            <span
-              className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
-              style={{ background: tc.light, color: tc.text }}
-            >
-              {profile}
+      <div className="rounded-2xl border border-[#EAECF0] bg-white p-5" style={{ borderTop: `3px solid ${scoreColor.arc}` }}>
+        <div className="flex items-center gap-4">
+          <MultiColorCircularScore value={score} precision={2} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[13px] font-semibold text-[#111827]">ATS Score</span>
+              {profile && <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: scoreColor.light, color: scoreColor.text }}>{profile}</span>}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-[#64748B]">
+              Your report identifies the changes; each recommendation below updates this score after it is confirmed.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 border-t border-[#F1F5F9] pt-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] font-semibold text-[#334155]">Enhancement progress</span>
+            <span className="text-[11px] font-bold tabular-nums text-[#0F172A]">
+              {fixedSuggestionCount} of {trackedSuggestions.length} addressed
             </span>
-          )}
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]" aria-label={`${overallEnhancementProgress}% of ATS recommendations addressed`}>
+            <div className="h-full rounded-full bg-[#2557A7] transition-all duration-700" style={{ width: `${overallEnhancementProgress}%` }} />
+          </div>
         </div>
       </div>
 
-      {/* Section breakdown */}
-      {sections.length > 0 && (
-        <div className="bg-white rounded-2xl border border-[#EAECF0] p-4 flex flex-col gap-3">
-          <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest">Section Breakdown</p>
-          <div className="flex flex-col gap-3.5">
-            {sections.map(([name, sec]) => {
-              const pct = Math.round(sec.percentage);
-              const sc = tier(pct);
+      {sectionEntries.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-[#EAECF0] bg-white p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9CA3AF]">Section Breakdown</p>
+          <div className="flex flex-col gap-4">
+            {sectionEntries.map(([name, sec], sectionIndex) => {
+              const percentage = getSectionPercentage(sec);
+              const sectionScoreColor = tier(percentage);
+              const pendingSectionSuggestions = trackedSuggestions.filter((suggestion) =>
+                suggestion.status === "pending" && belongsToScoreSection(suggestion, name),
+              );
+              // Fixed cards remain in their original backend section so Undo stays local.
+              const fixedSectionSuggestions = trackedSuggestions.filter((suggestion) =>
+                suggestion.status === "fixed" && belongsToScoreSection(suggestion, name),
+              );
+              const sectionSuggestions = [...pendingSectionSuggestions, ...fixedSectionSuggestions];
+              const resolvedCount = fixedSectionSuggestions.length;
+              const issueCount = sectionSuggestions.length;
+              // ATS quality and enhancement progress intentionally remain separate:
+              // the former comes from the scoring engine, while the latter is
+              // derived solely from the confirmed status of this section's issues.
+              const enhancementProgress = issueCount > 0
+                ? Math.round((resolvedCount / issueCount) * 100)
+                : 100;
+              // Recommendation progress and ATS quality are separate signals.
+              // A section stays amber until every confirmed finding is fixed,
+              // then turns green even if its ATS score refreshes separately.
+              const progressColor = enhancementProgress === 100
+                ? { track: "#D1FAE5", fill: "#10B981" }
+                : { track: "#FEF3C7", fill: "#F59E0B" };
+              const isExpanded = expandedSections[name] === true;
+
               return (
-                <div key={name} className="flex flex-col gap-1">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-[12px] font-medium text-[#374151]">{name}</span>
-                    <span className="text-[11px] font-bold tabular-nums" style={{ color: sc.arc }}>{pct}%</span>
+                <section key={name} className={`flex flex-col gap-2 ${sectionIndex > 0 ? "border-t border-[#EAECF0] pt-4" : ""}`}>
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={`ats-section-${normalizedSectionToken(name)}`}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${name} ATS recommendations`}
+                    onClick={() => setExpandedSections((current) => ({ ...current, [name]: !isExpanded }))}
+                    className="-mx-1 flex w-[calc(100%+0.5rem)] items-baseline justify-between gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557A7] focus-visible:ring-offset-1"
+                  >
+                    <div className="min-w-0">
+                      <span className="truncate text-[12px] font-semibold text-[#374151]">{name}</span>
+                      {issueCount > 0 ? (
+                        <span className="ml-1.5 text-[10px] text-[#94A3B8]">{resolvedCount}/{issueCount} addressed</span>
+                      ) : (
+                        <span className="ml-1.5 text-[10px] font-medium text-emerald-600">All recommendations addressed</span>
+                      )}
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <ChevronDown size={14} className={`text-[#64748B] transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} aria-hidden="true" />
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-2" aria-label={`${name}: ${enhancementProgress}% of recommendations addressed`}>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: progressColor.track }}>
+                      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${enhancementProgress}%`, background: progressColor.fill }} />
+                    </div>
+                    <span className="w-8 text-right text-[10px] font-semibold tabular-nums text-[#64748B]">{enhancementProgress}%</span>
                   </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: sc.muted }}>
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%`, background: sc.arc }}
-                    />
-                  </div>
-                  {sec.deductions?.slice(0, 1).map((d, i) => {
-                    const NO_FIX_SECTIONS = ["Keywords", "Leadership", "format", "content", "ATSCompatibility"];
-                    const showFix = onFixNow && !NO_FIX_SECTIONS.includes(name);
+
+                  {isExpanded ? (
+                    <div id={`ats-section-${normalizedSectionToken(name)}`} className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between px-0.5 text-[10px]">
+                        <span className="font-medium text-[#64748B]">Section ATS score</span>
+                        <span className="font-bold tabular-nums" style={{ color: sectionScoreColor.arc }}>{percentage}%</span>
+                      </div>
+                      {sectionSuggestions.map((suggestion) => {
+                    const isFixed = suggestion.status === "fixed";
+                    const isApplying = applyingSuggestionId === suggestion.id;
+                    const isUndoing = undoingSuggestionId === suggestion.id;
+                    const isAuto = suggestion.fix_type === "auto";
+                    const route = getScoreSectionAction(suggestion.section, suggestion.message);
+                    const canUndo = isFixed && suggestion.undoAvailable === true;
+                    const canOpenEditor = !isFixed && !isAuto && suggestion.fix_type !== "info" && Boolean(onFixNow && route);
+                    const canChooseTarget = !isFixed && !isAuto && suggestion.fix_type !== "info" && !route && Boolean(onFixNow);
+                    const isTargetPickerOpen = targetPickerSuggestionId === suggestion.id;
+
                     return (
-                      <div key={i} className="flex items-start justify-between gap-2 mt-0.5">
-                        <p className="text-[10px] text-[#B45309] leading-snug flex-1">
-                          {d.after_example || d.message}
-                        </p>
-                        {showFix && (
-                          <button
-                            onClick={() => onFixNow(name, parseEntryIndex(d.message || d.after_example || ""))}
-                            className="shrink-0 text-[10px] font-semibold text-white bg-[#2557a7] hover:bg-[#1a4585] px-2 py-0.5 rounded-full transition-colors whitespace-nowrap"
-                          >
-                            Fix Now
-                          </button>
-                        )}
+                      <div key={suggestion.id} className={`rounded-md px-2.5 py-2 ${isFixed ? "bg-emerald-50" : "bg-amber-50"}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            {isFixed && <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-600" />}
+                            <div className="min-w-0">
+                              <p className={`text-[10px] leading-snug ${isFixed ? "text-emerald-900" : "text-[#B45309]"}`}>{suggestion.message}</p>
+                              {isFixed && <span className="mt-0.5 block text-[9px] font-semibold text-emerald-700">Fixed via {isAuto ? "Auto Fix" : "Manual Fix"}</span>}
+                            </div>
+                          </div>
+                          {isFixed ? (
+                            canUndo ? <button type="button" aria-label={`Undo fix: ${suggestion.message}`} onClick={() => void handleUndo(suggestion.id)} disabled={undoingSuggestionId !== null} className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 py-1 text-[10px] font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"><Undo2 size={11} className={isUndoing ? "animate-pulse" : undefined} />{isUndoing ? "Undoing..." : "Undo"}</button>
+                              : onFixNow && route ? <button type="button" onClick={() => onFixNow(route.editorSection, route.entryIndex)} className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 py-1 text-[10px] font-semibold text-emerald-800 transition hover:bg-emerald-100"><Pencil size={11} />Edit</button>
+                                : <span className="shrink-0 text-[10px] font-medium text-emerald-700">Saved</span>
+                          ) : isAuto ? (
+                            <button type="button" aria-label={`Auto fix: ${suggestion.message}`} onClick={() => void handleApplyAutoFix(suggestion.id)} disabled={applyingSuggestionId !== null || undoingSuggestionId !== null} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#2557a7] px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-[#1a4585] disabled:cursor-not-allowed disabled:opacity-60"><Zap size={11} className={isApplying ? "animate-pulse" : undefined} />{isApplying ? "Fixing..." : "Auto Fix"}</button>
+                          ) : canOpenEditor ? (
+                            <button type="button" aria-label={`Manually fix: ${suggestion.message}`} onClick={() => openManualFix(suggestion.id, route!.editorSection, route!.entryIndex)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#2557a7] px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-[#1a4585]"><Pencil size={11} />Manual Fix</button>
+                          ) : canChooseTarget ? (
+                            <button type="button" aria-expanded={isTargetPickerOpen} onClick={() => setTargetPickerSuggestionId((current) => current === suggestion.id ? null : suggestion.id)} className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#93B4E8] bg-white px-2 py-1 text-[10px] font-semibold text-[#2557A7] transition hover:bg-[#EFF6FF]"><Pencil size={11} />Choose section</button>
+                          ) : suggestion.fix_type === "info" ? (
+                            <span className="shrink-0 text-[10px] font-medium text-[#64748B]">Review only</span>
+                          ) : null}
+                        </div>
+                        {canChooseTarget && isTargetPickerOpen ? (
+                          <div className="mt-2 rounded-md border border-[#BFDBFE] bg-white/80 p-2">
+                            <p className="text-[10px] leading-snug text-[#475569]">The ATS service did not provide a source field. Choose the section you want to improve.</p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {["Work Experience", "Projects", "Internships"].map((target) => (
+                                <button key={target} type="button" onClick={() => { setTargetPickerSuggestionId(null); openManualFix(suggestion.id, target); }} className="rounded-full border border-[#BFDBFE] bg-white px-2 py-1 text-[10px] font-semibold text-[#2557A7] hover:bg-[#EFF6FF]">{target}</button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
-                </div>
+                    </div>
+                  ) : null}
+                </section>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Tips */}
-      {penalties.length > 0 && (
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center gap-1.5">
-            <Zap size={11} className="text-[#9CA3AF]" />
-            <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest">Improvement Tips</p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {penalties.map((p, i) => (
-              <div
-                key={i}
-                className="text-[12px] text-[#92400E] px-3 py-2 rounded-xl leading-snug"
-                style={{ background: "#FFFBEB", borderLeft: "3px solid #FCD34D" }}
-              >
-                {p.after_example || p.message}
-              </div>
-            ))}
           </div>
         </div>
       )}
     </div>
   );
 }
-
-// ─── Builder score panel ──────────────────────────────────────────────────────
-export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIndex?: number) => void } = {}) {
+export default function ATSScorePanel({ onFixNow, compact = false }: { onFixNow?: (section: string, entryIndex?: number) => void; compact?: boolean } = {}) {
   const { resumeData, resumeSource, completionStatus } = useResume();
   const { canonicalScore, canonicalStatus, lastCalculatedAt, setCanonicalScore, setCanonicalStatus, markScoreStale } = useScore();
 
@@ -213,7 +383,7 @@ export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, canonicalStatus, isEnhanced]);
 
-  if (isEnhanced) return <EnhancedScorePanel onFixNow={onFixNow} />;
+  if (isEnhanced) return <EnhancedScorePanel onFixNow={onFixNow} compact={compact} />;
 
   const showFullScore  = canonicalStatus === "ready" || canonicalStatus === "stale";
   const isCalcRunning  = isCalculating || canonicalStatus === "calculating";

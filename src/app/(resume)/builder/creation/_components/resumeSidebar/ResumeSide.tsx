@@ -8,6 +8,7 @@ import EditorTab from "../editor/EditorTab";
 import ResumeGPTTab from "../resumeGPT/ResumeGPTTab";
 import AIReviewTab from "../aiReview/AIReviewTab";
 import ScoreTab from "../score/ScoreTab";
+import { getScoreSectionAction } from "../../_utils/scoreSectionRouting";
 
 import PersonalInfo from "../editor/sections/PersonalInfo";
 import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
@@ -63,10 +64,9 @@ const ATS_SECTION_TO_BUILDER: Record<string, string> = {
   Contact: "Personal Info",
   Headline: "Professional Summary",
   Summary: "Professional Summary",
-  Formatting: "Professional Summary",
-  ATSCompatibility: "Personal Info",
   Experience: "Work Experience",
   WorkExperience: "Work Experience",
+  CareerProgression: "Work Experience",
   ContentQuality: "Work Experience",
   Leadership: "Work Experience",
   Education: "Education",
@@ -93,12 +93,21 @@ interface ResumeSideProps {
   defaultOpen?: boolean;
   /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
   openSection?: string;
+<<<<<<< HEAD
   /**
    * Opens the sidebar on `tab` whenever a new request object arrives (for
    * example a toolbar Score click). Pass a fresh `id` for every click so a
    * repeated request for the same tab still switches back to it.
    */
   tabRequest?: { tab: string; id: number } | null;
+=======
+  /** Changes whenever an ATS recommendation is selected, including the same section twice. */
+  openSectionRequestId?: number;
+  /** Use the entire parent panel instead of the builder page's percentage width. */
+  embedded?: boolean;
+  /** ATS Scan exposes score health only; issue cards open the relevant form directly. */
+  atsFixMode?: boolean;
+>>>>>>> 9a42f5e1 (fix(resume-builder): section editor, scoring, and template UI updates)
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -115,7 +124,13 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   initialTab,
   defaultOpen = true,
   openSection,
+<<<<<<< HEAD
   tabRequest,
+=======
+  openSectionRequestId = 0,
+  embedded = false,
+  atsFixMode = false,
+>>>>>>> 9a42f5e1 (fix(resume-builder): section editor, scoring, and template UI updates)
 }) => {
   // ✅ Get context first
   const {
@@ -126,6 +141,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     setCompletionStatus,
     sectionOrder,
     setSectionOrder,
+    enhancedDataVersion,
   } = useResume();
 
   // Defined before sections useState so both initializers can reference it
@@ -163,15 +179,22 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         .filter(Boolean);
     }
 
-    // No saved order: sectionOrder comes from getSectionOrderByDomainAndCareer() which lists ALL sections.
+    // No saved order: sectionOrder comes from getSectionOrderByDomainAndCareer() which lists ALL
+    // sections the backend/parser found relevant (core + extras like Achievements/Awards/
+    // Publications with actual data) — sectionMap must know about defaultExtraSections too,
+    // same as the hasSavedOrder branch above, or every extra section sectionOrder names gets
+    // filtered out here and lands only in "Add New Sections" despite having real parsed data,
+    // forcing the user to manually re-add a section that's already populated.
     // Only include Declaration if the backend sent it (domain-specific for government_standard).
     const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
-    const sectionMap = new Map([...initialSections, ...declarationSection].map(s => [s.name, s]));
+    const sectionMap = new Map([...initialSections, ...defaultExtraSections, ...declarationSection].map(s => [s.name, s]));
     const reordered = sectionOrder
       .filter(name => sectionMap.has(name))
       .map(name => sectionMap.get(name)!)
       .filter(Boolean);
     const orderedNames = new Set(reordered.map(s => s.name));
+    // Core sections always show even if the backend's order omitted one — only
+    // initialSections gets this fallback; extras only appear when sectionOrder names them.
     const remaining = initialSections.filter(s => !orderedNames.has(s.name));
     return [...reordered, ...remaining];
   });
@@ -195,9 +218,13 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       return allKnown.filter(s => !mainNames.has(s.name));
     }
 
-    // No saved order: sectionOrder = getSectionOrder() which includes ALL sections.
-    // The main list only has initialSections, so all defaultExtraSections are available.
-    return defaultExtraSections;
+    // No saved order: sectionOrder = getSectionOrderByDomainAndCareer() which includes ALL
+    // sections the backend found relevant. Now that the `sections` initializer above also
+    // pulls matching extras (Achievements/Awards/...) into the main list, mirror the
+    // hasSavedOrder branch's filtering here too — otherwise an extra sectionOrder already
+    // placed in the main list would ALSO still show as addable in "Add New Sections".
+    const mainNames = new Set(sectionOrder);
+    return defaultExtraSections.filter(s => !mainNames.has(s.name));
   });
 
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -215,19 +242,31 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   }, [tabRequest]);
 
   // Auto-open the section specified by the ATS report "Fix Now" button
-  const openSectionDone = useRef(false);
+  const lastOpenSectionRequest = useRef<string | null>(null);
   useEffect(() => {
-    if (!openSection || isLoadingResume || openSectionDone.current) return;
-    openSectionDone.current = true;
-    const builderName = ATS_SECTION_TO_BUILDER[openSection] ?? openSection;
+    if (!openSection || isLoadingResume) return;
+    const requestKey = `${openSection}:${openSectionRequestId}`;
+    if (lastOpenSectionRequest.current === requestKey) return;
+    lastOpenSectionRequest.current = requestKey;
+    const builderName = getScoreSectionAction(openSection)?.editorSection
+      ?? ATS_SECTION_TO_BUILDER[openSection]
+      // Custom sections can still be opened by their display name. Diagnostic
+      // score categories cannot fall through and create an empty modal.
+      ?? (sections.some(section => section.name === openSection) ? openSection : null);
+    if (!builderName) return;
     const idx = sections.findIndex(s => s.name === builderName);
     if (idx !== -1) {
       setIsOpen(true);
       setActiveTab("Editor");
       setActiveSection(idx);
+      // A suggestion is an explicit intent to fix this section. Selecting the
+      // sidebar row alone leaves the user one click away from the form, which
+      // is especially confusing in the ATS workspace.
+      setPendingEditEntryIndex(null);
+      setPendingOpenSection(builderName);
     }
-  }, [openSection, isLoadingResume, sections]);
-  
+  }, [openSection, openSectionRequestId, isLoadingResume, sections]);
+
   const clearErrors = (fields?: string[]) => {
   if (!fields || fields.length === 0) {
     // Clear all errors
@@ -290,11 +329,11 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["orcidId"] = resumeData.personalInfo?.orcidId || "";
       newFormData["hIndex"] = resumeData.personalInfo?.hIndex || "";
       newFormData["googleScholarUrl"] = resumeData.personalInfo?.googleScholarUrl || "";
-      
+
       // Professional Summary
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";
       newFormData["targetRole"] = resumeData.professionalSummary.targetRole || "";
-      
+
       // Skills is intentionally excluded from formData — the Skills component writes
       // directly to resumeData.categorizedSkills via chip inputs and autosave reads
       // from context, not formData. Including it here created a stale snapshot that
@@ -304,14 +343,14 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       // Multi-entry sections (Education, Work Experience, Projects, etc.) are also
       // excluded from formData. They manage their own state (savedEntries / editingEntries)
       // and write directly to resumeData — they never read from formData.
-      
+
       setFormData(newFormData);
     }
-  // Intentionally omit resumeData from deps: re-running on every context update
-  // would overwrite formData while the user is actively typing in a section modal.
-  // formData is populated once when the initial load completes (isLoadingResume → false).
+  // Do not refresh on ordinary typing, but do refresh after an authoritative
+  // enhanced apply/delete response. Without this, a location Undo updates the
+  // context/preview while the Personal Info form retains the old location.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoadingResume]);
+  }, [isLoadingResume, enhancedDataVersion]);
 
   // Restore custom sections into the main sections list after initial load only
   useEffect(() => {
@@ -353,7 +392,17 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
     setExtraSections(prev => {
       const mainNames = new Set(sectionOrder);
-      const filtered = defaultExtraSections.filter(s => !mainNames.has(s.name));
+      // Pool must include initialSections too, not just defaultExtraSections —
+      // a deletable core section (Certifications, Work Experience, Projects,
+      // Internships) removed from sectionOrder needs to be re-offerable here.
+      // Using defaultExtraSections alone silently dropped those from "Add New
+      // Sections" forever, since they can never appear in a pool that never
+      // contained them in the first place.
+      const allKnown = [
+        ...defaultExtraSections,
+        ...initialSections.filter(s => !defaultExtraSections.some(d => d.name === s.name)),
+      ];
+      const filtered = allKnown.filter(s => !mainNames.has(s.name));
       const prevNames = prev.map(s => s.name).join(',');
       const newNames = filtered.map(s => s.name).join(',');
       if (prevNames === newNames) return prev;
@@ -449,7 +498,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     ...prev,
     [key]: value
   }));
-  
+
   // ✅ Clear error for this field when user starts typing
   if (errors[key]) {
     setErrors(prev => {
@@ -535,7 +584,10 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
 
   const handleFixNow = (atsSection: string, entryIndex?: number) => {
-    const builderName = ATS_SECTION_TO_BUILDER[atsSection] ?? atsSection;
+    const builderName = getScoreSectionAction(atsSection)?.editorSection
+      ?? ATS_SECTION_TO_BUILDER[atsSection]
+      ?? (sections.some(section => section.name === atsSection) ? atsSection : null);
+    if (!builderName) return;
     setPendingEditEntryIndex(entryIndex ?? null);
     setPendingOpenSection(builderName);
   };
@@ -550,7 +602,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   useEffect(() => {
     const isFilled = (value?: string) => !!value && value.length > 0;
     const isArrayFilled = (arr?: string[]) => !!arr && arr.length > 0;
-    
+
     const newStatus: Record<string, boolean> = {
       "Personal Info":
         !!resumeData.personalInfo.fullname &&
@@ -560,7 +612,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       "Professional Summary": !!resumeData.professionalSummary.summary?.trim(),
       Education: resumeData.education.some(
         (edu) =>
-          isFilled(edu.school) && isFilled(edu.degree) 
+          isFilled(edu.school) && isFilled(edu.degree)
       ),
       Skills: isArrayFilled(resumeData.skills),
       "Work Experience": resumeData.workExperience.some(
@@ -597,22 +649,25 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       Patents: (resumeData.patents ?? []).some(
         (pat) => isFilled(pat.title)),
     };
-    
+
     // ✅ Update context completion status (used for progress circle)
     setCompletionStatus(newStatus);
-    
+
   }, [resumeData, setCompletionStatus]);
 
-  const dynamicWidth = isTemplateSidebarOpen ? "w-[30%]" : "w-[32%]";
+  // In the normal builder this is one column within a flex row. The ATS
+  // workspace already owns its grid column, so applying 32% there leaves an
+  // empty panel and misaligns the preview.
+  const dynamicWidth = embedded ? "w-full" : (isTemplateSidebarOpen ? "w-[30%]" : "w-[32%]");
 
   return (
     <div
-      className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
+      className={`relative bg-gradient-to-br from-gray-50 to-white ${embedded ? "h-full min-h-0" : "h-screen"} shadow-sm transition-all duration-300 flex flex-col
         ${isOpen ? `${dynamicWidth}` : "w-12 p-0"}
       `}
     >
 
-      {isOpen && (
+      {isOpen && !atsFixMode && (
         <Tabs
           isOpen={isOpen}
           onToggle={() => setIsOpen(!isOpen)}
@@ -625,7 +680,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       {isOpen && (
         <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
           {/* Always mounted so the fixed modal overlay works from any tab */}
-          <div className={activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
+          <div className={atsFixMode ? "h-0 overflow-hidden" : activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
             <EditorTab
               sections={sections}
               extraSections={extraSections}
@@ -648,7 +703,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               onClearPendingSection={() => { setPendingOpenSection(null); setPendingEditEntryIndex(null); }}
             />
           </div>
-          {activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} />}
+          {atsFixMode
+            ? <ScoreTab onFixNow={handleFixNow} compact />
+            : activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} compact={embedded} />}
           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
           {activeTab === "AI Review" && <AIReviewTab />}
         </div>
