@@ -1,0 +1,36 @@
+{
+  "letter_id": "failedNoModel1234567890abcdef12",
+  "created_at": "2026-09-17T09:00:00.000000+00:00",
+  "status": "failed",
+  "cover_letter": null,
+  "plain_text": null,
+  "generation_status": {
+    "status": "failed",
+    "degraded": true,
+    "fallback_used": false,
+    "sentences_regenerated": 0,
+    "sentences_stripped": 0,
+    "generic_intent_sentences_inserted": 0,
+    "requires_user_review": true,
+    "reasons": ["invalid_jd"]
+  },
+  "jd_match_matrix": [],
+  "grounding": {
+    "claim_catalog_size": 0,
+    "high_confidence_claims": 0,
+    "low_confidence_claims_used": 0,
+    "parser_warnings_used": [],
+    "coverage_status": "low_confidence"
+  },
+  "metadata": {
+    "word_count": 0,
+    "tone": "professional",
+    "prompt_version": "cl-v1",
+    "verification_policy_version": "cl-verify-v1",
+    "tokens_used": 0,
+    "llm_calls": 0,
+    "model": null
+  },
+  "warnings": [],
+  "reason": "invalid_jd"
+}

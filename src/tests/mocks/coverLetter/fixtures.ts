@@ -26,6 +26,7 @@ import type {
 import readyJson from "./fixtures/cl_ready_to_review.json";
 import needsJson from "./fixtures/cl_needs_review.json";
 import failedJson from "./fixtures/cl_failed_low_jd_match.json";
+import failedNoModelJson from "./fixtures/cl_failed_no_model.json";
 import listEmptyJson from "./fixtures/cl_list_empty.json";
 import list3ItemsJson from "./fixtures/cl_list_3_items.json";
 import listWithCursorJson from "./fixtures/cl_list_with_next_cursor.json";
@@ -66,6 +67,9 @@ export const CL_FIXTURES = {
   readyToReview: readyJson as unknown as CoverLetterResponse,
   needsReview: needsJson as unknown as CoverLetterResponse,
   failedLowJdMatch: failedJson as unknown as CoverLetterResponse,
+  // Early-failure path: pipeline aborted before any LLM call ran, so
+  // careerbot-ai's metadata.model is an explicit JSON null (Optional[str]).
+  failedNoModel: failedNoModelJson as unknown as CoverLetterResponse,
   listEmpty: listEmptyJson as unknown as CoverLetterListResponse,
   list3Items: list3ItemsJson as unknown as CoverLetterListResponse,
   listWithCursor: listWithCursorJson as unknown as CoverLetterListResponse,
