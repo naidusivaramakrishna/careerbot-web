@@ -261,21 +261,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     }
                     sectionResults.experience = 'ok';
 
-                    // Auto-fill employment status based on current work experience
-                    // Only set 'employed' if there's an active job (no end_date or end_date in future)
+                    // Auto-fill employment status from the mapper's currently_working
+                    // flag (explicit "Present"/"Current" only). A missing end_date is
+                    // not evidence of a current job: treating it as one overwrote a
+                    // student's status with 'employed' for any undated internship.
                     try {
-                        const now = new Date();
-                        const hasCurrentJob = mapped.workExperience?.some((exp: Record<string, unknown>) => {
-                            if (!exp.end_date) return true; // Currently employed (no end date)
-                            const endDate = new Date(exp.end_date as string);
-                            return endDate > now; // End date is in the future
-                        });
+                        const hasCurrentJob = mapped.workExperience.some((exp) => exp.currently_working === true);
 
-                        const existingInfo = await getEmploymentInfo();
-                        await updateEmploymentInfo({
-                            ...existingInfo,
-                            employment_status: hasCurrentJob ? 'employed' : existingInfo.employment_status
-                        });
+                        if (hasCurrentJob) {
+                            const existingInfo = await getEmploymentInfo();
+                            if (existingInfo.employment_status !== 'employed') {
+                                await updateEmploymentInfo({
+                                    ...existingInfo,
+                                    employment_status: 'employed',
+                                });
+                            }
+                        }
                     } catch (err) {
                         logger.warn("Could not update employment status:", err);
                     }
