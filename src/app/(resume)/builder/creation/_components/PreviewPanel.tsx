@@ -319,7 +319,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   // never appeared until an explicit Save. resumeSavedVersion only bumps
   // once autosave/Save actually lands, so the fetch now happens exactly
   // when there is new persisted content to show.
-  const previewSignature = JSON.stringify({ resumeSavedVersion, resumeStyle, sectionOrder, selectedTemplate });
+  // resumeIdProp and userEmail are both read inside the effect below (the
+  // resume to fetch, and the per-user localStorage key for the selected
+  // template) but weren't part of this signature even though they're in the
+  // effect's own dependency array. Either changing while every other input
+  // stayed the same left the guard below treating it as a no-op: no fetch
+  // ran, so a new resume kept showing the previous one's preview image.
+  const previewSignature = JSON.stringify({
+    resumeSavedVersion, resumeStyle, sectionOrder, selectedTemplate, resumeIdProp, userEmail,
+  });
   const lastPreviewSignatureRef = useRef<string | null>(null);
   const [previewRetryTick, setPreviewRetryTick] = useState(0);
   const retryPreview = () => {
@@ -378,6 +386,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      // The in-flight fetch's own `finally` skips this once `cancelled` is
+      // true (so it can't clear the flag for a fetch that's no longer the
+      // current one) -- reset it here instead, so tearing down this effect
+      // (deps changed, or unmount) never leaves "Updating preview..."
+      // spinning forever. The next effect run sets it true again if it goes
+      // on to start a new fetch.
+      setIsPreviewRefreshing(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewSignature, isEnhancedResume, isEmailReady, resumeIdProp, userEmail, previewRetryTick]);
