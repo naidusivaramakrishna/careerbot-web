@@ -49,6 +49,7 @@ import AddNewSection from "./AddNewSection";
 import CircularProgress from "./CircularProgress";
 import CustomSectionEditor from "./CustomSectionEditor";
 import { sectionIcons } from "../../_utils/sectionsConfig";
+import { buildBuilderSectionPayload, SECTION_STATE_KEYS } from "../../_utils/sectionPayloadKeys";
 import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
 import { useResume, CustomSection } from "../../_context/ResumeContext";
 import { updateResume, getAllResumes, autoSaveResume } from "@/api/resumeApi";
@@ -483,31 +484,7 @@ const EditorTab: React.FC<Props> = ({
             googleScholarUrl: live.personalInfo?.googleScholarUrl || null,
           };
         } else {
-          const sectionMap: Record<string, keyof typeof live> = {
-            "Education": "education",
-            "Work Experience": "workExperience",
-            "Service Record": "serviceRecord",
-            "Vessels Operated": "vesselsOperated",
-            "Ports Experience": "portsExperience",
-            "Projects": "projects",
-            "Certifications": "certifications",
-            "Licenses and Credentials": "licenses",
-            "Certificates and Clearances": "certificatesAndClearances",
-            "Bar Admissions and Licenses": "barAdmissionsAndLicenses",
-            "Internships": "internships",
-            "Achievements": "achievements",
-            "Awards": "awards",
-            "Volunteering": "volunteering",
-            "Publications": "publications",
-            "Patents": "patents",
-            "References": "references",
-            "Hobbies": "hobbies",
-            "Interests": "interests",
-            "Languages": "languages",
-            "Research Grants": "researchGrants",
-            "Editorial Activities": "editorialActivities",
-            "Conference Presentations": "conferencePresentations",
-          };
+          const sectionMap = SECTION_STATE_KEYS as Record<string, keyof typeof live>;
           const key = sectionMap[sectionName];
           const data = key ? live[key] : undefined;
           if (isEnhancedResume) {
@@ -539,7 +516,7 @@ const EditorTab: React.FC<Props> = ({
           const camelKey = snakeToCamelSectionMap[backendKey] || backendKey;
           await autoSaveEnhancedResume(resumeId, { [camelKey]: sectionData });
         } else {
-          const updatePayload = { [backendKey]: sectionData };
+          const updatePayload = buildBuilderSectionPayload(backendKey, sectionData);
           const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
 
           if (autoSaveResponse?.warnings?.length) {
@@ -996,7 +973,7 @@ const EditorTab: React.FC<Props> = ({
         SECTION_KEY_MAP[openModalSection] ||
         openModalSection.toLowerCase().replace(/\s+/g, "_");
 
-      updatePayload = { [backendKey]: sectionData };
+      updatePayload = buildBuilderSectionPayload(backendKey, sectionData);
     }
 
     // // console.log("📤 Sending payload:", updatePayload);
