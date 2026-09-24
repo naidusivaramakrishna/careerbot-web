@@ -106,8 +106,8 @@ function TemplatesPageContent() {
   }, []);
 
   const buildStyleForCatalogue = useCallback((key: string): ResumeStyle => {
-    const catalogue = cataloguesMap[key];
-    const s = catalogue?.style || STYLE_CATALOGUES.galaxy.style;
+    // API catalogues have no ResumeStyle-shaped `style`; use the local definition.
+    const s = STYLE_CATALOGUES[key]?.style || STYLE_CATALOGUES.galaxy.style;
     const density = (typeof window !== 'undefined' ? localStorage.getItem('selected_density') : null) || s.lineSpacing || '1.45';
     const font = (typeof window !== 'undefined' ? localStorage.getItem('selected_font') : null) || s.fontFamily || 'arial';
     const savedColor = selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;

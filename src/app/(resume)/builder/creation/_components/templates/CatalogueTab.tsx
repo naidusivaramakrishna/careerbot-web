@@ -122,7 +122,9 @@ export default function CatalogueTab() {
       setSelectedKey(key);
       localStorage.setItem("selected_catalogue", key);
     }
-    const styleOverride = { ...cat.style } as Record<string, string>;
+    // API catalogues (useCatalogues) carry `typography`/`colors`/`styling`, not the
+    // ResumeStyle-shaped `style`; the builder style always comes from STYLE_CATALOGUES.
+    const styleOverride = { ...(STYLE_CATALOGUES[key]?.style ?? {}) } as Record<string, string>;
 
     // Re-apply user's manual density/font overrides on top of the catalogue defaults
     const density = localStorage.getItem("selected_density");
