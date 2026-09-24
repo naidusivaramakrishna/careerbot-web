@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { X } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
-import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, TemplateResponse } from "@/api/resumeApi";
+import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, getTemplateById, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 import { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } from "../../_utils/templateStyles";
@@ -14,6 +14,7 @@ import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_util
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from "@/app/(resume)/templates/_constants/templateImages";
 import { resolveTemplateImageUrl } from "@/lib/imageUtils";
+import { TemplatePreviewRenderer } from "@/components/templates";
 
 // Interface updated with mongoId (_id)
 interface TransformedTemplate {
@@ -28,6 +29,8 @@ interface TransformedTemplate {
   category: string;
   domain_family?: string;
   domain_display_name?: string;
+  preview_html?: string;
+  preview_css?: string;
 }
 
 // Default templates using MongoDB _ids
@@ -98,15 +101,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
   const [activePanel, setActivePanel] = useState<"templates" | "style">("templates");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<TransformedTemplate | null>(null);
   const [templates, setTemplates] = useState<TransformedTemplate[]>(DEFAULT_TEMPLATES);
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<string[]>(["All"]);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
   const [careerLevelData, setCareerLevelData] = useState<Array<{
     id: string;
@@ -117,13 +115,56 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
     subtitle?: string;
     domain_family?: string;
     domain_display_name?: string;
+    preview_html?: string;
+    preview_css?: string;
   }> | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
-  const [careerImgErrors, setCareerImgErrors] = useState<Record<string, boolean>>({});
   const [previewImgSrc, setPreviewImgSrc] = useState<string>('');
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const { selectedTemplate, setSelectedTemplate, setResumeStyle, setSectionOrder, sectionOrder } = useResume();
+
+  // Cache enrichment promise to prevent duplicate API calls
+  const enrichmentCacheRef = useRef<Promise<typeof careerLevelData> | null>(null);
+
+  // Enrich career level data with preview HTML/CSS (cached to prevent 100+ API calls)
+  const enrichCareerLevelData = useCallback(
+    async (templates: typeof careerLevelData) => {
+      if (!templates || templates.length === 0) return templates;
+
+      // Return cached result if already enriching
+      if (enrichmentCacheRef.current) {
+        return enrichmentCacheRef.current;
+      }
+
+      const enrichmentPromise = (async () => {
+        try {
+          const enriched = await Promise.all(
+            templates.map(async (tpl) => {
+              try {
+                const fullTemplate = await getTemplateById(tpl.id);
+                return {
+                  ...tpl,
+                  preview_html: fullTemplate.preview_html,
+                  preview_css: fullTemplate.preview_css,
+                };
+              } catch (err) {
+                logger.warn(`Failed to fetch preview for ${tpl.name}, using fallback`, err);
+                return tpl;
+              }
+            })
+          );
+          return enriched;
+        } catch (err) {
+          logger.error('Error enriching career level data:', err);
+          return templates;
+        }
+      })();
+
+      enrichmentCacheRef.current = enrichmentPromise;
+      return enrichmentPromise;
+    },
+    []
+  );
 
   // Get user email for scoped localStorage keys
   useEffect(() => {
@@ -184,12 +225,17 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           ats_friendly?: boolean;
           subtitle?: string;
           domain_family?: string;
+          preview_html?: string;
+          preview_css?: string;
         }>;
-        logger.info('Career level templates loaded from storage:');
-        careerLevels.forEach((tpl, idx) => {
-          logger.info(`  [${idx}] ${tpl.name} (id: ${tpl.id})`);
-        });
-        setCareerLevelData(careerLevels);
+        logger.info('Career level templates loaded from storage:', careerLevels.length);
+
+        // Enrich with preview data
+        const enrichAndSet = async () => {
+          const enriched = await enrichCareerLevelData(careerLevels);
+          setCareerLevelData(enriched);
+        };
+        enrichAndSet();
       } catch (err) {
         logger.error('Failed to parse career level templates', err);
         setCareerLevelData(null);
@@ -212,93 +258,85 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       if (localStorage.getItem(styleKey) === 'true') {
         setCareerLevelData(null);
       } else {
-      // New user with no domain selected — auto-populate software_engineering career levels
-      // so TemplatesTab shows career level cards and PreviewPanel shows Template2.tsx.
-      const autoPopulate = async () => {
-        try {
-          const allTemplates = await getTemplatesByCategory();
-          if (ignore) return; // unmounted / email changed before the fetch resolved
-          const seTemplates = (allTemplates || []).filter((t: TemplateResponse) => {
-            return (t as unknown as Record<string, unknown>).domain_family === 'software_engineering';
-          });
+        // New user with no domain selected — auto-populate software_engineering career levels
+        // so TemplatesTab shows career level cards and PreviewPanel shows Template2.tsx.
+        const autoPopulate = async () => {
+          try {
+            const allTemplates = await getTemplatesByCategory();
+            if (ignore) return; // unmounted / email changed before the fetch resolved
+            const seTemplates = (allTemplates || []).filter((t: TemplateResponse) => {
+              return (t as unknown as Record<string, unknown>).domain_family === 'software_engineering';
+            });
 
-          if (seTemplates.length === 0) {
+            if (seTemplates.length === 0) {
+              setCareerLevelData(null);
+              return;
+            }
+
+            const levelOrder = ['fresher', 'early career', 'mid-level', 'senior-level', 'lead', 'architect', 'manager'];
+            const sorted = [...seTemplates].sort((a, b) => {
+              const aIdx = levelOrder.findIndex(l => (a.name || '').toLowerCase().includes(l));
+              const bIdx = levelOrder.findIndex(l => (b.name || '').toLowerCase().includes(l));
+              if (aIdx === -1) return 1;
+              if (bIdx === -1) return -1;
+              return aIdx - bIdx;
+            });
+
+            const careerLevelData = sorted.map((t: TemplateResponse) => ({
+              id: t.id?.toString() || t._id || '',
+              name: t.name,
+              preview_url: t.preview_url || '/assets/templates/template-1.jpg',
+              description: t.description || 'Professional resume template',
+              ats_friendly: t.ats_friendly ?? true,
+              subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
+              domain_family: 'software_engineering',
+              domain_display_name: 'Software Engineering',
+            }));
+
+            // Find Early Career template; fall back to first in list
+            const earlyCareerTpl = careerLevelData.find(t =>
+              t.name.toLowerCase().includes('early') && t.name.toLowerCase().includes('career')
+            ) || careerLevelData[0];
+
+            localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData));
+            const domainFamilyKey = `domainFamily_${userEmail}`;
+            localStorage.setItem(domainFamilyKey, 'software_engineering');
+
+            if (earlyCareerTpl?.id) {
+              localStorage.setItem(selectedTemplateKey, earlyCareerTpl.id);
+              setAppliedTemplateId(earlyCareerTpl.id);
+              setSelectedTemplate(null);
+
+              // Set section order for software_engineering + early career
+              const sectionOrder = getSectionOrderByDomainAndCareer('software_engineering', 'early career');
+              const sectionOrderKey = `sectionOrder_${userEmail}`;
+              localStorage.setItem(sectionOrderKey, JSON.stringify(sectionOrder));
+              setSectionOrder(sectionOrder);
+            }
+
+            // Enrich with preview data
+            const enriched = await enrichCareerLevelData(careerLevelData);
+            setCareerLevelData(enriched);
+            logger.info('Auto-populated software_engineering career levels:', careerLevelData.length, '| applied:', earlyCareerTpl?.name);
+          } catch (err) {
+            logger.warn('Failed to auto-populate software_engineering templates', err);
             setCareerLevelData(null);
-            return;
           }
-
-          const levelOrder = ['fresher', 'early career', 'mid-level', 'senior-level', 'lead', 'architect', 'manager'];
-          const sorted = [...seTemplates].sort((a, b) => {
-            const aIdx = levelOrder.findIndex(l => (a.name || '').toLowerCase().includes(l));
-            const bIdx = levelOrder.findIndex(l => (b.name || '').toLowerCase().includes(l));
-            if (aIdx === -1) return 1;
-            if (bIdx === -1) return -1;
-            return aIdx - bIdx;
-          });
-
-          const careerLevelData = sorted.map((t: TemplateResponse) => ({
-            id: t.id?.toString() || t._id || '',
-            name: t.name,
-            preview_url: t.preview_url || '/assets/templates/template-1.jpg',
-            description: t.description || 'Professional resume template',
-            ats_friendly: t.ats_friendly ?? true,
-            subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
-            domain_family: 'software_engineering',
-            domain_display_name: 'Software Engineering',
-          }));
-
-          // Find Early Career template; fall back to first in list
-          const earlyCareerTpl = careerLevelData.find(t =>
-            t.name.toLowerCase().includes('early') && t.name.toLowerCase().includes('career')
-          ) || careerLevelData[0];
-
-          localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData));
-          const domainFamilyKey = `domainFamily_${userEmail}`;
-          localStorage.setItem(domainFamilyKey, 'software_engineering');
-
-          if (earlyCareerTpl?.id) {
-            localStorage.setItem(selectedTemplateKey, earlyCareerTpl.id);
-            setAppliedTemplateId(earlyCareerTpl.id);
-            setSelectedTemplate(null);
-
-            // Set section order for software_engineering + early career
-            const sectionOrder = getSectionOrderByDomainAndCareer('software_engineering', 'early career');
-            const sectionOrderKey = `sectionOrder_${userEmail}`;
-            localStorage.setItem(sectionOrderKey, JSON.stringify(sectionOrder));
-            setSectionOrder(sectionOrder);
-          }
-
-          setCareerLevelData(careerLevelData);
-          logger.info('Auto-populated software_engineering career levels:', careerLevelData.length, '| applied:', earlyCareerTpl?.name);
-        } catch (err) {
-          logger.warn('Failed to auto-populate software_engineering templates', err);
-          setCareerLevelData(null);
-        }
-      };
-      autoPopulate();
+        };
+        autoPopulate();
       }
     }
     return () => { ignore = true; };
-  }, [userEmail, setSelectedTemplate]);
+  }, [userEmail, setSelectedTemplate, enrichCareerLevelData, setSectionOrder]);
 
   // Fetch templates from API
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        logger.info("Fetching templates for category:", selectedCategory);
+        logger.info("Fetching all templates");
 
-        // Normalize category name (handle case sensitivity and spaces)
-        let categoryParam: string | undefined;
-        if (selectedCategory === "All") {
-          categoryParam = undefined;
-        } else {
-          // Convert to lowercase and remove extra spaces
-          categoryParam = selectedCategory.toLowerCase().trim();
-        }
-
-        logger.info("API call with category param:", categoryParam);
-        const data = await getTemplatesByCategory(categoryParam);
+        const data = await getTemplatesByCategory();
 
         logger.info("Templates fetched from API:", data?.length || 0, data);
 
@@ -343,13 +381,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           logger.info("Templates transformed:", transformedTemplates.length, transformedTemplates);
           setTemplates(transformedTemplates);
         } else {
-          logger.warn("No templates returned from API for category:", selectedCategory);
-          // Only use defaults if category is "All", otherwise show empty
-          if (selectedCategory === "All") {
-            setTemplates(DEFAULT_TEMPLATES);
-          } else {
-            setTemplates([]);
-          }
+          logger.warn("No templates returned from API");
+          setTemplates(DEFAULT_TEMPLATES);
         }
       } catch (error) {
         logger.error("Error fetching templates:", error);
@@ -360,45 +393,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       }
     };
     fetchTemplates();
-  }, [selectedCategory]);
-
-  const filteredTemplates = templates.filter((tpl) => {
-    const matchSearch = tpl.subtitle?.toLowerCase().includes(searchQuery.toLowerCase()) || tpl.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchSearch;
-  });
-
-  // ✅ Fetch categories when dropdown opens
-  useEffect(() => {
-    if (dropdownOpen) {
-      const fetchCategories = async () => {
-        try {
-          setCategoriesLoading(true);
-          const fetchedCategories = await getTemplateCategories();
-          logger.info("Fetched categories from API (lowercase):", fetchedCategories);
-
-          // Capitalize categories for display (convert "professional" -> "Professional")
-          const capitalizedCategories = fetchedCategories.map(cat =>
-            cat.charAt(0).toUpperCase() + cat.slice(1)
-          );
-
-          // Add "All" at the beginning if not already present
-          const categoriesWithAll = capitalizedCategories.includes("All")
-            ? capitalizedCategories
-            : ["All", ...capitalizedCategories];
-
-          logger.info("Categories for display (capitalized):", categoriesWithAll);
-          setCategories(categoriesWithAll);
-        } catch (error) {
-          logger.error("Error fetching categories:", error);
-          // Fall back to default categories
-          setCategories(["All", ...Array.from(new Set(templates.map((tpl) => tpl.subtitle)))]);
-        } finally {
-          setCategoriesLoading(false);
-        }
-      };
-      fetchCategories();
-    }
-  }, [dropdownOpen, templates]);
+  }, []);
 
   useEffect(() => {
     if (previewTemplate) {
@@ -407,16 +402,6 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       setPreviewImgSrc(resolved !== FALLBACK_TEMPLATE_IMAGE ? resolved : fallback);
     }
   }, [previewTemplate]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // ✅ Handle template click for instant preview
   const handleTemplateClick = (tpl: TransformedTemplate) => {
@@ -463,8 +448,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               if (previewName.includes('early') && previewName.includes('career'))
                 return apiName.includes('early') && apiName.includes('career');
               if (previewName.includes('senior')) return apiName.includes('senior');
-              if (previewName.includes('lead'))   return apiName.includes('lead');
-              if (previewName.includes('mid'))    return apiName.includes('mid');
+              if (previewName.includes('lead')) return apiName.includes('lead');
+              if (previewName.includes('mid')) return apiName.includes('mid');
               if (previewName.includes('manager')) return apiName.includes('manager');
               if (previewName.includes('fresher')) return apiName.includes('fresher');
               return false;
@@ -544,65 +529,19 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
 
   return (
     <>
-      {activePanel === "templates" && (
-        <div className="mb-3">
-          <input
-            type="text"
-            placeholder="Search templates..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg text-sm text-gray-600 focus:border-[#2557a7] placeholder-gray-400 transition-all duration-200 ease-in-out focus:outline-none hover:shadow-sm"
-          />
-        </div>
-      )}
-
       <div className="flex items-center gap-8 mb-4 relative">
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => {
-              setDropdownOpen(!dropdownOpen);
-              setActivePanel("templates");
-            }}
-            className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${activePanel === "templates"
-              ? "bg-blue-50 text-[#2557a7] border-blue-200"
-              : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
-              }`}
-          >
-            {selectedCategory} ▼
-          </button>
-          {dropdownOpen && (
-            <div className="absolute left-0 mt-1 w-40 bg-white border border-gray-200 rounded shadow-md z-10">
-              {categoriesLoading ? (
-                <div className="px-3 py-4 text-sm text-gray-500 text-center">
-                  <div className="animate-spin inline-block w-4 h-4 border-2 border-[#2557a7] border-t-transparent rounded-full"></div>
-                  <p className="mt-2">Loading...</p>
-                </div>
-              ) : (
-                categories.map((cat) => (
-                  <div
-                    key={cat}
-                    onClick={() => {
-                      logger.info("Category selected:", cat);
-                      setSelectedCategory(cat);
-                      setDropdownOpen(false);
-                      setActivePanel("templates");
-                    }}
-                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-100 ${selectedCategory === cat ? "bg-blue-50 text-[#2557a7]" : "text-gray-700"
-                      }`}
-                  >
-                    {cat}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
+        <button
+          onClick={() => setActivePanel("templates")}
+          className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${activePanel === "templates"
+            ? "bg-blue-50 text-[#2557a7] border-blue-200"
+            : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
+            }`}
+        >
+          Templates
+        </button>
 
         <button
-          onClick={() => {
-            setActivePanel("style");
-            setDropdownOpen(false);
-          }}
+          onClick={() => setActivePanel("style")}
           className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${activePanel === "style"
             ? "bg-blue-50 text-[#2557a7] border-blue-200"
             : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
@@ -626,16 +565,16 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                   const detected = detectCareerLevelUtil(_n);
                   const careerLevel = detected
                     ? detected.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-                    : ((_n.includes('early') && _n.includes('career'))    ? 'Early Career'    :
-                       _n.includes('mid')                                 ? 'Mid-Level'       : 'Custom');
+                    : ((_n.includes('early') && _n.includes('career')) ? 'Early Career' :
+                      _n.includes('mid') ? 'Mid-Level' : 'Custom');
                   const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
-                  const cardImgSrc = !careerImgErrors[careerTpl.id] && careerTpl.preview_url
+                  const cardImgSrc = careerTpl.preview_url
                     ? resolveTemplateImageUrl(careerTpl.preview_url)
                     : familyImage;
                   return (
                     <div
                       key={`career-${careerTpl.id}-${index}`}
-                      onClick={() => {
+                      onClick={async () => {
                         setAppliedTemplateId(careerTpl.id);
                         setSelectedTemplate(null);
 
@@ -674,22 +613,46 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                           logger.warn('Error updating sectionOrder:', err);
                         }
 
-                        // Open preview modal for career level template
-                        const previewData: TransformedTemplate = {
-                          id: careerTpl.id,
-                          mongoId: careerTpl.id,
-                          template_id: careerTpl.id,
-                          name: careerTpl.name,
-                          subtitle: careerTpl.subtitle || 'Template',
-                          preview_url: careerTpl.preview_url,
-                          atsFriendly: careerTpl.ats_friendly ?? true,
-                          description: careerTpl.description || 'Professional resume template',
-                          category: 'career-level',
-                          domain_family: careerTpl.domain_family,
-                          domain_display_name: careerTpl.domain_display_name
-                        };
-                        setPreviewTemplate(previewData);
-                        logger.info('Career level template selected:', careerTpl.name, 'ID:', careerTpl.id);
+                        // Fetch full template details including preview HTML/CSS
+                        try {
+                          const fullTemplate = await getTemplateById(careerTpl.id);
+
+                          // Open preview modal with full template data
+                          const previewData: TransformedTemplate = {
+                            id: fullTemplate.id?.toString() || fullTemplate._id || careerTpl.id,
+                            mongoId: fullTemplate.id?.toString() || fullTemplate._id || careerTpl.id,
+                            template_id: fullTemplate.template_id || careerTpl.id,
+                            name: fullTemplate.name || careerTpl.name,
+                            subtitle: fullTemplate.subtitle || careerTpl.subtitle || 'Template',
+                            preview_url: fullTemplate.preview_url || careerTpl.preview_url,
+                            atsFriendly: fullTemplate.ats_friendly ?? careerTpl.ats_friendly ?? true,
+                            description: fullTemplate.description || careerTpl.description || 'Professional resume template',
+                            category: 'career-level',
+                            domain_family: careerTpl.domain_family,
+                            domain_display_name: careerTpl.domain_display_name,
+                            preview_html: fullTemplate.preview_html,
+                            preview_css: fullTemplate.preview_css,
+                          };
+                          setPreviewTemplate(previewData);
+                          logger.info('Career level template with full details:', fullTemplate.name, 'Has preview:', !!fullTemplate.preview_html);
+                        } catch (err) {
+                          logger.error('Failed to fetch full template details:', err);
+                          // Fallback to basic preview data if fetch fails
+                          const previewData: TransformedTemplate = {
+                            id: careerTpl.id,
+                            mongoId: careerTpl.id,
+                            template_id: careerTpl.id,
+                            name: careerTpl.name,
+                            subtitle: careerTpl.subtitle || 'Template',
+                            preview_url: careerTpl.preview_url,
+                            atsFriendly: careerTpl.ats_friendly ?? true,
+                            description: careerTpl.description || 'Professional resume template',
+                            category: 'career-level',
+                            domain_family: careerTpl.domain_family,
+                            domain_display_name: careerTpl.domain_display_name
+                          };
+                          setPreviewTemplate(previewData);
+                        }
                       }}
                       className={`relative flex flex-col items-center rounded-lg shadow-sm border transition-all duration-200 cursor-pointer ${isSelected
                         ? "border-[#2557a7]"
@@ -699,14 +662,19 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                       <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-2 py-1 rounded-full shadow-sm">
                         100% ATS Friendly
                       </span>
-                      <Image
-                        src={cardImgSrc}
-                        alt={careerLevel}
-                        width={160}
-                        height={200}
-                        className="w-full h-44 mt-6 object-contain bg-gray-100"
-                        onError={() => setCareerImgErrors(prev => ({ ...prev, [careerTpl.id]: true }))}
-                      />
+                      <div className="w-full h-44 mt-6 bg-gray-100 pointer-events-none">
+                        <TemplatePreviewRenderer
+                          previewHtml={careerTpl.preview_html}
+                          previewCss={careerTpl.preview_css}
+                          fallbackImage={cardImgSrc}
+                          title={careerLevel}
+                          width="100%"
+                          height="100%"
+                          scale={0.35}
+                          hideScroll={true}
+                          fillContainer={true}
+                        />
+                      </div>
                       <div className="w-full px-2 py-2 flex flex-col items-center">
                         <p className="text-xs font-semibold text-gray-700 text-center">
                           {(() => {
@@ -742,48 +710,18 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             </div>
           )}
 
-          {(!careerLevelData || careerLevelData.length === 0) && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-6">
-              {loading ? (
-                <div className="col-span-2 flex items-center justify-center py-12">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-sm text-gray-600">Loading templates...</p>
-                  </div>
-                </div>
-              ) : filteredTemplates.length > 0 ? (
-                filteredTemplates.map((tpl) => (
-                  <div
-                    key={tpl.template_id}
-                    onClick={() => handleTemplateClick(tpl)}
-                    className={`relative flex flex-col items-center rounded-lg shadow-sm border ${String(selectedTemplate) === tpl.template_id ? "border-[#2557a7]" : "border-gray-200"
-                      } bg-white overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200`}
-                  >
-                    {tpl.atsFriendly && (
-                      <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-1 rounded-full shadow-sm border border-[#2557a7]">
-                        100% ATS Friendly
-                      </span>
-                    )}
-                    <Image
-                      src={tpl.preview_url}
-                      alt={`template-${tpl.template_id}`}
-                      width={160}
-                      height={200}
-                      className="w-full h-44 mt-6 object-contain bg-gray-100"
-                    />
-                    <div className="w-full px-2 py-2 flex flex-col items-center">
-                      <p className="text-xs font-semibold text-gray-700">{tpl.subtitle}</p>
-                      {String(selectedTemplate) === tpl.template_id && (
-                        <span className="mt-1 text-[10px] text-[#2557a7] font-semibold">✓ Selected</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="col-span-2 text-sm text-gray-500 text-center py-8">
-                  No templates found for &quot;{selectedCategory}&quot;
-                </div>
-              )}
+          {!careerLevelData && (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-sm text-gray-600">Loading career level templates...</p>
+              </div>
+            </div>
+          )}
+
+          {careerLevelData && careerLevelData.length === 0 && (
+            <div className="text-sm text-gray-500 text-center py-8">
+              No career level templates available
             </div>
           )}
 
@@ -823,18 +761,18 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             </div>
 
             <div className="flex flex-1 overflow-hidden">
-              <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
-                <div className="bg-white rounded-lg shadow-lg mx-auto" style={{ maxWidth: '600px' }}>
-                  <Image
-                    src={previewImgSrc || FALLBACK_TEMPLATE_IMAGE}
-                    alt={previewTemplate.name}
-                    width={600}
-                    height={800}
-                    className="w-full h-auto object-contain"
-                    onError={() => {
-                      const fallback = DOMAIN_FAMILY_IMAGES[previewTemplate.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
-                      setPreviewImgSrc(fallback);
-                    }}
+              <div className="flex-1 bg-gray-100 overflow-hidden">
+                <div className="bg-white w-full h-full">
+                  <TemplatePreviewRenderer
+                    previewHtml={previewTemplate.preview_html}
+                    previewCss={previewTemplate.preview_css}
+                    fallbackImage={previewImgSrc || FALLBACK_TEMPLATE_IMAGE}
+                    title={previewTemplate.name}
+                    width="100%"
+                    height="100%"
+                    scale={0.9}
+                    hideScroll={false}
+                    fillContainer={false}
                   />
                 </div>
               </div>

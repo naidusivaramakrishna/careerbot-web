@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useResume } from "../../_context/ResumeContext";
 import { STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from "@/app/browse-templates/_components/CatalogueThumbnail";
+import { useCatalogues } from "@/hooks/useCatalogues";
 
 const NATURAL_W = 300;
 const NATURAL_H = 400;
@@ -30,16 +31,19 @@ const ATS_BADGE: Record<string, { label: string; classes: string }> = {
 
 function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; customColor?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.43);
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const w = containerRef.current.offsetWidth;
-    setScale(w / NATURAL_W);
+    const h = containerRef.current.offsetHeight;
+    const scaleW = w / NATURAL_W;
+    const scaleH = h / NATURAL_H;
+    setScale(Math.min(scaleW, scaleH));
   }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full overflow-hidden" style={{ aspectRatio: `${NATURAL_W}/${NATURAL_H}` }}>
+    <div ref={containerRef} className="relative w-full h-full overflow-hidden" style={{ aspectRatio: `${NATURAL_W}/${NATURAL_H}` }}>
       <div
         style={{
           position: "absolute",
@@ -58,7 +62,8 @@ function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; 
 }
 
 export default function CatalogueTab() {
-  const { setResumeStyle, sectionOrder, setSectionOrder, setPreviewCatalogueKey } = useResume();
+  const { setResumeStyle, sectionOrder, setSectionOrder, setPreviewCatalogueKey, resumeId } = useResume();
+  const { catalogues, getCataloguesMap } = useCatalogues();
 
   const [selectedKey, setSelectedKey] = useState<string>(
     () => (typeof window !== "undefined" ? localStorage.getItem("selected_catalogue") || "galaxy" : "galaxy")
@@ -111,7 +116,7 @@ export default function CatalogueTab() {
   };
 
   const _applyStyleForKey = (key: string, color?: string, persist = false) => {
-    const cat = STYLE_CATALOGUES[key];
+    const cat = cataloguesMap[key];
     if (!cat) return;
     if (persist) {
       setSelectedKey(key);
@@ -141,7 +146,19 @@ export default function CatalogueTab() {
     }
   };
 
-  const applyCatalogue = (key: string, color?: string) => _applyStyleForKey(key, color, true);
+  const cataloguesMap = catalogues.length > 0 ? getCataloguesMap() : STYLE_CATALOGUES;
+
+  const applyCatalogue = (key: string, color?: string) => {
+    _applyStyleForKey(key, color, true);
+    // Persist catalogue selection to resume via API
+    if (resumeId) {
+      fetch(`/api/v1/templates/catalogues/${resumeId}/apply?catalogue_key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(err => console.warn('[CatalogueTab] Failed to persist catalogue:', err));
+    }
+  };
+
   const previewCatalogue = (key: string) => _applyStyleForKey(key, undefined, false);
 
   const handleColorPick = (key: string, color: string) => {
@@ -241,13 +258,14 @@ export default function CatalogueTab() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {Object.entries(STYLE_CATALOGUES).map(([key, catalogue]) => {
+        {Object.entries(cataloguesMap).map(([key, catalogue]) => {
           const isSelected = selectedKey === key;
           const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
           const paletteInfo = CATALOGUE_PALETTES[key];
           const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor;
-          const primarySwatch = catalogue.swatches[0];
-          const atsBadge = ATS_BADGE[catalogue.atsLevel];
+          const primarySwatch = catalogue.accent_swatches?.[0] || catalogue.swatches?.[0] || '#000000';
+          const atsLevel = catalogue.ats_level || catalogue.atsLevel;
+          const atsBadge = ATS_BADGE[atsLevel];
 
           return (
             <div key={key} className="group flex flex-col">

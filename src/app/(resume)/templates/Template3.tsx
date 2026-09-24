@@ -3,6 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
+import { filterSkillsByDomain } from "./skillsFilterByDomain";
 
 interface Props {
   data: ResumeData;
@@ -36,8 +37,13 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     publications,
     patents,
     declaration,
+    serviceRecord,
     customSections,
+    categorizedSkills,
   } = data;
+
+  // Filter skills by domain
+  const filteredCategorizedSkills = filterSkillsByDomain(categorizedSkills, domainFamily);
 
   // Debug: Log personalInfo to check if government fields are populated
   React.useEffect(() => {
@@ -50,6 +56,9 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       if (careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President") return "EXECUTIVE SUMMARY";
       return "PROFESSIONAL SUMMARY";
     }
+    if (section === "Service Record") {
+      return "SERVICE RECORD";
+    }
     if (section === "Skills") {
       const isCorporateDomain = CORPORATE_DOMAINS.includes(domainFamily || '');
       const isSeniorLevel = careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President";
@@ -60,7 +69,6 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     }
     if (section === "Work Experience") {
       if (domainFamily === "education") return "TEACHING EXPERIENCE";
-      if (domainFamily === "government_standard") return "SERVICE HISTORY";
       return "PROFESSIONAL EXPERIENCE";
     }
     if (section === "Publications") {
@@ -211,25 +219,58 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           </div>
         ) : null;
 
+      case "Service Record":
+        return serviceRecord && serviceRecord.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading(getSectionTitle("Service Record"))}
+            <div style={sectionBorderStyle("12px")} />
+            {serviceRecord.map((record, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...titleStyle, fontSize: "12px", marginBottom: "4px" }}>
+                  {record.currentDesignation || "Service Record"}
+                </div>
+                {record.currentPosting && (
+                  <div style={{ ...baseTextStyle, fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                    Current Posting: {record.currentPosting}
+                  </div>
+                )}
+                <div style={{ ...baseTextStyle, fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                  Service: {record.service || "—"} | Batch: {record.batch || "—"} | Service Number: {record.serviceNumber || "—"}
+                </div>
+                {record.careerProgression && (
+                  <div style={{ ...baseTextStyle, fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                    Career Progression: {record.careerProgression}
+                  </div>
+                )}
+                {record.totalServiceDuration && (
+                  <div style={{ ...baseTextStyle, fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                    Total Service Duration: {record.totalServiceDuration}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null;
+
       case "Skills":
-        return (data.categorizedSkills && Object.keys(data.categorizedSkills).some(key => {
-          const skillArray = data.categorizedSkills![key as keyof typeof data.categorizedSkills];
+        return (filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).some(key => {
+          const skillArray = filteredCategorizedSkills![key as keyof typeof filteredCategorizedSkills];
           return Array.isArray(skillArray) && skillArray.length > 0;
         })) || (skills && skills.length > 0) ? (
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && data.categorizedSkills ? (() => {
+              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && filteredCategorizedSkills ? (() => {
                 const allSkills: string[] = [];
-                Object.entries(data.categorizedSkills!)
+                Object.entries(filteredCategorizedSkills!)
                   .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))
                   .forEach(([, arr]) => { if (Array.isArray(arr)) allSkills.push(...(arr as string[]).filter(s => typeof s === 'string')); });
-                (data.categorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
+                (filteredCategorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
                 return allSkills.length > 0 ? <div style={{ ...baseTextStyle, fontSize: '11px', lineHeight: '1.7' }}>{allSkills.join(' | ')}</div> : null;
-              })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
+              })() : filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).length > 0 ? (
                 <>
-                  {Object.entries(data.categorizedSkills)
+                  {Object.entries(filteredCategorizedSkills)
                     .filter(([category]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(category))
                     .map(([category, categorySkills]) => {
                       const skillArr = Array.isArray(categorySkills)
@@ -247,13 +288,13 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                         </div>
                       );
                     })}
-                  {data.categorizedSkills.custom_categories && data.categorizedSkills.custom_categories.length > 0 && (
+                  {filteredCategorizedSkills.custom_categories && filteredCategorizedSkills.custom_categories.length > 0 && (
                     <>
-                      {data.categorizedSkills.custom_categories.map((customCat, idx) => {
+                      {filteredCategorizedSkills.custom_categories.map((customCat, idx) => {
                         if (!customCat.name || !customCat.skills || customCat.skills.length === 0) return null;
                         return (
                           <div key={`custom-${idx}`} style={{ marginBottom: "6px" }}>
-                            <span style={{ fontWeight: "600", fontSize: "10px" }}>{customCat.name}:</span>
+                            <span style={{ ...titleStyle, fontSize: "10px" }}>{customCat.name}:</span>
                             <span style={{ marginLeft: "4px", fontSize: "10px" }}>{customCat.skills.join(", ")}</span>
                           </div>
                         );
