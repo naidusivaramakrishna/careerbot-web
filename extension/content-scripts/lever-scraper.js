@@ -64,12 +64,14 @@
     const titleEl   = document.querySelector('h2[data-qa="posting-name"], h1[class*="title"], h2[class*="title"]');
     // Company is usually in the URL: jobs.lever.co/{company}/{id}
     const companyFromUrl = window.location.pathname.split('/')[1] || '';
-    const companyEl = document.querySelector('.main-header-logo img');
+    const companyEl  = document.querySelector('.main-header-logo img');
+    const locationEl = document.querySelector('[data-qa="posting-categories"] .location, .posting-categories .location, [class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim() || document.title,
-      company: companyEl?.alt || companyFromUrl.replace(/-/g, ' '),
-      url:     window.location.href,
-      source:  'lever',
+      title:    titleEl?.innerText?.trim() || document.title,
+      company:  companyEl?.alt || companyFromUrl.replaceAll('-', ' '),
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'lever',
     };
   }
 
@@ -80,7 +82,11 @@
     const jd = extractJobDescription();
     if (!jd) return;
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();

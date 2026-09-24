@@ -37,6 +37,16 @@
            document.querySelector('[class*="jobDescription"]') !== null;
   }
 
+  // Searches within a few ancestor levels of anchorEl (e.g. the job title)
+  // instead of the whole document, so a generic class-substring selector
+  // doesn't match an unrelated element elsewhere on the page (a search bar's
+  // location filter, a different job card in a results list, ...).
+  function nearbyElement(anchorEl, selector) {
+    let scope = anchorEl;
+    for (let i = 0; i < 4 && scope?.parentElement; i++) scope = scope.parentElement;
+    return (scope || document).querySelector(selector);
+  }
+
   function extractJobDescription() {
     const selectors = [
       '.descWrapper',
@@ -54,13 +64,15 @@
   }
 
   function extractMeta() {
-    const titleEl   = document.querySelector('h1.designationTitle, h1[class*="designation"], h1[class*="title"]');
-    const companyEl = document.querySelector('.companyName a, [class*="companyName"] a, [class*="company-name"] a');
+    const titleEl    = document.querySelector('h1.designationTitle, h1[class*="designation"], h1[class*="title"]');
+    const companyEl  = document.querySelector('.companyName a, [class*="companyName"] a, [class*="company-name"] a');
+    const locationEl = nearbyElement(titleEl, '[class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'foundit',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'foundit',
     };
   }
 
@@ -71,7 +83,11 @@
     const jd = extractJobDescription();
     if (!jd) return;
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();
