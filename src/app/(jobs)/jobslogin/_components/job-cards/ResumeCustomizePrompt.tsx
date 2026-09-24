@@ -67,26 +67,20 @@ export default function ResumeCustomizePrompt({
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       onClick={fixingResume ? undefined : onClose}
+      // Keyboard dismissal is Escape, which bubbles here from any control in
+      // the dialog. Enter/Space are deliberately NOT handled on the backdrop
+      // or the panel: cancelling them (preventDefault) on an ancestor blocks
+      // the browser from activating the focused button, link or checkbox.
       onKeyDown={(e) => {
-        if (fixingResume) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClose();
-        }
+        if (e.key === "Escape" && !fixingResume) onClose();
       }}
-      role="button"
-      tabIndex={0}
-      aria-label="Close"
+      role="presentation"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }}
-        role="presentation"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Customize your resume"
         className="relative w-full max-w-lg rounded-bl-3xl rounded-br-3xl rounded-tr-3xl bg-white p-8 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">

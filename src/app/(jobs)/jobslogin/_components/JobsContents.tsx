@@ -1604,25 +1604,21 @@ export default function JobsContents() {
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={clearPendingApply}
+          // Keyboard dismissal is Escape, which bubbles here from any button
+          // in the dialog. Enter/Space are deliberately NOT handled on the
+          // backdrop or the panel: cancelling them (preventDefault) on an
+          // ancestor blocks the browser from activating the focused
+          // "Yes, I applied!" / "No, I didn't apply" / Close button.
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              clearPendingApply();
-            }
+            if (e.key === "Escape") clearPendingApply();
           }}
-          role="button"
-          tabIndex={0}
-          aria-label="Close"
+          role="presentation"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-              }
-            }}
-            role="presentation"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Did you apply?"
             className="relative w-full max-w-md rounded-bl-3xl rounded-br-3xl rounded-tr-3xl bg-white p-8 text-center shadow-2xl"
           >
             <button
