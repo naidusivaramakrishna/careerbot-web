@@ -12,13 +12,14 @@ import {
   Award,
 } from "lucide-react";
 import { getSharedReport, ReportResponse } from "@/api/mockInterviewApi";
+import { getReportDimensions, normalizeOverallScore } from "../../_lib/reportScores";
 
 // ─── Score ring ───────────────────────────────────────────────────────────────
 
 function ScoreRing({ score }: { score: number }) {
   const r = 38;
   const circ = 2 * Math.PI * r;
-  const pct = Math.min(score / 10, 1);
+  const pct = Math.min(Math.max(score / 100, 0), 1);
   return (
     <div className="relative w-24 h-24 mx-auto">
       <svg viewBox="0 0 96 96" className="w-24 h-24 -rotate-90">
@@ -32,8 +33,8 @@ function ScoreRing({ score }: { score: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold text-gray-900">{score.toFixed(1)}</span>
-        <span className="text-[10px] text-gray-400 font-semibold">/ 10</span>
+        <span className="text-2xl font-bold text-gray-900">{Math.round(score)}</span>
+        <span className="text-[10px] text-gray-400 font-semibold">/ 100</span>
       </div>
     </div>
   );
@@ -83,6 +84,7 @@ export default function SharedReportPage() {
     );
   }
 
+  const dimensions = getReportDimensions(report);
   const typeLabel = report.type?.replace("live_", "").replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "Interview";
 
   return (
@@ -104,7 +106,7 @@ export default function SharedReportPage() {
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         {/* Overall score */}
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-center">
-          <ScoreRing score={report.overall_score} />
+          <ScoreRing score={normalizeOverallScore(report)} />
           <div className="mt-3">
             {report.grade && (
               <span className="inline-block px-3 py-1 bg-[#2557a7]/10 text-[#2557a7] text-sm font-bold rounded-full mb-2">
@@ -117,30 +119,28 @@ export default function SharedReportPage() {
           </div>
         </div>
 
-        {/* Score breakdown */}
-        {report.scores && Object.keys(report.scores).filter((k) => k !== "overall").length > 0 && (
+        {/* Score breakdown (each score on the scale of its own field, shown out of 100) */}
+        {dimensions.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <BarChart2 size={14} className="text-[#2557a7]" />
               <p className="text-sm font-semibold text-gray-900">Score Breakdown</p>
             </div>
             <div className="space-y-3">
-              {Object.entries(report.scores)
-                .filter(([k]) => k !== "overall")
-                .map(([key, val]) => val != null && (
-                  <div key={key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-600 capitalize">{key.replace("_", " ")}</span>
-                      <span className="text-xs font-bold text-gray-900">{(val as number).toFixed(1)}/10</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#2557a7] rounded-full transition-all duration-700"
-                        style={{ width: `${((val as number) / 10) * 100}%` }}
-                      />
-                    </div>
+              {dimensions.map((d) => (
+                <div key={d.key}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-600">{d.label}</span>
+                    <span className="text-xs font-bold text-gray-900">{d.score}/100</span>
                   </div>
-                ))}
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#2557a7] rounded-full transition-all duration-700"
+                      style={{ width: `${d.score}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -201,13 +201,17 @@ export default function SharedReportPage() {
                       : ans.score >= 5 ? "bg-gray-100 text-gray-600"
                       : "bg-gray-100 text-gray-400"
                     }`}>
-                      {ans.score}/10
+                      {Math.round(ans.score * 10) / 10}/10
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">{ans.feedback}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    Key points: {ans.key_points_hit}/{ans.key_points_total}
-                  </p>
+                  {(ans.feedback ?? ans.note) && (
+                    <p className="text-xs text-gray-500 leading-relaxed">{ans.feedback ?? ans.note}</p>
+                  )}
+                  {typeof ans.key_points_hit === "number" && typeof ans.key_points_total === "number" && (
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Key points: {ans.key_points_hit}/{ans.key_points_total}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

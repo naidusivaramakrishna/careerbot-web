@@ -68,7 +68,9 @@ function report(overrides: Record<string, unknown> = {}) {
     user_id: "user-123",
     type: "live_hr",
     overall_score: 84,
-    scores: { overall: 8.4 },
+    // Live realtime reports carry *_score keys and score_source; overall_score is 0-100.
+    scores: { hr_score: 84 },
+    score_source: "openai_realtime_text/turn_timeout",
     answers: Array.from({ length: 6 }, (_, i) => ({ question_text: `Q${i + 1}`, score: 8 })),
     duration_seconds: 1260,
     pressure_tag: null,
@@ -262,6 +264,17 @@ describe("MockInterview HistoryPage", () => {
     expect(within(statCard("Best Score")).getByText("100")).toBeInTheDocument();
     expect(screen.getByText(/across 12 completed sessions/i)).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows a low 0-100 score as sent (8/100), not multiplied into 80", async () => {
+    mocks.getReport.mockResolvedValue(report({ overall_score: 8 }));
+
+    const HistoryPage = await importHistoryPage();
+    render(<HistoryPage />);
+
+    await waitFor(() => expect(within(sessionRow()).getByText("8/100")).toBeInTheDocument());
+    expect(within(sessionRow()).queryByText("80/100")).not.toBeInTheDocument();
+    expect(within(statCard("Best Score")).getByText("8")).toBeInTheDocument();
   });
 
   it("reads scores remembered from an earlier visit without requesting them again", async () => {

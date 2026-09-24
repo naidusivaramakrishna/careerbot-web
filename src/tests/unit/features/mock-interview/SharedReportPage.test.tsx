@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
 
@@ -67,7 +67,11 @@ describe("SharedReportPage", () => {
     await waitFor(() => expect(screen.getByText("Hr Mock Interview Report")).toBeInTheDocument());
 
     expect(mocks.getSharedReport).toHaveBeenCalledWith("share-token-123");
-    expect(screen.getByText("8.6")).toBeInTheDocument();
+    // Older 0-10 report: 8.6 is 86 out of 100, matching the /report page.
+    expect(screen.getByText("86")).toBeInTheDocument();
+    expect(screen.getByText("/ 100")).toBeInTheDocument();
+    expect(screen.getByText("Communication")).toBeInTheDocument();
+    expect(screen.getByText("82/100")).toBeInTheDocument();
     expect(screen.getByText("Grade: A")).toBeInTheDocument();
     expect(screen.getByText("Strong live interview performance.")).toBeInTheDocument();
     expect(screen.getByText("Structured responses")).toBeInTheDocument();
@@ -104,9 +108,92 @@ describe("SharedReportPage", () => {
     const SharedReportPage = await importSharedReportPage();
     render(<SharedReportPage />);
 
-    await waitFor(() => expect(screen.getByText("6.2")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("62")).toBeInTheDocument());
     expect(screen.queryByText("Score Breakdown")).not.toBeInTheDocument();
     expect(screen.queryByText("Question Breakdown")).not.toBeInTheDocument();
     expect(screen.queryByText(/Grade:/)).not.toBeInTheDocument();
+  });
+
+  describe("live realtime report shape", () => {
+    const liveReport = (overrides = {}) => ({
+      report_id: "r1",
+      session_id: "s1",
+      user_id: "private-user",
+      type: "live_hr",
+      overall_score: 21.6,
+      scores: { hr_score: 21.6, communication_score: 30.0, confidence_score: 22.0 },
+      answers: [
+        { question_id: "q1", question_text: "Tell me about yourself.", score: 1.73, note: "Lacked detail and connection to the role." },
+      ],
+      pressure_tag: null,
+      score_source: "openai_realtime_text/turn_timeout",
+      grade: "D",
+      performance_summary: "Significant areas for improvement.",
+      created_at: "2026-09-24T08:25:45.713000",
+      ...overrides,
+    });
+
+    it("shows the overall score and category scores out of 100, not '21.6/10' with an overflowing bar", async () => {
+      mocks.getSharedReport.mockResolvedValue(liveReport());
+      const SharedReportPage = await importSharedReportPage();
+      render(<SharedReportPage />);
+
+      await waitFor(() => expect(screen.getByText("Hr Mock Interview Report")).toBeInTheDocument());
+      expect(screen.getByText("22")).toBeInTheDocument();
+      expect(screen.getByText("/ 100")).toBeInTheDocument();
+      // The old, wrong displays for this payload.
+      expect(screen.queryByText("21.6")).not.toBeInTheDocument();
+      expect(screen.queryByText("21.6/10")).not.toBeInTheDocument();
+      expect(screen.queryByText("/ 10")).not.toBeInTheDocument();
+
+      const hr = screen.getByText("HR readiness").closest("div")!.parentElement!;
+      expect(within(hr).getByText("22/100")).toBeInTheDocument();
+      // The bar width is the score, never above 100%.
+      expect((hr.querySelector('div[style]') as HTMLElement).style.width).toBe("22%");
+      expect(screen.getByText("30/100")).toBeInTheDocument();
+    });
+
+    it("prefers the report-level competency scores (0-10) and scales them once", async () => {
+      mocks.getSharedReport.mockResolvedValue(liveReport({ competency_scores: { communication: 3.7, confidence_articulation: 2.3 } }));
+      const SharedReportPage = await importSharedReportPage();
+      render(<SharedReportPage />);
+
+      await waitFor(() => expect(screen.getByText("Communication")).toBeInTheDocument());
+      expect(screen.getByText("37/100")).toBeInTheDocument();
+      expect(screen.getByText("Confidence articulation")).toBeInTheDocument();
+      expect(screen.getByText("23/100")).toBeInTheDocument();
+    });
+
+    it("keeps a low 0-100 score low (8 stays 8, not 80)", async () => {
+      mocks.getSharedReport.mockResolvedValue(liveReport({ overall_score: 8, scores: { hr_score: 8 } }));
+      const SharedReportPage = await importSharedReportPage();
+      render(<SharedReportPage />);
+
+      await waitFor(() => expect(screen.getByText("Hr Mock Interview Report")).toBeInTheDocument());
+      expect(screen.getAllByText("8").length).toBeGreaterThan(0);
+      expect(screen.queryByText("80")).not.toBeInTheDocument();
+      expect(screen.getByText("8/100")).toBeInTheDocument();
+    });
+
+    it("shows the answer's note as feedback and no empty 'Key points: /' line", async () => {
+      mocks.getSharedReport.mockResolvedValue(liveReport());
+      const SharedReportPage = await importSharedReportPage();
+      render(<SharedReportPage />);
+
+      await waitFor(() => expect(screen.getByText("Lacked detail and connection to the role.")).toBeInTheDocument());
+      expect(screen.getByText("1.7/10")).toBeInTheDocument();
+      expect(screen.queryByText(/Key points/)).not.toBeInTheDocument();
+    });
+  });
+
+  it("still shows key points and feedback for older reports, and keeps unrecognised score keys", async () => {
+    mocks.getSharedReport.mockResolvedValue(report({ scores: { overall: 8.6, english: 7 } }));
+    const SharedReportPage = await importSharedReportPage();
+    render(<SharedReportPage />);
+
+    await waitFor(() => expect(screen.getByText("Clear ownership and structure.")).toBeInTheDocument());
+    expect(screen.getByText("Key points: 3/4")).toBeInTheDocument();
+    expect(screen.getByText("English")).toBeInTheDocument();
+    expect(screen.getByText("70/100")).toBeInTheDocument();
   });
 });

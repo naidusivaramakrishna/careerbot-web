@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getReport, shareReport, downloadReportPdf, ReportResponse } from "@/api/mockInterviewApi";
+import { getReportDimensions, humanize, mapCompetencyScores, normalizeOverallScore, type ReportDimension } from "../../_lib/reportScores";
 import {
   ResponsiveContainer,
   BarChart,
@@ -51,11 +52,7 @@ interface UiQuestion {
   competencies: { key: string; label: string; score: number }[];
 }
 
-interface UiDimension {
-  key: string;
-  label: string;
-  score: number; // 0-100
-}
+type UiDimension = ReportDimension;
 
 /** Notes/practice page matching the interview type ("HR", "live_technical", ...). */
 function getPracticeHref(type: string | undefined): string {
@@ -96,17 +93,6 @@ interface UiReport {
   coding_round?: CodingRoundData;
 }
 
-/** Scores arrive on a 0-10 scale (older payloads) or 0-100 (live realtime backend). */
-function toPercent(value: number | undefined): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  return Math.round(value <= 10 ? value * 10 : value);
-}
-
-function humanize(key: string): string {
-  const spaced = key.replace(/_score$/, "").replace(/_/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
 function getInterviewLabel(type: string | undefined): string {
   const t = (type ?? "").toLowerCase();
   if (t.includes("technical")) return "Technical interview";
@@ -129,21 +115,13 @@ function getEndReasonLabel(reason: string | undefined): string | null {
   return END_REASON_LABELS[reason] ?? humanize(reason);
 }
 
-function mapCompetencies(scores: Record<string, number> | undefined): UiDimension[] {
-  return Object.entries(scores ?? {})
-    .filter(([, v]) => typeof v === "number" && Number.isFinite(v))
-    .map(([key, v]) => ({ key, label: humanize(key), score: toPercent(v) }));
-}
-
 /** Map API ReportResponse → UI shape */
 function mapReport(api: ReportResponse): UiReport {
   const answers = api.answers ?? [];
   const mockAvg = answers.length
     ? answers.reduce((s, a) => s + a.score, 0) / answers.length
     : 0;
-  const overallScore = api.overall_score <= 10
-    ? Math.round(api.overall_score * 10)
-    : api.overall_score;
+  const overallScore = normalizeOverallScore(api);
 
   // Map coding_performance from API to CodingRoundData
   let codingRound: CodingRoundData | undefined;
@@ -248,18 +226,7 @@ function mapReport(api: ReportResponse): UiReport {
       : null,
     // Prefer the backend's per-competency scores; otherwise the category
     // scores (or a supplied radar) so older payloads still get a breakdown.
-    dimensions: mapCompetencies(api.competency_scores).length > 0
-      ? mapCompetencies(api.competency_scores)
-      : api.radar
-        ? api.radar.map((d) => ({ key: d.dimension, label: d.dimension, score: toPercent(d.score) }))
-        : [
-            { key: "hr", label: "HR readiness", score: api.scores?.hr ?? api.scores?.hr_score ?? api.scores?.overall },
-            { key: "communication", label: "Communication", score: api.scores?.communication ?? api.scores?.communication_score ?? api.scores?.overall },
-            { key: "confidence", label: "Confidence", score: api.scores?.confidence ?? api.scores?.confidence_score ?? api.scores?.overall },
-            { key: "technical", label: "Technical", score: api.scores?.technical ?? api.scores?.technical_score },
-          ]
-            .filter((d) => typeof d.score === "number")
-            .map((d) => ({ key: d.key, label: d.label, score: toPercent(d.score) })),
+    dimensions: getReportDimensions(api, { fillFromOverall: true }),
     pressure_affected: api.pressure_tag === "pressure_affected",
     hinglish_phrases: api.hinglish_phrases ?? [],
     action_plan: api.action_plan ?? api.recommendations ?? [],
@@ -281,7 +248,7 @@ function mapReport(api: ReportResponse): UiReport {
       filler_count: typeof a.filler_count === "number" ? a.filler_count : null,
       feedback: a.feedback ?? a.note ?? "",
       level: a.performance_level ?? null,
-      competencies: mapCompetencies(a.competency_scores),
+      competencies: mapCompetencyScores(a.competency_scores, "percent"),
     })),
     coding_round: codingRound,
   };

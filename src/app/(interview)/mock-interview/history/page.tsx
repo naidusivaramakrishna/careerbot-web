@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getLiveHistory, getReport, LiveSession, ReportResponse } from "@/api/mockInterviewApi";
 import { useMockInterview } from "../_context/MockInterviewContext";
+import { normalizeOverallScore } from "../_lib/reportScores";
 import {
   LineChart,
   Line,
@@ -122,7 +123,8 @@ function cacheReportSummary(sessionId: string, summary: ReportSummary) {
 
 function summarizeReport(r: ReportResponse): ReportSummary {
   return {
-    score: Math.round(r.overall_score),
+    // Same scale rules as the report page, so a session shows one score everywhere.
+    score: Math.round(normalizeOverallScore(r)),
     duration_min: typeof r.duration_seconds === "number"
       ? Math.round(r.duration_seconds / 60)
       : typeof r.duration_min === "number" ? r.duration_min : null,

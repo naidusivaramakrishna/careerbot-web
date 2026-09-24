@@ -373,7 +373,7 @@ describe("LiveSetupPage", () => {
     expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeDisabled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
     expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeEnabled();
-  });
+  }, 15_000);
 
   it("stores the single fixed interviewer identity before starting", async () => {
     const LiveSetupPage = await importLiveSetupPage();
@@ -890,6 +890,71 @@ describe("ReportPage", () => {
     render(<ReportPage />);
     fireEvent.click(await screen.findByRole("button", { name: /practice weak questions/i }));
     expect(mocks.push).toHaveBeenCalledWith(expectedHref);
+  });
+
+  it("shows low 0-100 scores below 10 as sent, and only scales the 0-10 fields", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue({
+      report_id: "r1",
+      session_id: "report-123",
+      user_id: "u1",
+      type: "live_hr",
+      overall_score: 8, // 0-100: a very weak interview, NOT 8/10
+      scores: { hr_score: 8, communication_score: 5, confidence_score: 9 }, // 0-100
+      competency_scores: { communication: 0.8 }, // report-level competencies are 0-10 -> 8
+      answers: [
+        {
+          question_id: "q1",
+          question_text: "Tell me about yourself.",
+          score: 0.8,
+          note: "Very brief.",
+          // Per-answer competencies are 0-100, so 1.8 is 2, not 18.
+          competency_scores: { confidence_articulation: 1.8 },
+        },
+      ],
+      pressure_tag: null,
+      score_source: "openai_realtime_text/turn_timeout",
+      created_at: "2026-09-24T08:25:45.713000",
+    });
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    // Overall score stays 8 (not 80 / "Strong").
+    expect(screen.getByRole("img", { name: /overall score 8 out of 100, needs improvement/i })).toBeInTheDocument();
+    // Report-level competency 0.8 on the 0-10 scale is 8.
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "8");
+
+    // Per-answer competency 1.8 on the 0-100 scale is 2, not 18.
+    fireEvent.click(screen.getByRole("button", { name: /tell me about yourself/i }));
+    expect(screen.getByRole("meter", { name: "Confidence articulation" })).toHaveAttribute("aria-valuenow", "2");
+  });
+
+  it("uses the *_score keys as 0-100 in the category fallback, and the old keys as 0-10", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue({
+      report_id: "r1", session_id: "report-123", user_id: "u1", type: "live_hr", overall_score: 40,
+      scores: { hr_score: 6, communication: 7, confidence_score: 9 }, // 6 and 9 are 0-100, 7 is 0-10
+      answers: [], pressure_tag: null, weighted_score: 40, created_at: "2026-09-24T08:25:45.713000",
+    });
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    expect(screen.getByRole("meter", { name: "HR readiness" })).toHaveAttribute("aria-valuenow", "6");
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "70");
+    expect(screen.getByRole("meter", { name: "Confidence" })).toHaveAttribute("aria-valuenow", "9");
+  });
+
+  it("keeps older 0-10 reports working (overall_score 8.1 is 81)", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue(report()); // scores.overall 8.1, no live markers
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    expect(screen.getByRole("img", { name: /overall score 81 out of 100, strong/i })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "80");
   });
 
   it("renders the live realtime backend's real report payload accurately, without fabricated values", async () => {

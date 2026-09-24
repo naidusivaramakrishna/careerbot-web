@@ -183,6 +183,9 @@ export interface ReportResponse {
   answers: ReportAnswer[];
   duration_seconds?: number;
   // Live realtime backend fields.
+  weighted_score?: number;
+  score_source?: string;
+  provider?: string;
   not_scored?: boolean;
   performance_level?: string;
   end_reason?: string;
