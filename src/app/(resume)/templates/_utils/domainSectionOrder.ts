@@ -104,6 +104,9 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
       'Personal Info',
       'Professional Summary',
       'Certificates and Clearances',
+      // Keep the existing Certifications section: resumes created before this
+      // domain section existed store their certificates in `certifications`.
+      'Certifications',
       'Skills',
       'Work Experience',
       'Projects',
@@ -135,6 +138,7 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
       'Professional Summary',
       'Bar Admissions and Licenses',
       'Certificates and Clearances',
+      'Certifications',
       'Skills',
       'Work Experience',
       'Projects',
@@ -178,6 +182,7 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
       'Personal Info',
       'Professional Summary',
       'Maritime Certifications',
+      'Certifications',
       'Skills',
       'Work Experience',
       'Vessels Operated',
