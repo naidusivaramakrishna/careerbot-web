@@ -355,6 +355,15 @@ export default function NancyGuideModal({
       <div
         className="fixed inset-0 bg-black/30 backdrop-blur-sm z-9998"
         onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label="Close guide"
       />
 
       {/* Modal */}
@@ -386,16 +395,16 @@ export default function NancyGuideModal({
               </p>
             </div>
 
-            {sections.map((section, idx) => (
-              <div key={idx}>
+            {sections.map((section) => (
+              <div key={section.title}>
                 <h3 className="text-lg font-bold text-gray-800 mb-3">
                   {section.title}
                 </h3>
 
                 {/* Original Guidance List */}
                 <div className="mb-4 space-y-2 text-sm text-gray-700">
-                  {section.details.map((detail, didx) => (
-                    <div key={didx} className="flex gap-2">
+                  {section.details.map((detail) => (
+                    <div key={detail} className="flex gap-2">
                       <span className="text-blue-600 flex-shrink-0">•</span>
                       <p>{detail}</p>
                     </div>
@@ -404,9 +413,9 @@ export default function NancyGuideModal({
 
                 {/* Prompt Cards */}
                 <div className="grid grid-cols-2 gap-2 mb-6">
-                  {section.prompts.map((prompt, pidx) => (
+                  {section.prompts.map((prompt) => (
                     <PromptCard
-                      key={pidx}
+                      key={prompt}
                       prompt={prompt}
                       onClick={handlePromptClick}
                     />

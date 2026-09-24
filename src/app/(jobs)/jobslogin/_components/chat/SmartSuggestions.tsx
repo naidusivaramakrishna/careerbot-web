@@ -1,7 +1,7 @@
 "use client";
 
 interface SmartSuggestionsProps {
-  onSuggestionClick: (suggestion: string) => void;
+  readonly onSuggestionClick: (suggestion: string) => void;
 }
 
 export default function SmartSuggestions({ onSuggestionClick }: SmartSuggestionsProps) {
@@ -17,9 +17,10 @@ export default function SmartSuggestions({ onSuggestionClick }: SmartSuggestions
       <p className="text-xs font-bold text-gray-800 mb-3">Would you like me to:</p>
 
       <div className="space-y-2">
-        {suggestions.map((suggestion, idx) => (
+        {suggestions.map((suggestion) => (
           <button
-            key={idx}
+            key={suggestion.text}
+            type="button"
             onClick={() => onSuggestionClick(suggestion.text)}
             className="w-full flex items-center gap-2 p-2.5 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200/50 rounded-lg hover:border-blue-400 hover:shadow-md transition-all duration-200 ease-out group"
           >

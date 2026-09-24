@@ -179,10 +179,20 @@ const FILTER_CHIPS = [
    UTILITY COMPONENTS
 ───────────────────────────────────────────────────────────────────────────── */
 
-function MatchRing({ score }: { score: number }) {
+function MatchRing({ score }: { readonly score: number }) {
   const r = 14, circ = 2 * Math.PI * r;
-  const color = score >= 75 ? "#2563eb" : score >= 50 ? "#d97706" : "#dc2626";
-  const track = score >= 75 ? "#dbeafe" : score >= 50 ? "#fef3c7" : "#fee2e2";
+  let color: string;
+  let track: string;
+  if (score >= 75) {
+    color = "#2563eb";
+    track = "#dbeafe";
+  } else if (score >= 50) {
+    color = "#d97706";
+    track = "#fef3c7";
+  } else {
+    color = "#dc2626";
+    track = "#fee2e2";
+  }
   return (
     <svg width={36} height={36} viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
       <circle cx={18} cy={18} r={r} fill="none" stroke={track} strokeWidth={4} />
@@ -197,11 +207,14 @@ function MatchRing({ score }: { score: number }) {
   );
 }
 
-function SkillTag({ skill }: { skill: Skill }) {
-  const s =
-    skill.variant === "present" ? { bg: "#EAF3DE", tx: "#27500A", bd: "#97C459" } :
-    skill.variant === "missing" ? { bg: "#FCEBEB", tx: "#791F1F", bd: "#F09595" } :
-                                  { bg: "var(--cb-bg2)", tx: "var(--cb-tx2)", bd: "var(--cb-bd)" };
+const SKILL_VARIANT_STYLES: Record<SkillVariant, { bg: string; tx: string; bd: string }> = {
+  present: { bg: "#EAF3DE", tx: "#27500A", bd: "#97C459" },
+  missing: { bg: "#FCEBEB", tx: "#791F1F", bd: "#F09595" },
+  neutral: { bg: "var(--cb-bg2)", tx: "var(--cb-tx2)", bd: "var(--cb-bd)" },
+};
+
+function SkillTag({ skill }: { readonly skill: Skill }) {
+  const s = SKILL_VARIANT_STYLES[skill.variant];
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 3,
@@ -217,7 +230,7 @@ function SkillTag({ skill }: { skill: Skill }) {
   );
 }
 
-function CompanyLogo({ initials, color }: { initials: string; color: string }) {
+function CompanyLogo({ initials, color }: { readonly initials: string; readonly color: string }) {
   return (
     <div style={{
       width: 40, height: 40, borderRadius: 10, flexShrink: 0,
@@ -264,7 +277,7 @@ function Sidebar() {
       {NAV_ITEMS.map(({ id, Icon, label }) => {
         const on = active === id;
         return (
-          <button key={id} title={label} onClick={() => setActive(id)}
+          <button key={id} type="button" title={label} onClick={() => setActive(id)}
             style={{
               width: 36, height: 36, borderRadius: 8, border: "none",
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -301,7 +314,7 @@ function TopBar() {
           backgroundColor: "#f0fdf4", color: "#166534",
           fontSize: 11, fontWeight: 500,
         }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "#16a34a" }} />
+          <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "#16a34a" }} />{' '}
           Live
         </span>
         <span style={{ fontSize: 12, color: "var(--cb-tx3)" }}>4,128 opportunities</span>
@@ -325,7 +338,7 @@ function TopBar() {
 
         {/* Bell */}
         <div style={{ position: "relative" }}>
-          <button style={{
+          <button type="button" style={{
             width: 30, height: 30, borderRadius: 8, border: "none",
             backgroundColor: "transparent", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -370,7 +383,7 @@ function FilterBar() {
       gap: 6, overflowX: "auto",
     }}>
       {chips.map((c, i) => (
-        <button key={c.label} onClick={() => toggle(i)}
+        <button key={c.label} type="button" onClick={() => toggle(i)}
           style={{
             display: "inline-flex", alignItems: "center", gap: 4,
             padding: "4px 10px", borderRadius: 6,
@@ -391,7 +404,7 @@ function FilterBar() {
 /* ─────────────────────────────────────────────────────────────────────────────
    TAB BAR — All Jobs / New / Saved / Smart Match
 ───────────────────────────────────────────────────────────────────────────── */
-function TabBar({ active, onChange }: { active: string; onChange: (t: string) => void }) {
+function TabBar({ active, onChange }: { readonly active: string; readonly onChange: (t: string) => void }) {
   return (
     <div style={{
       flexShrink: 0,
@@ -402,7 +415,7 @@ function TabBar({ active, onChange }: { active: string; onChange: (t: string) =>
       {TABS.map(tab => {
         const on = active === tab.id;
         return (
-          <button key={tab.id} onClick={() => onChange(tab.id)}
+          <button key={tab.id} type="button" onClick={() => onChange(tab.id)}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "10px 12px", fontSize: 13, fontWeight: 500,
@@ -430,12 +443,20 @@ function TabBar({ active, onChange }: { active: string; onChange: (t: string) =>
 /* ─────────────────────────────────────────────────────────────────────────────
    JOB CARD
 ───────────────────────────────────────────────────────────────────────────── */
-function JobCard({ job }: { job: Job }) {
+function JobCard({ job }: { readonly job: Job }) {
   const [hov, setHov] = useState(false);
-  const matchColor =
-    job.matchScore >= 75 ? "#2563eb" : job.matchScore >= 50 ? "#d97706" : "#dc2626";
-  const statusColor =
-    job.matchScore >= 75 ? "#1d4ed8" : job.matchScore >= 50 ? "#b45309" : "#b91c1c";
+  let matchColor: string;
+  let statusColor: string;
+  if (job.matchScore >= 75) {
+    matchColor = "#2563eb";
+    statusColor = "#1d4ed8";
+  } else if (job.matchScore >= 50) {
+    matchColor = "#d97706";
+    statusColor = "#b45309";
+  } else {
+    matchColor = "#dc2626";
+    statusColor = "#b91c1c";
+  }
 
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
@@ -460,7 +481,7 @@ function JobCard({ job }: { job: Job }) {
               backgroundColor: "#f0fdf4", color: "#166534",
               fontSize: 10, fontWeight: 500,
             }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "#16a34a" }} />
+              <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "#16a34a" }} />{' '}
               Early applicant
             </span>
           )}
@@ -503,11 +524,11 @@ function JobCard({ job }: { job: Job }) {
           borderTop: "0.5px solid var(--cb-bd)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button style={ghostBtn}>Match analysis</button>
-            <button style={ghostBtn}><IcSparkles size={12} /> Ask Nancy</button>
-            <button style={{ ...ghostBtn, padding: "4px 8px" }}><IcHeart size={15} /></button>
+            <button type="button" style={ghostBtn}>Match analysis</button>
+            <button type="button" style={ghostBtn}><IcSparkles size={12} /> Ask Nancy</button>
+            <button type="button" style={{ ...ghostBtn, padding: "4px 8px" }}><IcHeart size={15} /></button>
           </div>
-          <button style={{
+          <button type="button" style={{
             padding: "5px 14px", borderRadius: 6,
             backgroundColor: "#1e3a5f", color: "white",
             fontSize: 12, fontWeight: 500, border: "none",
@@ -568,14 +589,14 @@ function RightPanel() {
             backgroundColor: "#f0fdf4", color: "#166534",
             fontSize: 10, fontWeight: 500,
           }}>
-            <span style={{ width: 4, height: 4, borderRadius: "50%", backgroundColor: "#16a34a" }} />
+            <span style={{ width: 4, height: 4, borderRadius: "50%", backgroundColor: "#16a34a" }} />{' '}
             Live
           </span>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {TOP_PICKS.map((pick, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <div key={`${pick.title}-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
               <div style={{
                 width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
                 backgroundColor: i === 0 ? "#fef9c3" : "var(--cb-bg2)",
@@ -601,7 +622,7 @@ function RightPanel() {
           ))}
         </div>
 
-        <button style={{
+        <button type="button" style={{
           marginTop: 10, fontSize: 12, color: "#2563eb",
           background: "none", border: "none", cursor: "pointer",
           padding: 0, fontFamily: "inherit",
@@ -707,7 +728,7 @@ function RightPanel() {
           I can help you prep for interviews, analyse job fit, and answer career questions.
         </p>
 
-        <button style={{
+        <button type="button" style={{
           width: "100%", padding: "6px 0", borderRadius: 6,
           backgroundColor: "rgba(255,255,255,0.12)",
           border: "0.5px solid rgba(255,255,255,0.2)",

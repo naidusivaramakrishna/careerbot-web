@@ -4,12 +4,12 @@ import { Search, MapPin, Briefcase, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 interface JobsHeaderSectionProps {
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  onCityChange?: (city: string) => void;
-  onExperienceChange?: (exp: string) => void;
-  cityValue?: string;
-  experienceValue?: string;
+  readonly searchQuery: string;
+  readonly onSearchChange: (query: string) => void;
+  readonly onCityChange?: (city: string) => void;
+  readonly onExperienceChange?: (exp: string) => void;
+  readonly cityValue?: string;
+  readonly experienceValue?: string;
 }
 
 const EXPERIENCE_OPTIONS = [
@@ -77,23 +77,30 @@ export default function JobsHeaderSection({
 
           {expOpen && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
-              {EXPERIENCE_OPTIONS.map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => {
-                    onExperienceChange?.(opt === "Any experience" ? "" : opt);
-                    setExpOpen(false);
-                  }}
-                  className={`w-full text-left px-4 py-2.5 text-[12.5px] hover:bg-[#f0f4ff] transition-colors ${
-                    (opt === "Any experience" ? "" : opt) === experienceValue
-                      ? "text-[#2557a7] font-semibold bg-[#f0f4ff]"
-                      : "text-gray-700"
-                  }`}
-                >
-                  {opt}
-                </button>
-              ))}
+              {EXPERIENCE_OPTIONS.map((opt) => {
+                // Extracted from a nested ternary (typescript:S3358) — "Any
+                // experience" maps to the empty-string sentinel value (same
+                // computation the onClick below used inline before), every
+                // other option keeps its own label.
+                const optValue = opt === "Any experience" ? "" : opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      onExperienceChange?.(optValue);
+                      setExpOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-[12.5px] hover:bg-[#f0f4ff] transition-colors ${
+                      optValue === experienceValue
+                        ? "text-[#2557a7] font-semibold bg-[#f0f4ff]"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

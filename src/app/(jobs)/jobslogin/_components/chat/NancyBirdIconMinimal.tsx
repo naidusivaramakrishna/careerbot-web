@@ -1,7 +1,7 @@
 "use client";
 
 interface NancyBirdIconMinimalProps {
-  size?: number;
+  readonly size?: number;
 }
 
 export default function NancyBirdIconMinimal({

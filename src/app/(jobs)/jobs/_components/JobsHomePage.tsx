@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
   BarChart2,
@@ -181,7 +181,7 @@ export default function JobsHomePage() {
   // lets suggestions match the in-progress term while earlier picks stay put.
   const currentTerm = useMemo(() => {
     const parts = searchValue.split(",");
-    return parts[parts.length - 1].trim();
+    return parts.at(-1)!.trim();
   }, [searchValue]);
 
   const suggestions = useMemo(() => {
@@ -312,7 +312,7 @@ export default function JobsHomePage() {
           { top: "16%", left: "92%", size: 10, duration: 4.2 },
         ].map((s, i) => (
           <motion.span
-            key={i}
+            key={`${s.top}-${s.left}`}
             className="pointer-events-none absolute -z-10 text-[#9fc3ff]"
             style={{ top: s.top, left: s.left }}
             animate={{ y: [0, -10, 0], opacity: [0.25, 0.6, 0.25] }}
@@ -508,7 +508,6 @@ export default function JobsHomePage() {
             </motion.div>
 
             {/* RIGHT — cinematic animated-style career visual */}
-            {true && (
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -542,7 +541,6 @@ export default function JobsHomePage() {
                 </div>
               </motion.div>
             </motion.div>
-            )}
 
           </div>
 
@@ -568,6 +566,7 @@ export default function JobsHomePage() {
                 <p className="mt-1 text-[13px] text-slate-500">Top picks matched to your profile and career goals</p>
               </div>
               <button
+                type="button"
                 onClick={() => goToSearch()}
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-[12.5px] font-bold text-slate-700 shadow-sm transition-colors hover:border-[#2557a7]/30 hover:text-[#2557a7]"
               >
@@ -658,6 +657,7 @@ export default function JobsHomePage() {
                 <p className="mt-1 text-[13px] text-slate-500">Explore top roles and find the perfect opportunity for you</p>
               </div>
               <button
+                type="button"
                 onClick={() => goToSearch()}
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-[12.5px] font-bold text-slate-700 shadow-sm transition-colors hover:border-[#2557a7]/30 hover:text-[#2557a7]"
               >

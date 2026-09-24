@@ -38,7 +38,7 @@ import Header from "@/components/layout/Header";
 export default function JobsLayout({
   children,
 }: {
-  children: React.ReactNode;
+  readonly children: React.ReactNode;
 }) {
   const pathname = usePathname();
 

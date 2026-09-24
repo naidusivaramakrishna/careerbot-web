@@ -3,8 +3,17 @@
 import { JobType } from "./NancyChat";
 
 interface InsightCardProps {
-  job: JobType;
+  readonly job: JobType;
 }
+
+// Difficulty badge color, keyed by getDifficulty()'s possible values. Any
+// value other than "Easy"/"Medium" (i.e. "Hard") falls back to the red
+// class below, matching the original ternary's default branch.
+const DIFFICULTY_BADGE_CLASSES: Record<string, string> = {
+  Easy: "bg-green-100 text-green-700",
+  Medium: "bg-yellow-100 text-yellow-700",
+};
+const DEFAULT_DIFFICULTY_BADGE_CLASS = "bg-red-100 text-red-700";
 
 export default function JobInsightCard({ job }: InsightCardProps) {
   // Analyze job difficulty based on experience level
@@ -58,9 +67,7 @@ export default function JobInsightCard({ job }: InsightCardProps) {
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-700">Skill Difficulty:</span>
           <span className={`text-xs font-semibold px-2 py-1 rounded ${
-            difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
-            difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-            'bg-red-100 text-red-700'
+            DIFFICULTY_BADGE_CLASSES[difficulty] ?? DEFAULT_DIFFICULTY_BADGE_CLASS
           }`}>
             {difficulty}
           </span>

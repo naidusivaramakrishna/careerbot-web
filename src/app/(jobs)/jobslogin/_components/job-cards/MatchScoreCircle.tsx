@@ -1,14 +1,13 @@
 "use client";
 
 interface MatchScoreCircleProps {
-  value: number;
-  size?: number;
-  strokeWidth?: number;
-  strokeColor?: string;
-  dark?: boolean;
-  band?: string;
-  showLabel?: boolean;
-  animate?: boolean;
+  readonly value: number;
+  readonly size?: number;
+  readonly strokeWidth?: number;
+  readonly strokeColor?: string;
+  readonly dark?: boolean;
+  readonly band?: string;
+  readonly showLabel?: boolean;
 }
 
 const BAND_COLORS: Record<string, { stroke: string; glow: string; text: string }> = {
@@ -23,6 +22,12 @@ function scoreColor(value: number) {
   if (value >= 55) return BAND_COLORS.good;
   if (value >= 35) return BAND_COLORS.partial;
   return BAND_COLORS.low;
+}
+
+function scoreFontSize(size: number): string {
+  if (size < 50) return "11";
+  if (size < 80) return "13";
+  return "16";
 }
 
 export default function MatchScoreCircle({
@@ -90,7 +95,7 @@ export default function MatchScoreCircle({
         x={cx}
         y={showLabel ? cy - 4 : cy}
         textAnchor="middle"
-        fontSize={size < 50 ? "11" : size < 80 ? "13" : "16"}
+        fontSize={scoreFontSize(size)}
         fontWeight="800"
         fill={textFill}
         dominantBaseline="middle"

@@ -15,15 +15,13 @@ const FILTER_OPTIONS: { id: FilterSort; label: string }[] = [
 
 
 interface JobsTabsProps {
-  activeTab?: TabType;
-  onTabChange?: (tab: TabType) => void;
-  savedCount?: number;
-  appliedCount?: number;
-  matchedCount?: number;
-  sortBy?: SortType;
-  onSortChange?: (sort: SortType) => void;
-  filterSort?: FilterSort;
-  onFilterSortChange?: (sort: FilterSort) => void;
+  readonly activeTab?: TabType;
+  readonly onTabChange?: (tab: TabType) => void;
+  readonly savedCount?: number;
+  readonly appliedCount?: number;
+  readonly matchedCount?: number;
+  readonly filterSort?: FilterSort;
+  readonly onFilterSortChange?: (sort: FilterSort) => void;
 }
 
 export default function JobsTabs({
@@ -67,6 +65,7 @@ export default function JobsTabs({
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => onTabChange?.(tab.id)}
               className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all duration-150 ${
                 isActive

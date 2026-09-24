@@ -124,10 +124,10 @@ const searchData = {
 };
 
 interface SearchBarProps {
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  selectedLocation?: string;
-  onLocationChange?: (location: string) => void;
+  readonly searchQuery: string;
+  readonly onSearchChange: (query: string) => void;
+  readonly selectedLocation?: string;
+  readonly onLocationChange?: (location: string) => void;
 }
 
 type SortFilter = "recommended" | "top-matched" | "most-recent";
@@ -246,9 +246,18 @@ export default function SearchBar({
               {filteredItems.map((item) => (
                 <div
                   key={item}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     onSearchChange(item);
                     setSearchOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSearchChange(item);
+                      setSearchOpen(false);
+                    }
                   }}
                   className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100"
                 >
@@ -263,7 +272,15 @@ export default function SearchBar({
         {/* LOCATION */}
         <div ref={locationRef} className="relative">
           <div
+            role="button"
+            tabIndex={0}
             onClick={() => setLocationOpen(!locationOpen)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setLocationOpen(!locationOpen);
+              }
+            }}
             className="flex items-center gap-2 text-sm text-black font-semibold cursor-pointer"
           >
             <MapPin size={16} className="text-red-600" />
@@ -277,9 +294,18 @@ export default function SearchBar({
               {locations.map((location) => (
                 <div
                   key={location}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     onLocationChange?.(location);
                     setLocationOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onLocationChange?.(location);
+                      setLocationOpen(false);
+                    }
                   }}
                   className="flex items-center justify-between px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100"
                 >

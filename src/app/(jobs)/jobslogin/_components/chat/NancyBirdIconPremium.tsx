@@ -1,8 +1,8 @@
 "use client";
 
 interface NancyBirdIconPremiumProps {
-  size?: number;
-  animated?: boolean;
+  readonly size?: number;
+  readonly animated?: boolean;
 }
 
 export default function NancyBirdIconPremium({

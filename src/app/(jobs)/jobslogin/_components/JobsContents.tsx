@@ -4,17 +4,18 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { getSmartMatchedJobs, getJobById, getJobTitleSuggestions } from "@/api/jobsApi";
-import type { MatchedJobItem } from "@/api/jobsApi";
+import type { MatchedJobItem, SmartMatchParams, SmartMatchResponse } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
 import { WORK_MODELS, JOB_TYPES, DATE_PRESETS } from "./filters/filterConstants";
 import { toast } from "sonner";
-import { getSavedJobs, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication, removeApplication } from "@/utils/jobTracking";
+import { getSavedJobs, getSavedJobsCount, getApplicationHistory, recordJobApplication, removeApplication } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
-import { Bookmark, Zap, Search, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X } from "lucide-react";
+import { Zap, RotateCcw, FileX, MessageCircle, Briefcase, X } from "lucide-react";
 
-import JobsTabs, { TabType, SortType, FilterSort } from "./JobsTabs";
+import JobsTabs, { TabType, FilterSort } from "./JobsTabs";
 import JobList from "./sidebar/JobList";
+import JobDetailsInline from "./JobDetailsInline";
 import Pagination from "./Pagination";
 import JobsRightSidebar from "./sidebar/JobsRightSidebar";
 import NancyChat from "./chat/NancyChat";
@@ -106,22 +107,34 @@ function strArr(job: Record<string, unknown>, ...keys: string[]): string[] {
   return [];
 }
 
+// Extracted from normalizeJob's nested ternary chain (typescript:S3358) —
+// same branching, same output for every input, just expressed as if/else.
+function normalizeJobTypeLabel(jobType: string): string {
+  if (!jobType) return "";
+  if (jobType.includes("intern")) return "Internship";
+  if (jobType.includes("contract") || jobType.includes("freelance")) return "Contract";
+  if (jobType.includes("part")) return "Part-time";
+  return "Full-time";
+}
+
 export function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
   const title = str(job, "title", "job_title") || "Job Title";
   const company = str(job, "company", "company_name", "organization", "about_company", "employer");
   const location = str(job, "location", "job_location", "city", "place") || "Location not specified";
 
   const jobType = str(job, "job_type", "type", "employment_type", "work_type", "contract_type").toLowerCase();
-  const typeNorm = !jobType ? ""
-    : jobType.includes("intern") ? "Internship"
-    : jobType.includes("contract") || jobType.includes("freelance") ? "Contract"
-    : jobType.includes("part") ? "Part-time"
-    : "Full-time";
+  const typeNorm = normalizeJobTypeLabel(jobType);
 
   const skills = job["skills"];
-  const skillsStr = typeof skills === "string" ? skills
-    : Array.isArray(skills) ? (skills as string[]).join(", ")
-    : "";
+  // Extracted from a nested ternary (typescript:S3358) — same result for
+  // every input as the original `typeof skills === "string" ? skills :
+  // Array.isArray(skills) ? skills.join(", ") : ""`.
+  let skillsStr = "";
+  if (typeof skills === "string") {
+    skillsStr = skills;
+  } else if (Array.isArray(skills)) {
+    skillsStr = (skills as string[]).join(", ");
+  }
 
   const recruiterId = str(job, "recruiter_id");
 
@@ -185,6 +198,124 @@ export function jobMatchesSearchQuery(job: Pick<NormalizedJob, "title" | "compan
 
 const MATCHED_PER_PAGE = 50;
 
+// A brand-new/just-updated profile can have /jobs/scored answer in a couple
+// of seconds with 0 jobs while the profile analysis it scores against is
+// still finishing server-side — treating that as a final "no matches" result
+// shows a false-negative empty state seconds after the user updates their
+// profile. Delays for the silent retry loop below (see
+// fetchSmartMatchedJobs) — sums to ~92s, matching the ~1-2 minutes a
+// first-time score computation is observed to need before results settle.
+const MATCHED_FIRST_LOAD_RETRY_DELAYS_MS = [4000, 8000, 15000, 25000, 40000];
+
+// Match Quality chips ("matchscore:70+", "skillscore:50+", ...) follow the
+// "<N>+" label convention as salary — parse the number back out. Extracted
+// to module scope (was a nested function inside matchedServerFiltersMemo)
+// purely to reduce that memo's Cognitive Complexity (typescript:S3776) —
+// same inputs/outputs as before.
+function parseScoreChipValue(selectedFilters: string[], prefix: string): number | undefined {
+  const label = selectedFilters.find((f) => f.startsWith(prefix))?.replace(prefix, "");
+  const n = label ? Number.parseFloat(label.replace(/\+$/, "")) : Number.NaN;
+  return Number.isNaN(n) ? undefined : n;
+}
+
+// Extracted from a nested ternary chain (typescript:S3358) — the "years:"
+// chip's label is one of EXP_OPTIONS' labels in JobsFilterSidebar —
+// "Fresher", "1 yr" .. "10 yrs", or "11+ yrs". Same result for every input
+// as the original `yearsLabel === "Fresher" ? 0 : yearsLabel === "11+ yrs"
+// ? 11 : yearsLabel ? Number.parseInt(yearsLabel, 10) : undefined`.
+function computeExperienceYearsFromLabel(yearsLabel: string | undefined): number | undefined {
+  if (yearsLabel === "Fresher") return 0;
+  if (yearsLabel === "11+ yrs") return 11;
+  if (yearsLabel) return Number.parseInt(yearsLabel, 10);
+  return undefined;
+}
+
+// Toggle helpers extracted from handleFilterToggle's setSelectedFilters
+// updater purely to reduce its Cognitive Complexity (typescript:S3776) —
+// each returns exactly what the corresponding branch previously computed
+// inline for the same (prev, filter) inputs.
+
+// salary:/years: chips: single-select, with a distinct "Any ..." sentinel
+// value that always clears the chip instead of being stored as a filter.
+function toggleExclusiveFilterWithSentinel(prev: string[], filter: string, prefix: string, anySentinel: string): string[] {
+  const without = prev.filter((f) => !f.startsWith(prefix));
+  if (filter === anySentinel || prev.includes(filter)) return without;
+  return [...without, filter];
+}
+
+// date:/Match-Quality chips: radio-style — only one value per prefix.
+function toggleRadioFilter(prev: string[], filter: string, prefix: string): string[] {
+  const without = prev.filter((f) => !f.startsWith(prefix));
+  return prev.includes(filter) ? without : [...without, filter];
+}
+
+// location:/education: chips (and the default case): plain multi-select toggle.
+function toggleSimpleFilter(prev: string[], filter: string): string[] {
+  return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
+}
+
+// Extracted from fetchSmartMatchedJobs's try body purely to reduce that
+// function's Cognitive Complexity (typescript:S3776) — identical requests,
+// identical zero-results fallback behavior, and identical thrown errors
+// (now TypeError, since these are response-shape type checks, per
+// typescript:S7786) as before.
+async function fetchScoredJobsWithFallback(
+  page: number,
+  matchedServerFilters: SmartMatchParams,
+  forceRefresh: boolean
+): Promise<{ data: SmartMatchResponse; fellBackToUnfiltered: boolean }> {
+  let data = await getSmartMatchedJobs({
+    limit: MATCHED_PER_PAGE,
+    skip: (page - 1) * MATCHED_PER_PAGE,
+    ...matchedServerFilters,
+    ...(forceRefresh && { force_refresh: true }),
+  });
+  // A malformed/unexpected response shape (e.g. the backend contract for
+  // this endpoint drifts) must not be silently treated the same as "0
+  // scored jobs" — that would show a misleading empty state instead of
+  // surfacing the failure.
+  if (!Array.isArray(data.jobs)) {
+    throw new TypeError("Unexpected Smart Match response shape");
+  }
+  // The filter values are UI labels lowercased onto the wire (see
+  // matchedServerFilters). If /jobs/scored expects a different vocabulary
+  // for any of them, it answers 0 rows and the tab would render empty —
+  // strictly worse than the client-side narrowing this replaced. Retry once
+  // without the filters and let matchesJobFilters narrow the result
+  // instead, so an enum mismatch degrades to the old behaviour rather than
+  // an empty tab.
+  const usedServerFilters = Object.keys(matchedServerFilters).length > 0;
+  let fellBackToUnfiltered = false;
+  if (data.jobs.length === 0 && usedServerFilters) {
+    data = await getSmartMatchedJobs({
+      limit: MATCHED_PER_PAGE,
+      skip: (page - 1) * MATCHED_PER_PAGE,
+      ...(forceRefresh && { force_refresh: true }),
+    });
+    if (!Array.isArray(data.jobs)) {
+      throw new TypeError("Unexpected Smart Match response shape");
+    }
+    fellBackToUnfiltered = true;
+  }
+  return { data, fellBackToUnfiltered };
+}
+
+// Shared "nothing here" illustration for every empty state below (Saved,
+// Applied, Smart Match, and the generic search/filter-narrowed case) — a
+// friendly face-on-a-tray drawing instead of a plain icon-on-a-tinted-square,
+// with `accent` carrying the same per-tab color the old icons used.
+function EmptyStateIllustration({ accent }: { readonly accent: string }) {
+  return (
+    <svg width="88" height="76" viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto">
+      <path d="M8 34 L24 34 L34 50 L62 50 L72 34 L88 34 L88 74 L8 74 Z" stroke="#0f172a" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" fill="white" />
+      <path d="M32 10 C32 2 40 -2 48 4 C56 -2 64 2 64 10 L64 28 C64 34 58 38 48 38 C38 38 32 34 32 28 Z" fill={accent} />
+      <line x1="40" y1="18" x2="45" y2="18" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="51" y1="18" x2="56" y2="18" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M42 27 Q48 23 54 27" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
 export default function JobsContents() {
   const searchParams = useSearchParams();
   const { userId } = useCurrentUserId();
@@ -197,7 +328,6 @@ export default function JobsContents() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("matched");
-  const [sortBy, setSortBy] = useState<SortType>("relevance");
   const [filterSort, setFilterSort] = useState<FilterSort>("most-recent");
 
   // ── Tab counters ──
@@ -304,6 +434,11 @@ export default function JobsContents() {
     setSearchQuery(val);
     setInputValue(val);
     setShowSuggestions(false);
+    // The search box stays visible even while viewing a job's inline detail
+    // panel (detailsJob) — without this, submitting a new search updated
+    // searchQuery/filteredJobs behind the scenes but left the detail panel
+    // on screen, so the results list never actually appeared for it.
+    setDetailsJob(null);
   };
 
   // ── Seed search from ?q= (e.g. arriving from the homepage search bar) ──
@@ -345,6 +480,10 @@ export default function JobsContents() {
   const [openChat, setOpenChat] = useState(false);
   const [selectedJob, setSelectedJob] = useState<NormalizedJob | null>(null);
 
+  // ── Inline job details — replaces the filter bar + job list (not a modal,
+  // not a route) when a job title is clicked; "Back" clears it. ──
+  const [detailsJob, setDetailsJob] = useState<NormalizedJob | null>(null);
+
   // ── Smart match ──
   // The subset of active filters that map onto /jobs/scored's own query
   // params — only pushed server-side when unambiguous (the backend takes a
@@ -356,8 +495,8 @@ export default function JobsContents() {
   // filtered whichever ~50-job page happened to be loaded, so paginating
   // reshuffled the very set the filter was supposed to be narrowing, and the
   // per-option counts in the dropdown swung wildly page to page even though
-  // nothing about the filter itself had changed. Education and Source have
-  // no server-side equivalent on this endpoint. Everything here still gets
+  // nothing about the filter itself had changed. Education has no
+  // server-side equivalent on this endpoint. Everything here still gets
   // re-applied client-side afterward via matchesJobFilters, same as before,
   // so this can only narrow the search further (to the whole pool) — never
   // behave worse than today.
@@ -374,25 +513,13 @@ export default function JobsContents() {
     // drawer) — parse the LPA figure straight out of it rather than
     // threading a second, separate value through onFilterChange.
     const salaryLabel = selectedFilters.find((f) => f.startsWith("salary:"))?.replace("salary:", "");
-    const salaryLpa = salaryLabel ? parseFloat(salaryLabel.match(/^(\d+(?:\.\d+)?)\s*LPA\+/i)?.[1] ?? "") : NaN;
-    // Match Quality chips ("matchscore:70+", "skillscore:50+", ...) follow
-    // the same "<N>+" label convention as salary — parse the number back out.
-    const parseScoreChip = (prefix: string): number | undefined => {
-      const label = selectedFilters.find((f) => f.startsWith(prefix))?.replace(prefix, "");
-      const n = label ? parseFloat(label.replace(/\+$/, "")) : NaN;
-      return Number.isNaN(n) ? undefined : n;
-    };
-    const minScore = parseScoreChip("matchscore:");
-    const minSkillScore = parseScoreChip("skillscore:");
-    const minExperienceScore = parseScoreChip("expscore:");
-    const minEducationScore = parseScoreChip("eduscore:");
-    // The "years:" chip's label is one of EXP_OPTIONS' labels in
-    // JobsFilterSidebar — "Fresher", "1 yr" .. "10 yrs", or "11+ yrs".
+    const salaryLpa = salaryLabel ? Number.parseFloat(/^(\d+(?:\.\d+)?)\s*LPA\+/i.exec(salaryLabel)?.[1] ?? "") : Number.NaN;
+    const minScore = parseScoreChipValue(selectedFilters, "matchscore:");
+    const minSkillScore = parseScoreChipValue(selectedFilters, "skillscore:");
+    const minExperienceScore = parseScoreChipValue(selectedFilters, "expscore:");
+    const minEducationScore = parseScoreChipValue(selectedFilters, "eduscore:");
     const yearsLabel = selectedFilters.find((f) => f.startsWith("years:"))?.replace("years:", "");
-    const experienceYears = yearsLabel === "Fresher" ? 0
-      : yearsLabel === "11+ yrs" ? 11
-      : yearsLabel ? parseInt(yearsLabel, 10)
-      : undefined;
+    const experienceYears = computeExperienceYearsFromLabel(yearsLabel);
 
     const params: {
       mode?: string; job_type?: string; location?: string; posted_within_days?: number; query?: string;
@@ -425,7 +552,13 @@ export default function JobsContents() {
   const [matchedJobs, setMatchedJobs] = useState<NormalizedJob[]>([]);
   const [matchedTotal, setMatchedTotal] = useState(0);
   const [matchedPage, setMatchedPage] = useState(1);
-  const [matchedLoading, setMatchedLoading] = useState(false);
+  // Starts true (not false) because "matched" is the default active tab and
+  // always fetches on mount (see the tab-activation effect below) — without
+  // this, the very first paint (before that effect has even run) renders
+  // with matchedLoading still false and matchedJobs still empty, flashing
+  // "No matched jobs found" for a frame — longer, and visibly, on a slow
+  // hydration/dev build — before the fetch (and its retry loop) takes over.
+  const [matchedLoading, setMatchedLoading] = useState(true);
   const [matchedFetched, setMatchedFetched] = useState(false);
   const [matchedNoResume, setMatchedNoResume] = useState(false);
   const [matchedError, setMatchedError] = useState(false);
@@ -491,76 +624,70 @@ export default function JobsContents() {
     setMatchedLoading(true);
     setMatchedNoResume(false);
     setMatchedError(false);
-    try {
-      let data = await getSmartMatchedJobs({
-        limit: MATCHED_PER_PAGE,
-        skip: (page - 1) * MATCHED_PER_PAGE,
-        ...matchedServerFilters,
-        ...(forceRefresh && { force_refresh: true }),
-      });
-      // A malformed/unexpected response shape (e.g. the backend contract
-      // for this endpoint drifts) must not be silently treated the same as
-      // "0 scored jobs" — that would show a misleading empty state instead
-      // of surfacing the failure.
-      if (!Array.isArray(data.jobs)) {
-        throw new Error("Unexpected Smart Match response shape");
-      }
-      // The filter values are UI labels lowercased onto the wire (see
-      // matchedServerFilters). If /jobs/scored expects a different vocabulary
-      // for any of them, it answers 0 rows and the tab would render empty —
-      // strictly worse than the client-side narrowing this replaced. Retry
-      // once without the filters and let matchesJobFilters narrow the result
-      // instead, so an enum mismatch degrades to the old behaviour rather
-      // than an empty tab.
-      const usedServerFilters = Object.keys(matchedServerFilters).length > 0;
-      let fellBackToUnfiltered = false;
-      if (data.jobs.length === 0 && usedServerFilters) {
-        data = await getSmartMatchedJobs({
-          limit: MATCHED_PER_PAGE,
-          skip: (page - 1) * MATCHED_PER_PAGE,
-          ...(forceRefresh && { force_refresh: true }),
-        });
-        if (!Array.isArray(data.jobs)) {
-          throw new Error("Unexpected Smart Match response shape");
+
+    // Only the plain, unfiltered first page qualifies for the warm-up retry
+    // loop below — a 0-result response to a filtered/paginated request is
+    // either a real answer already (fetchScoredJobsWithFallback retries once
+    // server-side without filters) or bound by pagination, neither of which
+    // improves by waiting.
+    const eligibleForWarmupRetry = page === 1 && Object.keys(matchedServerFilters).length === 0;
+    let attempt = 0;
+    let useForceRefresh = forceRefresh;
+
+    for (;;) {
+      try {
+        const { data, fellBackToUnfiltered } = await fetchScoredJobsWithFallback(page, matchedServerFilters, useForceRefresh);
+        if (matchedFetchTokenRef.current !== token) return;
+        const normalized = data.jobs.map((item) =>
+          normalizeJob(item.job, item.match.score, item.match)
+        );
+
+        if (normalized.length === 0 && eligibleForWarmupRetry && attempt < MATCHED_FIRST_LOAD_RETRY_DELAYS_MS.length) {
+          // Silently retry — force_refresh from here on, since a cached 0-job
+          // answer would otherwise keep coming back unchanged. matchedLoading
+          // and matchedFetched are left untouched so the caller keeps showing
+          // the "matching in progress" spinner throughout.
+          const delay = MATCHED_FIRST_LOAD_RETRY_DELAYS_MS[attempt];
+          attempt++;
+          useForceRefresh = true;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          if (matchedFetchTokenRef.current !== token) return;
+          continue;
         }
-        fellBackToUnfiltered = true;
-      }
-      if (matchedFetchTokenRef.current !== token) return;
-      const normalized = data.jobs.map((item) =>
-        normalizeJob(item.job, item.match.score, item.match)
-      );
-      setMatchedJobs(normalized);
-      // After a fallback, data.total counts the WHOLE unfiltered pool while
-      // the list rendered is this page narrowed client-side — driving the
-      // pager off it would advertise pages that are empty once narrowed.
-      // Size it to what's actually on this page instead.
-      setMatchedTotal(fellBackToUnfiltered ? normalized.length : (data.total ?? normalized.length));
-      setMatchedQueryAppliedServerSide(!!matchedServerFilters.query && !fellBackToUnfiltered);
-      setMatchedFellBackToUnfiltered(fellBackToUnfiltered);
-      setMatchedPage(page);
-      setMatchedFetched(true);
-      setMatchedNoResume(false);
-    } catch (err: unknown) {
-      if (matchedFetchTokenRef.current !== token) return;
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 404) {
-        // No resume on file is a terminal state — cache it so we don't refetch.
-        setMatchedNoResume(true);
+
+        setMatchedJobs(normalized);
+        // After a fallback, data.total counts the WHOLE unfiltered pool while
+        // the list rendered is this page narrowed client-side — driving the
+        // pager off it would advertise pages that are empty once narrowed.
+        // Size it to what's actually on this page instead.
+        setMatchedTotal(fellBackToUnfiltered ? normalized.length : (data.total ?? normalized.length));
+        setMatchedQueryAppliedServerSide(!!matchedServerFilters.query && !fellBackToUnfiltered);
+        setMatchedFellBackToUnfiltered(fellBackToUnfiltered);
+        setMatchedPage(page);
         setMatchedFetched(true);
-      } else {
-        // Transient failure — leave matchedFetched false so the next tab
-        // activation retries instead of caching the error. matchedError
-        // tracks this separately so the empty state can show a Retry
-        // button immediately instead of only after the user leaves and
-        // re-enters this tab (matchedFetched alone doesn't change here).
-        setMatchedError(true);
-        toast.error("Could not load Smart Match jobs. Please try again later.");
+        setMatchedNoResume(false);
+      } catch (err: unknown) {
+        if (matchedFetchTokenRef.current !== token) return;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 404) {
+          // No resume on file is a terminal state — cache it so we don't refetch.
+          setMatchedNoResume(true);
+          setMatchedFetched(true);
+        } else {
+          // Transient failure — leave matchedFetched false so the next tab
+          // activation retries instead of caching the error. matchedError
+          // tracks this separately so the empty state can show a Retry
+          // button immediately instead of only after the user leaves and
+          // re-enters this tab (matchedFetched alone doesn't change here).
+          setMatchedError(true);
+          toast.error("Could not load Smart Match jobs. Please try again later.");
+        }
       }
-    } finally {
-      // Only the newest run owns the spinner — a superseded one clearing it
-      // would hide the fact that a fresher fetch is still in flight.
-      if (matchedFetchTokenRef.current === token) setMatchedLoading(false);
+      break;
     }
+    // Only the newest run owns the spinner — a superseded one clearing it
+    // would hide the fact that a fresher fetch is still in flight.
+    if (matchedFetchTokenRef.current === token) setMatchedLoading(false);
   }, [matchedFetched, matchedPage, matchedServerFilters]);
 
   // ── Fetch full details for saved jobs by id — works regardless of which
@@ -959,7 +1086,7 @@ export default function JobsContents() {
       let filtered = [...savedJobsList];
       if (selectedFilters.length > 0) {
         filtered = filtered.filter((job) =>
-          matchesJobFilters(job, selectedFilters, { includeSource: true })
+          matchesJobFilters(job, selectedFilters)
         );
       }
       filtered = filtered.filter(matchesQuery);
@@ -976,7 +1103,7 @@ export default function JobsContents() {
     let filtered = [...appliedJobsList];
     if (selectedFilters.length > 0) {
       filtered = filtered.filter((job) =>
-        matchesJobFilters(job, selectedFilters, { includeSource: true, includeDate: false })
+        matchesJobFilters(job, selectedFilters, { includeDate: false })
       );
     }
     filtered = filtered.filter(matchesQuery);
@@ -998,56 +1125,54 @@ export default function JobsContents() {
   const handleFilterToggle = (filter: string) => {
     setSelectedFilters((prev) => {
       if (filter.startsWith("salary:")) {
-        const withoutSalary = prev.filter((f) => !f.startsWith("salary:"));
-        // Remove if already active or is the "Any" sentinel
-        if (filter === "salary:Any salary" || prev.includes(filter)) return withoutSalary;
-        return [...withoutSalary, filter];
+        return toggleExclusiveFilterWithSentinel(prev, filter, "salary:", "salary:Any salary");
       }
       if (filter.startsWith("years:")) {
-        const withoutYears = prev.filter((f) => !f.startsWith("years:"));
-        // Remove if already active or is the "Any" sentinel
-        if (filter === "years:Any requirements" || prev.includes(filter)) return withoutYears;
-        return [...withoutYears, filter];
+        return toggleExclusiveFilterWithSentinel(prev, filter, "years:", "years:Any requirements");
       }
       if (filter.startsWith("location:") || filter.startsWith("education:")) {
-        return prev.includes(filter)
-          ? prev.filter((f) => f !== filter)
-          : [...prev, filter];
+        return toggleSimpleFilter(prev, filter);
       }
-      // date: and source: are radio-style (only one at a time)
+      // date: is radio-style (only one at a time)
       if (filter.startsWith("date:")) {
-        const without = prev.filter((f) => !f.startsWith("date:"));
-        return prev.includes(filter) ? without : [...without, filter];
-      }
-      if (filter.startsWith("source:")) {
-        const without = prev.filter((f) => !f.startsWith("source:"));
-        return prev.includes(filter) ? without : [...without, filter];
+        return toggleRadioFilter(prev, filter, "date:");
       }
       // Match Quality chips (matchscore:/skillscore:/expscore:/eduscore:) are
-      // radio-style per component, same as date:/source: above.
+      // radio-style per component, same as date: above.
       const scorePrefix = ["matchscore:", "skillscore:", "expscore:", "eduscore:"].find((p) => filter.startsWith(p));
       if (scorePrefix) {
-        const without = prev.filter((f) => !f.startsWith(scorePrefix));
-        return prev.includes(filter) ? without : [...without, filter];
+        return toggleRadioFilter(prev, filter, scorePrefix);
       }
-      return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
+      return toggleSimpleFilter(prev, filter);
     });
   };
 
   // ── Derived values ──
   const isMatchedTab = activeTab === "matched";
   const isSavedTab = activeTab === "saved";
-  const displayLoading = isMatchedTab
-    ? matchedLoading
-    : isSavedTab
-    ? savedJobsListLoading
-    : appliedJobsListLoading;
+  // Extracted from a nested ternary (typescript:S3358) — same value for
+  // every combination of isMatchedTab/isSavedTab as before.
+  let displayLoading: boolean;
+  if (isMatchedTab) {
+    displayLoading = matchedLoading;
+  } else if (isSavedTab) {
+    displayLoading = savedJobsListLoading;
+  } else {
+    displayLoading = appliedJobsListLoading;
+  }
   // After a fallback, matchedTotal is just the raw unfiltered page's size
   // (see matchedFellBackToUnfiltered) — not how many of those actually match
   // the user's search/filters. filteredJobs.length is the honest number
   // there (e.g. 0, matching what's actually rendered below).
   const matchedCount = matchedFellBackToUnfiltered ? filteredJobs.length : matchedTotal;
   const matchedTotalPages = Math.max(1, Math.ceil(matchedCount / MATCHED_PER_PAGE));
+  // The top-bar "N results" count next to the clear-X must read as the true
+  // total, not "how many happen to be on this loaded page" — Smart Match is
+  // fetched MATCHED_PER_PAGE (50) rows at a time, so filteredJobs.length there
+  // is just this page's count after client-side narrowing. matchedCount
+  // already carries the honest total for that tab (see above); Saved/Applied
+  // load their full list up front, so filteredJobs.length IS the true total there.
+  const resultsHeaderCount = isMatchedTab ? matchedCount : filteredJobs.length;
   // True when Smart Match has real results loaded but the active search/
   // filters narrowed them to zero — as opposed to Smart Match genuinely
   // having no matches. Search only covers the currently-loaded page of
@@ -1055,10 +1180,90 @@ export default function JobsContents() {
   const matchedSearchNarrowed =
     isMatchedTab && !matchedNoResume && matchedJobs.length > 0 && !!(searchQuery || selectedFilters.length > 0);
 
+  // Extracted from a nested ternary (typescript:S3358) — same title text for
+  // every combination of searchQuery/isMatchedTab/isSavedTab as before.
+  let pageTitle: string;
+  if (searchQuery) {
+    pageTitle = `Results for "${searchQuery}"`;
+  } else if (isMatchedTab) {
+    pageTitle = "Smart Match Jobs";
+  } else if (isSavedTab) {
+    pageTitle = "Saved Jobs";
+  } else {
+    pageTitle = "Applied Jobs";
+  }
+
+  // Extracted from a nested ternary (typescript:S3358) — same list for every
+  // combination of isMatchedTab/isSavedTab as before.
+  let activeTabJobs: NormalizedJob[];
+  if (isMatchedTab) {
+    activeTabJobs = matchedJobs;
+  } else if (isSavedTab) {
+    activeTabJobs = savedJobsList;
+  } else {
+    activeTabJobs = appliedJobsList;
+  }
+
+  // ── Empty-state icon/title/description — depends on activeTab, plus (for
+  //    the matched tab specifically) *why* Smart Match is empty. Extracted
+  //    from several nested ternary chains (typescript:S3358) and a nested
+  //    template literal (typescript:S4624) into plain if/else, computing the
+  //    exact same value for every combination of inputs as before. Computed
+  //    unconditionally here (cheap, no side effects) even though it's only
+  //    rendered in the filteredJobs.length === 0 branch below. ──
+  // Accent for the empty-state illustration's face — keeps a tab-specific
+  // cue (same colors as the old per-tab icons) without needing a different
+  // icon per tab.
+  let emptyStateAccent: string;
+  if (activeTab === "saved") {
+    emptyStateAccent = "#fbbf24";
+  } else if (activeTab === "applied") {
+    emptyStateAccent = "#34d399";
+  } else if (activeTab === "matched") {
+    emptyStateAccent = "#4F46E5";
+  } else {
+    emptyStateAccent = "#94a3b8";
+  }
+
+  let matchedEmptyTitle: string;
+  let matchedEmptyDescription: string;
+  if (matchedNoResume) {
+    matchedEmptyTitle = "Resume required for Smart Match";
+    matchedEmptyDescription = "Smart Match analyses your resume to score every job for you. Go to Profile → Resume tab to upload your resume.";
+  } else if (matchedError) {
+    matchedEmptyTitle = "Couldn't load Smart Match";
+    matchedEmptyDescription = "Something went wrong loading your matches. Please try again.";
+  } else if (matchedSearchNarrowed) {
+    matchedEmptyTitle = "No matches in your loaded results";
+    // Nested template literal (typescript:S4624) pulled out into its own
+    // variable, referenced from the outer template literal below.
+    const searchQuerySuffix = searchQuery ? ` — none matched "${searchQuery}"` : "";
+    matchedEmptyDescription = `Search and filters only apply to your currently loaded top ${matchedJobs.length} recommendations${searchQuerySuffix}. Clear them to see all your matches.`;
+  } else {
+    matchedEmptyTitle = "No matched jobs found";
+    matchedEmptyDescription = "Smart Match ran but no strong matches found yet. Try clicking Retry or update your profile with more skills.";
+  }
+
+  let emptyStateTitle: string;
+  let emptyStateDescription: string;
+  if (activeTab === "saved") {
+    emptyStateTitle = "No saved jobs yet";
+    emptyStateDescription = "Save jobs you like and find them all here.";
+  } else if (activeTab === "applied") {
+    emptyStateTitle = "No applications yet";
+    emptyStateDescription = "Jobs you apply to will show up here so you can track your pipeline.";
+  } else if (activeTab === "matched") {
+    emptyStateTitle = matchedEmptyTitle;
+    emptyStateDescription = matchedEmptyDescription;
+  } else {
+    emptyStateTitle = "No results found";
+    emptyStateDescription = "Try adjusting your search or filters to find more jobs.";
+  }
+
   return (
     <div className="jobs-workspace flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
       {/* CENTER PANEL — scrolls internally so the right sidebar never moves */}
-      <main id="jobs-main-scroll" className="scrollbar-hide h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
+      <main id="jobs-main-scroll" className="h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
         {/* RESULTS VIEW */}
 
         
@@ -1068,27 +1273,31 @@ export default function JobsContents() {
               <div className="flex flex-1 items-center gap-3 min-w-0">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Search and/or filters active — clicking the X resets both
+                        back to the full unfiltered list. searchQuery drives the
+                        server-side Smart Match query and the client-side
+                        Saved/Applied filtering; selectedFilters drives the pill
+                        row above. No page refresh needed for either. */}
+                    {(searchQuery || selectedFilters.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { commitSearch(""); setSelectedFilters([]); }}
+                        aria-label="Clear search and filters"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
                     <h1 className="min-w-0 truncate text-[26px] font-extrabold leading-tight text-slate-950">
-                      {searchQuery
-                        ? `Results for "${searchQuery}"`
-                        : isMatchedTab
-                        ? "Smart Match Jobs"
-                        : isSavedTab
-                        ? "Saved Jobs"
-                        : "Applied Jobs"}
+                      {searchQuery || selectedFilters.length > 0
+                        ? `${resultsHeaderCount} results${searchQuery ? ` for "${searchQuery}"` : ""}`
+                        : pageTitle}
                     </h1>
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#4F46E5]/15 bg-[#eef3ff] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#4F46E5] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#4F46E5] animate-pulse shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#4F46E5] animate-pulse shrink-0" />{" "}
                       Live
                     </span>
                   </div>
-                  <p className="mt-1 text-[14px] font-semibold text-slate-500">
-                    {filteredJobs.length > 0
-                      ? `${filteredJobs.length.toLocaleString()} opportunities`
-                      : displayLoading
-                      ? "Loading…"
-                      : "No results"}
-                  </p>
                 </div>
               </div>
 
@@ -1113,11 +1322,11 @@ export default function JobsContents() {
                   {/* Autocomplete dropdown */}
                   {showSuggestions && (
                     <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                      {suggestions.map((s, i) => {
+                      {suggestions.map((s) => {
                         const idx = s.toLowerCase().indexOf(inputValue.toLowerCase());
                         return (
                           <button
-                            key={i}
+                            key={s}
                             type="button"
                             onMouseDown={() => commitSearch(s)}
                             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] text-slate-700 transition-colors hover:bg-[#f0f4ff]"
@@ -1154,13 +1363,29 @@ export default function JobsContents() {
             </div>
 
               <div className="px-5 sm:px-6">
+              {detailsJob ? (
+                <JobDetailsInline
+                  job={detailsJob}
+                  onBack={() => setDetailsJob(null)}
+                  onSaveToggle={(saved) => handleSaveToggle(detailsJob.id, saved)}
+                  onApplyClick={() =>
+                    markPendingApply({
+                      id: detailsJob.id,
+                      title: detailsJob.title,
+                      company: detailsJob.company,
+                      url: detailsJob.url || detailsJob.application_url || "",
+                    })
+                  }
+                />
+              ) : (
+                <>
               {/* STICKY FILTER + TABS BAR */}
               <div className="jobs-controls sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white px-5 pb-0 sm:-mx-6 sm:px-6">
                 <JobsFilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
                   onFilterChange={handleFilterChange}
-                  jobs={isMatchedTab ? matchedJobs : isSavedTab ? savedJobsList : appliedJobsList}
+                  jobs={activeTabJobs}
                 />
 
                 <JobsTabs
@@ -1169,8 +1394,6 @@ export default function JobsContents() {
                   savedCount={savedJobsCount}
                   appliedCount={appliedJobsCount}
                   matchedCount={matchedCount}
-                  sortBy={sortBy}
-                  onSortChange={setSortBy}
                   filterSort={filterSort}
                   onFilterSortChange={setFilterSort}
                 />
@@ -1179,87 +1402,77 @@ export default function JobsContents() {
               {/* JOB LIST */}
               <div className="mt-4 pb-10">
                 {displayLoading ? (
-                  <div className="space-y-4">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <JobSkeleton key={i} />
-                    ))}
-                  </div>
-                ) : filteredJobs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-                    {/* Tab-specific icon */}
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm ${
-                      activeTab === "saved"   ? "bg-amber-50 border border-amber-100" :
-                      activeTab === "applied" ? "bg-emerald-50 border border-emerald-100" :
-                      activeTab === "matched" ? "bg-blue-50 border border-blue-100" :
-                                               "bg-gray-100 border border-gray-200"
-                    }`}>
-                      {activeTab === "saved"   ? <Bookmark size={26} className="text-amber-400" /> :
-                       activeTab === "applied" ? <CheckCircle2 size={26} className="text-emerald-500" /> :
-                       activeTab === "matched" ? <Zap size={26} className="text-[#4F46E5]" /> :
-                                                <Search size={26} className="text-gray-400" />}
+                  isMatchedTab && !matchedFetched ? (
+                    // First-ever Smart Match computation for this profile has
+                    // no cache to fall back on (see cache_hit on
+                    // SmartMatchResponse) and can take up to ~2 minutes — a
+                    // bare skeleton with no messaging reads as broken/stuck
+                    // well before that. Subsequent loads (pagination, filter
+                    // changes, Retry) usually resolve fast, so they keep the
+                    // lighter skeleton below instead.
+                    <div className="flex flex-col items-center justify-center py-20 px-8 text-center">
+                      <div className="relative flex h-14 w-14 items-center justify-center">
+                        <span className="absolute inset-0 rounded-full border-4 border-[#4F46E5]/15" />
+                        <span className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-[#4F46E5]" />
+                        <Zap size={20} className="text-[#4F46E5]" />
+                      </div>
+                      <h3 className="mt-5 text-[16px] font-bold text-gray-800">
+                        Finding your best matches…
+                      </h3>
+                      <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-500">
+                        We&apos;re comparing your profile against every open role to personalize your results. This can take a minute or two — no need to refresh.
+                      </p>
                     </div>
-                    <h3 className="text-[16px] font-bold text-gray-800">
-                      {activeTab === "saved"
-                        ? "No saved jobs yet"
-                        : activeTab === "applied"
-                        ? "No applications yet"
-                        : activeTab === "matched"
-                        ? matchedNoResume
-                          ? "Resume required for Smart Match"
-                          : matchedError
-                          ? "Couldn't load Smart Match"
-                          : matchedSearchNarrowed
-                          ? "No matches in your loaded results"
-                          : "No matched jobs found"
-                        : "No results found"}
-                    </h3>
-                    <p className="text-gray-500 text-[13px] mt-2 max-w-sm leading-relaxed">
-                      {activeTab === "saved"
-                        ? "Save jobs you like and find them all here."
-                        : activeTab === "applied"
-                        ? "Jobs you apply to will show up here so you can track your pipeline."
-                        : activeTab === "matched"
-                        ? matchedNoResume
-                          ? "Smart Match analyses your resume to score every job for you. Go to Profile → Resume tab to upload your resume."
-                          : matchedError
-                          ? "Something went wrong loading your matches. Please try again."
-                          : matchedSearchNarrowed
-                          ? `Search and filters only apply to your currently loaded top ${matchedJobs.length} recommendations${searchQuery ? ` — none matched "${searchQuery}"` : ""}. Clear them to see all your matches.`
-                          : "Smart Match ran but no strong matches found yet. Try clicking Retry or update your profile with more skills."
-                        : "Try adjusting your search or filters to find more jobs."}
-                    </p>
-                    {isMatchedTab && matchedNoResume && (
-                      <a
-                        href="/profile"
-                        className="mt-5 inline-flex items-center gap-2 px-6 py-2.5 bg-[#4F46E5] text-white text-sm font-semibold rounded-full hover:bg-[#4338CA] transition-colors"
-                      >
-                        Upload Resume in Profile →
-                      </a>
-                    )}
-                    {isMatchedTab && !matchedNoResume && (matchedFetched || matchedError) && !matchedSearchNarrowed && (
-                      <button
-                        type="button"
-                        onClick={() => fetchSmartMatchedJobs(matchedPage, { bypassGuard: true, forceRefresh: true })}
-                        className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#4F46E5] text-white text-sm font-semibold rounded-full hover:bg-[#4338CA] transition-colors"
-                      >
-                        <RotateCcw size={13} />
-                        Retry Smart Match
-                      </button>
-                    )}
-                    {(searchQuery || selectedFilters.length > 0) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchQuery("");
-                          setInputValue("");
-                          setSelectedFilters([]);
-                        }}
-                        className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
-                      >
-                        <FileX size={13} />
-                        Clear Filters &amp; Try Again
-                      </button>
-                    )}
+                  ) : (
+                    <div className="space-y-4">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <JobSkeleton key={i} />
+                      ))}
+                    </div>
+                  )
+                ) : filteredJobs.length === 0 ? (
+                  <div className="flex items-center justify-center py-10 px-8">
+                    <div className="w-full max-w-sm rounded-3xl border border-slate-100 bg-white px-8 py-10 text-center shadow-[0_8px_28px_rgba(15,23,42,0.06)]">
+                      <EmptyStateIllustration accent={emptyStateAccent} />
+                      <h3 className="mt-5 text-[16px] font-bold text-gray-800">
+                        {emptyStateTitle}
+                      </h3>
+                      <p className="text-gray-500 text-[13px] mt-2 leading-relaxed">
+                        {emptyStateDescription}
+                      </p>
+                      {isMatchedTab && matchedNoResume && (
+                        <a
+                          href="/profile"
+                          className="mt-5 inline-flex items-center gap-2 px-6 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
+                        >
+                          Upload Resume in Profile →
+                        </a>
+                      )}
+                      {isMatchedTab && !matchedNoResume && (matchedFetched || matchedError) && !matchedSearchNarrowed && (
+                        <button
+                          type="button"
+                          onClick={() => fetchSmartMatchedJobs(matchedPage, { bypassGuard: true, forceRefresh: true })}
+                          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
+                        >
+                          <RotateCcw size={13} />
+                          Retry Smart Match
+                        </button>
+                      )}
+                      {(searchQuery || selectedFilters.length > 0) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery("");
+                            setInputValue("");
+                            setSelectedFilters([]);
+                          }}
+                          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
+                        >
+                          <FileX size={13} />
+                          Clear Filters &amp; Try Again
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <JobList
@@ -1280,6 +1493,7 @@ export default function JobsContents() {
                     onRemoveApplication={activeTab === "applied" ? handleRemoveApplication : undefined}
                     onAppliedToggle={handleAppliedToggle}
                     allowDismiss={isMatchedTab}
+                    onViewDetails={(job) => setDetailsJob(job as unknown as NormalizedJob)}
                   />
                 )}
 
@@ -1294,6 +1508,8 @@ export default function JobsContents() {
                   />
                 )}
               </div>
+                </>
+              )}
             </div>
           </div>
       </main>
@@ -1345,6 +1561,16 @@ export default function JobsContents() {
           <div
             className="fixed inset-0 z-40"
             onClick={() => { setOpenChat(false); setSelectedJob(null); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setOpenChat(false);
+                setSelectedJob(null);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Close chat"
           />
           {/* Chat panel — same position/width as sidebar, slides in from right */}
           <div
@@ -1378,9 +1604,25 @@ export default function JobsContents() {
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={clearPendingApply}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              clearPendingApply();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Close"
         >
           <div
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+            role="presentation"
             className="relative w-full max-w-md rounded-bl-3xl rounded-br-3xl rounded-tr-3xl bg-white p-8 text-center shadow-2xl"
           >
             <button

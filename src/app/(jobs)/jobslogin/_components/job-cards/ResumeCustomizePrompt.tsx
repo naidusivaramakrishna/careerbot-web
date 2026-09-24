@@ -3,24 +3,24 @@
 import { X, AlertTriangle, Loader2 } from "lucide-react";
 
 interface ResumeCustomizePromptProps {
-  jobTitle: string;
-  company: string;
-  logo?: string;
-  matchScore: number;
-  bandColor: string;
-  bandLabel: string;
-  missingSkills: string[];
-  applyUrl: string;
-  onClose: () => void;
-  onApplyWithoutCustomizing: () => void;
-  onFixResume: () => void;
-  fixingResume?: boolean;
-  dontRemindAgain: boolean;
-  onDontRemindAgainChange: (checked: boolean) => void;
+  readonly jobTitle: string;
+  readonly company: string;
+  readonly logo?: string;
+  readonly matchScore: number;
+  readonly bandColor: string;
+  readonly bandLabel: string;
+  readonly missingSkills: string[];
+  readonly applyUrl: string;
+  readonly onClose: () => void;
+  readonly onApplyWithoutCustomizing: () => void;
+  readonly onFixResume: () => void;
+  readonly fixingResume?: boolean;
+  readonly dontRemindAgain: boolean;
+  readonly onDontRemindAgainChange: (checked: boolean) => void;
 }
 
 // Semicircle gauge, 180°, needle position derived from score (0-100).
-function MatchGauge({ score, color }: { score: number; color: string }) {
+function MatchGauge({ score, color }: { readonly score: number; readonly color: string }) {
   const clamped = Math.max(0, Math.min(100, score));
   const angleDeg = (clamped / 100) * 180; // 0 = left, 180 = right
   const angleRad = (Math.PI * angleDeg) / 180;
@@ -67,9 +67,26 @@ export default function ResumeCustomizePrompt({
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       onClick={fixingResume ? undefined : onClose}
+      onKeyDown={(e) => {
+        if (fixingResume) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label="Close"
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        role="presentation"
         className="relative w-full max-w-lg rounded-bl-3xl rounded-br-3xl rounded-tr-3xl bg-white p-8 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -172,7 +189,7 @@ export default function ResumeCustomizePrompt({
             checked={dontRemindAgain}
             onChange={(e) => onDontRemindAgainChange(e.target.checked)}
             className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-400"
-          />
+          />{" "}
           Do not remind me again
         </label>
       </div>

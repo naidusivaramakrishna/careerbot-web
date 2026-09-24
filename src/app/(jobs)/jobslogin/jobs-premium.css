@@ -146,13 +146,7 @@
 }
 
 .jobs-premium-theme .jobs-intelligence-body {
-  background: var(--jobs-canvas);
-}
-
-.jobs-premium-theme .jobs-intelligence-body > div > div {
-  border-color: #dfe6ef;
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+  background: #ffffff;
 }
 
 .jobs-premium-theme .jobs-intelligence-body [class*="bg-linear-to-r"] {

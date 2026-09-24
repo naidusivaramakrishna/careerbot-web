@@ -55,8 +55,8 @@ export default function NancyChat({
   job,
   onClose,
 }: {
-  job: JobType;
-  onClose: () => void;
+  readonly job: JobType;
+  readonly onClose: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -197,7 +197,7 @@ export default function NancyChat({
         <div className="scrollbar-hide flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] px-4 pb-4 pt-4">
           {messages.map((msg, idx) => (
             <div
-              key={idx}
+              key={`${msg.timestamp}-${idx}`}
               className={`flex flex-col gap-1.5 ${msg.type === "user" ? "items-end" : "items-start"}`}
             >
               <div className="flex gap-2 w-full items-end">
@@ -287,9 +287,9 @@ export default function NancyChat({
                     Ask Nancy — Free
                   </p>
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {remaining.map((action, idx) => (
+                    {remaining.map((action) => (
                       <button
-                        key={idx}
+                        key={action}
                         type="button"
                         onClick={() => sendMessage(action)}
                         disabled={isTyping}
