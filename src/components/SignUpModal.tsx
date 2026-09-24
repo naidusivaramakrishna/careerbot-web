@@ -23,6 +23,21 @@ interface Props {
     hideOverlay?: boolean
 }
 
+/**
+ * user_id from a sign-in 403 EMAIL_NOT_VERIFIED. careerbot-api's
+ * http_exception_handler (core/exception_handler.py:216-236) puts every detail
+ * key except message/error_code under error.details:
+ *   {success: false, error: {message, error_code: "HTTP_403", details: {error: "EMAIL_NOT_VERIFIED", user_id}}}
+ * Any other 403 (e.g. a suspended account) returns null.
+ */
+function getUnverifiedUserId(err: unknown): string | null {
+    if (!axios.isAxiosError(err) || err.response?.status !== 403) return null
+    const details = (err.response.data as { error?: { details?: { error?: unknown; user_id?: unknown } } } | undefined)
+        ?.error?.details
+    if (details?.error !== "EMAIL_NOT_VERIFIED") return null
+    return typeof details.user_id === "string" && details.user_id ? details.user_id : null
+}
+
 const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo, onSuccess, hideOverlay = false }) => {
     const router = useRouter()
     const authRedirectTo = sanitizeAuthRedirect(redirectTo)
@@ -31,7 +46,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
     const [showPassword, setShowPassword] = useState(false)
     const [isEmailVerified, setIsEmailVerified] = useState(false)
     const [isVerifyingEmail, setIsVerifyingEmail] = useState(false)
-    const [verificationData, setVerificationData] = useState<{ userId: string; email: string; password: string } | null>(null)
+    // password is held in React state only (for the auto sign-in after the
+    // code is accepted); it is never written to web storage.
+    const [verificationData, setVerificationData] = useState<{ userId: string; email: string; password: string; fromSignIn?: boolean } | null>(null)
 
     const [signUpForm, setSignUpForm] = useState<ISignUpForm>({ email: "", username: "", password: "" })
     const [loginForm, setLoginForm] = useState<LoginForm>({ email: "", password: "" })
@@ -114,6 +131,22 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
             if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo; onClose(); }
         } catch (err) {
+            // Unverified account: careerbot-api answers 403 EMAIL_NOT_VERIFIED
+            // with the user_id (user_service/service.py:479-491, only after the
+            // password matched). That is all the OTP step needs, so a user who
+            // signed up in another browser -- no pendingEmailVerification
+            // record here -- can still enter their code instead of dead-ending.
+            const unverifiedUserId = getUnverifiedUserId(err)
+            if (unverifiedUserId) {
+                setVerificationData({
+                    userId: unverifiedUserId,
+                    email: loginForm.email,
+                    password: loginForm.password,
+                    fromSignIn: true,
+                })
+                setIsVerifyingEmail(true)
+                return
+            }
             handleApiError(err, true)
         } finally {
             setLoading((prev) => ({ ...prev, login: false }))
@@ -310,6 +343,12 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     userId={verificationData.userId}
                     email={verificationData.email}
                     password={verificationData.password}
+                    // From sign-in no code was just sent (it may have expired),
+                    // so Resend is available immediately.
+                    initialResendCooldown={verificationData.fromSignIn ? 0 : undefined}
+                    notice={verificationData.fromSignIn
+                        ? "Your email isn't verified yet. Enter the code from your verification email, or tap Resend for a new one."
+                        : undefined}
                     onSuccess={() => {
                         // Clear pending verification from localStorage on success
                         localStorage.removeItem('pendingEmailVerification')
@@ -334,9 +373,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     onClose={() => {
                         // Keep pending verification in localStorage so user can recover
                         // (Don't clear it - let user resume from recovery option if they closed modal)
+                        const backTo = verificationData.fromSignIn ? "signin" : "signup"
                         setIsVerifyingEmail(false)
                         setVerificationData(null)
-                        setFormType("signup")
+                        setFormType(backTo)
                         setLoading((prev) => ({ ...prev, signUp: false }))
                     }}
                 />

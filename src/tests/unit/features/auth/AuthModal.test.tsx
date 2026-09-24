@@ -339,6 +339,99 @@ describe('AuthModal — error handling', () => {
   });
 });
 
+// careerbot-api develop2 user_service/service.py:479-491 raises 403 with
+// detail {error: "EMAIL_NOT_VERIFIED", message, user_id} AFTER the password
+// check; core/exception_handler.py:216-236 moves every detail key other than
+// message/error_code into error.details. So a user signing in from a browser
+// with no pendingEmailVerification record still gets their user_id here.
+const emailNotVerified403 = (userId: string) => ({
+  isAxiosError: true,
+  response: {
+    status: 403,
+    data: {
+      success: false,
+      error: {
+        message: 'Your email address has not been verified. Please check your inbox for the verification code, or request a new one.',
+        error_code: 'HTTP_403',
+        details: { error: 'EMAIL_NOT_VERIFIED', user_id: userId },
+      },
+    },
+  },
+});
+
+describe('AuthModal — sign in with an unverified email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+    mockIsAxiosError.mockReturnValue(true);
+  });
+
+  const signInAs = (email: string, password: string) => {
+    renderSignin();
+    fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: email } });
+    fireEvent.change(screen.getByTestId('signup-password-input'), { target: { value: password } });
+    fireEvent.click(screen.getByTestId('auth-submit-btn'));
+  };
+
+  it('opens the OTP step with the user_id from the 403, with no local pending record', async () => {
+    mockSignIn.mockRejectedValueOnce(emailNotVerified403('user-42'));
+    mockVerifyEmail.mockResolvedValue({ message: 'Email verified successfully' });
+
+    signInAs('late@example.com', 'Secret123!');
+
+    expect(await screen.findByTestId('otp-input-0')).toBeInTheDocument();
+    expect(screen.getByText('late@example.com')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('otp-input-0'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByTestId('verify-email-btn'));
+
+    await waitFor(() =>
+      expect(mockVerifyEmail).toHaveBeenCalledWith({ user_id: 'user-42', otp: '123456' })
+    );
+  });
+
+  it('lets the user request a new code straight away', async () => {
+    mockSignIn.mockRejectedValueOnce(emailNotVerified403('user-42'));
+    mockResendVerificationEmail.mockResolvedValue({ message: 'sent' });
+
+    signInAs('late@example.com', 'Secret123!');
+
+    const resend = await screen.findByTestId('resend-otp-btn');
+    expect(resend).not.toBeDisabled();
+    fireEvent.click(resend);
+
+    await waitFor(() =>
+      expect(mockResendVerificationEmail).toHaveBeenCalledWith({ email: 'late@example.com' })
+    );
+  });
+
+  it('never writes the password to web storage', async () => {
+    mockSignIn.mockRejectedValueOnce(emailNotVerified403('user-42'));
+
+    signInAs('late@example.com', 'Secret123!');
+    await screen.findByTestId('otp-input-0');
+
+    const dump = JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage });
+    expect(dump).not.toContain('Secret123!');
+  });
+
+  it('keeps the plain error for a 403 that is not EMAIL_NOT_VERIFIED', async () => {
+    mockSignIn.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 403,
+        data: { success: false, error: { message: 'Account is suspended', error_code: 'HTTP_403' } },
+      },
+    });
+
+    signInAs('someone@example.com', 'Secret123!');
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Account is suspended'));
+    expect(screen.queryByTestId('otp-input-0')).not.toBeInTheDocument();
+  });
+});
+
 describe('AuthModal — email verified state', () => {
   beforeEach(() => vi.clearAllMocks());
 

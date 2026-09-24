@@ -13,6 +13,15 @@ interface OTPVerificationInputProps {
   password: string
   onSuccess?: () => void
   onClose?: () => void
+  /**
+   * Seconds before "Resend" is enabled. Defaults to the server cooldown,
+   * because right after signup a code has just been sent. Pass 0 when no code
+   * was just sent (e.g. sign-in answered EMAIL_NOT_VERIFIED), so the user can
+   * ask for a fresh one straight away.
+   */
+  initialResendCooldown?: number
+  /** Optional context shown above the code boxes. */
+  notice?: string
 }
 
 type VerificationStatus = "idle" | "loading" | "success" | "error"
@@ -67,6 +76,8 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
   password,
   onSuccess,
   onClose,
+  initialResendCooldown = RESEND_COOLDOWN_SECONDS,
+  notice,
 }) => {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
   const verifyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -78,7 +89,8 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
   useEffect(() => {
     inputRefs.current[0]?.focus()
     // Start resend countdown when component mounts (OTP just sent)
-    setResendCountdown(RESEND_COOLDOWN_SECONDS)
+    setResendCountdown(initialResendCooldown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, [])
 
   // Cleanup post-verify timeout on unmount
@@ -318,6 +330,9 @@ const OTPVerificationInput: React.FC<OTPVerificationInputProps> = ({
         <h2 className="text-2xl font-bold text-gray-900 mb-3">Verify your email</h2>
         <p className="text-gray-600 text-sm">Enter the 6-digit code sent to</p>
         <p className="text-gray-900 font-semibold">{email}</p>
+        {notice && (
+          <p className="text-gray-600 text-sm mt-3" data-testid="otp-notice">{notice}</p>
+        )}
       </div>
 
       {/* OTP Input Fields */}
