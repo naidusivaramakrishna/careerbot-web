@@ -927,6 +927,142 @@ section.docx {
 }
 
 /* ==========================================================================
+   Mock Interview Private App Surface
+
+   Scoped visual system for the authenticated mock-interview workflow. This is
+   intentionally excluded from the public landing page and shared reports.
+   ========================================================================== */
+[data-mock-interview="private"] {
+  --mi-brand: #2557a7;
+  --mi-brand-dark: #1f4b8f;
+  --mi-ink: #111827;
+  --mi-muted: #64748b;
+  --mi-line: #e5e7eb;
+  --mi-panel: #ffffff;
+  --mi-surface: #f6f8fb;
+  background:
+    linear-gradient(180deg, rgba(37, 87, 167, 0.055) 0%, rgba(255, 255, 255, 0) 220px),
+    var(--mi-surface);
+  color: var(--mi-ink);
+  font-feature-settings: "cv11", "ss01", "tnum";
+}
+
+[data-mock-interview="private"] .flex-1.overflow-auto::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-mock-interview="private"] .flex-1.overflow-auto::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+[data-mock-interview="private"] .flex-1.overflow-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border: 2px solid #f3f4f6;
+  border-radius: 999px;
+}
+
+[data-mock-interview="private"] .flex-1.overflow-auto::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+[data-mock-interview="private"] .bg-gray-50 {
+  background-color: var(--mi-surface);
+}
+
+[data-mock-interview="private"] .bg-white {
+  background-color: var(--mi-panel);
+}
+
+[data-mock-interview="private"] .border-gray-200,
+[data-mock-interview="private"] .border-gray-100 {
+  border-color: var(--mi-line);
+}
+
+[data-mock-interview="private"] .text-gray-950,
+[data-mock-interview="private"] .text-gray-900,
+[data-mock-interview="private"] .text-gray-800 {
+  color: var(--mi-ink);
+}
+
+[data-mock-interview="private"] .text-gray-600,
+[data-mock-interview="private"] .text-gray-500,
+[data-mock-interview="private"] .text-gray-400 {
+  color: var(--mi-muted);
+}
+
+[data-mock-interview="private"] main,
+[data-mock-interview="private"] main.min-h-screen,
+[data-mock-interview="private"] > div > div.flex-1 {
+  background: transparent;
+}
+
+[data-mock-interview="private"] :is(.rounded-xl, .rounded-2xl, .rounded-lg) {
+  border-radius: 8px;
+}
+
+[data-mock-interview="private"] :is(
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl
+) {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 38px rgba(15, 23, 42, 0.06);
+}
+
+[data-mock-interview="private"] :is(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--mi-brand);
+  outline-offset: 2px;
+}
+
+[data-mock-interview="private"] button {
+  letter-spacing: 0;
+}
+
+[data-mock-interview="private"] button:not(:disabled) {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 160ms;
+}
+
+[data-mock-interview="private"] button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+[data-mock-interview="private"] .bg-\[\#2557a7\] {
+  background-color: var(--mi-brand);
+}
+
+[data-mock-interview="private"] .text-\[\#2557a7\] {
+  color: var(--mi-brand);
+}
+
+[data-mock-interview="private"] .border-\[\#2557a7\] {
+  border-color: var(--mi-brand);
+}
+
+[data-mock-interview="private"] .hover\:bg-\[\#1e4a8f\]:hover,
+[data-mock-interview="private"] .hover\:bg-\[\#1e4a96\]:hover,
+[data-mock-interview="private"] .hover\:bg-\[\#1a3a8f\]:hover {
+  background-color: var(--mi-brand-dark);
+}
+
+[data-mock-interview="private"] aside.hidden.h-full {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(226, 232, 240, 0.95);
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.02);
+  backdrop-filter: blur(12px);
+}
+
+[data-mock-interview="private"] .recharts-wrapper text {
+  fill: #64748b;
+  font-size: 11px;
+}
+
+[data-mock-interview="private"] .recharts-cartesian-grid line {
+  stroke: #edf0f5;
+}
+
+/* ==========================================================================
    Mock-Test Typography System
 
    Scoped defaults so every page on the surface inherits the same scale.
