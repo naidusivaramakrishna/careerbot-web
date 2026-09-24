@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState } from "react"
-import { Eye, EyeClosed, X } from "lucide-react"
+import { Eye, EyeOff, X, User, Mail, Lock } from "lucide-react"
 import { toast } from "sonner"
 import axios from "axios"
 import { useRouter } from "next/navigation"
@@ -8,7 +8,8 @@ import { signUp, signIn } from "@/api/authApi"
 import { SignUpForm as ISignUpForm, LoginForm, ErrorState, LoadingState, FormType } from "@/types/authTypes"
 import SocialLoginButtons from "./SocialLoginButtons"
 import { mapAuthError, AUTH_ERROR_MESSAGES } from "@/lib/authMessages"
-import { sanitizeAuthRedirect, DEFAULT_AUTH_REDIRECT } from "@/lib/authRedirect"
+import { sanitizeAuthRedirect } from "@/lib/authRedirect"
+import OTPVerificationInput from "./OTPVerificationInput"
 
 interface Props {
     open: boolean
@@ -29,6 +30,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
     const [formType, setFormType] = useState<FormType>(initialFormType)
     const [showPassword, setShowPassword] = useState(false)
     const [isEmailVerified, setIsEmailVerified] = useState(false)
+    const [isVerifyingEmail, setIsVerifyingEmail] = useState(false)
+    const [verificationData, setVerificationData] = useState<{ userId: string; email: string; password: string } | null>(null)
 
     const [signUpForm, setSignUpForm] = useState<ISignUpForm>({ email: "", username: "", password: "" })
     const [loginForm, setLoginForm] = useState<LoginForm>({ email: "", password: "" })
@@ -68,23 +71,19 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
         setErrors({ email: "", username: "", password: "", login: "" })
         setLoading((prev) => ({ ...prev, signUp: true }))
         try {
-            await signUp(signUpForm)
+            const response = await signUp(signUpForm)
+
+            if (response.id) {
+                toast.success("Account created! Verification email sent.")
+                setVerificationData({
+                    userId: response.id,
+                    email: signUpForm.email,
+                    password: signUpForm.password,
+                })
+                setIsVerifyingEmail(true)
+            }
         } catch (err) {
             handleApiError(err, false)
-            setLoading((prev) => ({ ...prev, signUp: false }))
-            return
-        }
-        try {
-            // Sign in immediately after signup to get access_token and refresh_token
-            await signIn({ email: signUpForm.email, password: signUpForm.password })
-            toast.success("Account created! Redirecting...")
-            localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo !== DEFAULT_AUTH_REDIRECT ? `/onboarding?next=${encodeURIComponent(authRedirectTo)}` : "/onboarding" }
-        } catch (err) {
-            // Account was created — treat the follow-up sign-in failure as a login
-            // error so it is never mis-attributed to a signup field (e.g. "username").
-            handleApiError(err, true)
-        } finally {
             setLoading((prev) => ({ ...prev, signUp: false }))
         }
     }
@@ -212,47 +211,58 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
         const activeLoginError = errors.email ? 'email' : errors.password ? 'password' : errors.login ? 'login' : null
         return (
             <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
-                <input
-                    type="email"
-                    name="email"
-                    autoFocus
-                    placeholder="Email Address"
-                    value={loginForm.email}
-                    onChange={handleChange}
-                    data-testid="login-email-input"
-                    id="login-email"
-                    className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
-                />
-                {activeLoginError === 'email' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
-
-                <div className="relative">
-                    <input
-                        type={showPassword ? "text" : "password"}
-                        name="password"
-                        placeholder="Password"
-                        value={loginForm.password}
-                        onChange={handleChange}
-                        data-testid="login-password-input"
-                        id="login-password"
-                        className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
-                    />
-                    <button
-                        type="button"
-                        onClick={() => setShowPassword((p) => !p)}
-                        data-testid="toggle-login-password-btn"
-                        aria-label="Toggle password visibility"
-                        className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                        {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
-                    </button>
+                {/* Email Field */}
+                <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Email address</label>
+                    <div className="relative">
+                        <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                        <input
+                            type="email"
+                            name="email"
+                            autoFocus
+                            placeholder="name@example.com"
+                            value={loginForm.email}
+                            onChange={handleChange}
+                            data-testid="login-email-input"
+                            id="login-email"
+                            className={`w-full rounded-md pl-10 pr-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-white border border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                        />
+                    </div>
+                    {activeLoginError === 'email' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
 
-                {activeLoginError === 'password' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-                {activeLoginError === 'login' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+                {/* Password Field */}
+                <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            name="password"
+                            placeholder="Enter your password"
+                            value={loginForm.password}
+                            onChange={handleChange}
+                            data-testid="login-password-input"
+                            id="login-password"
+                            className={`w-full rounded-md pl-10 pr-10 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-white border border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword((p) => !p)}
+                            data-testid="toggle-login-password-btn"
+                            aria-label="Toggle password visibility"
+                            className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                    </div>
+                    {activeLoginError === 'password' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    {activeLoginError === 'login' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
+                </div>
 
                 <p
                     data-testid="forgot-password-link"
-                    className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-blue-500 hover:text-blue-700 transition-colors"
+                    className="text-xs font-semibold cursor-pointer flex justify-end mb-4 text-blue-600 hover:text-blue-700 transition-colors"
                     onClick={() => {
                         router.push('/forgot-password')
                         onClose()
@@ -265,7 +275,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     type="submit"
                     disabled={loading.login}
                     data-testid="login-submit-btn"
-                    className="w-full py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90 transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-200 flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-md font-semibold text-white text-sm bg-blue-600 hover:bg-blue-700 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
                     {loading.login ? (
                         <>
@@ -282,6 +292,28 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
 
     const renderAuthForm = () => {
+        // Show OTP verification during signup flow
+        if (isVerifyingEmail && verificationData) {
+            return (
+                <OTPVerificationInput
+                    userId={verificationData.userId}
+                    email={verificationData.email}
+                    password={verificationData.password}
+                    onSuccess={() => {
+                        setIsVerifyingEmail(false)
+                        onClose()
+                        window.location.href = "/onboarding"
+                    }}
+                    onClose={() => {
+                        setIsVerifyingEmail(false)
+                        setVerificationData(null)
+                        setFormType("signup")
+                        setLoading((prev) => ({ ...prev, signUp: false }))
+                    }}
+                />
+            )
+        }
+
         // Show verified email message when redirected from email verification
         if (isEmailVerified && formType === "signin") {
             return (
@@ -305,98 +337,91 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
         return (
             <>
                 <div className="text-center mb-6">
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                        <h1 className="text-2xl font-bold text-gray-900">
-                            {formType === "signup" ? "Create Your Account" : "Welcome Back"}
-                        </h1>
-                    </div>
-                    <p className="text-[#473659] text-sm mt-1">
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        {formType === "signup" ? "Create your account" : "Welcome back"}
+                    </h1>
+                    <p className="text-gray-500 text-sm mt-2">
                         {formType === "signup"
-                            ? "Join us today and start your journey"
+                            ? "Start with your CareerBOT account."
                             : "Sign in to continue your career journey"}
                     </p>
                 </div>
 
-                <SocialLoginButtons variant={formType} redirectTo={authRedirectTo} />
-
-                <div className="flex items-center my-5">
-                    <div className="grow h-px bg-gray-300"></div>
-                    <p className="text-gray-500 text-center px-4 text-xs font-semibold">
-                        Or Continue with Email
-                    </p>
-                    <div className="grow h-px bg-gray-300"></div>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                    {formType === "signup" && (
-                        <>
+                {/* Username Field (Signup Only) */}
+                {formType === "signup" && (
+                    <div className="mb-4">
+                        <label className="text-sm font-semibold text-gray-900 mb-2 block">Username</label>
+                        <div className="relative">
+                            <User className="absolute left-3 top-3.5 text-gray-400" size={18} />
                             <input
                                 type="text"
                                 name="username"
                                 autoFocus
-                                placeholder="Username"
+                                placeholder="Enter username"
                                 value={signUpForm.username}
                                 onChange={handleChange}
                                 data-testid="signup-username-input"
                                 id="signup-username"
-                                className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
-                                style={errors.username ? { boxShadow: '0 0 0 1000px #fef2f2 inset', WebkitBoxShadow: '0 0 0 1000px #fef2f2 inset' } : undefined}
+                                className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                             />
-                            {errors.username && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.username}</p>}
-                        </>
-                    )}
+                        </div>
+                        {errors.username && <p role="alert" className="text-red-500 text-xs mt-1">{errors.username}</p>}
+                    </div>
+                )}
 
-                    <input
-                        type="email"
-                        name="email"
-                        placeholder="Email Address"
-                        value={formType === "signup" ? signUpForm.email : loginForm.email}
-                        onChange={handleChange}
-                        data-testid="signup-email-input"
-                        id="signup-email"
-                        className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.email ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
-                        style={errors.email ? { boxShadow: '0 0 0 1000px #fef2f2 inset', WebkitBoxShadow: '0 0 0 1000px #fef2f2 inset' } : undefined}
-                    />
-                    {errors.email && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
-
+                {/* Email Field */}
+                <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Email</label>
                     <div className="relative">
+                        <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                        <input
+                            type="email"
+                            name="email"
+                            placeholder="name@example.com"
+                            value={formType === "signup" ? signUpForm.email : loginForm.email}
+                            onChange={handleChange}
+                            data-testid="signup-email-input"
+                            id="signup-email"
+                            className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                        />
+                    </div>
+                    {errors.email && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                </div>
+
+                {/* Password Field */}
+                <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
                             type={showPassword ? "text" : "password"}
                             name="password"
-                            placeholder="Password"
+                            placeholder="Enter your password"
                             value={formType === "signup" ? signUpForm.password : loginForm.password}
                             onChange={handleChange}
                             data-testid="signup-password-input"
                             id="signup-password"
-                            className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.password ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                            className={`w-full rounded-md pl-10 pr-10 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                         />
                         <button
                             type="button"
                             onClick={() => setShowPassword((p) => !p)}
                             data-testid="toggle-password-btn"
                             aria-label="Toggle password visibility"
-                            className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                            className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                         >
-                            {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
-                    {errors.password && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-
-                    {/* Non-field error (timeout, network, server error) — shown as a banner, not tied to any field */}
-                    {errors.login && (
-                        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
-                            <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                            </svg>
-                            <p className="text-sm text-red-600">{errors.login}</p>
-                        </div>
-                    )}
+                    {errors.password && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    {errors.login && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
                 </div>
 
+                {/* Forgot Password Link (Signin Only) */}
                 {formType === "signin" && (
                     <p
                         data-testid="forgot-password-link"
-                        className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-[#1e0ce8] hover:text-blue-700 transition-colors"
+                        className="text-xs font-semibold cursor-pointer flex justify-end mb-4 text-blue-600 hover:text-blue-700 transition-colors"
                         onClick={() => {
                             router.push('/forgot-password')
                             onClose()
@@ -406,17 +431,18 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     </p>
                 )}
 
+                {/* Submit Button */}
                 <button
                     onClick={formType === "signup" ? handleSignUp : handleLogin}
                     disabled={formType === "signup" ? loading.signUp : loading.login}
                     data-testid="auth-submit-btn"
-                    className="w-full mt-5 py-3 rounded-xl font-semibold text-white text-sm bg-[#2257a7] hover:bg-[#184284] transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-md font-semibold text-white text-sm bg-blue-600 hover:bg-blue-700 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
                     {formType === "signup" ? (
                         loading.signUp ? (
                             <>
                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                Signing up...
+                                Creating account...
                             </>
                         ) : (
                             "Create Account"
@@ -431,31 +457,38 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     )}
                 </button>
 
-                <div className="text-xs text-center text-[#7B698F] mt-4 space-y-1">
-                    <p>
-                        By continuing, you agree to our <b className="text-[#371A62] font-semibold">Terms</b> and <b className="text-[#371A62] font-semibold">Privacy Policy</b>
+                {/* Divider */}
+                <div className="flex items-center my-4">
+                    <div className="grow h-px bg-gray-300"></div>
+                    <p className="text-gray-500 text-center px-4 text-xs font-semibold">
+                        Or continue with
                     </p>
-                    <p>Your data is secure & encrypted</p>
+                    <div className="grow h-px bg-gray-300"></div>
                 </div>
-                <p className="text-sm text-center mt-4 text-[#241438] font-medium">
+
+                {/* Social Login Buttons */}
+                <SocialLoginButtons redirectTo={authRedirectTo} />
+
+                {/* Switch Form Link */}
+                <p className="text-sm text-center mt-4 text-gray-700">
                     {formType === "signup" ? (
                         <>
                             Already have an account?{" "}
                             <span
                                 onClick={() => setFormType("signin")}
                                 data-testid="switch-to-signin-link"
-                                className="text-[#1e0ce8] font-bold cursor-pointer hover:text-blue-700 transition-colors"
+                                className="text-blue-600 font-semibold cursor-pointer hover:text-blue-700 transition-colors"
                             >
                                 Sign in
                             </span>
                         </>
                     ) : (
                         <>
-                            New to CareerBot?{" "}
+                            Don&apos;t have an account?{" "}
                             <span
                                 onClick={() => setFormType("signup")}
                                 data-testid="switch-to-signup-link"
-                                className="text-[#1e0ce8] font-bold cursor-pointer hover:text-blue-700 transition-colors"
+                                className="text-blue-600 font-semibold cursor-pointer hover:text-blue-700 transition-colors"
                             >
                                 Sign up
                             </span>
@@ -468,11 +501,21 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
     if (!open) return null
 
+    const handleModalClose = () => {
+        // Reset verification state when closing
+        if (isVerifyingEmail) {
+            setIsVerifyingEmail(false)
+            setVerificationData(null)
+            setLoading((prev) => ({ ...prev, signUp: false }))
+        }
+        onClose()
+    }
+
     return (
         <div className={`fixed inset-0 flex items-center justify-center z-50 p-4 ${hideOverlay ? "" : "bg-black/60 backdrop-blur-md"}`}>
-            <div className="relative w-full max-w-124 h-145 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
+            <div className="relative w-full max-w-124 h-150 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
                 <button
-                    onClick={onClose}
+                    onClick={handleModalClose}
                     data-testid="auth-modal-close-btn"
                     aria-label="Close modal"
                     className="absolute top-5 right-5 p-1.5 cursor-pointer hover:bg-gray-100 rounded-full transition-colors"

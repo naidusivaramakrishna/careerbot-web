@@ -44,34 +44,34 @@ const RealtimeStatsComponent: React.FC<RealtimeStatsProps> = ({
             return [];
         }
         return [
-        {
-            icon: Users,
-            value: data.active_users_now,
-            label: 'Active Users',
-            bgColor: 'bg-[#DBEAFE]',
-            iconColor: 'text-[#155DFC]'
-        },
-        {
-            icon: Zap,
-            value: data.api_requests_per_min,
-            label: 'API Requests/min',
-            bgColor: 'bg-[#F3E8FF]',
-            iconColor: 'text-[#9810FA]'
-        },
-        {
-            icon: Database,
-            value: data.db_queries_per_sec.toFixed(2),
-            label: 'DB Queries/sec',
-            bgColor: 'bg-[#FCE7F3]',
-            iconColor: 'text-[#E60076]'
-        },
-        {
-            icon: Gauge,
-            value: `${data.cache_hit_rate.toFixed(1)}%`,
-            label: 'Cache Hit Rate',
-            bgColor: 'bg-[#DCFCE7]',
-            iconColor: 'text-[#00A63E]'
-        }
+            {
+                icon: Users,
+                value: data.active_users_now,
+                label: 'Users Online Now',
+                bgColor: 'bg-[#DBEAFE]',
+                iconColor: 'text-[#155DFC]'
+            },
+            {
+                icon: Zap,
+                value: data.api_requests_per_min,
+                label: 'API Requests/min',
+                bgColor: 'bg-[#F3E8FF]',
+                iconColor: 'text-[#9810FA]'
+            },
+            {
+                icon: Database,
+                value: data.db_queries_per_sec.toFixed(2),
+                label: 'DB Queries/sec',
+                bgColor: 'bg-[#FCE7F3]',
+                iconColor: 'text-[#E60076]'
+            },
+            {
+                icon: Gauge,
+                value: `${data.cache_hit_rate.toFixed(1)}%`,
+                label: 'Cache Hit Rate',
+                bgColor: 'bg-[#DCFCE7]',
+                iconColor: 'text-[#00A63E]'
+            }
         ];
     }, [data]);
 

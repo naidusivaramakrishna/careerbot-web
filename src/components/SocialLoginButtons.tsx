@@ -7,11 +7,10 @@ import { AUTH_REDIRECT_STORAGE_KEY, sanitizeAuthRedirect } from "@/lib/authRedir
 import { toast } from "sonner"
 
 interface Props {
-  variant?: "signup" | "signin"
   redirectTo?: string
 }
 
-const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo }) => {
+const SocialLoginButtons: React.FC<Props> = ({ redirectTo }) => {
   const storeRedirectTarget = () => {
     sessionStorage.setItem(
       AUTH_REDIRECT_STORAGE_KEY,
@@ -75,7 +74,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo })
         >
           <Image src="/assets/icons/google-icon.svg" alt="google-icon" width={20} height={20} className="w-4 h-4" />
           <span className="text-sm">
-            {variant === "signup" ? "Sign up" : "Sign in"} with Google
+            Continue with Google
           </span>
         </button>
       </div>
@@ -88,7 +87,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo })
           className="flex gap-2 items-center justify-center  hover:bg-gray-200 cursor-pointer rounded-lg px-4 py-2.5 w-full border border-gray-300 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
         >
           <Image src="/assets/icons/linkedin-icon.svg" alt="linkedin-icon" width={20} height={20} className="w-4 h-4" />
-          <span className="text-sm ">{variant === "signup" ? "Sign up" : "Sign in"} with LinkedIn</span>
+          <span className="text-sm ">Continue with LinkedIn</span>
         </button>
       </div>
     </div>

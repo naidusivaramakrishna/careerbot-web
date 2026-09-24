@@ -64,6 +64,14 @@ export interface ResumeResponse {
     expiryDate?: string;
     credentialId?: string;
   }>;
+  licenses?: Array<{
+    id?: string;
+    name: string;
+    issuedBy: string;
+    year: string;
+    expiryDate?: string;
+    credentialId?: string;
+  }>;
   achievements?: Array<{
     id?: string;
     title: string;
@@ -162,6 +170,8 @@ export interface TemplateResponse {
   subtitle?: string;
   description?: string;
   preview_url?: string;
+  preview_html?: string;
+  preview_css?: string;
   category?: string;
   ats_friendly?: boolean;
   layout?: {
@@ -1055,6 +1065,21 @@ export const downloadResume = async (
 
   } catch (error) {
     logger.error('❌ Error downloading:', error);
+    throw error;
+  }
+};
+
+// Get a single template by ID with full details including preview HTML/CSS
+export const getTemplateById = async (templateId: string): Promise<TemplateResponse> => {
+  try {
+    logger.debug("📋 Fetching template by ID:", templateId);
+
+    const response = await httpClient.get<TemplateResponse>(`/templates/${templateId}`);
+
+    logger.info("✅ Template fetched:", response.data);
+    return response.data;
+  } catch (error) {
+    logger.error("❌ Error fetching template by ID:", error);
     throw error;
   }
 };

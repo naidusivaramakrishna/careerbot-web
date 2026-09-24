@@ -306,12 +306,18 @@ export const createAdmin = async (
 
 /**
  * Admin logout endpoint
- * ✅ Backend clears httpOnly cookies automatically
- * ❌ No need to manually clear tokens
+ * Clears auth tokens and redirects to login page
+ * Uses a dedicated logout route that clears httpOnly cookies via Set-Cookie headers
  */
 export const adminLogout = async (): Promise<void> => {
   try {
-    await httpClient.post('/admin/auth/logout');
+    // Call the logout API route which will clear cookies via Set-Cookie headers
+    await fetch('/api/admin/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
   } catch (error) {
     logger.error('Error logging out admin:', error);
   } finally {
@@ -322,7 +328,9 @@ export const adminLogout = async (): Promise<void> => {
       sessionStorage.removeItem('admin_role');
       // Clear admin token expiry
       localStorage.removeItem('admin_token_expires_in_seconds');
+
       // Force redirect to admin login
+      // Cookies are cleared via Set-Cookie headers from /api/admin/auth/logout
       window.location.href = '/admin/login';
     }
   }

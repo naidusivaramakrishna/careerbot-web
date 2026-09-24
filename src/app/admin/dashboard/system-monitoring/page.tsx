@@ -13,6 +13,15 @@ import { PerformanceMetrics } from './_components/PerformanceMetrics'
 import { logger } from '@/lib/logger'
 import { useAdminAccess } from '../../_hooks/useAdminAccess'
 import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
+import type { LogLevel, LogSource } from '@/api/adminMonitoringApi'
+
+interface LogsFilters {
+    level: LogLevel | ''
+    source: LogSource | ''
+    search: string
+    startDate: string
+    endDate: string
+}
 
 const SystemMonitoring = () => {
     const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('system-monitoring');
@@ -20,6 +29,13 @@ const SystemMonitoring = () => {
     const [activeTabs, setActiveTabs] = useState({ api: "Today", cpu: "Today", memory: "Today" })
     const [showComparisons, setShowComparisons] = useState({ api: false, cpu: false, memory: false })
     const [autoRefresh, setAutoRefresh] = useState<string>("Off")
+    const [logsFilters, setLogsFilters] = useState<LogsFilters>({
+        level: '',
+        source: '',
+        search: '',
+        startDate: '',
+        endDate: '',
+    })
 
     // Load auto-refresh preference from localStorage on mount
     useEffect(() => {
@@ -47,7 +63,8 @@ const SystemMonitoring = () => {
         apiShowComparison: showComparisons.api,
         cpuShowComparison: showComparisons.cpu,
         memoryShowComparison: showComparisons.memory,
-        autoRefresh
+        autoRefresh,
+        logsFilters
     })
 
     const handleRefresh = useCallback(() => {
@@ -144,7 +161,12 @@ const SystemMonitoring = () => {
 
             {/* System Logs */}
             {systemLogs && (
-                <SystemLogsSection logs={systemLogs.logs} />
+                <SystemLogsSection
+                    logs={systemLogs.logs}
+                    loading={isRefreshing}
+                    filters={logsFilters}
+                    onFiltersChange={setLogsFilters}
+                />
             )}
 
             {/* Performance Metrics */}

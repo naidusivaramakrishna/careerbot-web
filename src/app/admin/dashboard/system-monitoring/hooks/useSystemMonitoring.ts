@@ -11,8 +11,18 @@ import {
     type MemoryUsageResponse,
     type SystemLogsResponse,
     type MonitoringPeriod,
+    type LogLevel,
+    type LogSource,
 } from '@/api/adminMonitoringApi'
 import { logger } from '@/lib/logger'
+
+interface LogsFilters {
+    level: LogLevel | ''
+    source: LogSource | ''
+    search: string
+    startDate: string
+    endDate: string
+}
 
 interface UseSystemMonitoringProps {
     activeTab: string
@@ -22,6 +32,7 @@ interface UseSystemMonitoringProps {
     cpuShowComparison: boolean
     memoryShowComparison: boolean
     autoRefresh: string
+    logsFilters?: LogsFilters
 }
 
 export const useSystemMonitoring = ({
@@ -31,7 +42,8 @@ export const useSystemMonitoring = ({
     apiShowComparison,
     cpuShowComparison,
     memoryShowComparison,
-    autoRefresh
+    autoRefresh,
+    logsFilters
 }: UseSystemMonitoringProps) => {
     const [systemOverview, setSystemOverview] = useState<SystemOverviewResponse | null>(null)
     const [apiMetrics, setApiMetrics] = useState<ApiRequestMetricsResponse | null>(null)
@@ -61,12 +73,19 @@ export const useSystemMonitoring = ({
             const cpuPeriod = getPeriodFromTab(cpuActiveTab || activeTab)
             const memoryPeriod = getPeriodFromTab(memoryActiveTab || activeTab)
 
+            const logsParams: Record<string, any> = { page: 1, page_size: 10 }
+            if (logsFilters?.level) logsParams.level = logsFilters.level
+            if (logsFilters?.source) logsParams.source = logsFilters.source
+            if (logsFilters?.search) logsParams.search = logsFilters.search
+            if (logsFilters?.startDate) logsParams.start_date = logsFilters.startDate
+            if (logsFilters?.endDate) logsParams.end_date = logsFilters.endDate
+
             const [overview, api, cpu, memory, logs] = await Promise.all([
                 getSystemOverview(),
                 getApiRequestMetrics(apiPeriod, apiShowComparison),
                 getCpuUsage(cpuPeriod, cpuShowComparison),
                 getMemoryUsage(memoryPeriod, memoryShowComparison),
-                getSystemLogs({ page: 1, page_size: 10 })
+                getSystemLogs(logsParams)
             ])
 
             setSystemOverview(overview)
@@ -87,7 +106,7 @@ export const useSystemMonitoring = ({
             setLoading(false)
             setIsRefreshing(false)
         }
-    }, [activeTab, cpuActiveTab, memoryActiveTab, apiShowComparison, cpuShowComparison, memoryShowComparison, getPeriodFromTab])
+    }, [activeTab, cpuActiveTab, memoryActiveTab, apiShowComparison, cpuShowComparison, memoryShowComparison, logsFilters, getPeriodFromTab])
 
     // Initial fetch
     useEffect(() => {

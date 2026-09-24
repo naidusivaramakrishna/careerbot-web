@@ -1,46 +1,61 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CheckCircle, XCircle, Mail } from "lucide-react";
-import { verifyEmail } from "@/api/authApi";
+import { verifyEmail, signIn } from "@/api/authApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
+import axios from "axios";
 
-type VerificationStatus = "loading" | "success" | "error" | "idle";
+type VerificationStatus = "loading" | "success" | "error" | "idle" | "waiting-otp";
 
 const VerifyEmailContent = () => {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const token = searchParams.get("token");
-
-  const [status, setStatus] = useState<VerificationStatus>("idle");
+  const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [status, setStatus] = useState<VerificationStatus>("waiting-otp");
   const [errorMessage, setErrorMessage] = useState("");
   const [countdown, setCountdown] = useState(5);
   const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
 
   useEffect(() => {
-    // Auto-verify if token exists
-    if (token) {
-      // Strip token from URL after reading to prevent leakage via:
-      // - Browser history
-      // - Referer headers
-      // - Server access logs
-      window.history.replaceState({}, document.title, window.location.pathname);
+    const storedUserId = sessionStorage.getItem("pendingVerificationUserId");
+    const storedEmail = sessionStorage.getItem("pendingVerificationEmail");
+    const storedPassword = sessionStorage.getItem("pendingVerificationPassword");
 
-      verifyEmailToken();
-    } else {
-      setStatus("error");
-      setErrorMessage("No verification token found. Please check your email link.");
-    }
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (storedUserId) setUserId(storedUserId);
+    if (storedEmail) setEmail(storedEmail);
+    if (storedPassword) setPassword(storedPassword);
+  }, []);
 
-  // Redirect immediately on success, countdown timer for error
   useEffect(() => {
     if (status === "success") {
-      // Wait 2 seconds to show success message, then redirect to login
-      const timer = setTimeout(() => {
-        window.location.href = "/?showLogin=true&verified=true";
+      const timer = setTimeout(async () => {
+        // Auto-signin user after email verification
+        try {
+          await signIn({ email, password });
+          localStorage.setItem('token_last_refreshed_at', Date.now().toString());
+
+          // Clear temporary credentials
+          sessionStorage.removeItem("pendingVerificationUserId");
+          sessionStorage.removeItem("pendingVerificationEmail");
+          sessionStorage.removeItem("pendingVerificationPassword");
+
+          // Redirect to onboarding
+          window.location.href = "/onboarding";
+        } catch (signinError) {
+          logger.error("Auto-signin failed after email verification:", signinError);
+          // Fallback to signin page if auto-signin fails
+          sessionStorage.removeItem("pendingVerificationUserId");
+          sessionStorage.removeItem("pendingVerificationEmail");
+          sessionStorage.removeItem("pendingVerificationPassword");
+          sessionStorage.setItem("emailVerified", "true");
+          window.location.href = "/?showLogin=true&verified=true";
+        }
       }, 2000);
       setRedirectTimer(timer);
       return () => clearTimeout(timer);
@@ -52,13 +67,11 @@ const VerifyEmailContent = () => {
       return () => clearTimeout(timer);
     }
 
-    // Redirect on error after countdown
     if (status === "error" && countdown === 0) {
       router.push("/?showLogin=true");
     }
-  }, [countdown, status, router]);
+  }, [countdown, status, router, email, password]);
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (redirectTimer) {
@@ -67,18 +80,28 @@ const VerifyEmailContent = () => {
     };
   }, [redirectTimer]);
 
-  const verifyEmailToken = async () => {
-    if (!token) return;
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!userId) {
+      setStatus("error");
+      setErrorMessage("Session expired. Please sign up again.");
+      toast.error("Session expired. Please sign up again.");
+      return;
+    }
+
+    if (!otp || otp.length !== 6) {
+      setErrorMessage("Please enter a valid 6-digit OTP.");
+      toast.error("Please enter a valid 6-digit OTP.");
+      return;
+    }
 
     try {
       setStatus("loading");
-
-      const response = await verifyEmail({ token });
+      const response = await verifyEmail({ user_id: userId, otp });
 
       logger.info("Email verification response received");
 
-      // Backend returns success if API call completes without error
-      // Response contains: { message: "Email verified successfully" } or similar
       if (response && response.message) {
         setStatus("success");
         toast.success(response.message || "Email verified successfully!");
@@ -91,31 +114,41 @@ const VerifyEmailContent = () => {
       logger.error("Email verification error:", error);
 
       let errorMsg = "Email verification failed. Please try again.";
-      if (typeof error === "object" && error !== null) {
-        const apiError = error as { response?: { data?: { error?: { message?: string }; detail?: string } } };
-        errorMsg =
-          apiError.response?.data?.error?.message ||
-          apiError.response?.data?.detail ||
-          "Email verification failed. Please try again.";
+      let attempts: number | null = null;
+
+      if (axios.isAxiosError(error)) {
+        const apiError = error.response?.data as unknown as Record<string, unknown>;
+        const errorObj = (apiError?.error as Record<string, unknown>) || {};
+        const errorCode = (errorObj?.code as string) || (apiError?.code as string);
+        const detail = (errorObj?.message as string) || (apiError?.detail as string) || "";
+
+        if (errorCode === "OTP_INVALID") {
+          attempts = (errorObj?.attempts_remaining as number) || null;
+          errorMsg = attempts
+            ? `Invalid OTP. ${attempts} attempt${attempts !== 1 ? "s" : ""} remaining.`
+            : "Invalid OTP.";
+        } else if (errorCode === "OTP_EXPIRED") {
+          errorMsg = "OTP has expired. Please request a new one.";
+        } else if (errorCode === "OTP_MAX_ATTEMPTS") {
+          errorMsg = "Too many wrong attempts. Please request a new OTP.";
+        } else if (errorCode === "USER_NOT_FOUND") {
+          errorMsg = "User not found. Please sign up again.";
+        } else {
+          errorMsg = detail || errorMsg;
+        }
+        setRemainingAttempts(attempts);
       } else if (error instanceof Error) {
         errorMsg = error.message;
       }
 
-      // Treat "already verified" as success since the email IS verified
-      if (errorMsg.toLowerCase().includes("already verified")) {
-        setStatus("success");
-        setErrorMessage("");
-        toast.success("Your email is already verified. You can sign in now.");
-      } else {
-        setStatus("error");
-        setErrorMessage(errorMsg);
-        toast.error(errorMsg);
-      }
+      setStatus("error");
+      setErrorMessage(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100 px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
         {/* Loading State */}
         {status === "loading" && (
@@ -167,12 +200,11 @@ const VerifyEmailContent = () => {
             <h1 className="text-2xl font-bold text-red-600 mb-2">Verification Failed</h1>
             <p role="alert" className="text-gray-600 mb-4">{errorMessage}</p>
 
-            {/* Troubleshooting tips */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
               <p className="text-sm font-semibold text-yellow-900 mb-2">What you can do:</p>
               <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
-                <li>Check if the link has expired (links expire in 48 hours)</li>
-                <li>Request a new verification email</li>
+                <li>Check your email for the OTP code</li>
+                <li>Request a new OTP code</li>
                 <li>Check your spam/junk folder</li>
               </ul>
             </div>
@@ -183,10 +215,9 @@ const VerifyEmailContent = () => {
                 data-testid="try-again-btn"
                 onClick={() => {
                   setCountdown(5);
-                  setStatus("idle");
-                  if (token) {
-                    verifyEmailToken();
-                  }
+                  setErrorMessage("");
+                  setStatus("waiting-otp");
+                  setOtp("");
                 }}
                 className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
               >
@@ -210,30 +241,67 @@ const VerifyEmailContent = () => {
           </>
         )}
 
-        {/* Idle State (No token) */}
-        {status === "idle" && (
+        {/* Waiting for OTP Input */}
+        {(status === "waiting-otp" || status === "loading") && (
           <>
             <div className="mb-6 flex justify-center">
-              <div className="bg-gray-100 rounded-full p-4">
-                <Mail className="w-12 h-12 text-gray-600" />
+              <div className="bg-blue-100 rounded-full p-4">
+                <Mail className="w-12 h-12 text-blue-600" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Email Verification</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Verify Your Email</h1>
             <p className="text-gray-600 mb-6">
-              Click the link in your email to verify your email address.
+              We&apos;ve sent a 6-digit code to your email. Enter it below to verify your account.
             </p>
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <form onSubmit={handleOtpSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="otp" className="block text-sm font-semibold text-gray-900 mb-2">
+                  6-Digit OTP
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  data-testid="otp-input"
+                  className={`w-full px-4 py-3 text-2xl tracking-widest text-center border-2 rounded-lg outline-none transition-colors ${
+                    errorMessage
+                      ? "border-red-400 bg-red-50 focus:border-red-600"
+                      : "border-gray-300 bg-white focus:border-blue-600"
+                  }`}
+                />
+              </div>
+
+              {errorMessage && <p className="text-red-600 text-sm">{errorMessage}</p>}
+
+              <button
+                type="submit"
+                disabled={!otp || otp.length !== 6}
+                data-testid="verify-otp-btn"
+                className="w-full py-3 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {status === "loading" && (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                )}
+                Verify Email
+              </button>
+            </form>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
               <p className="text-sm text-gray-700 mb-4">
-                <strong>Didn&apos;t receive the email?</strong>
+                <strong>Didn&apos;t receive the code?</strong>
               </p>
               <button
                 type="button"
-                data-testid="request-new-verification-btn"
+                data-testid="resend-otp-btn"
                 onClick={() => router.push("/?showLogin=true")}
                 className="text-sm text-[#2257a7] hover:text-[#184284] font-semibold underline"
               >
-                Click here to request a new verification email
+                Request a new OTP
               </button>
             </div>
 
@@ -241,7 +309,7 @@ const VerifyEmailContent = () => {
               type="button"
               data-testid="back-to-signin-btn"
               onClick={() => router.push("/?showLogin=true")}
-              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
+              className="w-full mt-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
             >
               Back to Sign In
             </button>

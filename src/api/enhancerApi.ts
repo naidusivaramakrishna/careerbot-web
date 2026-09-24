@@ -389,24 +389,43 @@ export async function getEnhancementHistory(limit: number = 20): Promise<Enhance
  * Download Enhanced Resume
  * GET /api/v1/resume/enhance/{enhanced_id}/download
  *
- * Download enhanced resume as PDF or DOCX
+ * Download enhanced resume as PDF or DOCX with template styling options
  *
  * @param enhanced_id - ID of enhanced resume
  * @param format - Export format (pdf or docx)
+ * @param catalogueTemplateId - Catalogue template ID for styling
+ * @param domainTemplateId - Domain template ID for styling
+ * @param sectionBgColor - Background color for sections
+ * @param accentColor - Accent color for elements
+ * @param sectionOrder - Order of resume sections
+ * @param fontFamily - Font family for resume
+ * @param lineSpacing - Line spacing/height
+ * @param careerLevel - Career level for template selection
  * @returns Blob of the file
  */
 export async function downloadEnhancedResume(
   enhanced_id: string,
   format: "pdf" | "docx" = "pdf",
-  template?: string
+  catalogueTemplateId?: string,
+  domainTemplateId?: string,
+  sectionBgColor?: string,
+  accentColor?: string,
+  sectionOrder?: string[],
+  fontFamily?: string,
+  lineSpacing?: string,
+  careerLevel?: string
 ): Promise<Blob> {
   try {
-    // When a template is selected, set preserve_template=false so backend uses the chosen template
-    const preserveTemplate = template ? "false" : "true";
-    const params = new URLSearchParams({ format, preserve_template: preserveTemplate });
-    if (template) {
-      params.set("template_id", template);
-    }
+    const params = new URLSearchParams({ format });
+    if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
+    if (domainTemplateId) params.append('template_id', domainTemplateId);
+    if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
+    if (accentColor) params.append('accent_color', accentColor);
+    if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
+    if (fontFamily) params.append('font_family', fontFamily);
+    if (lineSpacing) params.append('line_height', lineSpacing);
+    if (careerLevel) params.append('career_level', careerLevel);
+
     const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/download?${params.toString()}`, {
       responseType: 'blob',
     });

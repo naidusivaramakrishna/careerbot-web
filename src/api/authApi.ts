@@ -23,7 +23,8 @@ export interface SignUpRequest {
 }
 
 export interface SignUpResponse {
-  success: boolean;
+  id: string;
+  success?: boolean;
   message?: string;
   tenant_id?: string;
 }
@@ -245,7 +246,8 @@ export const resendVerificationEmail = async (
 };
 
 export interface VerifyEmailRequest {
-  token: string;
+  user_id: string;
+  otp: string;
 }
 
 export interface VerifyEmailResponse {
@@ -254,12 +256,13 @@ export interface VerifyEmailResponse {
 }
 
 /**
- * Verify user email address
+ * Verify user email address with OTP
  *
- * Confirms email verification using the token sent to the user's email.
+ * Confirms email verification using the 6-digit OTP sent to user's email during signup.
  *
- * @param data - Verification token from email
+ * @param data - User ID and OTP code
  * @returns Success status and message
+ * @throws Error with code OTP_EXPIRED, OTP_INVALID, OTP_MAX_ATTEMPTS, or USER_NOT_FOUND
  */
 export const verifyEmail = async (
   data: VerifyEmailRequest

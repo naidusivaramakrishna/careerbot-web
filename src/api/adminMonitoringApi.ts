@@ -99,8 +99,8 @@ export interface MemoryUsageResponse {
 export interface SystemLog {
     id: string;
     message: string;
-    level: 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
-    source: 'System' | 'Database' | 'API' | 'Cache' | 'Worker';
+    level: 'WARNING' | 'CRITICAL';
+    source: 'System' | 'Database'
     timestamp: string;
     metadata: Record<string, unknown>;
 }
@@ -114,8 +114,8 @@ export interface SystemLogsResponse {
 }
 
 export type MonitoringPeriod = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days';
-export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
-export type LogSource = 'System' | 'Database' | 'API' | 'Cache' | 'Worker';
+export type LogLevel = 'WARNING' | 'CRITICAL';
+export type LogSource = 'System' | 'Database'
 
 export interface LogsQueryParams {
     level?: LogLevel;
@@ -401,21 +401,6 @@ export const getCriticalLogs = async (
     });
 };
 
-/**
- * Get error logs
- * 
- * Helper to get only ERROR level logs
- */
-export const getErrorLogs = async (
-    page: number = 1,
-    pageSize: number = 50
-): Promise<SystemLogsResponse> => {
-    return getSystemLogs({
-        level: 'ERROR',
-        page,
-        page_size: pageSize,
-    });
-};
 
 /**
  * Get recent logs
@@ -496,15 +481,27 @@ export const getLogLevelColor = (level: LogLevel): string => {
  * Utility to format ISO timestamps to readable format
  */
 export const formatTimestamp = (isoString: string): string => {
-    const date = new Date(isoString);
-    return date.toLocaleString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    });
+    try {
+        // Ensure timestamp is treated as UTC by appending 'Z' if missing
+        const utcString = isoString.includes('Z') || isoString.includes('+') ? isoString : `${isoString}Z`;
+        const date = new Date(utcString);
+
+        // Use Intl.DateTimeFormat for explicit timezone conversion to IST
+        const formatter = new Intl.DateTimeFormat('en-IN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZone: 'Asia/Kolkata',
+        });
+
+        return formatter.format(date);
+    } catch (error) {
+        logger.error('Error formatting timestamp:', error);
+        return isoString;
+    }
 };
 
 /**

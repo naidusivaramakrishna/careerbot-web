@@ -120,7 +120,7 @@ export const useUserManagement = () => {
 
             const exportParams: Record<string, unknown> = {
                 page: 1,
-                page_size: 10000,
+                page_size: 100,
             }
 
             // Add current filters to export

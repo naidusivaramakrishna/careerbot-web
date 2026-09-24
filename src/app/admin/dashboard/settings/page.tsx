@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 
 // Components
 import TabNavigation from './_components/TabNavigation';
@@ -19,8 +19,16 @@ import { LockedPageOverlay } from '../../_components/LockedPageOverlay';
 
 
 const AdminSettings: React.FC = () => {
-    const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('settings');
-    const [activeTab, setActiveTab] = useState<TabType>('Feature Flags');
+    const { hasAccess, userRole, requiredRoles, loading: accessLoading } = useAdminAccess('settings');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
+    const [activeTab, setActiveTab] = useState<TabType>('Security');
+
+    // Determine disabled tabs based on role
+    const disabledTabs = useMemo(() => {
+        return isSuperAdmin
+            ? ([] as TabType[])
+            : (['Feature Flags', 'System configuration'] as TabType[]);
+    }, [isSuperAdmin]);
 
     // Feature flags hook
     const {
@@ -72,7 +80,7 @@ const AdminSettings: React.FC = () => {
                 <div>
                     <h1 className="font-semibold text-xl">Settings</h1>
                     <p className="text-[#4A5565] text-xs">
-                        Manage Feature Flags and system configuration.
+                        {isSuperAdmin ? 'Manage Feature Flags and system configuration.' : 'Configure Two-Factor Authentication for your account.'}
                     </p>
                 </div>
             </div>
@@ -81,6 +89,7 @@ const AdminSettings: React.FC = () => {
             <TabNavigation
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
+                disabledTabs={disabledTabs}
             />
 
             {/* Tab Content */}

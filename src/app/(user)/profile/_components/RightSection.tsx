@@ -24,6 +24,8 @@ import {
     deleteCertification,
     addCertificationAutoFill,
     uploadResume,
+    updateEmploymentInfo,
+    getEmploymentInfo,
 } from "@/api/userApi";
 
 import { useProfileContext } from '../context/ProfileContext'
@@ -262,6 +264,17 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                         });
                     }
                     sectionResults.experience = 'ok';
+
+                    // Auto-fill employment status if experience found
+                    try {
+                        const existingInfo = await getEmploymentInfo();
+                        await updateEmploymentInfo({
+                            ...existingInfo,
+                            employment_status: 'employed'
+                        });
+                    } catch (err) {
+                        logger.warn("Could not update employment status:", err);
+                    }
                 } catch (err) {
                     logger.error("Error adding experience:", err);
                     sectionResults.experience = 'failed';
@@ -628,6 +641,17 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                         });
                     }
                     sectionResults.experience = 'ok';
+
+                    // Auto-fill employment status if experience found
+                    try {
+                        const existingInfo = await getEmploymentInfo();
+                        await updateEmploymentInfo({
+                            ...existingInfo,
+                            employment_status: 'employed'
+                        });
+                    } catch (err) {
+                        logger.warn("Could not update employment status from LinkedIn:", err);
+                    }
                 } catch (err) {
                     logger.error("Error adding experience from LinkedIn:", err);
                 }
