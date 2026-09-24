@@ -17,8 +17,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Smartphone,
-  Sparkles,
-  Timer,
   UserRound,
   Video,
   VideoOff,
@@ -177,107 +175,114 @@ function InfoScreen({ onContinue }: { onContinue: () => void }) {
     "If connection drops, reconnect and continue from the saved room state.",
   ];
 
-  const roomSignals = [
-    { label: "Format", value: "Live AI voice panel" },
-    { label: "Questions", value: "6 adaptive prompts" },
-    { label: "Answer time", value: "About 2 min" },
-    { label: "Output", value: "Transcript + report" },
-  ];
-
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-5 text-gray-950 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-4">
-        <header className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2557a7] text-white">
-              <Radio size={17} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#2557a7]">Live interview briefing</p>
-              <h1 className="truncate text-base font-semibold text-gray-950 sm:text-lg">Mock interview room information</h1>
-            </div>
-          </div>
-          <div className="hidden rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 sm:block">
-            Ready for room check
-          </div>
-        </header>
-
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm lg:p-6">
-            <div className="max-w-3xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">
-                <Sparkles size={13} className="text-[#2557a7]" /> Realistic interview setup
+    <main className="min-h-screen px-4 py-6 text-gray-950 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 flex flex-col gap-4 rounded-lg border border-gray-200 bg-white px-6 py-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7] text-white">
+                <Radio size={18} />
+              </span>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Mock Interview</p>
+                <h1 className="text-2xl font-semibold tracking-tight text-gray-950">Room setup workflow</h1>
               </div>
-              <h2 className="max-w-2xl text-xl font-semibold leading-tight tracking-tight text-gray-950 lg:text-2xl">
-                Review the live interview flow before the AI interviewer joins.
-              </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600">
-                This room simulates a real video interview with voice questions, timed answers, live transcript capture, follow-up handling, reconnect support, and a structured report after completion.
+            </div>
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-gray-600">
+              Review the live AI interview flow, session format, and candidate instructions before continuing to device checks.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f]"
+          >
+            Continue to room check <ArrowRight size={15} />
+          </button>
+        </div>
+
+        <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="grid border-b border-gray-200 lg:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)]">
+            <div className="p-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Session plan</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-950">Live AI voice panel</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
+                The room opens a guided AI interview, confirms device readiness, and produces a transcript with the final report after completion.
               </p>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {flow.map(({ title, copy, Icon }, index) => (
-                <div key={title} className="rounded-lg border border-gray-200 bg-gray-50 p-3.5">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-[#2557a7]"><Icon size={16} /></span>
-                    <span className="text-[11px] font-semibold text-gray-400">0{index + 1}</span>
+            <div className="grid border-t border-gray-200 sm:grid-cols-3 lg:border-l lg:border-t-0">
+              <div className="border-b border-gray-200 p-5 sm:border-b-0 sm:border-r">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
+                    <Radio size={18} />
+                  </span>
+                </div>
+                <p className="mt-4 text-sm font-semibold text-gray-950">Voice interview</p>
+                <p className="mt-1 text-xs leading-5 text-gray-600">AI interviewer joins after setup.</p>
+              </div>
+
+              <div className="border-b border-gray-200 p-5 sm:border-b-0 sm:border-r">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
+                    <Mic size={18} />
+                  </span>
+                </div>
+                <p className="mt-4 text-sm font-semibold text-gray-950">Device check</p>
+                <p className="mt-1 text-xs leading-5 text-gray-600">Mic, camera, speaker, and network.</p>
+              </div>
+
+              <div className="p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
+                    <FileText size={18} />
+                  </span>
+                </div>
+                <p className="mt-4 text-sm font-semibold text-gray-950">Transcript + report</p>
+                <p className="mt-1 text-xs leading-5 text-gray-600">Generated when the interview ends.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="p-6">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Interview flow</p>
+                  <h2 className="mt-1 text-lg font-semibold text-gray-950">What happens inside the room</h2>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                {flow.map(({ title, copy, Icon }, index) => (
+                  <div key={title} className="grid gap-4 border-b border-gray-100 px-4 py-4 last:border-b-0 sm:grid-cols-[44px_140px_minmax(0,1fr)] sm:items-center">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
+                      <Icon size={16} />
+                    </span>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Step {index + 1}</p>
+                      <p className="text-sm font-semibold text-gray-950">{title}</p>
+                    </div>
+                    <p className="text-sm leading-6 text-gray-600">{copy}</p>
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-950">{title}</h3>
-                  <p className="mt-1 text-xs leading-5 text-gray-600">{copy}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">
-              {roomSignals.map((item) => (
-                <div key={item.label} className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">{item.label}</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-950">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <aside className="grid gap-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-[#2557a7]"><Timer size={17} /></span>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">Candidate instructions</p>
-                  <h2 className="text-base font-semibold text-gray-950">How to perform well</h2>
-                </div>
-              </div>
-              <ul className="space-y-2">
-                {expectations.map((item) => (
-                  <li key={item} className="flex gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-5 text-gray-700">
-                    <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[#2557a7]" />
-                    <span>{item}</span>
-                  </li>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-[#2557a7]"><Mic size={17} /></span>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#2557a7]">Room requirements</p>
-                  <h2 className="text-base font-semibold text-gray-950">Mic, camera, speaker, network</h2>
-                </div>
+            <aside className="border-t border-gray-200 bg-gray-50 p-6 lg:border-l lg:border-t-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Candidate instructions</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-950">How to perform well</h2>
+              <div className="mt-5 space-y-3">
+                {expectations.map((item) => (
+                  <div key={item} className="flex gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm leading-5 text-gray-700">
+                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#2557a7]" />
+                    <span>{item}</span>
+                  </div>
+                ))}
               </div>
-              <p className="text-sm leading-6 text-gray-600">
-                CareerBot will verify your microphone, camera preview, speaker output, connection state, and quiet-room confirmation before the timer starts.
-              </p>
-              <button
-                type="button"
-                onClick={onContinue}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2557a7]/90 focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
-              >
-                Continue to room check <ArrowRight size={15} />
-              </button>
-            </div>
-          </aside>
+            </aside>
+          </div>
         </section>
       </div>
     </main>
@@ -401,17 +406,31 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
   const canContinue = micState === "ok" && camState === "ok" && speakerState === "ok" && quietConfirmed && network.state !== "offline";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-5 sm:px-6">
-      <div className="mb-5 text-center">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[#2557a7]/10 px-3 py-1 text-xs font-medium text-[#2557a7]">
-          <Sparkles size={12} /> Pre-interview checks
+    <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Room check</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950">Set up your interview room</h1>
+        <p className="mt-3 text-sm leading-6 text-gray-600">
+          Verify every live-interview dependency before the AI interviewer joins.
+        </p>
+        <div className="mt-6 rounded-lg border border-gray-200">
+          {[
+            ["Microphone", micState],
+            ["Camera", camState],
+            ["Speaker", speakerState],
+            ["Connection", network.state],
+          ].map(([label, state]) => (
+            <div key={label} className="flex items-center justify-between border-b border-gray-100 px-3 py-3 text-xs last:border-b-0">
+              <span className="font-semibold text-gray-700">{label}</span>
+              <span className={`font-bold ${state === "ok" ? "text-[#2557a7]" : "text-gray-400"}`}>{state === "ok" ? "Ready" : "Pending"}</span>
+            </div>
+          ))}
         </div>
-        <h1 className="text-xl font-semibold text-gray-900">Set up your interview room</h1>
-        <p className="text-sm text-gray-500 mt-1">Verify devices, audio, connection, and environment before the AI interviewer joins.</p>
-      </div>
+      </aside>
 
+      <section>
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${micState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
@@ -438,7 +457,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${camState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
@@ -469,7 +488,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${speakerState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
@@ -491,7 +510,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${network.state === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
               {network.state === "offline" ? <WifiOff size={18} className="text-gray-500" /> : network.state === "ok" ? <CheckCircle2 size={18} className="text-[#2557a7]" /> : <Wifi size={18} className="text-gray-500" />}
@@ -505,7 +524,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
         </div>
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <input type="checkbox" checked={quietConfirmed} onChange={(event) => setQuietConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 rounded accent-[#2557a7]" />
         <div>
           <p className="text-sm font-semibold text-gray-900">Quiet environment confirmed</p>
@@ -513,17 +532,18 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
         </div>
       </label>
 
-      <button onClick={onContinue} disabled={!canContinue} className="mt-4 w-full rounded-lg bg-[#2557a7] py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2557a7]/90 disabled:cursor-not-allowed disabled:opacity-40">
+      <button onClick={onContinue} disabled={!canContinue} className="mt-4 w-full rounded-lg bg-[#2557a7] py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f] disabled:cursor-not-allowed disabled:opacity-40">
         {canContinue ? "Continue to interview setup" : "Complete mic, camera, speaker, and room checks"}
       </button>
+      </section>
     </div>
   );
 }
 
 function ConnectingScreen({ sessionType }: { sessionType: SessionType }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8 text-gray-950">
-      <section className="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+    <main className="flex min-h-screen items-center justify-center px-4 py-8 text-gray-950">
+      <section className="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-7 text-center shadow-sm">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-[#2557a7] text-white">
           <Loader2 size={22} className="animate-spin" />
         </div>
@@ -650,7 +670,7 @@ function PreInterviewScreen({
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       {isMobile && (
         <div className="mb-5 flex items-start gap-2.5 bg-[#2557a7]/5 border border-[#2557a7]/20 rounded-lg px-4 py-3">
           <Smartphone size={15} className="text-[#2557a7] mt-0.5 shrink-0" />
@@ -660,15 +680,18 @@ function PreInterviewScreen({
         </div>
       )}
 
-      <div className="mb-5 text-center">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[#2557a7]/10 px-3 py-1 text-xs font-medium text-[#2557a7]">
-          <Sparkles size={12} /> Live AI Mock Interview
+      <div className="mb-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Role matrix</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">Choose your interview role</h2>
+            <p className="mt-1 text-sm text-gray-500">Filter by discipline, then open a role to confirm format and resume.</p>
+          </div>
+          <div className="text-xs font-semibold text-gray-500">{visibleRoles.length} roles shown</div>
         </div>
-        <h1 className="mb-1 text-xl font-semibold text-gray-900">Choose your interview role.</h1>
-        <p className="text-gray-500 text-sm">Select the role you want to simulate. You can confirm the interview type before entering the live room.</p>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-1.5">
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
         {ROLE_CATEGORY_FILTERS.map((category) => {
           const isActive = selectedCategory === category;
 
@@ -677,7 +700,7 @@ function PreInterviewScreen({
               key={category}
               type="button"
               onClick={() => setSelectedCategory(category)}
-              className={`rounded-full border px-3 py-1 text-[11px] font-medium leading-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2 ${
+              className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold leading-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2 ${
                 isActive
                   ? "border-transparent bg-[#2557a7] text-white shadow-sm"
                   : "border-gray-200 bg-white text-gray-700 hover:border-[#2557a7]/40 hover:text-[#2557a7]"
@@ -689,7 +712,7 @@ function PreInterviewScreen({
         })}
       </div>
 
-      <div className="mb-4 grid gap-2.5 lg:grid-cols-3">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {visibleRoles.map((role) => {
           const roleTitle = role.title;
 
@@ -698,7 +721,7 @@ function PreInterviewScreen({
               key={roleTitle}
               type="button"
               onClick={() => openRoleModal(role)}
-              className="flex min-h-[56px] items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-3 text-center text-sm font-semibold text-gray-900 shadow-[0_8px_20px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-[#2557a7]/40 hover:text-[#2557a7] hover:shadow-[0_10px_24px_rgba(15,23,42,0.10)] focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
+              className="flex min-h-[60px] items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-3 text-center text-sm font-semibold text-gray-900 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2557a7]/40 hover:text-[#2557a7] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
             >
               {roleTitle}
             </button>
@@ -708,7 +731,7 @@ function PreInterviewScreen({
 
       {selectedRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4" role="dialog" aria-modal="true" aria-labelledby="role-confirm-title">
-          <section className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
+          <section className="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#2557a7]">Confirm interview</p>

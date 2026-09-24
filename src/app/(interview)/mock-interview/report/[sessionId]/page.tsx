@@ -260,12 +260,12 @@ function QuestionRow({ q }: { q: UiQuestion }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
       <button
         onClick={() => setOpen((s) => !s)}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50"
       >
-        <span className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center shrink-0">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs font-bold text-gray-600">
           {q.num}
         </span>
         <p className="flex-1 text-sm font-medium text-gray-800 truncate">{q.text}</p>
@@ -278,17 +278,17 @@ function QuestionRow({ q }: { q: UiQuestion }) {
       </button>
 
       {open && (
-        <div className="border-t border-gray-100 px-4 py-4 bg-gray-50">
+        <div className="border-t border-gray-100 bg-gray-50 px-4 py-4">
           <div className="grid grid-cols-3 gap-3 mb-3">
-            <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
+            <div className="rounded-lg border border-gray-200 bg-white p-2 text-center">
               <p className="text-[10px] text-gray-500 mb-0.5">Score</p>
               <p className={`text-sm font-bold ${scoreColor(q.mock_score)}`}>{q.mock_score.toFixed(1)}</p>
             </div>
-            <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
+            <div className="rounded-lg border border-gray-200 bg-white p-2 text-center">
               <p className="text-[10px] text-gray-500 mb-0.5">Duration</p>
               <p className="text-sm font-bold text-gray-800">{q.duration_s}s</p>
             </div>
-            <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
+            <div className="rounded-lg border border-gray-200 bg-white p-2 text-center">
               <p className="text-[10px] text-gray-500 mb-0.5">Fillers</p>
               <p className="text-sm font-bold text-gray-800">{q.filler_count}</p>
             </div>
@@ -336,7 +336,7 @@ function ShareModal({ sessionId, onClose }: { sessionId: string; onClose: () => 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+      <div className="w-full max-w-md overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Link2 size={16} className="text-[#2557a7]" />
@@ -379,7 +379,7 @@ function ShareModal({ sessionId, onClose }: { sessionId: string; onClose: () => 
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="w-full py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#1e4a8f] disabled:opacity-60"
             >
               {generating ? (
                 <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Generating link…</>
@@ -490,12 +490,12 @@ export default function ReportPage() {
     <>
       {showShare && <ShareModal sessionId={sessionId} onClose={() => setShowShare(false)} />}
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* Top bar */}
-      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <button
           onClick={() => router.push("/mock-interview")}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
         >
           <ChevronLeft size={14} />
           Back to Mock Interview
@@ -503,7 +503,7 @@ export default function ReportPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowShare(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50 shadow-sm transition-all"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all hover:bg-gray-50"
           >
             <Share2 size={13} />
             Share Report
@@ -511,7 +511,7 @@ export default function ReportPage() {
           <button
             onClick={handleDownloadPdf}
             disabled={pdfLoading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#2557a7] text-white rounded-xl text-xs font-semibold hover:bg-[#1e4a8f] shadow-sm transition-all disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-lg bg-[#2557a7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f] disabled:opacity-60"
           >
             {pdfLoading ? (
               <><svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Generating…</>
@@ -522,14 +522,41 @@ export default function ReportPage() {
         </div>
       </div>
 
+      <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-6 lg:self-start">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Executive score</p>
+          <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-950">
+            <ScoreRing score={report.overall_score} />
+          </div>
+          <div className="mt-5 rounded-lg border border-gray-200">
+            <div className="border-b border-gray-100 px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Date</p>
+              <p className="mt-1 text-sm font-semibold text-gray-950">{report.date}</p>
+            </div>
+            <div className="border-b border-gray-100 px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Session length</p>
+              <p className="mt-1 text-sm font-semibold text-gray-950">{report.duration_min} min</p>
+            </div>
+            <div className="border-b border-gray-100 px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Questions</p>
+              <p className="mt-1 text-sm font-semibold text-gray-950">{report.question_count}</p>
+            </div>
+            <div className="px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Pressure</p>
+              <p className="mt-1 text-sm font-semibold text-gray-950">{report.pressure_handling}</p>
+            </div>
+          </div>
+        </aside>
+
+        <section className="min-w-0">
       {/* Report header */}
-      <div className="relative bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] px-6 py-6 mb-6 flex flex-wrap items-center justify-between gap-4 overflow-hidden">
+      <div className="relative mb-6 flex flex-wrap items-center justify-between gap-5 overflow-hidden rounded-lg border border-gray-200 bg-white px-6 py-6 shadow-sm">
         {/* Top accent */}
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-linear-to-r from-[#2557a7] to-[#5b8fd6]" />
         {/* Decorative blob */}
-        <div className="absolute -top-12 -right-12 w-40 h-40 bg-[#2557a7]/5 rounded-full blur-2xl pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Mock Interview Report</h1>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2557a7]">Performance report</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900">Mock Interview Report</h1>
           <div className="flex items-center gap-4 mt-1.5 text-gray-500 text-xs">
             <span>{report.date}</span>
             <span className="flex items-center gap-1">
@@ -539,13 +566,13 @@ export default function ReportPage() {
             <span>{report.question_count} questions</span>
           </div>
         </div>
-        <div className="relative z-10">
+        <div className="relative z-10 hidden lg:block">
           <ScoreRing score={report.overall_score} />
         </div>
       </div>
 
       {/* Score comparison bar */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
+      <div className="mb-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-bold text-gray-800">Live Score by Question</p>
           {report.practice_avg > 0 && (
@@ -580,7 +607,7 @@ export default function ReportPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         {/* Radar chart */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-gray-800 mb-4">Performance Dimensions</p>
           <ResponsiveContainer width="100%" height={220}>
             <RadarChart data={report.radar}>
@@ -608,7 +635,7 @@ export default function ReportPage() {
 
         {/* Strengths & Improvements */}
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5">
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
               <Trophy size={14} className="text-[#2557a7]" />
               Top 3 Strengths
@@ -623,7 +650,7 @@ export default function ReportPage() {
             </ul>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5">
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
               <AlertCircle size={14} className="text-gray-500" />
               Areas to Improve
@@ -642,7 +669,7 @@ export default function ReportPage() {
 
       {/* TOP 2 REDO QUESTIONS */}
       {report.redo_questions.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
+        <div className="mb-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
             <AlertCircle size={14} className="text-gray-500" />
             Redo These Questions
@@ -670,7 +697,7 @@ export default function ReportPage() {
       )}
 
       {/* Question breakdown */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
+      <div className="mb-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-bold text-gray-800">Question-by-Question Breakdown</p>
           <span className="text-[10px] text-gray-400 hidden sm:block">Click any row to expand transcript + feedback</span>
@@ -689,7 +716,7 @@ export default function ReportPage() {
 
       {/* Hinglish Note */}
       {report.hinglish_phrases.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
+        <div className="mb-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2">
             <MessageSquare size={14} className="text-gray-600" />
             Hinglish Detected
@@ -711,7 +738,7 @@ export default function ReportPage() {
 
       {/* Action Plan + Suggested Reattempt */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-        <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
             <ListChecks size={14} className="text-[#2557a7]" />
             Action Plan
@@ -734,7 +761,7 @@ export default function ReportPage() {
         </div>
 
         {/* Interviewer's Perspective */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
             <BookOpen size={14} className="text-[#2557a7]" />
             Interviewer&apos;s Perspective
@@ -752,24 +779,27 @@ export default function ReportPage() {
         </div>
       </div>
 
+        </section>
+      </div>
+
       {/* Footer action buttons */}
       <div className="mt-6 flex flex-wrap gap-3 justify-center">
         <button
           onClick={() => router.push("/mock-interview/live")}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] shadow-md transition-all"
+          className="flex items-center gap-2 rounded-lg bg-[#2557a7] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f]"
         >
           <RotateCcw size={14} />
           Take Another Mock Interview
         </button>
         <button
           onClick={() => router.push("/notes/managerial")}
-          className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm transition-all"
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50"
         >
           Practice Weak Questions
         </button>
         <button
           onClick={() => router.push("/mock-interview/history")}
-          className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm transition-all"
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50"
         >
           View History
         </button>

@@ -199,7 +199,7 @@ function EndEarlyModal({
       aria-modal="true"
       aria-labelledby="end-modal-title"
     >
-      <div className="bg-white border border-gray-200 rounded-xl w-full max-w-sm mx-4 p-6 shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
+      <div className="mx-4 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
         <div className="flex items-center justify-between mb-4">
           <h2 id="end-modal-title" className="text-base font-bold text-gray-900">End Interview Early?</h2>
           <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -212,13 +212,13 @@ function EndEarlyModal({
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] transition-colors"
+            className="flex-1 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e4a8f]"
           >
             Continue Interview
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 py-2.5 bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
+            className="flex-1 rounded-lg border border-gray-200 bg-gray-100 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200"
           >
             End
           </button>
@@ -249,8 +249,8 @@ function ReconnectModal({
       aria-modal="true"
       aria-labelledby="reconnect-modal-title"
     >
-      <div className="bg-white border border-gray-200 rounded-xl w-full max-w-sm mx-4 p-6 shadow-[0_24px_64px_rgba(0,0,0,0.18)] text-center">
-        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-gray-100">
+      <div className="mx-4 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100">
           {failed ? (
             <WifiOff size={24} className="text-gray-400" />
           ) : (
@@ -275,14 +275,14 @@ function ReconnectModal({
           {!failed && (
             <button
               onClick={onRetry}
-              className="flex-1 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] transition-colors flex items-center justify-center gap-1.5"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e4a8f]"
             >
               <RefreshCw size={13} /> Try Again
             </button>
           )}
           <button
             onClick={onAbandon}
-            className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+            className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
               failed
                 ? "flex-1 bg-[#2557a7] text-white hover:bg-[#1e4a8f]"
                 : "px-4 bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
@@ -303,15 +303,15 @@ function CompletedScreen({ sessionId, reportId }: { sessionId: string; reportId?
   const steps = ["Answers saved", "Transcript reviewed", reportId ? "Report ready" : "Report being prepared"];
   const reportTargetId = reportId || sessionId;
   return (
-    <div className="max-w-md mx-auto px-4 py-16 text-center">
-      <div className="w-20 h-20 bg-[#2557a7]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+    <div className="mx-auto max-w-md px-4 py-16 text-center">
+      <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-lg bg-[#2557a7]/10">
         <CheckCircle2 size={40} className="text-[#2557a7]" />
       </div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">Interview Complete!</h2>
       <p className="text-gray-500 text-sm mb-5">
         Great effort. Your completed answers are saved and the report is being prepared.
       </p>
-      <div className="mb-6 space-y-2 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm">
+      <div className="mb-6 space-y-2 rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm">
         {steps.map((step, index) => (
           <div key={step} className="flex items-center gap-2 text-xs text-gray-600">
             <span className={`flex h-5 w-5 items-center justify-center rounded-full ${index < 2 ? "bg-[#2557a7]/10 text-[#2557a7]" : "bg-gray-100 text-gray-500"}`}>{index < 2 ? <CheckCircle2 size={12} /> : <Loader2 size={12} className="animate-spin" />}</span>
@@ -321,7 +321,7 @@ function CompletedScreen({ sessionId, reportId }: { sessionId: string; reportId?
       </div>
       <button
         onClick={() => router.push(`/mock-interview/report/${reportTargetId}`)}
-        className="flex items-center gap-2 px-6 py-3 bg-[#2557a7] text-white rounded-xl font-bold mx-auto hover:bg-[#1e4a8f] transition-all shadow-md"
+        className="mx-auto flex items-center gap-2 rounded-lg bg-[#2557a7] px-6 py-3 font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f]"
       >
         View My Report <ChevronRight size={16} />
       </button>
@@ -432,7 +432,7 @@ export default function LiveInterviewSessionPage() {
   // stays in "fallback" and the interview behaves exactly as without it.
   type AvatarConnection = "connecting" | "live" | "audio-blocked" | "fallback";
   const [avatarConnection, setAvatarConnection] = useState<AvatarConnection>("fallback");
-  const [avatarActivity, setAvatarActivity] = useState<"idle" | "listening" | "talking">("idle");
+  const [, setAvatarActivity] = useState<"idle" | "listening" | "talking">("idle");
   const avatarVideoElRef = useRef<HTMLVideoElement | null>(null);
   const avatarRoomRef = useRef<Room | null>(null);
   const avatarAudioElRef = useRef<HTMLMediaElement | null>(null); // attach() returns HTMLMediaElement
@@ -1311,11 +1311,11 @@ export default function LiveInterviewSessionPage() {
         />
       )}
 
-      <div className="flex h-[calc(100vh-56px)] min-h-0 flex-col overflow-hidden bg-gray-50">
+      <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#f6f8fb]">
 
         {/* Score toast */}
         {showFullscreenWarning && (
-          <div className="fixed top-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 items-center justify-between gap-3 rounded-xl bg-gray-900 px-4 py-2.5 text-white shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
+          <div className="fixed left-1/2 top-4 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 items-center justify-between gap-3 rounded-lg bg-gray-900 px-4 py-2.5 text-white shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
             <p className="flex items-center gap-2 text-xs font-semibold">
               <AlertCircle size={14} className="shrink-0 text-yellow-400" />
               Fullscreen helps simulate the interview environment.
@@ -1327,7 +1327,7 @@ export default function LiveInterviewSessionPage() {
         )}
 
         {scoreToast && (
-          <div className="fixed top-4 right-4 z-40 flex items-center gap-2.5 bg-white border border-[#2557a7]/20 rounded-xl px-4 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.10)]">
+          <div className="fixed right-4 top-4 z-40 flex items-center gap-2.5 rounded-lg border border-[#2557a7]/20 bg-white px-4 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.10)]">
             <CheckCircle2 size={14} className="text-[#2557a7] shrink-0" />
             <p className="text-xs text-gray-900 font-semibold">
               Q{scoreToast.questionNumber} scored:{" "}
@@ -1342,28 +1342,28 @@ export default function LiveInterviewSessionPage() {
         )}
 
         {/* Status bar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-5 py-3 text-white shadow-sm">
           <div className="flex items-center gap-3">
             {wsConnected ? (
-              <span className="flex items-center gap-1.5 text-xs text-[#2557a7] font-medium">
+              <span className="flex items-center gap-1.5 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 px-2.5 py-1 text-xs font-semibold text-[#2557a7]">
                 <Wifi size={12} /> Connected
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+              <span className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-400">
                 <WifiOff size={12} /> Disconnected
               </span>
             )}
-            <span className="text-xs text-gray-500">Session: {sessionId.slice(-8)}</span>
+            <span className="text-xs text-white/55">Session: {sessionId.slice(-8)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 flex items-center gap-1">
+            <span className="flex items-center gap-1 text-xs text-white/55">
               <Clock size={11} />
               {sessionType} Interview
             </span>
             {!isFullscreen && (
               <button
                 onClick={toggleFullscreen}
-                className="flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white/70 transition-colors hover:bg-white/15"
                 aria-label="Enter full screen"
               >
                 <Maximize2 size={13} />
@@ -1371,7 +1371,7 @@ export default function LiveInterviewSessionPage() {
             )}
             <button
               onClick={() => setShowEndModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/75 transition-colors hover:bg-white/15"
             >
               <PhoneOff size={12} /> End
             </button>
@@ -1392,7 +1392,7 @@ export default function LiveInterviewSessionPage() {
 
         {micError && (
           <div className="border-b border-gray-200 bg-white px-4 py-3">
-            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2.5">
                 <Mic size={15} className="mt-0.5 shrink-0 text-gray-500" />
                 <div>
@@ -1409,7 +1409,7 @@ export default function LiveInterviewSessionPage() {
 
         {cameraError && (
           <div className="border-b border-gray-200 bg-white px-4 py-2.5">
-            <div className="mx-auto flex max-w-3xl items-start gap-2.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="mx-auto flex max-w-3xl items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
               <VideoOff size={15} className="mt-0.5 shrink-0 text-gray-500" />
               <div>
                 <p className="text-xs font-semibold text-gray-800">Camera preview is unavailable</p>
@@ -1446,12 +1446,12 @@ export default function LiveInterviewSessionPage() {
 
         {/* Main content — verbal interview phases */}
         {phase !== "coding" && (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:overflow-hidden">
-          <div className="mx-auto flex h-full w-full max-w-[1560px] flex-col gap-3">
+        <div className="min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4">
+          <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-3">
             {/* Question progress — the realtime protocol doesn't report a total
                 question count, so this shows a running counter rather than a
                 fixed-length bar when totalQuestions is unknown (0). */}
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
               {totalQuestions > 0 ? (
                 <>
                   <div className="flex flex-1 gap-1.5">
@@ -1475,10 +1475,10 @@ export default function LiveInterviewSessionPage() {
               )}
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.14fr)_minmax(320px,0.78fr)_300px] gap-3 overflow-hidden">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)_280px] lg:overflow-hidden">
               {/* Interviewer */}
               <section
-                className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]"
+                className="relative min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)] lg:min-h-0"
               >
                 {/* Live avatar (interview-avatar.txt). Element stays mounted the
                     whole time so LiveKit has a target to attach the track to
@@ -1510,11 +1510,11 @@ export default function LiveInterviewSessionPage() {
                   </div>
                 )}
                 <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
-                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
+                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-lg border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
                   <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
                   {wsConnected ? "Live interview room" : "Connecting room"}
                 </div>
-                <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-[#2557a7] shadow-sm" role="status" aria-live="polite">
+                <div className="absolute right-4 top-4 rounded-lg border border-white/20 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-[#2557a7] shadow-sm" role="status" aria-live="polite">
                   {getInterviewerStatus(phase, isSessionClosing)}
                 </div>
 
@@ -1542,23 +1542,23 @@ export default function LiveInterviewSessionPage() {
                   </div>
                 )}
 
-                <div className="absolute bottom-4 left-4 max-w-[min(380px,calc(100%-2rem))] rounded-2xl border border-white/15 bg-black/50 px-4 py-3 text-white shadow-xl backdrop-blur-md">
+                <div className="absolute bottom-4 left-4 max-w-[min(380px,calc(100%-2rem))] rounded-lg border border-white/15 bg-black/50 px-4 py-3 text-white shadow-xl backdrop-blur-md">
                   <p className="text-lg font-bold">{interviewer.name}, AI Interviewer</p>
                   <p className="mt-0.5 text-xs font-medium text-white/75">{interviewer.role} - {sessionType} interview</p>
                 </div>
               </section>
 
               {/* Question and transcript */}
-              <section className="flex min-h-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
-                <div className="shrink-0 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <section className="flex min-h-0 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="shrink-0 rounded-lg border border-gray-900 bg-gray-950 p-4 text-white">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Current question</p>
-                      <p className="mt-1 text-sm font-bold text-gray-900">Question {questionNumber}{totalQuestions ? `/${totalQuestions}` : ""}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Current question</p>
+                      <p className="mt-1 text-sm font-bold text-white">Question {questionNumber}{totalQuestions ? `/${totalQuestions}` : ""}</p>
                     </div>
                   </div>
                   <div className="max-h-36 overflow-y-auto pr-1">
-                    <p className="text-base font-semibold leading-relaxed text-gray-950">
+                    <p className="text-base font-semibold leading-relaxed text-white">
                       {questionTextForDisplay}
                       {isQuestionBeingSpoken && visibleQuestionText !== currentQuestion?.text && (
                         <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7] align-[-2px]" aria-hidden="true" />
@@ -1567,7 +1567,7 @@ export default function LiveInterviewSessionPage() {
                   </div>
                 </div>
 
-                <div className="shrink-0 rounded-xl border border-[#2557a7]/15 bg-[#2557a7]/5 px-3 py-2 text-center">
+                <div className="shrink-0 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 px-3 py-2 text-center">
                   {phase === "connecting" && (
                     <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#2557a7]">
                       <Loader2 size={13} className="animate-spin" />
@@ -1591,7 +1591,7 @@ export default function LiveInterviewSessionPage() {
                   )}
                 </div>
 
-                <div className="flex min-h-[220px] flex-1 flex-col rounded-xl border border-gray-200 bg-white p-3">
+                <div className="flex min-h-[220px] flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3">
                   {phase === "listening" ? (
                     <div className="flex h-full min-h-0 flex-col" role="log" aria-live="polite" aria-label="Live transcript">
                       <div className="mb-2 flex items-center justify-between gap-3">
@@ -1632,9 +1632,9 @@ export default function LiveInterviewSessionPage() {
               </section>
 
               {/* Interviewee */}
-              <aside className="flex min-h-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
-                <div className="rounded-xl border border-gray-200 bg-gray-950 p-2">
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-gray-900">
+              <aside className="flex min-h-0 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="rounded-lg border border-gray-200 bg-gray-950 p-2">
+                  <div className="relative aspect-video overflow-hidden rounded-lg bg-gray-900 lg:aspect-[4/3]">
                     <video
                       ref={videoRef}
                       autoPlay
@@ -1657,7 +1657,7 @@ export default function LiveInterviewSessionPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${micError ? "border-gray-200 bg-gray-100 text-gray-400" : "border-[#2557a7]/30 bg-white text-[#2557a7]"}`}>
                       <Mic size={15} />
                     </span>
@@ -1666,7 +1666,7 @@ export default function LiveInterviewSessionPage() {
                       <p className="text-[10px] text-gray-400">Recording integrity</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${cameraError ? "border-gray-200 bg-gray-100 text-gray-400" : "border-[#2557a7]/30 bg-white text-[#2557a7]"}`}>
                       <Video size={15} />
                     </span>
@@ -1677,7 +1677,7 @@ export default function LiveInterviewSessionPage() {
                   </div>
                   <button
                     onClick={() => setIsAudioMuted((m) => !m)}
-                    className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:bg-gray-100"
+                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:bg-gray-100"
                     aria-label={isAudioMuted ? "Unmute interviewer audio" : "Mute interviewer audio"}
                   >
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
@@ -1694,19 +1694,19 @@ export default function LiveInterviewSessionPage() {
               </aside>
             </div>
 
-            <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_300px] gap-3">
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 pb-3 shadow-sm">
+            <div className="grid shrink-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="rounded-lg border border-gray-200 bg-white px-4 pb-2 shadow-sm">
                 <InterviewTimeline phase={phase} />
               </div>
 
-              <div className="rounded-2xl border border-[#2557a7]/20 bg-white p-3 shadow-sm">
+              <div className="rounded-lg border border-[#2557a7]/20 bg-white p-3 shadow-sm">
                 {phase === "listening" ? (
-                  <div className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-[#2557a7]/5 px-4 text-center text-sm font-semibold text-[#2557a7]">
+                  <div className="flex min-h-14 items-center justify-center gap-2 rounded-lg bg-[#2557a7]/5 px-4 text-center text-sm font-semibold text-[#2557a7]">
                     <span className={`h-2 w-2 rounded-full bg-[#2557a7] ${isCandidateSpeaking ? "animate-pulse" : "opacity-40"}`} aria-hidden="true" />
                     {isCandidateSpeaking ? "Hearing you — keep going" : "Your turn — start speaking"}
                   </div>
                 ) : (
-                  <div className="flex min-h-14 items-center justify-center rounded-xl bg-gray-50 px-4 text-center text-sm font-semibold text-gray-500">
+                  <div className="flex min-h-14 items-center justify-center rounded-lg bg-gray-50 px-4 text-center text-sm font-semibold text-gray-500">
                     {getInterviewerStatus(phase, isSessionClosing)}
                   </div>
                 )}

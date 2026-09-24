@@ -89,11 +89,13 @@ export default function LiveStartingPage() {
 
   if (error) {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-6 bg-background">
-        <p className="text-destructive text-center max-w-sm">{error}</p>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-6 bg-[#f6f8fb] px-4">
+        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-sm leading-6 text-gray-600">{error}</p>
+        </div>
         <button
           onClick={() => router.replace("/mock-interview/live")}
-          className="px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+          className="rounded-lg bg-[#2557a7] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f]"
         >
           Go Back
         </button>
@@ -102,9 +104,15 @@ export default function LiveStartingPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-background">
-      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      <p className="text-muted-foreground text-sm">Setting up your interview session…</p>
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#f6f8fb] px-4">
+      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-7 text-center shadow-sm">
+        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-[#2557a7] text-white">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2557a7]">Live room setup</p>
+        <h1 className="mt-2 text-xl font-semibold tracking-tight text-gray-950">Preparing your interview session</h1>
+        <p className="mt-2 text-sm leading-6 text-gray-600">Connecting the AI interviewer, transcript capture, and secure report pipeline.</p>
+      </div>
     </div>
   );
 }

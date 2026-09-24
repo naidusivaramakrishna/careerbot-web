@@ -112,7 +112,9 @@ describe("MockInterview HistoryPage", () => {
     expect(screen.getByText("6 questions")).toBeInTheDocument();
     expect(screen.getByText("21 min")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("HR Mock Interview").closest("button")!);
+    // The row is a div[role="button"] (not a real <button>) so a nested
+    // retry control can be accessible without invalid button-in-button markup.
+    fireEvent.click(screen.getByText("HR Mock Interview").closest('[role="button"]')!);
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/report/session-1");
   });
 
@@ -156,6 +158,59 @@ describe("MockInterview HistoryPage", () => {
     expect(within(avgCard).getByText("72")).toBeInTheDocument();
     const bestCard = screen.getByText("Best Score").closest("div")!.parentElement!;
     expect(within(bestCard).getByText("84")).toBeInTheDocument();
+  });
+
+  it("excludes a row whose report fetch fails from the score badge and the stats/chart, instead of scoring it 0", async () => {
+    mocks.getLiveHistory.mockResolvedValue({
+      sessions: [
+        liveSession({ session_id: "session-1" }),
+        liveSession({ session_id: "session-2", created_at: "2026-07-16T09:00:00Z" }),
+      ],
+    });
+    mocks.getReport.mockImplementation((id: string) =>
+      id === "session-1"
+        ? Promise.resolve(report({ session_id: id, overall_score: 84 }))
+        : Promise.reject(new Error("rate limited"))
+    );
+
+    const HistoryPage = await importHistoryPage();
+    render(<HistoryPage />);
+
+    await waitFor(() => expect(screen.getByText("84/100")).toBeInTheDocument());
+    // The failed row must never render as a real (and lowest-tier-styled) score.
+    expect(screen.queryByText("0/100")).not.toBeInTheDocument();
+    expect(await screen.findByText("—/100")).toBeInTheDocument();
+
+    // A single successful score (84) must not be dragged down by the failed
+    // row's placeholder — avg and best both stay at 84, not (84+0)/2 = 42.
+    const avgCard = screen.getByText("Avg Score").closest("div")!.parentElement!;
+    expect(within(avgCard).getByText("84")).toBeInTheDocument();
+    const bestCard = screen.getByText("Best Score").closest("div")!.parentElement!;
+    expect(within(bestCard).getByText("84")).toBeInTheDocument();
+  });
+
+  it("retries a single failed row's score without navigating to its report or re-fetching the whole list", async () => {
+    mocks.getLiveHistory.mockResolvedValue({ sessions: [liveSession({ session_id: "session-1" })] });
+    mocks.getReport
+      .mockRejectedValueOnce(new Error("rate limited"))
+      .mockResolvedValueOnce(report({ session_id: "session-1", overall_score: 84 }));
+
+    const HistoryPage = await importHistoryPage();
+    render(<HistoryPage />);
+
+    const retryButton = await screen.findByRole("button", { name: /^retry$/i });
+    fireEvent.click(retryButton);
+
+    // Clicking Retry must not also trigger the row's own click handler
+    // (view report) via event bubbling.
+    expect(mocks.push).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(screen.getByText("84/100")).toBeInTheDocument());
+    expect(mocks.getLiveHistory).toHaveBeenCalledTimes(1);
+    expect(mocks.getReport).toHaveBeenCalledTimes(2);
+
+    const avgCard = screen.getByText("Avg Score").closest("div")!.parentElement!;
+    expect(within(avgCard).getByText("84")).toBeInTheDocument();
   });
 
   it("shows API failure state and recovers through retry", async () => {
