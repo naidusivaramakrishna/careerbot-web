@@ -67,6 +67,110 @@ interface SectionComponentProps {
   onBlur: (key: string, value: string) => void;
 }
 
+/**
+ * "resume-item-deleted" listener body, pulled out of its useEffect so it's
+ * directly testable. A section's delete handler (e.g. Certifications.tsx)
+ * dispatches this event before calling its DELETE endpoint; this cancels a
+ * QUEUED debounced autosave for that section and, if one has already fired
+ * and is awaiting a response, hands its promise back via `awaitInFlight` so
+ * the caller can await it -- guaranteeing DELETE is always the last request
+ * to reach the backend for that section.
+ */
+/** Fields that are optional across every section, by a case-insensitive substring match on the field key. */
+function isRequiredField(key: string): boolean {
+  const lowerKey = key.toLowerCase();
+  const optionalFields = [
+    // Personal Info
+    "linkedin url",
+    "portfolio url",
+
+    // General
+    "currentlyworking",
+    "startdate",
+    "enddate",
+    "date",
+    "year",
+    "location",
+
+    // Work/Internship/Projects
+    "link",
+    "technologies",
+    "description",
+
+    // Education
+    "scoretype",
+    "scorevalue",
+
+    // Certifications
+    "issuedby",
+    "expirydate",
+    "credentialid",
+
+    // Hobbies/Interests/Achievements
+    "achievement",
+    "category",
+    "proficiencylevel",
+
+    // Languages (proficiency is REQUIRED, not optional)
+
+    // Publications
+    "authors",
+    "url",
+
+    // References
+    "relation",
+    "contact",
+
+    // Volunteering
+    "role",
+  ];
+  return !optionalFields.some((optional) => lowerKey.includes(optional));
+}
+
+/**
+ * isRequiredField() above treats "location" as optional everywhere, since
+ * it's genuinely optional on Work Experience, Education, etc. Personal
+ * Info's location field is the one exception -- required there. Exported
+ * (and pulled out of the component) so this section-specific override is
+ * directly testable without rendering EditorTab.
+ */
+export function isFieldRequiredForSection(key: string, openModalSection: string | null): boolean {
+  return isRequiredField(key) || (openModalSection === "Personal Info" && key.toLowerCase() === "location");
+}
+
+export function handleStaleSectionAutosaveEvent(
+  event: Event,
+  ctx: {
+    openModalSection: string | null;
+    skipNextAutoSaveForSectionRef: React.MutableRefObject<string | null>;
+    autoSaveTimerRef: React.MutableRefObject<NodeJS.Timeout | null>;
+    autoSaveInFlightRef: React.MutableRefObject<Promise<void> | null>;
+  },
+): void {
+  const detail = (event as CustomEvent<{
+    section?: unknown;
+    suppressNext?: unknown;
+    awaitInFlight?: { promise?: Promise<void> };
+  }>).detail;
+  const section = detail?.section;
+  if (typeof section !== "string" || section !== ctx.openModalSection) return;
+  if (detail?.suppressNext === true) {
+    ctx.skipNextAutoSaveForSectionRef.current = section;
+  }
+  if (ctx.autoSaveTimerRef.current) {
+    clearTimeout(ctx.autoSaveTimerRef.current);
+    ctx.autoSaveTimerRef.current = null;
+  }
+  // The timer above only cancels a QUEUED autosave. If one has already fired
+  // and its PATCH is in flight, hand its promise back so the caller (a
+  // delete handler) can await it before issuing DELETE -- otherwise that
+  // stale, pre-delete PATCH can still reach the backend after DELETE and
+  // resurrect the item there.
+  if (detail?.awaitInFlight && ctx.autoSaveInFlightRef.current) {
+    detail.awaitInFlight.promise = ctx.autoSaveInFlightRef.current;
+  }
+}
+
 
 interface Props {
   sections: { name: string; ai: boolean }[];
@@ -434,7 +538,11 @@ const EditorTab: React.FC<Props> = ({
       if (!value || (wasExplicitlyTargeted
         ? !changedSinceManualTarget
         : !isStructuralSuggestionSatisfied(savedResume, suggestion))) continue;
-      await applyManualFixRef.current(suggestion.id, value);
+      // "autosave" origin: this runs right after this section's own autosave
+      // PATCH, while its editor modal may still be open. Skip the resumeData
+      // replacement applyManualFix would otherwise do -- it would overwrite
+      // anything typed in the few seconds since that PATCH was sent.
+      await applyManualFixRef.current(suggestion.id, value, "autosave");
       if (wasExplicitlyTargeted) pendingManualSuggestionRef.current = null;
     }
   }, [isEnhancedResume]);
@@ -656,30 +764,13 @@ const EditorTab: React.FC<Props> = ({
 
 
   useEffect(() => {
-    const cancelStaleSectionAutosave = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        section?: unknown;
-        suppressNext?: unknown;
-        awaitInFlight?: { promise?: Promise<void> };
-      }>).detail;
-      const section = detail?.section;
-      if (typeof section !== "string" || section !== openModalSection) return;
-      if (detail?.suppressNext === true) {
-        skipNextAutoSaveForSectionRef.current = section;
-      }
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      // The timer above only cancels a QUEUED autosave. If one has already
-      // fired and its PATCH is in flight, hand its promise back so the
-      // caller (a delete handler) can await it before issuing DELETE --
-      // otherwise that stale, pre-delete PATCH can still reach the backend
-      // after DELETE and resurrect the item there.
-      if (detail?.awaitInFlight && autoSaveInFlightRef.current) {
-        detail.awaitInFlight.promise = autoSaveInFlightRef.current;
-      }
-    };
+    const cancelStaleSectionAutosave = (event: Event) =>
+      handleStaleSectionAutosaveEvent(event, {
+        openModalSection,
+        skipNextAutoSaveForSectionRef,
+        autoSaveTimerRef,
+        autoSaveInFlightRef,
+      });
     window.addEventListener("resume-item-deleted", cancelStaleSectionAutosave);
     return () => window.removeEventListener("resume-item-deleted", cancelStaleSectionAutosave);
   }, [openModalSection]);
@@ -720,57 +811,6 @@ const EditorTab: React.FC<Props> = ({
   }, []);
 
 
-  const isRequiredField = (key: string): boolean => {
-    const lowerKey = key.toLowerCase();
-    const optionalFields = [
-      // Personal Info
-      "linkedin url",
-      "portfolio url",
-
-      // General
-      "currentlyworking",
-      "startdate",
-      "enddate",
-      "date",
-      "year",
-      "location",
-
-      // Work/Internship/Projects
-      "link",
-      "technologies",
-      "description",
-
-      // Education
-      "scoretype",
-      "scorevalue",
-
-      // Certifications
-      "issuedby",
-      "expirydate",
-      "credentialid",
-
-      // Hobbies/Interests/Achievements
-      "achievement",
-      "category",
-      "proficiencylevel",
-
-      // Languages (proficiency is REQUIRED, not optional)
-
-      // Publications
-      "authors",
-      "url",
-
-      // References
-      "relation",
-      "contact",
-
-      // Volunteering
-      "role",
-    ];
-    return !optionalFields.some((optional) => lowerKey.includes(optional));
-  };
-
-
   // ✅ FIXED: Validate and return new errors, don't rely on stale state
   const validateSectionFields = (): { isValid: boolean; newErrors: Record<string, string> } => {
     if (!openModalSection) return { isValid: true, newErrors: {} };
@@ -806,7 +846,7 @@ const EditorTab: React.FC<Props> = ({
 
     sectionFields.forEach((key) => {
       const value = formData[key] || "";
-      const isRequired = isRequiredField(key);
+      const isRequired = isFieldRequiredForSection(key, openModalSection);
       if (isRequired) {
         if (!value || value.trim() === "") {
           newErrors[key] = "This field is required";

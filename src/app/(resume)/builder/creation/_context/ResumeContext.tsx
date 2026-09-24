@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useRe
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix, deleteFix, addSkillToEnhancedResume } from "@/api/enhancerApi";
-import type { ATSScore, ATSSectionScore, ATSSectionDeduction, EnhancedSuggestion } from "@/types/api.types";
+import type { ATSScore, ATSSectionScore, ATSSectionDeduction, EnhancedSuggestion, EnhanceResumeResponse } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
@@ -139,6 +139,13 @@ function reconcileServerSuggestions(
   // across reloads, since pending cards are persisted to localStorage) is
   // the P2 bug this flag fixes.
   dropMissingPending = false,
+  // Suggestion `section` values just saved by the editor (see
+  // EnhancedScoreSyncOptions.resolvedSuggestionSections). A pending card in
+  // one of these sections missing from `serverSuggestions` is evidence it
+  // was resolved by that save -- even though this response is otherwise
+  // PARTIAL (dropMissingPending is false) -- so it becomes a green fixed
+  // card instead of staying pending or being dropped.
+  resolvedSections: Set<string> = new Set(),
 ): EnhancedSuggestion[] {
   // A suggestion the server list itself already marks "fixed" (see
   // resolveRemovedSkillDeductions) must stay fixed here too -- forcing every
@@ -192,7 +199,23 @@ function reconcileServerSuggestions(
     // server has resolved it, and keeping it would leave a resolved card
     // stuck pending forever -- including across reloads, since pending
     // cards round-trip through localStorage.
-    if (suggestion.status === "pending") return dropMissingPending ? [] : [suggestion];
+    if (suggestion.status === "pending") {
+      if (dropMissingPending) return [];
+      // The editor just saved this suggestion's own section (see
+      // resolvedSections above) and the fresh breakdown no longer lists it --
+      // that omission is real evidence within this one section, even though
+      // the response is otherwise partial. Show it fixed rather than
+      // dropping it (an unrelated section's still-partial suggestions list
+      // must not be treated as authoritative) or leaving it stuck pending.
+      if (resolvedSections.has(suggestion.section)) {
+        // Not backed by an applied-fix ledger entry (this is a section save,
+        // not an /enhance/apply call), so there is nothing for an Undo
+        // button to call -- explicitly false, not left as whatever the
+        // suggestion's previous value happened to be.
+        return [{ ...suggestion, status: "fixed" as const, undoAvailable: false }];
+      }
+      return [suggestion];
+    }
     // A fixed card can be removed only by an explicit authoritative ledger
     // response (for example, an Undo). Legacy responses keep it visible.
     return hasAppliedFixLedger ? [] : [{ ...suggestion, status: "fixed" as const }];
@@ -815,7 +838,7 @@ interface ResumeContextType {
   updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<{ beforeScore: number; afterScore: number; scoreConfirmed: boolean }>;
-  applyManualFix: (suggestionId: string, value: string) => Promise<void>;
+  applyManualFix: (suggestionId: string, value: string, origin?: "autosave") => Promise<void>;
   resolveSkillRemovedSuggestions: (skillName: string, category?: string) => void;
   undoFix: (suggestionId: string) => Promise<void>;
   removeEnhancedScoreSection: (sectionName: string) => void;
@@ -2233,6 +2256,15 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         liveSkillNames,
         hasSkillUndoInfo,
       );
+      // Expand the saved editor section key(s) (e.g. "Education") into the
+      // actual suggestion.section values that key covers (e.g. also
+      // "ContentQuality", "Leadership" for WorkExperience) via the same map
+      // EditorTab used to route a suggestion to its editor section.
+      const resolvedSections = new Set(
+        (options?.resolvedSuggestionSections ?? []).flatMap(
+          (key) => SUGGESTION_SECTION_MAP[key] ?? [key],
+        ),
+      );
       setEnhancedSuggestions(previous => reconcileServerSuggestions(
         previous,
         normalizedServerSuggestions,
@@ -2240,6 +2272,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         clearsMissingAppliedFixes,
         false,
         options?.isFullSnapshot === true,
+        resolvedSections,
       ));
       return;
     }
@@ -2432,7 +2465,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     };
   };
 
-  const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
+  const applyManualFix = async (suggestionId: string, value: string, origin?: "autosave"): Promise<void> => {
     // Missing-section suggestions are generated by our own delete/reload
     // reconciliation, not by the AI service. Sending their synthetic IDs to
     // /enhance/apply can only return 404/422. The section save/autosave has
@@ -2495,7 +2528,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // Manual and automatic fixes must refresh the same canonical resume.
     // Previously only automatic fixes did this, leaving Project/Education
     // editors to render stale local arrays after a successful manual save.
-    syncEnhancedResumeData(response);
+    // Skip it for a fix confirmed right after an autosave PATCH (see
+    // EditorTab's confirmSavedManualFixes): the section modal that just
+    // autosaved is still open, so replacing resumeData here would overwrite
+    // whatever the user typed in the few seconds since that PATCH was sent --
+    // the exact overwrite the "autosave" origin tag on the sync event already
+    // prevents for the autosave response itself. Score/suggestions still
+    // sync below; only the resumeData replacement is skipped.
+    if (origin !== "autosave") syncEnhancedResumeData(response);
     {
       setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
       const freshSuggestions = suggestionsFromFixResponse(response);
