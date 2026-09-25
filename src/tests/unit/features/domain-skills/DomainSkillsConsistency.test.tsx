@@ -45,6 +45,7 @@ vi.mock('@/app/(resume)/builder/creation/_components/editor/SectionTipsPanel', (
 vi.mock('@/app/(resume)/builder/creation/_components/editor/TechnologyChipsInput', () => {
   const Chips = React.forwardRef(function Chips(
     props: { label: string; placeholder?: string; selectedTechnologies: string[] },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _ref,
   ) {
     const id = props.label || props.placeholder || 'custom';
