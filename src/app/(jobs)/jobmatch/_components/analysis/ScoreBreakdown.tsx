@@ -655,7 +655,7 @@ export default function ScoreBreakdown({
           )}
         </SectionCard>
 
-        {careerProg.applicable !== false && careerProg.match_score !== undefined && (
+        {careerProg.applicable !== false && careerProg.match_score != null && (
           <SectionCard
             label="Career Progression"
             subtitle="Growth trajectory and job stability"
@@ -693,18 +693,12 @@ export default function ScoreBreakdown({
           </SectionCard>
         )}
 
-        {/* Rendered only when the payload actually carries a leadership block.
-            Leadership_Check is NOT one of the keys the AI layer emits today
-            (match_engine.py enumerates them: Technical_Skills,
-            Capabilities_Check, STAR_Pattern_Check, Soft_Skills,
-            Experience_Check, Education_Check, Requirements_Check,
-            Job_Title_Check, Certifications_Check, Formatting_Check,
-            Summary_Check, Match_Penalties, ATS_SCORE). Unguarded, parseScore
-            turned the missing block into 0 and every user saw a red "0%
-            Leadership" with no explanation -- a fabricated score on a report
-            people make decisions from. The Career Progression card directly
-            above already guards itself the same way. */}
-        {leadership.match_score !== undefined && (
+        {/* Rendered only when the payload carries a leadership score. The AI
+            layer emits Leadership_Check (careerbot-ai match_engine.py), but it
+            can be an empty block, and parseScore turns a missing or null score
+            into 0 -- a fabricated red "0% Leadership". `!= null` covers both
+            undefined and null, as the Career Progression guard above does. */}
+        {leadership.match_score != null && (
           <SectionCard
             label="Leadership"
             subtitle="Ownership, initiative & team leadership signals"
