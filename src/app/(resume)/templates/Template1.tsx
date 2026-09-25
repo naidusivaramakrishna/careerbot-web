@@ -3,6 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
+import { filterSkillsByDomain, hasPrintableSkills } from "./skillsFilterByDomain";
 
 interface Props {
   data: ResumeData;
@@ -45,7 +46,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     patents,
     customSections,
     declaration,
+    categorizedSkills,
   } = data;
+
+  // Filter skills by domain
+  const filteredCategorizedSkills = filterSkillsByDomain(categorizedSkills, domainFamily);
 
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
@@ -217,24 +222,21 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         ) : null;
 
       case "Skills":
-        return (data.categorizedSkills && Object.keys(data.categorizedSkills).some(key => {
-          const skillArray = data.categorizedSkills![key as keyof typeof data.categorizedSkills];
-          return Array.isArray(skillArray) && skillArray.length > 0;
-        })) || (skills && skills.length > 0) ? (
+        return hasPrintableSkills(filteredCategorizedSkills, skills) ? (
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && data.categorizedSkills ? (() => {
+              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && filteredCategorizedSkills ? (() => {
                 const allSkills: string[] = [];
-                Object.entries(data.categorizedSkills!)
+                Object.entries(filteredCategorizedSkills!)
                   .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))
                   .forEach(([, arr]) => { if (Array.isArray(arr)) allSkills.push(...(arr as string[]).filter(s => typeof s === 'string')); });
-                (data.categorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
+                (filteredCategorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
                 return allSkills.length > 0 ? <div style={{ ...baseTextStyle, fontSize: '11px', lineHeight: '1.7' }}>{allSkills.join(' | ')}</div> : null;
-              })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
+              })() : filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).length > 0 ? (
                 <>
-                  {Object.entries(data.categorizedSkills)
+                  {Object.entries(filteredCategorizedSkills)
                     .filter(([category]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(category))
                     .map(([category, categorySkills]) => {
                       const skillArr = Array.isArray(categorySkills)
@@ -249,9 +251,9 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                         </div>
                       );
                     })}
-                  {data.categorizedSkills.custom_categories && data.categorizedSkills.custom_categories.length > 0 && (
+                  {filteredCategorizedSkills.custom_categories && filteredCategorizedSkills.custom_categories.length > 0 && (
                     <>
-                      {data.categorizedSkills.custom_categories.map((customCat, idx) => {
+                      {filteredCategorizedSkills.custom_categories.map((customCat, idx) => {
                         if (!customCat.name || !customCat.skills || customCat.skills.length === 0) return null;
                         return (
                           <div key={`custom-${idx}`} style={{ marginBottom: "6px" }}>

@@ -1,496 +1,518 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { LayoutTemplate, Search, Sparkles, ArrowRight } from "lucide-react"
+import { ArrowRight, Sparkles, Download, Zap, Shield, ChevronLeft, ChevronRight } from "lucide-react"
 import AuthModal from "@/components/SignUpModal"
-import { STYLE_CATALOGUES } from "@/app/(resume)/builder/creation/_utils/templateStyles"
-import CategorySidebar from "@/app/(resume)/templates/_components/CategorySidebar"
-import DomainCard from "@/app/(resume)/templates/_components/DomainCard"
-import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from "./_components/CatalogueThumbnail"
-import {
-  FAMILY_TEMPLATES,
-  FAMILY_DOMAINS,
-  DOMAIN_NAMES,
-  DOMAIN_DISPLAY_NAMES,
-  CAREER_LEVELS,
-  FALLBACK_IMAGE,
-} from "./_data/constants"
-import { resolveTemplateImageUrl } from "@/lib/imageUtils"
 
-const TRUST_BADGES = ['100% ATS Friendly', '18 Industries', 'Free to browse']
-const QUICK_SEARCHES = ['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education']
-const STEPS = [
-  { num: '1', label: 'Choose style', active: true },
-  { num: '2', label: 'Enter details', active: false },
-  { num: '3', label: 'Download', active: false },
+const CATALOGUES = [
+  {
+    name: 'Eclipse',
+    subtitle: 'Classic & Formal',
+    description: 'Centered header with highlighted section backgrounds — a structured, formal look for any industry.',
+    features: ['Formal design', 'Professional tone', 'Corporate appeal', 'Structured layout'],
+    bgGradient: 'from-blue-50 to-blue-100',
+    accentGradient: 'from-blue-600 to-blue-700'
+  },
+  {
+    name: 'Crimson',
+    subtitle: 'Executive & Bold',
+    description: 'Executive-style header with bold red accents and strong typography — commands attention at every level.',
+    features: ['Bold presentation', 'Executive styling', 'Strong typography', 'Eye-catching design'],
+    bgGradient: 'from-red-50 to-red-100',
+    accentGradient: 'from-red-600 to-red-700'
+  },
+  {
+    name: 'Galaxy',
+    subtitle: 'Modern & Tech-Focused',
+    description: 'Sleek two-column header with bold name and clean section lines — great for tech and finance roles.',
+    features: ['Modern design', 'Tech-friendly', 'Clean layout', 'Professional hierarchy'],
+    bgGradient: 'from-indigo-50 to-indigo-100',
+    accentGradient: 'from-indigo-600 to-indigo-700'
+  },
+  {
+    name: 'Forest',
+    subtitle: 'Calm & Credible',
+    description: 'Stacked classic layout with earthy green tones — a calm, credible look for healthcare, education, and research.',
+    features: ['Warm tones', 'Credible design', 'Calm aesthetic', 'Research-friendly'],
+    bgGradient: 'from-emerald-50 to-emerald-100',
+    accentGradient: 'from-emerald-600 to-emerald-700'
+  },
+  {
+    name: 'Ocean',
+    subtitle: 'Corporate & Professional',
+    description: 'Compact side-by-side header with cool blue accents — perfect for corporate and operations roles.',
+    features: ['Corporate style', 'Cool accents', 'Compact design', 'Operations-focused'],
+    bgGradient: 'from-cyan-50 to-cyan-100',
+    accentGradient: 'from-cyan-600 to-cyan-700'
+  },
+  {
+    name: 'Slate',
+    subtitle: 'Timeless & Recruiter-Friendly',
+    description: 'Understated slate tones with a clean divider layout — timeless and recruiter-friendly for any profession.',
+    features: ['Timeless design', 'Clean dividers', 'Universal appeal', 'Recruiter-friendly'],
+    bgGradient: 'from-slate-50 to-slate-100',
+    accentGradient: 'from-slate-600 to-slate-700'
+  },
+  {
+    name: 'Amber',
+    subtitle: 'Elegant & Sophisticated',
+    description: 'Elegant serif font with warm accent tones — ideal for business, consulting, and management profiles.',
+    features: ['Serif typography', 'Warm tones', 'Sophisticated feel', 'Executive-grade'],
+    bgGradient: 'from-amber-50 to-amber-100',
+    accentGradient: 'from-amber-600 to-amber-700'
+  },
+  {
+    name: 'Aether',
+    subtitle: 'Minimalist & Content-Focused',
+    description: 'Ultra-minimal with ruled section dividers — no distraction, just content. Great for design and research roles.',
+    features: ['Minimal design', 'Ruled dividers', 'Content-focused', 'Distraction-free'],
+    bgGradient: 'from-gray-50 to-gray-100',
+    accentGradient: 'from-gray-600 to-gray-700'
+  },
+  {
+    name: 'Pillar',
+    subtitle: 'Bold & Structured',
+    description: 'Strong left accent bar with bold section titles — visually striking and structured for leadership and tech roles.',
+    features: ['Accent bar design', 'Strong hierarchy', 'Leadership-style', 'Visually striking'],
+    bgGradient: 'from-purple-50 to-purple-100',
+    accentGradient: 'from-purple-600 to-purple-700'
+  },
+  {
+    name: 'Ember',
+    subtitle: 'Creative & Energetic',
+    description: 'Right-aligned name and contact block with warm orange highlights — energetic and distinctive for creative fields.',
+    features: ['Creative design', 'Warm highlights', 'Energetic feel', 'Distinctive layout'],
+    bgGradient: 'from-orange-50 to-orange-100',
+    accentGradient: 'from-orange-600 to-orange-700'
+  }
+]
+
+const INDUSTRIES = [
+  { name: 'Software Engineering', templates: 12 },
+  { name: 'Healthcare & Medical', templates: 8 },
+  { name: 'Finance & Accounting', templates: 10 },
+  { name: 'Legal & Law', templates: 6 },
+  { name: 'Education & Academia', templates: 7 },
+  { name: 'Product & Leadership', templates: 9 },
+  { name: 'Sales & Business Dev', templates: 8 },
+  { name: 'Marketing & Creative', templates: 8 },
+  { name: 'Operations & Management', templates: 7 },
+  { name: 'Human Resources', templates: 6 },
+  { name: 'Cybersecurity', templates: 5 },
+  { name: 'Engineering & Core Tech', templates: 9 },
+]
+
+const CAREER_LEVELS = [
+  { title: 'Fresher', description: 'Entry-level professionals with 0-1 years of experience' },
+  { title: 'Early Career', description: 'Professionals with 1-3 years of relevant experience' },
+  { title: 'Mid-Level', description: 'Established professionals with 4-7 years in the field' },
+  { title: 'Senior Level', description: 'Experienced professionals with 8+ years of expertise' },
+  { title: 'Lead / Manager', description: 'Leadership roles with team management experience' },
+  { title: 'Architect / Director / VP', description: 'Director, VP, and C-suite leadership positions' }
+]
+
+const BENEFITS = [
+  {
+    icon: Shield,
+    title: 'ATS Optimized',
+    description: 'Guaranteed to pass Applicant Tracking Systems'
+  },
+  {
+    icon: Download,
+    title: 'Instant Download',
+    description: 'PDF, DOCX, or Google Docs formats'
+  },
+  {
+    icon: Sparkles,
+    title: 'Industry-Tailored',
+    description: 'Customized for 18+ professional fields'
+  },
+  {
+    icon: Zap,
+    title: 'Live Customization',
+    description: 'Real-time preview with instant changes'
+  }
 ]
 
 export default function BrowseTemplatesPage() {
   const router = useRouter()
   const [authOpen, setAuthOpen] = useState(false)
   const [initialFormType, setInitialFormType] = useState<"signup" | "signin">("signup")
-  const [selectedCategory, setSelectedCategory] = useState('All')
-  const [selectedCatalogue, setSelectedCatalogue] = useState('galaxy')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [hoverBg, setHoverBg] = useState<Record<string, string | undefined>>({})
-  const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>(() => {
-    if (typeof window === 'undefined') return {}
-    const result: Record<string, string | undefined> = {}
-    for (const key of Object.keys(CATALOGUE_PALETTES)) {
-      const saved = localStorage.getItem(`selected_color_${key}`)
-      if (saved) result[key] = saved
-    }
-    const legacy = localStorage.getItem('selected_section_bg')
-    if (legacy && !result.eclipse) result.eclipse = legacy
-    return result
-  })
-
-  const persistColorForBuilder = (catalogueKey: string, color: string | undefined) => {
-    if (catalogueKey === 'eclipse') {
-      if (color) localStorage.setItem('selected_section_bg', color)
-      else localStorage.removeItem('selected_section_bg')
-    }
-  }
-
-  const handleCatalogueSelect = (key: string) => {
-    setSelectedCatalogue(key)
-    localStorage.setItem('selected_catalogue', key)
-    persistColorForBuilder(key, selectedBg[key])
-  }
-
-  const handleColorPick = (catalogueKey: string, color: string) => {
-    setSelectedCatalogue(catalogueKey)
-    setSelectedBg(prev => ({ ...prev, [catalogueKey]: color }))
-    localStorage.setItem('selected_catalogue', catalogueKey)
-    localStorage.setItem(`selected_color_${catalogueKey}`, color)
-    persistColorForBuilder(catalogueKey, color)
-  }
-
-  const handleDomainSelect = (family: string, domain: string) => {
-    localStorage.setItem('selected_catalogue', selectedCatalogue)
-    router.push(`/browse-templates/${family}/${domain}`)
-  }
+  const [currentCatalogueIndex, setCurrentCatalogueIndex] = useState(0)
 
   const handleAuthSuccess = () => {
     window.location.href = "/builder"
   }
 
-  const getFilteredDomains = (family: string, domains: string[]) => {
-    if (!searchQuery) return domains
-    const q = searchQuery.toLowerCase()
-    return domains.filter(domain => {
-      const displayName = (DOMAIN_DISPLAY_NAMES[domain] || domain).toLowerCase()
-      const familyName = (DOMAIN_NAMES[family] || family).toLowerCase()
-      return displayName.includes(q) || familyName.includes(q)
-    })
-  }
-
-  const baseFamilies = selectedCategory === 'All'
-    ? Object.keys(FAMILY_DOMAINS)
-    : (FAMILY_DOMAINS[selectedCategory] ? [selectedCategory] : [])
-
-  const visibleFamilies = searchQuery
-    ? baseFamilies.filter(f => getFilteredDomains(f, FAMILY_DOMAINS[f] || []).length > 0)
-    : baseFamilies
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentCatalogueIndex((prev) => (prev + 1) % CATALOGUES.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-gray-900 overflow-x-hidden">
-
-      {/* ── Navigation ────────────────────────────────────────── */}
-      <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-xl border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-8 py-3.5 flex justify-between items-center">
-          <button onClick={() => router.push('/')} className="flex items-center gap-1 cursor-pointer">
-            <Image src="/assets/icons/Logo.png" alt="CareerBot" width={52} height={52} />
-            <span className="text-lg font-bold text-gray-900 tracking-tight">CareerBot</span>
+    <div className="min-h-screen bg-white overflow-hidden">
+      {/* Navigation */}
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-2xl border-b border-gray-100/50">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex justify-between items-center">
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 group">
+            <Image src="/assets/icons/Logo.png" alt="CareerBot" width={44} height={44} priority className="group-hover:scale-110 transition-transform" />
+            <div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-teal-600 bg-clip-text text-transparent">CareerBot</span>
+              <p className="text-xs text-gray-500 font-medium">Resume Builder</p>
+            </div>
           </button>
-
-          {/* Step indicator */}
-          <div className="hidden lg:flex items-center gap-2 text-sm">
-            {STEPS.map((step, i) => (
-              <div key={step.num} className="flex items-center gap-2">
-                <div className="flex items-center gap-2">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    step.active
-                      ? 'bg-linear-to-br from-[#2257a7] to-[#1a6abf] text-white shadow-md shadow-blue-400/30'
-                      : 'bg-gray-100 text-gray-400 border border-gray-200'
-                  }`}>
-                    {step.num}
-                  </div>
-                  <span className={`font-medium ${step.active ? 'text-gray-900' : 'text-gray-400'}`}>{step.label}</span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div className={`h-px w-16 mx-1 rounded-full ${step.active ? 'bg-linear-to-r from-[#2257a7] to-gray-200' : 'bg-gray-200'}`} />
-                )}
-              </div>
-            ))}
-          </div>
+          <button
+            onClick={() => router.push('/')}
+            className="group px-6 py-2.5 bg-gray-100 text-gray-900 font-semibold rounded-xl hover:bg-gray-200 transition-all duration-300 flex items-center gap-2"
+          >
+            <span>← Back</span>
+          </button>
         </div>
       </nav>
 
-      {/* ── Hero ──────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden pt-28 pb-16 px-6">
-        {/* Background layers */}
-        <div className="absolute inset-0 bg-linear-to-br from-blue-50 via-white to-teal-50/60" />
-        <div className="absolute -top-32 -right-32 w-[550px] h-[550px] bg-linear-to-bl from-blue-100/70 to-transparent rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-[400px] h-[400px] bg-linear-to-tr from-teal-100/60 to-transparent rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-indigo-50/60 rounded-full blur-3xl" />
+      {/* Hero Section */}
+      <section className="relative px-6 lg:px-8 pt-24 pb-40 overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-blue-200/40 to-transparent rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-gradient-to-tr from-teal-200/30 to-transparent rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-96 h-96 bg-gradient-to-br from-indigo-200/20 to-transparent rounded-full blur-3xl" />
+        </div>
 
-        <div className="max-w-7xl mx-auto relative">
+        <div className="max-w-6xl mx-auto relative z-10">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-full text-xs font-semibold text-[#2257a7] mb-5 shadow-sm">
-            <Sparkles className="w-3.5 h-3.5" />
-            ATS-Optimized · Professional · Free to browse
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-teal-50 border border-blue-200/50 rounded-full mb-8 backdrop-blur-sm">
+            <Sparkles className="w-4 h-4 text-blue-600 animate-spin" />
+            <span className="text-sm font-semibold bg-gradient-to-r from-blue-600 to-teal-600 bg-clip-text text-transparent">AI-Powered Resume Builder</span>
           </div>
 
-          <h1 className="text-5xl lg:text-6xl font-extrabold tracking-tight mb-5 leading-[1.08]">
-            <span className="text-gray-900">Find your </span>
-            <span className="bg-linear-to-r from-[#2257a7] via-[#1a6abf] to-[#0d9488] bg-clip-text text-transparent">
-              perfect resume style
-            </span>
+          {/* Main Headline */}
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-black text-gray-900 leading-tight mb-8 tracking-tight">
+            Land Your Dream Job with
+            <br />
+            <span className="bg-gradient-to-r from-blue-600 via-teal-600 to-emerald-600 bg-clip-text text-transparent">Perfect Resumes</span>
           </h1>
 
-          <p className="text-lg text-slate-500 max-w-xl leading-relaxed mb-7">
-            Beautiful templates for every industry and career level. Pick a colour theme, select your domain, and build in minutes.
+          {/* Subtitle */}
+          <p className="text-xl text-gray-600 leading-relaxed max-w-2xl mb-12 font-light">
+            Choose from 100+ professionally designed templates. Each crafted for 18+ industries with 10 stunning styles and 9 career levels to match your expertise.
           </p>
 
-          <div className="flex flex-wrap items-center gap-5">
-            {TRUST_BADGES.map(badge => (
-              <div key={badge} className="flex items-center gap-2 text-sm text-slate-500">
-                <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-20">
+            <button
+              onClick={() => router.push('/templates')}
+              className="group px-8 py-5 bg-gradient-to-r from-blue-600 to-teal-600 text-white font-bold rounded-2xl shadow-2xl shadow-blue-500/40 hover:shadow-3xl hover:shadow-blue-500/60 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3"
+            >
+              <Sparkles className="w-5 h-5" />
+              <span>Start Exploring Now</span>
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+            <button
+              onClick={() => { setInitialFormType("signup"); setAuthOpen(true) }}
+              className="px-8 py-5 border-2 border-gray-200 text-gray-900 font-bold rounded-2xl hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50/50 transition-all duration-300 backdrop-blur-sm"
+            >
+              Get Started Free
+            </button>
+          </div>
+
+          {/* Stats - Inline Display */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-20">
+            {[
+              { value: '100+', label: 'Professional Templates' },
+              { value: '18+', label: 'Industries' },
+              { value: '9', label: 'Career Levels' },
+              { value: '10', label: 'Style Catalogues' }
+            ].map((stat, i) => (
+              <div key={i} className="text-center group">
+                <div className="text-5xl md:text-6xl font-black bg-gradient-to-r from-blue-600 to-teal-600 bg-clip-text text-transparent mb-3 group-hover:scale-110 transition-transform">
+                  {stat.value}
                 </div>
-                {badge}
+                <p className="text-gray-700 font-semibold text-sm md:text-base group-hover:text-blue-600 transition-colors">{stat.label}</p>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Catalogue style picker ─────────────────────────────── */}
-      <div className="px-6 py-14 bg-white border-y border-slate-100">
-        <div className="max-w-7xl mx-auto">
-          {/* Section header */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
-            <div>
-              <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100 mb-3">
-                <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
-                Step 1 of 2
-              </div>
-              <h2 className="text-3xl font-extrabold text-slate-900">Choose a Style</h2>
-              <p className="text-slate-500 mt-1.5 text-sm max-w-md leading-relaxed">
-                Pick a colour theme — it will apply automatically when you open the builder.
-              </p>
-            </div>
-
-            {selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue] && (
-              <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
-                <span>{STYLE_CATALOGUES[selectedCatalogue].label}</span>
-                <span className="text-blue-300">selected</span>
-              </div>
-            )}
+      {/* Benefits Section */}
+      <section className="px-6 lg:px-8 py-24 bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-pattern opacity-[0.02]" />
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6">Why Professionals Trust Us</h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto font-light">Everything you need to create a standout resume that gets noticed</p>
           </div>
 
-          {/* Catalogue grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-            {Object.entries(STYLE_CATALOGUES).map(([key, catalogue]) => {
-              const isSelected = selectedCatalogue === key
-              const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key)
-              const paletteInfo = CATALOGUE_PALETTES[key]
-              const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor
-              const primarySwatch = catalogue.swatches[0]
-
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {BENEFITS.map((benefit, i) => {
+              const Icon = benefit.icon
               return (
-                <div key={key} className="group flex flex-col">
-                  <div
-                    data-testid={`catalogue-card-${key}`}
-                    className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
-                    style={{
-                      boxShadow: isSelected
-                        ? `0 0 0 2.5px ${primarySwatch}, 0 16px 48px ${primarySwatch}30`
-                        : '0 1px 6px rgba(0,0,0,0.07)',
-                      transform: isSelected ? 'translateY(-3px)' : undefined,
-                    }}
-                    onClick={() => handleCatalogueSelect(key)}
-                  >
-                    {/* Thumbnail */}
-                    <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
-                      <div
-                        className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
-                        style={{ aspectRatio: '3/4' }}
-                      >
-                        <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_IMAGE} customColor={colorForThumbnail} />
-                      </div>
-
-                      {/* Selected checkmark */}
-                      {isSelected && (
-                        <div
-                          className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg"
-                          style={{ backgroundColor: primarySwatch }}
-                        >
-                          ✓
-                        </div>
-                      )}
-
-                      {/* Hover overlay label */}
-                      <div className="absolute inset-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3 pointer-events-none">
-                        <div
-                          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
-                          style={{ backgroundColor: isSelected ? primarySwatch : '#1e293b' }}
-                        >
-                          {isSelected ? '✓ Selected' : 'Select Style'}
-                        </div>
-                      </div>
+                <div key={i} className="group relative p-8 bg-white rounded-2xl border border-gray-100 hover:border-blue-200 shadow-sm hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-teal-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="relative">
+                    <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-teal-100 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                      <Icon className="w-7 h-7 text-blue-600" />
                     </div>
-
-                    {/* Card footer */}
-                    <div className="px-3 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
-                      {hasCodeThumbnail && paletteInfo ? (
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          {paletteInfo.palette.slice(0, 5).map(color => {
-                            const isSel = selectedBg[key] === color || (!selectedBg[key] && color === paletteInfo.defaultColor)
-                            return (
-                              <button
-                                key={color}
-                                aria-label={`Select colour ${color}`}
-                                onMouseEnter={() => setHoverBg(prev => ({ ...prev, [key]: color }))}
-                                onMouseLeave={() => setHoverBg(prev => ({ ...prev, [key]: undefined }))}
-                                onClick={e => { e.stopPropagation(); handleColorPick(key, color) }}
-                                className={`w-4 h-4 rounded-full cursor-pointer transition-all duration-150 ${
-                                  isSel
-                                    ? 'ring-2 ring-[#2257a7] ring-offset-1 scale-110'
-                                    : 'ring-1 ring-slate-200 hover:scale-110 hover:ring-slate-400'
-                                }`}
-                                style={{ backgroundColor: color }}
-                              />
-                            )
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 font-medium">Monochrome</span>
-                      )}
-                      <div className="flex gap-1 shrink-0">
-                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">PDF</span>
-                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">DOCX</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Label + description below card */}
-                  <div className="mt-3 px-0.5">
-                    <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
-                      {catalogue.label}
-                    </p>
-                    <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue.description}</p>
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">{benefit.title}</h3>
+                    <p className="text-gray-600 font-light leading-relaxed">{benefit.description}</p>
                   </div>
                 </div>
               )
             })}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Search ────────────────────────────────────────────── */}
-      <div className="px-6 py-8 bg-linear-to-b from-white to-[#f8fafc] border-b border-slate-100">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
-              <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
-              Step 2 of 2
-            </div>
-            <span className="text-sm font-semibold text-slate-700">Select your industry &amp; career level</span>
+      {/* Catalogues Section - Featured Carousel */}
+      <section className="px-6 lg:px-8 py-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-50/30 to-transparent" />
+        <div className="max-w-7xl mx-auto relative z-10">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6">10 Premium Style Catalogues</h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto font-light">Each style is meticulously crafted for different industries and career levels</p>
           </div>
 
-          <div className="relative group max-w-2xl">
-            <div className="absolute inset-0 bg-linear-to-r from-blue-400/15 to-teal-400/15 rounded-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg -m-1" />
-            <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
-              <Search className="absolute left-3.5 w-4 h-4 text-slate-400 group-focus-within:text-[#2257a7] transition-colors" />
-              <input
-                data-testid="template-search-input"
-                type="text"
-                placeholder="Search by role, industry, or template..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-10 py-3 bg-transparent border-0 rounded-xl focus:outline-none text-slate-900 placeholder-slate-400 text-sm"
-              />
-              {searchQuery && (
-                <button
-                  data-testid="clear-search-btn"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3.5 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors text-xs"
-                >
-                  ✕
-                </button>
-              )}
+          {/* Featured Catalogue Showcase */}
+          <div className="relative mb-16">
+            {/* Main Featured Display */}
+            <div className="relative overflow-hidden rounded-3xl bg-white border border-gray-200 shadow-2xl">
+              <div className={`absolute inset-0 bg-gradient-to-br ${CATALOGUES[currentCatalogueIndex].bgGradient}`} />
+              <div className={`absolute inset-0 bg-gradient-to-br ${CATALOGUES[currentCatalogueIndex].accentGradient} opacity-5`} />
+
+              <div className="relative p-12 md:p-16 min-h-[320px] flex flex-col justify-between">
+                {/* Catalogue Number */}
+                <div className="inline-flex w-fit items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full mb-8 border border-gray-200/50">
+                  <span className={`text-sm font-bold bg-gradient-to-r ${CATALOGUES[currentCatalogueIndex].accentGradient} bg-clip-text text-transparent`}>
+                    Style {currentCatalogueIndex + 1} of {CATALOGUES.length}
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div>
+                  <h3 className="text-4xl md:text-5xl font-black text-gray-900 mb-4">{CATALOGUES[currentCatalogueIndex].name}</h3>
+                  <p className={`text-lg md:text-xl font-semibold bg-gradient-to-r ${CATALOGUES[currentCatalogueIndex].accentGradient} bg-clip-text text-transparent mb-6`}>
+                    {CATALOGUES[currentCatalogueIndex].subtitle}
+                  </p>
+                  <p className="text-gray-700 text-base md:text-lg font-light leading-relaxed max-w-2xl">
+                    {CATALOGUES[currentCatalogueIndex].description}
+                  </p>
+
+                  {/* Features List */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-gray-200/50">
+                    {CATALOGUES[currentCatalogueIndex].features.map((feature, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${CATALOGUES[currentCatalogueIndex].accentGradient}`} />
+                        <span className="text-sm font-semibold text-gray-700">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* Navigation Arrows */}
+            <button
+              onClick={() => setCurrentCatalogueIndex((prev) => (prev - 1 + CATALOGUES.length) % CATALOGUES.length)}
+              className="absolute -left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full border border-gray-200 shadow-lg hover:shadow-xl hover:scale-110 transition-all flex items-center justify-center text-gray-900 hover:bg-gray-50 z-20"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setCurrentCatalogueIndex((prev) => (prev + 1) % CATALOGUES.length)}
+              className="absolute -right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full border border-gray-200 shadow-lg hover:shadow-xl hover:scale-110 transition-all flex items-center justify-center text-gray-900 hover:bg-gray-50 z-20"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <span className="text-xs text-slate-400 font-medium">Try:</span>
-            {QUICK_SEARCHES.map(q => (
+          {/* Catalogue Selector - Horizontal Scrollable Thumbnails */}
+          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+            {CATALOGUES.map((catalogue, i) => (
               <button
-                key={q}
-                data-testid={`quick-search-${q.toLowerCase().replace(/\s+/g, '-')}`}
-                onClick={() => setSearchQuery(q)}
-                className="text-xs px-3 py-1 bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#2257a7] hover:text-[#2257a7] hover:bg-blue-50 transition-all duration-150 font-medium shadow-sm"
+                key={i}
+                onClick={() => setCurrentCatalogueIndex(i)}
+                className={`flex-shrink-0 px-5 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
+                  i === currentCatalogueIndex
+                    ? `bg-gradient-to-r ${catalogue.accentGradient} text-white shadow-lg`
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
-                {q}
+                {catalogue.name}
               </button>
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Content: sidebar + grid ────────────────────────────── */}
-      <div className="flex gap-6 px-6 py-10 max-w-7xl mx-auto">
-        <div className="shrink-0">
-          <CategorySidebar
-            categories={Object.keys(FAMILY_DOMAINS)}
-            selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
-            loading={false}
-          />
-        </div>
+      {/* Industries Section - Horizontal Bar Chart */}
+      <section className="px-6 lg:px-8 py-24 relative overflow-hidden bg-gradient-to-b from-white via-blue-50/20 to-white">
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6">Trusted by 18+ Industries</h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto font-light">From Fortune 500s to startups, professionals across every field choose CareerBot</p>
+          </div>
 
-        <div className="flex-1 min-w-0 space-y-10">
-          {selectedCategory === 'All' ? (
-            visibleFamilies.length === 0 ? (
-              <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-24 text-center">
-                <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
-                  <LayoutTemplate className="w-8 h-8 text-slate-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-slate-700 mb-2">No templates found</h3>
-                <p className="text-slate-400 text-sm max-w-xs">Try a different search term or select a different industry.</p>
-                <button
-                  data-testid="clear-search-link"
-                  onClick={() => setSearchQuery('')}
-                  className="mt-5 text-sm text-[#2257a7] font-semibold hover:underline flex items-center gap-1.5"
+          {/* Industry Bar Chart */}
+          <div className="space-y-6">
+            {INDUSTRIES.map((industry, i) => {
+              const colors = [
+                'from-blue-600 to-blue-700',
+                'from-purple-600 to-purple-700',
+                'from-emerald-600 to-emerald-700',
+                'from-orange-600 to-orange-700',
+                'from-pink-600 to-pink-700',
+                'from-cyan-600 to-cyan-700',
+                'from-red-600 to-red-700',
+                'from-indigo-600 to-indigo-700',
+                'from-teal-600 to-teal-700',
+                'from-violet-600 to-violet-700',
+                'from-amber-600 to-amber-700',
+                'from-lime-600 to-lime-700',
+              ]
+              const color = colors[i % colors.length]
+              const maxTemplates = Math.max(...INDUSTRIES.map(ind => ind.templates))
+              const percentage = (industry.templates / maxTemplates) * 100
+
+              return (
+                <div
+                  key={i}
+                  className="group"
+                  style={{
+                    animationDelay: `${i * 40}ms`,
+                  }}
                 >
-                  Clear search
-                </button>
-              </div>
-            ) : visibleFamilies.map(family => {
-              const domains = getFilteredDomains(family, FAMILY_DOMAINS[family] || [])
-              return (
-                <div key={family} className="scroll-mt-20">
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="w-1 h-7 rounded-full bg-linear-to-b from-[#2257a7] to-[#0d9488]" />
-                    <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                      {DOMAIN_NAMES[family] || family}
-                    </h2>
-                    <span className="px-2.5 py-0.5 bg-blue-50 text-[#2257a7] text-xs font-semibold rounded-full ring-1 ring-blue-200">
-                      {domains.length} templates
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {domains.map(domain => (
-                      <DomainCard
-                        key={domain}
-                        domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
-                        templateCount={CAREER_LEVELS.length}
-                        previewImage={resolveTemplateImageUrl(FAMILY_TEMPLATES[family]?.previewUrl) || FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE}
-                        onClick={() => handleDomainSelect(family, domain)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )
-            })
-          ) : (
-            (() => {
-              const domains = getFilteredDomains(selectedCategory, FAMILY_DOMAINS[selectedCategory] || [])
-              return (
-                <div>
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="w-1 h-7 rounded-full bg-linear-to-b from-[#2257a7] to-[#0d9488]" />
-                    <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                      {DOMAIN_NAMES[selectedCategory] || selectedCategory}
-                    </h2>
-                    <span className="px-2.5 py-0.5 bg-blue-50 text-[#2257a7] text-xs font-semibold rounded-full ring-1 ring-blue-200">
-                      {domains.length} templates
-                    </span>
-                  </div>
-                  {domains.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-24 text-center">
-                      <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
-                        <LayoutTemplate className="w-8 h-8 text-slate-400" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-slate-700 mb-2">No templates found</h3>
-                      <p className="text-slate-400 text-sm">Try selecting a different industry.</p>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="w-32 flex-shrink-0">
+                      <h3 className="font-bold text-gray-900 text-sm line-clamp-2">{industry.name}</h3>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {domains.map(domain => (
-                        <DomainCard
-                          key={domain}
-                          domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
-                          templateCount={CAREER_LEVELS.length}
-                          previewImage={resolveTemplateImageUrl(FAMILY_TEMPLATES[selectedCategory]?.previewUrl) || FAMILY_TEMPLATES[selectedCategory]?.image || FALLBACK_IMAGE}
-                          onClick={() => handleDomainSelect(selectedCategory, domain)}
+                    <div className="flex-1">
+                      <div className="h-3 bg-gray-200/50 rounded-full overflow-hidden backdrop-blur-sm border border-gray-200/30">
+                        <div
+                          className={`h-full bg-gradient-to-r ${color} rounded-full transition-all duration-700 ease-out`}
+                          style={{
+                            '--target-width': `${percentage}%`,
+                            width: `${percentage}%`,
+                            animation: `expandWidth 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards`,
+                            animationDelay: `${i * 40}ms`,
+                          } as React.CSSProperties & { '--target-width': string }}
                         />
-                      ))}
+                      </div>
                     </div>
-                  )}
+                    <div className="w-16 flex-shrink-0 text-right">
+                      <span className={`text-lg font-black bg-gradient-to-r ${color} bg-clip-text text-transparent`}>
+                        {industry.templates}
+                      </span>
+                      <p className="text-xs text-gray-500 font-medium">templates</p>
+                    </div>
+                  </div>
+                  <div className="h-px bg-gradient-to-r from-gray-200/50 via-gray-200/30 to-transparent group-hover:from-gray-300 transition-all" />
                 </div>
               )
-            })()
-          )}
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* ── CTA ───────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden py-20 px-6 mt-4">
-        <div className="absolute inset-0 bg-linear-to-br from-[#162d5c] via-[#1e4fa0] to-[#163d6b]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_70%_20%,_#2257a730_0%,_transparent_70%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_20%_80%,_#0d948830_0%,_transparent_70%)]" />
-        <div className="absolute top-0 right-0 w-72 h-72 bg-white/[0.03] rounded-full -translate-y-1/3 translate-x-1/4 border border-white/10" />
-        <div className="absolute bottom-0 left-0 w-52 h-52 bg-white/[0.03] rounded-full translate-y-1/3 -translate-x-1/4 border border-white/10" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[1px] bg-linear-to-r from-transparent via-white/10 to-transparent" />
+        <style>{`
+          @keyframes expandWidth {
+            from {
+              width: 0;
+            }
+            to {
+              width: var(--target-width);
+            }
+          }
+        `}</style>
+      </section>
 
-        <div className="max-w-3xl mx-auto text-center relative">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 border border-white/20 rounded-full text-xs font-semibold text-white/80 mb-6 backdrop-blur-sm">
-            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-            No credit card required
+      {/* Career Levels - Linear Progression Timeline */}
+      <section className="px-6 lg:px-8 py-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-50/30 via-transparent to-transparent" />
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6">Perfect for Every Career Stage</h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto font-light">From your first job to executive leadership</p>
           </div>
 
-          <h2 className="text-4xl lg:text-5xl font-extrabold mb-4 tracking-tight text-white leading-[1.1]">
-            Ready to land your <br />
-            <span className="bg-linear-to-r from-teal-300 to-blue-300 bg-clip-text text-transparent">dream job?</span>
-          </h2>
+          {/* Vertical Timeline */}
+          <div className="max-w-3xl mx-auto">
+            {CAREER_LEVELS.map((level, i) => (
+              <div key={i} className="relative group">
+                {/* Timeline Line */}
+                {i !== CAREER_LEVELS.length - 1 && (
+                  <div className="absolute left-8 top-24 w-1 h-20 bg-gradient-to-b from-blue-400 to-blue-200 group-hover:from-blue-600 group-hover:to-blue-400 transition-all" />
+                )}
 
-          <p className="text-blue-100/70 mb-9 leading-relaxed max-w-lg mx-auto">
-            Create a professional, ATS-optimized resume in minutes. Free to start — no sign-up needed to browse.
-          </p>
+                {/* Timeline Item */}
+                <div className="flex gap-6 mb-12 group/item hover:scale-102 transition-transform">
+                  {/* Circle Number */}
+                  <div className="flex-shrink-0">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg group-hover/item:shadow-2xl group-hover/item:shadow-blue-500/50 transition-all group-hover/item:scale-110 relative z-10">
+                      {i + 1}
+                    </div>
+                  </div>
 
-          <div className="flex items-center justify-center gap-4 flex-wrap">
-            <button
-              data-testid="get-started-btn"
-              onClick={() => { setInitialFormType("signup"); setAuthOpen(true) }}
-              className="group flex items-center gap-2.5 px-8 py-3.5 bg-white text-[#2257a7] rounded-xl font-bold text-sm shadow-xl shadow-black/20 hover:bg-blue-50 hover:scale-[1.02] transition-all duration-200"
-            >
-              <Sparkles className="w-4 h-4 text-[#2257a7]" />
-              Get Started Free
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </button>
-            <button
-              data-testid="sign-in-btn"
-              onClick={() => { setInitialFormType("signin"); setAuthOpen(true) }}
-              className="px-8 py-3.5 border border-white/25 text-white rounded-xl font-semibold text-sm hover:bg-white/10 transition-all duration-200 backdrop-blur-sm"
-            >
-              Sign in
-            </button>
-          </div>
+                  {/* Content */}
+                  <div className="flex-1 pt-2">
+                    <h3 className="text-2xl font-black text-gray-900 mb-2 group-hover/item:text-blue-600 transition-colors">
+                      {level.title}
+                    </h3>
+                    <p className="text-gray-600 font-light leading-relaxed">
+                      {level.description}
+                    </p>
 
-          <div className="flex items-center justify-center gap-6 mt-8 flex-wrap">
-            {['Free forever', 'ATS-optimized', 'PDF + DOCX download'].map(f => (
-              <div key={f} className="flex items-center gap-1.5 text-xs text-blue-200/60">
-                <div className="w-1.5 h-1.5 bg-teal-400 rounded-full" />
-                {f}
+                    {/* Bottom Line Accent */}
+                    <div className="mt-4 h-1 w-0 bg-gradient-to-r from-blue-600 to-teal-600 group-hover/item:w-32 transition-all duration-500" />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
+
+      {/* Final CTA */}
+      <section className="px-6 lg:px-8 py-32 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-teal-600 to-emerald-600" />
+        <div className="absolute inset-0">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-white/5 rounded-full blur-3xl" />
+        </div>
+
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-8 leading-tight">Ready to Transform Your Resume?</h2>
+          <p className="text-xl text-white/90 mb-12 max-w-2xl mx-auto font-light leading-relaxed">
+            Join thousands of job seekers who have landed interviews with our professional templates. Start exploring now — completely free.
+          </p>
+
+          <button
+            onClick={() => router.push('/templates')}
+            className="group px-10 py-6 bg-white text-blue-600 font-bold rounded-2xl shadow-2xl hover:shadow-3xl hover:scale-105 active:scale-95 transition-all duration-300 inline-flex items-center gap-3 text-lg"
+          >
+            <Sparkles className="w-6 h-6" />
+            Browse All Templates
+            <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          <div className="mt-12 flex items-center justify-center gap-6 flex-wrap text-white/80 text-sm font-light">
+            <div className="flex items-center gap-2">✓ Free to explore</div>
+            <div className="flex items-center gap-2">✓ No credit card</div>
+            <div className="flex items-center gap-2">✓ Instant download</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-gray-400 py-16 px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto text-center">
+          <p className="text-white font-bold mb-3">CareerBot</p>
+          <p className="mb-4 font-light">Create professional, ATS-optimized resumes for every industry and career level.</p>
+          <p className="text-sm">© 2024 CareerBot. Crafted with ❤️ for your success.</p>
+        </div>
+      </footer>
 
       <AuthModal
         open={authOpen}

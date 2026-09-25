@@ -11,6 +11,7 @@ interface UseEmailFormConfig {
     redirectPath?: string;
     redirectDelayMs?: number;
     rateLimitSeconds?: number;
+    disableAutoRedirect?: boolean;
 }
 
 export function useEmailForm({
@@ -20,6 +21,7 @@ export function useEmailForm({
     redirectPath = "/?showLogin=true",
     redirectDelayMs = 5000,
     rateLimitSeconds,
+    disableAutoRedirect = false,
 }: UseEmailFormConfig) {
     const router = useRouter();
     const [email, setEmailState] = useState("");
@@ -61,7 +63,9 @@ export function useEmailForm({
             setStatus("success");
             setLastAttemptTime(now);
             toast.success(response.message || successMessage || "Email sent successfully!");
-            redirectTimerRef.current = setTimeout(() => router.push(redirectPath), redirectDelayMs);
+            if (!disableAutoRedirect) {
+                redirectTimerRef.current = setTimeout(() => router.push(redirectPath), redirectDelayMs);
+            }
         } catch (error: unknown) {
             const errorMsg = mapAuthError(error, errorContext);
             setStatus("idle");

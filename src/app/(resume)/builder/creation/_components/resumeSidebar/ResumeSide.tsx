@@ -12,11 +12,22 @@ import { getScoreSectionAction } from "../../_utils/scoreSectionRouting";
 
 import PersonalInfo from "../editor/sections/PersonalInfo";
 import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
+import ServiceRecord from "../editor/sections/ServiceRecord";
 import Education from "../editor/sections/Education";
 import WorkExperience from "../editor/sections/WorkExperience";
+import VesselsOperated from "../editor/sections/VesselsOperated";
+import PortsExperience from "../editor/sections/PortsExperience";
+import SeaServiceRecord from "../editor/sections/SeaServiceRecord";
+import MaritimeCertifications from "../editor/sections/MaritimeCertifications";
+import ResearchGrants from "../editor/sections/ResearchGrants";
+import EditorialActivities from "../editor/sections/EditorialActivities";
+import ConferencePresentations from "../editor/sections/ConferencePresentations";
 import Projects from "../editor/sections/Projects";
 import Skills from "../editor/sections/Skills";
 import Certifications from "../editor/sections/Certifications";
+import Licenses from "../editor/sections/Licenses";
+import CertificatesAndClearances from "../editor/sections/CertificatesAndClearances";
+import BarAdmissionsAndLicenses from "../editor/sections/BarAdmissionsAndLicenses";
 import Achievements from "../editor/sections/Achievements";
 import Volunteering from "../editor/sections/Volunteering";
 import References from "../editor/sections/References";
@@ -41,11 +52,22 @@ interface SectionProps {
 const sectionComponents: Record<string, React.FC<SectionProps>> = {
   "Personal Info": PersonalInfo,
   "Professional Summary": ProfessionalSummary,
+  "Service Record": ServiceRecord,
   Education,
   "Work Experience": WorkExperience,
+  "Vessels Operated": VesselsOperated,
+  "Ports Experience": PortsExperience,
+  "Sea Service Record": SeaServiceRecord,
+  "Maritime Certifications": MaritimeCertifications,
+  "Research Grants": ResearchGrants,
+  "Editorial Activities": EditorialActivities,
+  "Conference Presentations": ConferencePresentations,
   Projects,
   Skills,
   Certifications,
+  "Licenses and Credentials": Licenses,
+  "Certificates and Clearances": CertificatesAndClearances,
+  "Bar Admissions and Licenses": BarAdmissionsAndLicenses,
   Achievements,
   Volunteering,
   References,
@@ -104,7 +126,7 @@ interface ResumeSideProps {
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
 const standardSectionNames = new Set([
   "Personal Info", "Professional Summary", "Education", "Skills",
-  "Work Experience", "Projects", "Certifications", "Internships",
+  "Work Experience", "Projects", "Certifications", "Licenses and Credentials", "Certificates and Clearances", "Bar Admissions and Licenses", "Internships",
   "Achievements", "Publications", "Patents", "Volunteering", "Awards",
   "Hobbies", "Interests", "Languages", "References", "Declaration",
 ]);

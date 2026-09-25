@@ -1,12 +1,12 @@
 export const WIZARD_OVERVIEW_STYLES = `
   .jm-container {
-    max-width: 1280px;
+    max-width: 1600px;
     margin: 0 auto;
-    padding: 42px 44px 38px;
+    padding: 12px 40px 40px;
   }
-  @media (max-width: 1280px) { .jm-container { padding: 48px 32px 28px; } }
-  @media (max-width: 1024px) { .jm-container { padding: 36px 24px 24px; } }
-  @media (max-width: 768px)  { .jm-container { padding: 28px 16px 16px; } }
+  @media (max-width: 1280px) { .jm-container { padding: 10px 32px 32px; } }
+  @media (max-width: 1024px) { .jm-container { padding: 8px 28px 30px; } }
+  @media (max-width: 768px)  { .jm-container { padding: 12px; } }
   .jm-page-head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 280px;

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredAuthRedirect } from "@/lib/authRedirect";
 import { isAuthenticated } from "@/api/authApi";
+import { clearPendingVerification } from "@/lib/pendingVerification";
 
 function GoogleOAuthContent() {
   const router = useRouter();
@@ -64,6 +65,10 @@ function GoogleOAuthContent() {
 
         setStatus("Redirecting to dashboard...");
         sessionStorage.removeItem("__signing_out");
+        // A session was just handed over, the same as authApi.signIn: drop any
+        // unverified-signup record so the "Resume Email Verification" banner
+        // does not follow the signed-in user around.
+        clearPendingVerification();
         await new Promise((resolve) => setTimeout(resolve, 400));
         if (cancelled) return;
         // Hard navigation — not router.push — so that:

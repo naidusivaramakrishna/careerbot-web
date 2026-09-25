@@ -1,0 +1,147 @@
+import { useState, useEffect } from 'react';
+import logger from '@/lib/logger';
+import httpClient from '@/lib/http';
+
+export interface CatalogueConfig {
+  key: string;
+  label: string;
+  description: string;
+  preview_url: string;
+  template_id: string;
+  header_layout: string;
+  ats_level: 'safe' | 'friendly' | 'creative';
+  default_color: string;
+  color_palette: string[];
+  accent_swatches: string[];
+  typography: {
+    font_family: string;
+    name_font_size: string;
+    heading_font_size: string;
+    body_font_size: string;
+    line_spacing: string;
+  };
+  colors: {
+    heading: string;
+    body: string;
+    accent: string;
+  };
+  styling: Record<string, any>;
+}
+
+export interface CataloguesResponse {
+  catalogues: CatalogueConfig[];
+}
+
+// Relative to httpClient's baseURL ('/api/v1' or NEXT_PUBLIC_BASE_URL, src/lib/http.ts);
+// an '/api/v1/...' path here would be requested as '/api/v1/api/v1/...'.
+const CATALOGUES_API_URL = '/templates/catalogues/all';
+const CACHE_KEY = 'catalogues_cache';
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * localStorage is not trusted input: earlier builds of this hook cached the
+ * raw response body under the same key, and storage can hold anything. Only
+ * an array of objects with a string `key` is safe to hand to
+ * getCataloguesMap(), which runs during PreviewPanel's render.
+ */
+const isCatalogueList = (value: unknown): value is CatalogueConfig[] =>
+  Array.isArray(value) &&
+  value.every(
+    (c) => typeof c === 'object' && c !== null && typeof (c as { key?: unknown }).key === 'string'
+  );
+
+/**
+ * Hook to fetch and cache catalogues from the backend
+ * Provides a centralized source of truth for all catalogue configurations
+ */
+export const useCatalogues = () => {
+  const [catalogues, setCatalogues] = useState<CatalogueConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCatalogues = async () => {
+      try {
+        // Check cache first
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const { data, timestamp } = JSON.parse(cached);
+            if (!isCatalogueList(data)) {
+              logger.debug('Cached catalogues have an unexpected shape, fetching fresh');
+            } else if (Date.now() - timestamp < CACHE_DURATION) {
+              setCatalogues(data);
+              setLoading(false);
+              logger.info('Catalogues loaded from cache');
+              return;
+            }
+          } catch (e) {
+            logger.debug('Failed to parse cached catalogues, fetching fresh');
+          }
+        }
+
+        // Fetch from API
+        const response = await httpClient.get<CatalogueConfig[] | CataloguesResponse>(CATALOGUES_API_URL);
+
+        // Validate and normalize response (handle both direct array and wrapper object)
+        let data: CatalogueConfig[];
+        if (Array.isArray(response.data)) {
+          data = response.data;
+        } else if (response.data && typeof response.data === 'object' && 'catalogues' in response.data) {
+          data = (response.data as CataloguesResponse).catalogues;
+        } else {
+          throw new Error('Invalid catalogues response format');
+        }
+
+        if (!Array.isArray(data)) {
+          throw new Error('Catalogues data is not an array');
+        }
+
+        // Cache the result
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data,
+          timestamp: Date.now()
+        }));
+
+        setCatalogues(data);
+        logger.info(`Catalogues loaded from API: ${data.length} catalogues`);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(errorMessage);
+        logger.error('Failed to fetch catalogues:', err);
+        // Fallback: return empty array to prevent app crash
+        setCatalogues([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCatalogues();
+  }, []);
+
+  /**
+   * Get a specific catalogue by key or template_id
+   */
+  const getCatalogue = (keyOrId: string): CatalogueConfig | undefined => {
+    return catalogues.find(c => c.key === keyOrId || c.template_id === keyOrId);
+  };
+
+  /**
+   * Get catalogues as a Record for compatibility with STYLE_CATALOGUES
+   */
+  const getCataloguesMap = (): Record<string, CatalogueConfig> => {
+    const map: Record<string, CatalogueConfig> = {};
+    catalogues.forEach(c => {
+      map[c.key] = c;
+    });
+    return map;
+  };
+
+  return {
+    catalogues,
+    loading,
+    error,
+    getCatalogue,
+    getCataloguesMap,
+  };
+};

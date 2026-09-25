@@ -5,7 +5,7 @@ import {
   FaBuilding, FaTrophy, FaHandHoldingHeart, FaFileSignature
 } from "react-icons/fa";
 import { MdLanguage } from 'react-icons/md';
-import { LuFileBadge, LuFileSearch } from 'react-icons/lu';
+import { LuFileBadge, LuFileSearch, LuBadgeCheck } from 'react-icons/lu';
 import { RiAlignRight } from 'react-icons/ri';
 
 export interface Section {
@@ -16,22 +16,44 @@ export interface Section {
 export const initialSections: Section[] = [
   { name: "Personal Info", ai: false },
   { name: "Professional Summary", ai: true },
+  { name: "Service Record", ai: false },
   { name: "Education", ai: false },
   { name: "Skills", ai: false },
   { name: "Work Experience", ai: true },
+  { name: "Vessels Operated", ai: false },
+  { name: "Ports Experience", ai: false },
+  { name: "Sea Service Record", ai: false },
+  { name: "Maritime Certifications", ai: false },
+  { name: "Research Grants", ai: false },
+  { name: "Editorial Activities", ai: false },
+  { name: "Conference Presentations", ai: false },
   { name: "Projects", ai: true },
   { name: "Certifications", ai: false },
+  { name: "Licenses and Credentials", ai: false },
+  { name: "Certificates and Clearances", ai: false },
+  { name: "Bar Admissions and Licenses", ai: false },
   { name: "Internships", ai:true},
 ];
 
 export const sectionIcons: Record<string, IconType> = {
   "Personal Info": FaUserCircle,
   "Professional Summary": FaFileAlt,
+  "Service Record": FaFileSignature,
   "Education": FaUserGraduate,
   "Work Experience": FaBriefcase,
+  "Vessels Operated": FaBuilding,
+  "Ports Experience": FaBuilding,
+  "Sea Service Record": FaFileSignature,
+  "Maritime Certifications": FaAward,
+  "Research Grants": FaTrophy,
+  "Editorial Activities": FaFileAlt,
+  "Conference Presentations": FaTrophy,
   "Projects": FaFolderOpen,
   "Skills": FaStar,
   "Certifications": FaAward,
+  "Licenses and Credentials": LuBadgeCheck,
+  "Certificates and Clearances": LuBadgeCheck,
+  "Bar Admissions and Licenses": LuBadgeCheck,
   "Achievements": FaMedal,
   "Volunteering": FaHandHoldingHeart,
   "References": FaUsers,

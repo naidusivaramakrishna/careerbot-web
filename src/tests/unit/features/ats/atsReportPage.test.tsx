@@ -87,6 +87,20 @@ describe("ATS report workspace setup", () => {
     expect(enhanceResume).toHaveBeenCalledTimes(1);
   });
 
+  it("sends the credit-charging enhance request once under a StrictMode double mount", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume).mockResolvedValue({
+      success: true,
+      enhanced_resume_id: "enh-1",
+      enhanced_resume: { contact: { name: "Avery" } },
+    } as never);
+
+    render(<React.StrictMode><ATSLoginReportPage /></React.StrictMode>);
+
+    await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+    expect(enhanceResume).toHaveBeenCalledTimes(1);
+  });
+
   it("does not write embedded images from a pre-existing cached report back into browser storage", async () => {
     // Reports cached before this change were stored unstripped.
     window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({
@@ -131,6 +145,37 @@ describe("ATS report workspace setup", () => {
     await waitFor(() => expect(screen.getByText("Could not prepare ATS fixes")).toBeTruthy());
     expect(screen.getByTestId("ats-score-fallback").textContent).toMatch(/64\s*\/\s*100/);
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  describe("blocked browser storage", () => {
+    const realLocalGetItem = vi.mocked(window.localStorage.getItem).getMockImplementation()!;
+    const blocked = () => { throw new DOMException("The operation is insecure.", "SecurityError"); };
+    let sessionGetItem: { mockRestore: () => void } | undefined;
+    afterEach(() => {
+      vi.mocked(window.localStorage.getItem).mockImplementation(realLocalGetItem);
+      sessionGetItem?.mockRestore();
+      sessionGetItem = undefined;
+    });
+
+    it("reads the report from sessionStorage when localStorage.getItem throws", async () => {
+      window.sessionStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-1" })));
+      vi.mocked(window.localStorage.getItem).mockImplementation(blocked);
+
+      render(<ATSLoginReportPage />);
+
+      await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+      expect(enhanceResume).not.toHaveBeenCalled();
+    });
+
+    it("shows No Report Found instead of crashing when both storages throw", async () => {
+      vi.mocked(window.localStorage.getItem).mockImplementation(blocked);
+      sessionGetItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(blocked);
+
+      render(<ATSLoginReportPage />);
+
+      await waitFor(() => expect(screen.getByText("No Report Found")).toBeTruthy());
+      expect(enhanceResume).not.toHaveBeenCalled();
+    });
   });
 
   describe("preview toolbar buttons", () => {

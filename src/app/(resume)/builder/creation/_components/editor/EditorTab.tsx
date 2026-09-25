@@ -6,11 +6,22 @@ import React, { useState, useEffect, useCallback,useRef } from "react";
 const SECTION_KEY_MAP: Record<string, string> = {
   "Personal Info": "personal_info",
   "Professional Summary": "professional_summary",
+  "Service Record": "service_record",
   "Skills": "skills",
   "Education": "education",
   "Work Experience": "work_experience",
+  "Vessels Operated": "vessels_operated",
+  "Ports Experience": "ports_experience",
+  "Sea Service Record": "sea_service_record",
+  "Maritime Certifications": "maritime_certifications",
+  "Research Grants": "research_grants",
+  "Editorial Activities": "editorial_activities",
+  "Conference Presentations": "conference_presentations",
   "Projects": "projects",
   "Certifications": "certifications",
+  "Licenses and Credentials": "licenses",
+  "Certificates and Clearances": "certificates_and_clearances",
+  "Bar Admissions and Licenses": "bar_admissions_and_licenses",
   "Achievements": "achievements",
   "Volunteering": "volunteering",
   "Internships": "internships",
@@ -51,6 +62,7 @@ import AddNewSection from "./AddNewSection";
 import CircularProgress from "./CircularProgress";
 import CustomSectionEditor from "./CustomSectionEditor";
 import { sectionIcons } from "../../_utils/sectionsConfig";
+import { buildBuilderSectionPayload, SECTION_STATE_KEYS } from "../../_utils/sectionPayloadKeys";
 import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
 import { useResume, CustomSection } from "../../_context/ResumeContext";
 import { updateResume, getAllResumes, autoSaveResume } from "@/api/resumeApi";
@@ -108,7 +120,6 @@ function isRequiredField(key: string): boolean {
 
     // Hobbies/Interests/Achievements
     "achievement",
-    "category",
     "proficiencylevel",
 
     // Languages (proficiency is REQUIRED, not optional)
@@ -464,13 +475,78 @@ const EditorTab: React.FC<Props> = ({
 
 
   const getSectionFields = (sectionName: string): string[] => {
-    const fields: string[] = [];
+    // ✅ Special handling for Personal Info: return expected field names
+    // so validation works even if formData is initially empty
+    if (sectionName === "Personal Info") {
+      // Core fields required for all templates
+      const coreFields = [
+        "fullname",
+        "email",
+        "phone",
+        "countryCode",
+        "location",
+        "linkedinUrl",
+        "githubUrl",
+        "portfolioUrl",
+      ];
 
+      // Template-specific fields grouped by domain
+      const domainSpecificFields: Record<string, string[]> = {
+        government_standard: [
+          "dateOfBirth",
+          "nationality",
+          "category",
+          "languages",
+          "gender",
+          "maritalStatus",
+          "fathersName",
+          "permanentAddress",
+        ],
+        healthcare: [
+          "titlePrefix",
+          "qualifications",
+          "specialisation",
+          "medicalRegNo",
+        ],
+        legal: [
+          "barEnrollmentNo",
+          "yearOfEnrollment",
+          "courtsOfPractise",
+        ],
+        marine_merchant_navy: [
+          "rank",
+          "cocNumber",
+          "vesselTypes",
+          "stcwCertificates",
+        ],
+        research_scholar: [
+          "qualifications",
+          "orcidId",
+          "googleScholarUrl",
+          "hIndex",
+        ],
+      };
+
+      // Get active domain
+      const activeDomain = getActiveDomain();
+
+      // Return core fields + domain-specific fields for the active domain
+      const fieldsToReturn = [
+        ...coreFields,
+        ...(domainSpecificFields[activeDomain] || []),
+      ];
+
+      return fieldsToReturn.filter(field => {
+        return Object.keys(formData).some(key => key.toLowerCase() === field.toLowerCase()) ||
+               coreFields.includes(field);
+      });
+    }
+
+    const fields: string[] = [];
 
     Object.keys(formData).forEach((key) => {
       const lowerKey = key.toLowerCase();
       const lowerSection = sectionName.toLowerCase().replace(/\s+/g, "");
-
 
       if (
         lowerKey.includes(lowerSection) ||
@@ -478,9 +554,34 @@ const EditorTab: React.FC<Props> = ({
           (lowerKey.includes("fullname") ||
             lowerKey.includes("email") ||
             lowerKey.includes("phone") ||
+            lowerKey.includes("countrycode") ||
             lowerKey.includes("location") ||
-            lowerKey.includes("linkedinUrl")) ||
-            lowerKey.includes("portifolioUrl")) ||
+            lowerKey.includes("linkedinurl") ||
+            lowerKey.includes("githuburl") ||
+            lowerKey.includes("portfoliourl") ||
+            // Template-specific fields
+            lowerKey.includes("dateofbirth") ||
+            lowerKey.includes("nationality") ||
+            lowerKey.includes("category") ||
+            lowerKey.includes("languages") ||
+            lowerKey.includes("titleprefix") ||
+            lowerKey.includes("qualifications") ||
+            lowerKey.includes("fathersname") ||
+            lowerKey.includes("maritalstatus") ||
+            lowerKey.includes("gender") ||
+            lowerKey.includes("permanentaddress") ||
+            lowerKey.includes("specialisation") ||
+            lowerKey.includes("medicalregno") ||
+            lowerKey.includes("barenrollmentno") ||
+            lowerKey.includes("yearofenrollment") ||
+            lowerKey.includes("courtsofpractise") ||
+            lowerKey.includes("rank") ||
+            lowerKey.includes("cocnumber") ||
+            lowerKey.includes("vesseltypes") ||
+            lowerKey.includes("stcwcertificates") ||
+            lowerKey.includes("orcidid") ||
+            lowerKey.includes("googlescholarurl") ||
+            lowerKey.includes("hindex"))) ||
         (sectionName === "Professional Summary" &&
           lowerKey.includes("summary")) ||
         (sectionName === "Skills" && lowerKey.includes("skill")) ||
@@ -490,6 +591,12 @@ const EditorTab: React.FC<Props> = ({
         (sectionName === "Projects" && lowerKey.includes("project")) ||
         (sectionName === "Certifications" &&
           lowerKey.includes("certification")) ||
+        (sectionName === "Licenses and Credentials" &&
+          lowerKey.includes("license")) ||
+        (sectionName === "Certificates and Clearances" &&
+          lowerKey.includes("certificateandclearance")) ||
+        (sectionName === "Bar Admissions and Licenses" &&
+          lowerKey.includes("baradmissionandlicense")) ||
         (sectionName === "Achievements" &&
           lowerKey.includes("achievement")) ||
         (sectionName === "Volunteering" &&
@@ -502,7 +609,10 @@ const EditorTab: React.FC<Props> = ({
         (sectionName === "Languages" && lowerKey.includes("language")) ||
         (sectionName === "Publications" && lowerKey.includes("publication")) ||
         (sectionName === "References" &&
-          lowerKey.includes("reference"))
+          lowerKey.includes("reference")) ||
+        (sectionName === "Research Grants" && lowerKey.includes("researchgrant")) ||
+        (sectionName === "Editorial Activities" && lowerKey.includes("editorialactivit")) ||
+        (sectionName === "Conference Presentations" && lowerKey.includes("conferencepresentation"))
       ) {
         fields.push(key);
       }
@@ -633,22 +743,7 @@ const EditorTab: React.FC<Props> = ({
             googleScholarUrl: live.personalInfo?.googleScholarUrl || null,
           };
         } else {
-          const sectionMap: Record<string, keyof typeof live> = {
-            "Education": "education",
-            "Work Experience": "workExperience",
-            "Projects": "projects",
-            "Certifications": "certifications",
-            "Internships": "internships",
-            "Achievements": "achievements",
-            "Awards": "awards",
-            "Volunteering": "volunteering",
-            "Publications": "publications",
-            "Patents": "patents",
-            "References": "references",
-            "Hobbies": "hobbies",
-            "Interests": "interests",
-            "Languages": "languages",
-          };
+          const sectionMap = SECTION_STATE_KEYS as Record<string, keyof typeof live>;
           const key = sectionMap[sectionName];
           const data = key ? live[key] : undefined;
           // Both builder and enhanced: only send items with a backend ID so auto-save
@@ -694,17 +789,19 @@ const EditorTab: React.FC<Props> = ({
         if (isEnhancedResume) {
           const snakeToCamelSectionMap: Record<string, string> = {
             personal_info: "personalInfo", professional_summary: "professionalSummary",
+            service_record: "serviceRecord", vessels_operated: "vesselsOperated", ports_experience: "portsExperience", sea_service_record: "seaServiceRecord", maritime_certifications: "maritimeCertifications",
             skills: "skills", education: "education", work_experience: "workExperience",
-            projects: "projects", certifications: "certifications", achievements: "achievements",
+            projects: "projects", certifications: "certifications", licenses: "licenses", certificates_and_clearances: "certificatesAndClearances", bar_admissions_and_licenses: "barAdmissionsAndLicenses", achievements: "achievements",
             volunteering: "volunteering", internships: "internships", awards: "awards",
             hobbies: "hobbies", interests: "interests", languages: "languages",
             publications: "publications", patents: "patents", references: "references",
+            research_grants: "researchGrants", editorial_activities: "editorialActivities", conference_presentations: "conferencePresentations",
           };
           const camelKey = snakeToCamelSectionMap[backendKey] || backendKey;
           await autoSaveEnhancedResume(resumeId, { [camelKey]: sectionData });
           await confirmSavedManualFixes(sectionName, live);
         } else {
-          const updatePayload = { [backendKey]: sectionData };
+          const updatePayload = buildBuilderSectionPayload(backendKey, sectionData);
           const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
 
           if (autoSaveResponse?.warnings?.length) {
@@ -720,11 +817,12 @@ const EditorTab: React.FC<Props> = ({
           if (autoSaveResponse && Array.isArray(sectionData)) {
             const camelKeyMap: Record<string, string> = {
               education: "education", work_experience: "workExperience",
-              projects: "projects", certifications: "certifications",
-              internships: "internships", achievements: "achievements",
+              projects: "projects", certifications: "certifications", licenses: "licenses", certificates_and_clearances: "certificatesAndClearances", bar_admissions_and_licenses: "barAdmissionsAndLicenses",
+              internships: "internships", achievements: "achievements", service_record: "serviceRecord", vessels_operated: "vesselsOperated", ports_experience: "portsExperience", sea_service_record: "seaServiceRecord", maritime_certifications: "maritimeCertifications",
               awards: "awards", volunteering: "volunteering",
               publications: "publications", patents: "patents", references: "references",
               hobbies: "hobbies", interests: "interests", languages: "languages",
+              research_grants: "researchGrants", editorial_activities: "editorialActivities", conference_presentations: "conferencePresentations",
             };
             const camelKey = camelKeyMap[backendKey];
             const resp = autoSaveResponse as unknown as Record<string, unknown>;
@@ -801,6 +899,48 @@ const EditorTab: React.FC<Props> = ({
     }
   }, [formData, resumeData, openModalSection, triggerAutoSave, enhancedDataVersion]);
 
+  // ✅ Update completion status for multi-entry sections when data changes (auto-save)
+  useEffect(() => {
+    if (!openModalSection) return;
+
+    const multiEntrySections: Record<string, keyof typeof resumeData> = {
+      "Education": "education",
+      "Work Experience": "workExperience",
+      "Projects": "projects",
+      "Certifications": "certifications",
+      "Licenses and Credentials": "licenses",
+      "Certificates and Clearances": "certificatesAndClearances",
+      "Bar Admissions and Licenses": "barAdmissionsAndLicenses",
+      "Achievements": "achievements",
+      "Awards": "awards",
+      "Volunteering": "volunteering",
+      "Publications": "publications",
+      "Patents": "patents",
+      "References": "references",
+      "Hobbies": "hobbies",
+      "Interests": "interests",
+      "Languages": "languages",
+      "Internships": "internships",
+      "Service Record": "serviceRecord",
+      "Vessels Operated": "vesselsOperated",
+      "Ports Experience": "portsExperience",
+      "Sea Service Record": "seaServiceRecord",
+      "Maritime Certifications": "maritimeCertifications",
+      "Research Grants": "researchGrants",
+      "Editorial Activities": "editorialActivities",
+      "Conference Presentations": "conferencePresentations",
+    };
+
+    const dataKey = multiEntrySections[openModalSection];
+    if (dataKey) {
+      const sectionData = resumeData[dataKey];
+      const hasData = Array.isArray(sectionData) && sectionData.length > 0;
+      setCompletionStatus(prev => ({
+        ...prev,
+        [openModalSection]: hasData,
+      }));
+    }
+  }, [resumeData, openModalSection, setCompletionStatus]);
 
   useEffect(() => {
     return () => {
@@ -809,6 +949,46 @@ const EditorTab: React.FC<Props> = ({
       }
     };
   }, []);
+
+
+  // ✅ Check if a template domain is active (determines if domain-specific fields are required)
+  const getActiveDomain = (): string => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+
+      const careerLevelStorage = localStorage.getItem(careerLevelKey);
+      const selectedTemplateId = localStorage.getItem(selectedTemplateKey);
+
+      if (careerLevelStorage && selectedTemplateId) {
+        const careerLevels = JSON.parse(careerLevelStorage) as Array<{ id?: string | number; domain_family?: string }>;
+        const activeTemplate = careerLevels.find(t => String(t.id) === String(selectedTemplateId));
+        return activeTemplate?.domain_family || '';
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  };
+
+  // ✅ Check if a field is required for the current template domain
+  const isDomainSpecificFieldRequired = (key: string, domain: string): boolean => {
+    const lowerKey = key.toLowerCase();
+
+    if (domain === 'government_standard') {
+      return ['dateofbirth', 'nationality', 'category', 'languages', 'gender', 'maritalstatus', 'fathersname', 'permanentaddress'].some(f => lowerKey.includes(f));
+    } else if (domain === 'healthcare') {
+      return ['titleprefix', 'qualifications', 'specialisation', 'medicalregno'].some(f => lowerKey.includes(f));
+    } else if (domain === 'legal') {
+      return ['barenrollmentno', 'yearofenrollment', 'courtsofpractise'].some(f => lowerKey.includes(f));
+    } else if (domain === 'marine_merchant_navy') {
+      return ['rank', 'cocnumber', 'vesseltypes', 'stcwcertificates'].some(f => lowerKey.includes(f));
+    } else if (domain === 'research_scholar') {
+      return ['qualifications', 'orcidid', 'hindex', 'googlescholarurl'].some(f => lowerKey.includes(f));
+    }
+    return false;
+  };
 
 
   // ✅ FIXED: Validate and return new errors, don't rely on stale state
@@ -843,10 +1023,17 @@ const EditorTab: React.FC<Props> = ({
     const newErrors: Record<string, string> = {};
     let hasEmptyRequiredFields = false;
 
-
     sectionFields.forEach((key) => {
       const value = formData[key] || "";
-      const isRequired = isFieldRequiredForSection(key, openModalSection);
+      // Determine if this field is required
+      let isRequired = isFieldRequiredForSection(key, openModalSection);
+
+      // For Personal Info, check if domain-specific fields are required for the current template
+      if (openModalSection === "Personal Info" && !isRequired) {
+        const activeDomain = getActiveDomain();
+        isRequired = isDomainSpecificFieldRequired(key, activeDomain);
+      }
+
       if (isRequired) {
         if (!value || value.trim() === "") {
           newErrors[key] = "This field is required";
@@ -854,7 +1041,6 @@ const EditorTab: React.FC<Props> = ({
         }
       }
     });
-
 
     return {
       isValid: !hasEmptyRequiredFields,
@@ -868,7 +1054,7 @@ const EditorTab: React.FC<Props> = ({
 
     // ✅ FIXED: Multi-entry sections read from resumeData context, not formData
     // These sections manage their own component state and only update context
-    if (["Education", "Work Experience", "Projects", "Certifications", "Internships", "Achievements", "Awards", "Volunteering", "Publications", "Patents", "References", "Hobbies", "Interests", "Languages"].includes(sectionName)) {
+    if (["Education", "Work Experience", "Service Record", "Vessels Operated", "Ports Experience", "Sea Service Record", "Maritime Certifications", "Research Grants", "Editorial Activities", "Conference Presentations", "Projects", "Certifications", "Licenses and Credentials", "Certificates and Clearances", "Bar Admissions and Licenses", "Internships", "Achievements", "Awards", "Volunteering", "Publications", "Patents", "References", "Hobbies", "Interests", "Languages"].includes(sectionName)) {
       const contextKey = sectionName
         .toLowerCase()
         .replace(/ /g, "_")
@@ -877,8 +1063,20 @@ const EditorTab: React.FC<Props> = ({
       const sectionMap: Record<string, keyof typeof resumeData> = {
         "education": "education",
         "work_experience": "workExperience",
+        "service_record": "serviceRecord",
+        "vessels_operated": "vesselsOperated",
+        "ports_experience": "portsExperience",
+        "sea_service_record": "seaServiceRecord",
+        "maritime_certifications": "maritimeCertifications",
+        "research_grants": "researchGrants",
+        "editorial_activities": "editorialActivities",
+        "conference_presentations": "conferencePresentations",
         "projects": "projects",
         "certifications": "certifications",
+        "licenses": "licenses",
+        "licenses_and_credentials": "licenses",
+        "certificates_and_clearances": "certificatesAndClearances",
+        "bar_admissions_and_licenses": "barAdmissionsAndLicenses",
         "internships": "internships",
         "achievements": "achievements",
         "awards": "awards",
@@ -1073,7 +1271,7 @@ const EditorTab: React.FC<Props> = ({
         SECTION_KEY_MAP[openModalSection] ||
         openModalSection.toLowerCase().replace(/\s+/g, "_");
 
-      updatePayload = { [backendKey]: sectionData };
+      updatePayload = buildBuilderSectionPayload(backendKey, sectionData);
     }
 
     // // console.log("📤 Sending payload:", updatePayload);
@@ -1084,7 +1282,7 @@ const EditorTab: React.FC<Props> = ({
       const snakeToCamelMap: Record<string, string> = {
         personal_info: "personalInfo", professional_summary: "professionalSummary",
         skills: "skills", education: "education", work_experience: "workExperience",
-        projects: "projects", certifications: "certifications", achievements: "achievements",
+        projects: "projects", certifications: "certifications", licenses: "licenses", achievements: "achievements",
         volunteering: "volunteering", internships: "internships", awards: "awards",
         hobbies: "hobbies", interests: "interests", languages: "languages",
         publications: "publications", patents: "patents", references: "references",
@@ -1104,6 +1302,7 @@ const EditorTab: React.FC<Props> = ({
       "Work Experience": "workExperience",
       "Projects": "projects",
       "Certifications": "certifications",
+      "Licenses and Credentials": "licenses",
       "Internships": "internships",
       "Achievements": "achievements",
       "Awards": "awards",

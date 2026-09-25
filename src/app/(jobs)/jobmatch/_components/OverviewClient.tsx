@@ -6,6 +6,6 @@ import dynamic from "next/dynamic";
 // (a Server Component) to use it while still disabling SSR for Overview.
 const Overview = dynamic(() => import("./Overview"), { ssr: false });
 
-export default function OverviewClient({ sessionId }: { sessionId?: string }) {
+export default function OverviewClient({ sessionId }: { readonly sessionId?: string }) {
   return <Overview sessionId={sessionId} />;
 }

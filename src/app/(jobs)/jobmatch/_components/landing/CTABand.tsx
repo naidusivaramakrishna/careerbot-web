@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, ShieldCheck, Zap, BarChart2 } from "lucide-react";
 
 interface CTABandProps {
-  onAnalyzeClick?: () => void;
+  readonly onAnalyzeClick?: () => void;
 }
 
 const inlineStats = [
@@ -64,6 +64,7 @@ export default function CTABand({ onAnalyzeClick }: CTABandProps) {
           transition={{ duration: 0.5, delay: 0.15 }}
         >
           <button
+            type="button"
             onClick={onAnalyzeClick}
             className="inline-flex items-center gap-2 bg-[#2557a7] text-white hover:bg-[#1e4a94] font-bold px-9 py-4 rounded-xl text-sm shadow-[0_8px_32px_rgba(37,87,167,0.25)] hover:shadow-[0_12px_40px_rgba(37,87,167,0.35)] hover:scale-[1.03] active:scale-100 transition-all duration-300"
           >

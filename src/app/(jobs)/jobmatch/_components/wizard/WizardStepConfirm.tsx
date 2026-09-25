@@ -1,141 +1,71 @@
 "use client";
 
 import React from "react";
-import { Upload, Link2, AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileText, Pencil, RefreshCw } from "lucide-react";
+import styles from "./WizardUpload.module.css";
 
 interface WizardStepConfirmProps {
-  uploadedFile: File | null;
-  sessionResumeName: string | null;
-  jdFile: File | null;
-  jdText: string;
-  error: string | null;
+  readonly uploadedFile: File | null;
+  readonly sessionResumeName: string | null;
+  readonly jdFile: File | null;
+  readonly jdText: string;
+  readonly error: string | null;
+  readonly onReplaceResume: () => void;
+  readonly onEditJobDescription: () => void;
 }
 
 export default function WizardStepConfirm({
   uploadedFile, sessionResumeName, jdFile, jdText, error,
+  onReplaceResume, onEditJobDescription,
 }: WizardStepConfirmProps) {
+  const resumeName = uploadedFile?.name || sessionResumeName;
+  const extension = uploadedFile?.name.split(".").pop()?.toUpperCase();
   const isUrl = /^https?:\/\/.+/i.test(jdText.trim());
-  const jdLabel = jdFile
-    ? jdFile.name
-    : isUrl
-      ? jdText.trim()
-      : jdText.slice(0, 60) + (jdText.length > 60 ? "…" : "");
-  const jdSubLabel = jdFile
-    ? "File added successfully"
-    : isUrl
-      ? "URL added successfully"
-      : "Text added successfully";
+  const hasJobDescription = Boolean(jdFile || jdText.trim());
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: "50%",
-          background: "#f0fdf4", border: "1.5px solid #86efac",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          margin: "0 auto 10px",
-        }}>
-          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 10l4 4 8-8"/>
-          </svg>
-        </div>
-        <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 6px" }}>Ready to Analyze</h3>
-        <p style={{ fontSize: 13, color: "#64748B", margin: 0, lineHeight: 1.55 }}>
-          We&apos;ve received your resume and job description.<br />
-          Click the button below to get your AI match score.
-        </p>
-      </div>
+      <h2 id="review-confirm-title" className={styles.title}>Review &amp; Confirm</h2>
+      <p className={styles.description}>Please review your resume and job description before we analyze the match.</p>
 
-      {/* Review card */}
-      <div style={{
-        background: "#fff",
-        border: "1px solid #E8EDF5",
-        borderRadius: 16,
-        overflow: "hidden",
-        marginBottom: 14,
-        boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-      }}>
-        {/* Row: Resume */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: "#F1F5F9",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <Upload style={{ width: 18, height: 18, color: "#2557a7" }} />
+      <section className={styles.reviewSection} aria-labelledby="review-resume-heading">
+        <div className={styles.reviewHeading}>
+          <span className={styles.reviewIcon}><FileText aria-hidden="true" /></span>
+          <div><h3 id="review-resume-heading">Resume</h3><p>Here is the resume you uploaded.</p></div>
+        </div>
+        <div className={styles.reviewFile}>
+          <span className={styles.fileTypeIcon}>
+            <FileText className={extension === "PDF" ? styles.pdfIcon : styles.reviewFileIcon} aria-hidden="true" />
+            {extension === "PDF" && <span className={styles.pdfTag}>PDF</span>}
+          </span>
+          <div className={styles.reviewFileDetails}>
+            <strong title={resumeName || undefined}>{resumeName || "No resume selected"}</strong>
+            <div className={styles.reviewMetadata}>
+              {uploadedFile && <><span>{(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB</span><span>{extension}</span></>}
+              {resumeName && <span className={styles.readyLabel}><CheckCircle2 aria-hidden="true" />{uploadedFile ? "Uploaded Successfully" : "Saved resume"}</span>}
+            </div>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 10.5, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Resume</p>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {uploadedFile ? uploadedFile.name : sessionResumeName || "Resume ready"}
-            </p>
-            <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>Uploaded successfully</p>
-          </div>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            background: "#f0fdf4", border: "1px solid #bbf7d0",
-            padding: "6px 14px", borderRadius: 99, flexShrink: 0,
-          }}>
-            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 10l4 4 8-8"/>
-            </svg>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>Ready</span>
+          <div className={styles.reviewActions}>
+            <button type="button" onClick={onReplaceResume}><RefreshCw aria-hidden="true" /> Replace</button>
           </div>
         </div>
+      </section>
 
-        {/* Divider */}
-        <div style={{ height: 1, background: "#F1F5F9" }} />
-
-        {/* Row: Job Description */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: "#F1F5F9",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <Link2 style={{ width: 18, height: 18, color: "#2557a7" }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 10.5, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Job Description</p>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {jdLabel}
-            </p>
-            <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>{jdSubLabel}</p>
-          </div>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            background: "#f0fdf4", border: "1px solid #bbf7d0",
-            padding: "6px 14px", borderRadius: 99, flexShrink: 0,
-          }}>
-            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 10l4 4 8-8"/>
-            </svg>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>Ready</span>
-          </div>
+      <section className={styles.reviewSection} aria-labelledby="review-jd-heading">
+        <div className={styles.reviewHeading}>
+          <span className={styles.reviewIcon}><FileText aria-hidden="true" /></span>
+          <div><h3 id="review-jd-heading">Job Description</h3><p>Here is the job description you added.</p></div>
+          <button type="button" className={styles.reviewEdit} onClick={onEditJobDescription} aria-label="Edit job description"><Pencil aria-hidden="true" /> Edit</button>
         </div>
-      </div>
-
-      {error && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8,
-          padding: "10px 14px", marginBottom: 16, borderRadius: 10,
-          background: "#FEF2F2", border: "1px solid #FECACA",
-        }}>
-          <AlertCircle style={{ width: 13, height: 13, color: "#ef4444", flexShrink: 0 }} />
-          <p style={{ fontSize: 12, color: "#dc2626", margin: 0 }}>{error}</p>
+        <div className={styles.reviewPreview} role="region" aria-label="Job description preview" tabIndex={0}>
+          {jdText || (jdFile ? "Text preview is not available for this file. It will be processed during analysis." : "No job description added.")}
         </div>
-      )}
-
-      <p style={{
-        textAlign: "center", fontSize: 11.5, color: "#94A3B8",
-        marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-      }}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-        </svg>
-        End-to-end encrypted · Never stored · 100% private
-      </p>
+        {hasJobDescription && <div className={styles.reviewReady} role="status">
+          <CheckCircle2 aria-hidden="true" />
+          <div><strong>{isUrl && !jdFile ? "Job URL Added" : "Job Description Ready"}</strong><p>{jdFile && !jdText ? "Your file will be processed during analysis." : "Your job description has been added and is ready for analysis."}</p></div>
+        </div>}
+      </section>
+      {error && <div className={styles.error} role="alert"><AlertCircle aria-hidden="true" /><p>{error}</p></div>}
     </div>
   );
 }

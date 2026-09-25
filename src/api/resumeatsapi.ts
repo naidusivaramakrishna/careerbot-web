@@ -64,7 +64,7 @@ export function storeAtsAnalysis(key: string, payload: unknown): void {
 }
 
 /** Reads an ATS analysis written by storeAtsAnalysis (localStorage first, then the quota fallback). */
-function readAtsAnalysis(key: string): string | null {
+export function readAtsAnalysis(key: string): string | null {
   for (const storage of [() => localStorage, () => sessionStorage]) {
     try {
       const value = storage().getItem(key);

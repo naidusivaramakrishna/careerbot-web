@@ -3,8 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
-import { type TemplateResponse, getAllResumes, createResumeWithAuth } from '@/api/resumeApi';
+import { type TemplateResponse, getAllResumes, createResumeWithAuth, applyTemplateToResume } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
@@ -12,6 +11,7 @@ import { detectCareerLevel as detectCareerLevelUtil } from '@/utils/careerLevelD
 import { Button } from '@/components/ui/Button';
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from '../_constants/templateImages';
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
+import { TemplatePreviewRenderer } from '@/components/templates';
 
 interface DomainTemplatesModalProps {
   domainName: string;
@@ -100,6 +100,9 @@ export default function DomainTemplatesModal({
       const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
       const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
 
+      // Use domainFamily prop directly (already correctly set from page.tsx)
+      const correctDomainFamily = domainFamily;
+
       // Store the selected template ID in localStorage for the builder to use
       const templateId = selectedTemplate.id || selectedTemplate._id;
       if (templateId) {
@@ -107,10 +110,6 @@ export default function DomainTemplatesModal({
         logger.info('Stored selectedTemplateId:', templateId, 'with key:', selectedTemplateKey);
 
         // Also store all career level templates for the builder to display
-        // Use domainFamily prop directly (already correctly set from page.tsx)
-        const correctDomainFamily = domainFamily;
-        console.warn("🔥 DomainTemplatesModal - domainName:", domainName);
-        console.warn("🔥 DomainTemplatesModal - correctDomainFamily:", correctDomainFamily);
 
         const careerLevelData = sortedTemplates.map(t => ({
           id: t.id?.toString() || t._id || '',
@@ -167,12 +166,34 @@ export default function DomainTemplatesModal({
           resumeId = newResume.id || (newResume as unknown as Record<string, unknown>)._id as string;
         }
       }
+
+      if (!resumeId) {
+        throw new Error('Failed to get or create resume ID');
+      }
+
+      // Save the chosen template on the resume (regular or enhanced), as the
+      // builder's TemplatesTab does, so it survives another browser or cleared
+      // storage. Best-effort: the builder still reads the localStorage choice.
+      if (templateId) {
+        try {
+          await applyTemplateToResume(resumeId, String(templateId));
+        } catch (applyError) {
+          logger.warn('Failed to save the template on the resume:', applyError);
+        }
+      }
+
       // Catalogue is already saved in localStorage by the /templates page selection
 
-      // Redirect back to the builder, preserving source query param if present
-      if (resumeId) {
-        router.push(`/builder/creation/${resumeId}${source ? `?source=${source}` : ''}`);
+      // Store templateDomain in localStorage for domain-aware features (e.g., domain-specific skills)
+      try {
+        localStorage.setItem(`templateDomain_${resumeId}`, correctDomainFamily);
+      } catch (storageError) {
+        logger.warn('Failed to store templateDomain to localStorage:', storageError);
+        // Don't throw - continue with navigation even if storage fails
       }
+
+      // Redirect back to the builder, preserving source query param if present
+      router.push(`/builder/creation/${resumeId}${source ? `?source=${source}` : ''}`);
     } catch (error) {
       logger.error('Error applying template:', error);
       setIsLoading(false);
@@ -196,198 +217,202 @@ export default function DomainTemplatesModal({
 
       {/* Modal */}
       <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="relative bg-white rounded-2xl ring-1 ring-slate-200 shadow-2xl overflow-hidden max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Close Button */}
-        <button
-          data-testid="modal-close-btn"
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 bg-white/80 backdrop-blur-sm hover:bg-slate-100 rounded-lg ring-1 ring-slate-200 transition-colors z-10"
-        >
-          <X className="w-5 h-5 text-slate-600" />
-        </button>
+        <div className="relative bg-white rounded-2xl ring-1 ring-slate-200 shadow-2xl overflow-hidden max-w-6xl w-full h-[90vh] flex flex-col">
+          {/* Close Button */}
+          <button
+            data-testid="modal-close-btn"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 bg-white/80 backdrop-blur-sm hover:bg-slate-100 rounded-lg ring-1 ring-slate-200 transition-colors z-10"
+          >
+            <X className="w-5 h-5 text-slate-600" />
+          </button>
 
-        <div className="flex gap-6 p-8">
-          {/* Left: Main Template Preview */}
-          <div className="flex-1">
-            <div className="bg-linear-to-br from-slate-50 via-sky-50/40 to-teal-50/30 ring-1 ring-slate-200 rounded-xl overflow-hidden flex items-center justify-center p-4 h-full">
-              <Image
-                src={resolveTemplateImageUrl(selectedTemplate.preview_url) || domainFallback}
-                alt={selectedTemplate.name}
-                width={400}
-                height={500}
-                className="w-full h-auto object-contain drop-shadow-md"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).src = domainFallback; }}
-              />
-            </div>
-          </div>
-
-          {/* Right: Career Level Templates Grid */}
-          <div className="w-96 flex flex-col">
-            {/* Header */}
-            <div className="mb-6 relative">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-                  {domainName}
-                </h2>
+          <div className="flex gap-6 p-8 flex-1 min-h-0">
+            {/* Left: Main Template Preview */}
+            <div className="flex-1 h-full">
+              <div className="w-full h-full overflow-hidden bg-white">
+                <TemplatePreviewRenderer
+                  previewHtml={((selectedTemplate as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
+                  previewCss={((selectedTemplate as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
+                  fallbackImage={resolveTemplateImageUrl(selectedTemplate.preview_url) || domainFallback}
+                  errorFallbackImage={domainFallback}
+                  title={selectedTemplate.name}
+                  height="100%"
+                  width="100%"
+                />
               </div>
-              <p className="text-sm text-slate-500">
-                Select your career level
-              </p>
             </div>
 
-            {/* Career Level Cards Grid (2x2) */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {sortedTemplates.map((template, index) => {
-                const careerLevel = getCareerLevel(template.name);
-                const isSelected = selectedTemplateIndex === index;
+            {/* Right: Career Level Templates Grid */}
+            <div className="w-96 flex flex-col overflow-y-auto">
+              {/* Header */}
+              <div className="mb-6 relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
+                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                    {domainName}
+                  </h2>
+                </div>
+                <p className="text-sm text-slate-500">
+                  Select your career level
+                </p>
+              </div>
 
-                return (
-                  <div key={template.id || template._id} className="flex flex-col">
-                    <button
-                      data-testid={`career-level-btn-${index}`}
-                      onClick={() => handleSelectTemplate(index)}
-                      className={`relative rounded-lg overflow-hidden ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${
-                        isSelected
-                          ? 'ring-2 ring-[#2257a7] shadow-md'
-                          : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
-                      }`}
-                    >
-                      <Image
-                        src={resolveTemplateImageUrl(template.preview_url) || domainFallback}
-                        alt={careerLevel}
-                        width={160}
-                        height={200}
-                        className="w-full h-auto object-contain group-hover:scale-105 transition-transform"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = domainFallback; }}
-                      />
-                      <span className="absolute top-2 left-2 bg-[#2557a7] text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full shadow-sm pointer-events-none">
-                        100% ATS Friendly
-                      </span>
-                      {isSelected && (
-                        <div className="absolute top-2 right-2 bg-linear-to-br from-teal-500 to-sky-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg ring-2 ring-white">
-                          <span className="text-sm font-bold">✓</span>
+              {/* Career Level Cards Grid (2x2) */}
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                {sortedTemplates.map((template, index) => {
+                  const careerLevel = getCareerLevel(template.name);
+                  const isSelected = selectedTemplateIndex === index;
+
+                  return (
+                    <div key={template.id || template._id} className="flex flex-col">
+                      <button
+                        data-testid={`career-level-btn-${index}`}
+                        onClick={() => handleSelectTemplate(index)}
+                        className={`relative rounded-lg overflow-hidden ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${isSelected
+                            ? 'ring-2 ring-[#2257a7] shadow-md'
+                            : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
+                          }`}
+                        style={{ pointerEvents: 'auto' }}
+                      >
+                        <div style={{ pointerEvents: 'none' }}>
+                          <TemplatePreviewRenderer
+                          previewHtml={((template as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
+                          previewCss={((template as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
+                          fallbackImage={resolveTemplateImageUrl(template.preview_url) || domainFallback}
+                          errorFallbackImage={domainFallback}
+                          title={careerLevel}
+                          height="200px"
+                          width="100%"
+                          scale={0.35}
+                          hideScroll={true}
+                          fillContainer={true}
+                        />
                         </div>
-                      )}
-                    </button>
-                    <p className={`text-sm font-semibold mt-2 text-center transition-colors ${
-                      isSelected ? 'text-[#2257a7]' : 'text-slate-700'
-                    }`}>
-                      {careerLevel}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Template Details */}
-            {selectedTemplate && (
-              <div className="space-y-4">
-                {/* Title and ATS Badge */}
-                <div>
-                  <h3 className="text-lg font-bold tracking-tight text-slate-900 mb-3">
-                    {(() => {
-                      const templateName = selectedTemplate.name || '';
-                      const nameStr = templateName.toLowerCase();
-
-                      let careerLevel = '';
-                      if (nameStr.includes('early') && nameStr.includes('career')) {
-                        careerLevel = 'Early Career';
-                      } else if (nameStr.includes('fresher')) {
-                        careerLevel = 'Fresher';
-                      } else if (nameStr.includes('architect')) {
-                        careerLevel = 'Architect';
-                      } else if (nameStr.includes('manager')) {
-                        careerLevel = 'Manager';
-                      } else if (nameStr.includes('lead')) {
-                        careerLevel = 'Lead';
-                      } else if (nameStr.includes('senior')) {
-                        careerLevel = 'Senior-Level';
-                      } else if (nameStr.includes('mid')) {
-                        careerLevel = 'Mid-Level';
-                      }
-
-                      if (careerLevel) {
-                        return `${domainName} ${careerLevel} Template`;
-                      }
-
-                      return selectedTemplate.name;
-                    })()}
-                  </h3>
-                  <div className="inline-block bg-emerald-50 text-emerald-700 text-xs font-semibold px-4 py-1.5 rounded-full ring-1 ring-emerald-200">
-                    ✓ 100% ATS Friendly
-                  </div>
-                </div>
-
-                {/* Description */}
-                {selectedTemplate.description && (
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800 mb-2">Description</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {selectedTemplate.description}
-                    </p>
-                  </div>
-                )}
-
-                {/* Features */}
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800 mb-2">Features</h4>
-                  <ul className="space-y-1.5">
-                    <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> Professional layout
-                    </li>
-                    <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> Easy to customize
-                    </li>
-                    <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> ATS optimized
-                    </li>
-                    <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> Print friendly
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Apply and Cancel Buttons */}
-                <div className="space-y-2">
-                  <Button
-                    data-testid="apply-template-btn"
-                    onClick={handleApplyTemplate}
-                    disabled={isLoading}
-                    className={`w-full text-white font-semibold py-3 rounded-lg cursor-pointer transition-all shadow-sm ${
-                      isLoading
-                        ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-[#2257a7] hover:bg-[#184284] '
-                    }`}
-                  >
-                    {isLoading ? (
-                      <span className="flex items-center justify-center gap-2 cursor-pointer">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Applying Template...
-                      </span>
-                    ) : (
-                      'Apply This Template'
-                    )}
-                  </Button>
-                  <button
-                    data-testid="cancel-btn"
-                    onClick={onClose}
-                    disabled={isLoading}
-                    className={`w-full font-semibold py-2 rounded-lg cursor-pointer transition-colors ring-1 ${
-                      isLoading
-                        ? 'bg-slate-50 text-slate-400 ring-slate-200 cursor-not-allowed'
-                        : 'bg-white hover:bg-slate-50 text-slate-700 ring-slate-200'
-                    }`}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                        <span className="absolute top-2 left-2 bg-[#2557a7] text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full shadow-sm pointer-events-none">
+                          100% ATS Friendly
+                        </span>
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 bg-linear-to-br from-teal-500 to-sky-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg ring-2 ring-white">
+                            <span className="text-sm font-bold">✓</span>
+                          </div>
+                        )}
+                      </button>
+                      <p className={`text-sm font-semibold mt-2 text-center transition-colors ${isSelected ? 'text-[#2257a7]' : 'text-slate-700'
+                        }`}>
+                        {careerLevel}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
-            )}
+
+              {/* Template Details */}
+              {selectedTemplate && (
+                <div className="space-y-4">
+                  {/* Title and ATS Badge */}
+                  <div>
+                    <h3 className="text-lg font-bold tracking-tight text-slate-900 mb-3">
+                      {(() => {
+                        const templateName = selectedTemplate.name || '';
+                        const nameStr = templateName.toLowerCase();
+
+                        let careerLevel = '';
+                        if (nameStr.includes('early') && nameStr.includes('career')) {
+                          careerLevel = 'Early Career';
+                        } else if (nameStr.includes('fresher')) {
+                          careerLevel = 'Fresher';
+                        } else if (nameStr.includes('architect')) {
+                          careerLevel = 'Architect';
+                        } else if (nameStr.includes('manager')) {
+                          careerLevel = 'Manager';
+                        } else if (nameStr.includes('lead')) {
+                          careerLevel = 'Lead';
+                        } else if (nameStr.includes('senior')) {
+                          careerLevel = 'Senior-Level';
+                        } else if (nameStr.includes('mid')) {
+                          careerLevel = 'Mid-Level';
+                        }
+
+                        if (careerLevel) {
+                          return `${domainName} ${careerLevel} Template`;
+                        }
+
+                        return selectedTemplate.name;
+                      })()}
+                    </h3>
+                    <div className="inline-block bg-emerald-50 text-emerald-700 text-xs font-semibold px-4 py-1.5 rounded-full ring-1 ring-emerald-200">
+                      ✓ 100% ATS Friendly
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  {selectedTemplate.description && (
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 mb-2">Description</h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {selectedTemplate.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Features */}
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 mb-2">Features</h4>
+                    <ul className="space-y-1.5">
+                      <li className="text-xs text-slate-700 flex items-center gap-2">
+                        <span className="text-[#2257a7]">✓</span> Professional layout
+                      </li>
+                      <li className="text-xs text-slate-700 flex items-center gap-2">
+                        <span className="text-[#2257a7]">✓</span> Easy to customize
+                      </li>
+                      <li className="text-xs text-slate-700 flex items-center gap-2">
+                        <span className="text-[#2257a7]">✓</span> ATS optimized
+                      </li>
+                      <li className="text-xs text-slate-700 flex items-center gap-2">
+                        <span className="text-[#2257a7]">✓</span> Print friendly
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Apply and Cancel Buttons */}
+                  <div className="space-y-2">
+                    <Button
+                      data-testid="apply-template-btn"
+                      onClick={handleApplyTemplate}
+                      disabled={isLoading}
+                      className={`w-full text-white font-semibold py-3 rounded-lg cursor-pointer transition-all shadow-sm ${isLoading
+                          ? 'bg-slate-300 cursor-not-allowed'
+                          : 'bg-[#2257a7] hover:bg-[#184284] '
+                        }`}
+                    >
+                      {isLoading ? (
+                        <span className="flex items-center justify-center gap-2 cursor-pointer">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Applying Template...
+                        </span>
+                      ) : (
+                        'Apply This Template'
+                      )}
+                    </Button>
+                    <button
+                      data-testid="cancel-btn"
+                      onClick={onClose}
+                      disabled={isLoading}
+                      className={`w-full font-semibold py-2 rounded-lg cursor-pointer transition-colors ring-1 ${isLoading
+                          ? 'bg-slate-50 text-slate-400 ring-slate-200 cursor-not-allowed'
+                          : 'bg-white hover:bg-slate-50 text-slate-700 ring-slate-200'
+                        }`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </>
   );
 }

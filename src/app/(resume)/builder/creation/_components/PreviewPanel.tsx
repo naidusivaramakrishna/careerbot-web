@@ -19,15 +19,14 @@ import TemplateFive from "./templates/TemplateFive";
 import Template2 from "../../../templates/Template2";
 import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
-import { toPng } from "html-to-image";
-import jsPDF from "jspdf";
 import { downloadResume, getResumePreviewImage } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
-import { getProfile } from "@/api/userApi";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
 import { getEnhancedCurrentScore } from "../_utils/enhancedScore";
+import { useCatalogues } from "@/hooks/useCatalogues";
+import { getAppliedCareerTemplate, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
@@ -97,6 +96,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey } = useResume();
   const { canonicalScore, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
+  const { getCataloguesMap } = useCatalogues();
 
   // For enhanced resumes, seed the canonical score from the enhancer's ATS score
   // so the toolbar and any other score consumers show the correct value.
@@ -159,13 +159,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   useEffect(() => {
     const fetchUserEmail = async () => {
       try {
-        const profile = await getProfile();
-        if (profile.email) {
-          setUserEmail(profile.email);
-          logger.info('User email set for scoped storage:', profile.email);
+        // Shared with the Skills editor, PersonalInfo and the resume loader so
+        // all of them read the same account's template storage.
+        const email = await resolveAccountEmail();
+        if (email) {
+          setUserEmail(email);
+          logger.info('User email set for scoped storage:', email);
+        } else {
+          logger.warn('No account email for scoped storage; using unscoped keys');
         }
-      } catch (err) {
-        logger.warn('Failed to get user email for scoped storage', err);
       } finally {
         setIsEmailReady(true);
       }
@@ -235,7 +237,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
       // Read selected catalogue and resolve its backend template_id for the style overlay
       const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
-      const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+      // Use loaded catalogues from API if available, fallback to hardcoded STYLE_CATALOGUES for backward compatibility
+      const cataloguesMap = getCataloguesMap();
+      const catalogueConfig = selectedCatalogue ? (cataloguesMap[selectedCatalogue] || STYLE_CATALOGUES[selectedCatalogue]) : undefined;
+      const catalogueTemplateId = catalogueConfig?.template_id;
 
       // Pass the domain template ID so the backend uses the correct section structure
       // (e.g., education template → "TEACHING EXPERIENCE"). This overrides the initial
@@ -254,7 +259,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       const careerLevel = getCareerLevel();
 
       const blob = isEnhancedResume
-        ? await downloadEnhancedResume(resumeId, format, getEnhancedTemplateId(resumeId))
+        ? await downloadEnhancedResume(resumeId, format, getEnhancedTemplateId(resumeId) ?? catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel)
         : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel);
 
       // ✅ Generate filename from person's name
@@ -352,7 +357,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const timer = setTimeout(async () => {
       try {
         const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
-        const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+        const previewCatalogue = selectedCatalogue ? (getCataloguesMap()[selectedCatalogue] || STYLE_CATALOGUES[selectedCatalogue]) : undefined;
+        const catalogueTemplateId = previewCatalogue?.template_id;
         const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
         const domainTemplateId = typeof window !== 'undefined' ? localStorage.getItem(selectedTemplateKey) ?? undefined : undefined;
         const sectionBgColor = selectedCatalogue === 'eclipse' ? resumeStyle.sectionHeaderBg : undefined;
@@ -405,99 +411,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     };
   }, []);
 
-  const handleDownloadPDF = async () => {
-    const el = contentRef.current;
-    if (!el) return;
-    setShowExportOptions(false);
-
-    const prevTransform = el.style.transform;
-    el.style.transform = "none";
-
-    try {
-      const dataUrl = await toPng(el, {
-        pixelRatio: 3,
-        backgroundColor: "#ffffff",
-        skipFonts: true,
-      });
-
-      const img = new Image();
-      img.src = dataUrl;
-      await new Promise<void>(resolve => { img.onload = () => resolve(); });
-
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgW = pageW;
-      const imgH = (img.naturalHeight * imgW) / img.naturalWidth;
-
-      let posY = 0;
-      let remaining = imgH;
-
-      pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
-      remaining -= pageH;
-
-      while (remaining > 0) {
-        posY -= pageH;
-        pdf.addPage();
-        pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
-        remaining -= pageH;
-      }
-
-      const fullname = resumeData.personalInfo?.fullname || "";
-      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
-      const filename = sanitizedName ? `${sanitizedName}.pdf` : "resume.pdf";
-
-      pdf.save(filename);
-    } finally {
-      el.style.transform = prevTransform;
-    }
-  };
-
-  const handleDownloadDOCX = async () => {
-    const el = contentRef.current;
-    if (!el) return;
-    setShowExportOptions(false);
-    setIsDownloading(true);
-    setDownloadError(null);
-
-    const prevTransform = el.style.transform;
-    el.style.transform = "none";
-
-    try {
-      // Send resume HTML to server-side API route (runs html-to-docx in Node.js)
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>${el.outerHTML}</body></html>`;
-
-      const response = await fetch("/api/generate-docx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: "Server error" }));
-        throw new Error(err.error || "Server error");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const fullname = resumeData.personalInfo?.fullname || "";
-      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
-      link.setAttribute("download", sanitizedName ? `${sanitizedName}.docx` : "resume.docx");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Failed to generate DOCX";
-      setDownloadError(`DOCX generation failed. ${msg}`);
-    } finally {
-      el.style.transform = prevTransform;
-      setIsDownloading(false);
-    }
-  };
-
   const handleResumeScoreClick = () => {
     if (onOpenSidebar) {
       onOpenSidebar("Score");
@@ -507,15 +420,14 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   // ✅ UPDATED: renderTemplate to support all 4 templates with both string and number IDs
   const renderTemplate = () => {
-    // Create user-scoped localStorage keys
-    const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
-    const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
-
     const careerLevel = getCareerLevel();
 
     // Compute layoutVariant — use hovered catalogue key during preview, else the persisted selection
     const activeCatalogueKey = previewCatalogueKey ?? localStorage.getItem('selected_catalogue');
-    const catalogueTemplateId = activeCatalogueKey ? STYLE_CATALOGUES[activeCatalogueKey]?.template_id : undefined;
+    // Use loaded catalogues from API if available, fallback to hardcoded for backward compatibility
+    const cataloguesMap = getCataloguesMap();
+    const activeCatalogueConfig = activeCatalogueKey ? (cataloguesMap[activeCatalogueKey] || STYLE_CATALOGUES[activeCatalogueKey]) : undefined;
+    const catalogueTemplateId = activeCatalogueConfig?.template_id;
     const layoutVariant: HeaderLayout = (catalogueTemplateId && CATALOGUE_LAYOUT_MAP[catalogueTemplateId]) || "centered";
 
     // Function to get the correct template component based on domain_family
@@ -575,27 +487,14 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const isFreshStart = typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true';
     if (isFreshStart) sessionStorage.removeItem('builder_fresh_start');
 
-    // Check if this is a career level template and render appropriate template based on domain
-    const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
-    const careerLevelStorage = localStorage.getItem(careerLevelKey);
-    logger.info('Career level render check:', { appliedTemplateId, hasCareerLevelStorage: !!careerLevelStorage });
-    if (!isFreshStart && appliedTemplateId && careerLevelStorage) {
-      try {
-        const careerLevels = JSON.parse(careerLevelStorage) as Array<{
-          id: string;
-          name: string;
-          domain_family?: string;
-        }>;
-        logger.info('Parsed careerLevels:', careerLevels);
-        const appliedTemplate = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
-        logger.info('Applied template found:', appliedTemplate);
-        if (appliedTemplate) {
-          logger.info('Rendering career level template with domain:', appliedTemplate.domain_family);
-          return getTemplateByDomain(appliedTemplate.domain_family);
-        }
-      } catch (err) {
-        logger.warn('Error checking career level template:', err);
-      }
+    // Career-level template → domain template. The Skills editor resolves its
+    // domain through the same helper, so both always agree.
+    const appliedTemplate = isFreshStart ? null : getAppliedCareerTemplate(userEmail);
+    if (appliedTemplate) {
+      // Use template's domain family for career level filtering
+      const templateDomain = appliedTemplate.domain_family || 'software_engineering';
+      logger.info('Rendering career level template with domain:', templateDomain);
+      return getTemplateByDomain(templateDomain);
     }
     logger.info('Career level logic not triggered, checking templateMap');
 

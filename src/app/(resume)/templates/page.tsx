@@ -2,8 +2,9 @@
 
 import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, LayoutTemplate, Sparkles, User } from 'lucide-react';
+import { Search, LayoutTemplate, Sparkles, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
+import { createCataloguePersister } from './_utils/cataloguePersister';
 import logger from '@/lib/logger';
 import CategorySidebar from './_components/CategorySidebar';
 import DomainTemplatesModal from './_components/DomainTemplatesModal';
@@ -15,6 +16,7 @@ import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } fro
 import { DOMAIN_DISPLAY_NAMES } from '@/app/browse-templates/_data/constants';
 import Template1 from '@/app/(resume)/templates/Template1';
 import { type ResumeData, type ResumeStyle } from '@/app/(resume)/builder/creation/_context/ResumeContext';
+import { useCatalogues, type CatalogueConfig } from '@/hooks/useCatalogues';
 
 const DOMAIN_NAMES: Record<string, string> = {
   core_engineering: 'Core Engineering',
@@ -60,9 +62,22 @@ function TemplatesPageContent() {
   const [loading, setLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [selectedCatalogue, setSelectedCatalogue] = useState<string>('galaxy');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
   // Per-catalogue section-header background / accent colour (only meaningful for code-thumbnail catalogues).
   const [hoverBg, setHoverBg] = useState<Record<string, string | undefined>>({});
   const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>({});
+
+  // Fetch catalogues from API
+  const { catalogues, loading: cataloguesLoading, getCataloguesMap } = useCatalogues();
+
+  // Use API catalogues with fallback to hardcoded STYLE_CATALOGUES during migration.
+  // Only API keys with a local style are listed: previews (buildStyleForCatalogue)
+  // and the export's catalogue template_id come from STYLE_CATALOGUES.
+  const renderableApiCatalogues = catalogues.length > 0
+    ? Object.fromEntries(Object.entries(getCataloguesMap()).filter(([key]) => key in STYLE_CATALOGUES))
+    : {};
+  const cataloguesMap = Object.keys(renderableApiCatalogues).length > 0 ? renderableApiCatalogues : STYLE_CATALOGUES;
 
   // Live preview state
   const [showLivePreview, setShowLivePreview] = useState(false);
@@ -97,8 +112,8 @@ function TemplatesPageContent() {
   }, []);
 
   const buildStyleForCatalogue = useCallback((key: string): ResumeStyle => {
-    const catalogue = STYLE_CATALOGUES[key];
-    const s = catalogue?.style || STYLE_CATALOGUES.galaxy.style;
+    // API catalogues have no ResumeStyle-shaped `style`; use the local definition.
+    const s = STYLE_CATALOGUES[key]?.style || STYLE_CATALOGUES.galaxy.style;
     const density = (typeof window !== 'undefined' ? localStorage.getItem('selected_density') : null) || s.lineSpacing || '1.45';
     const font = (typeof window !== 'undefined' ? localStorage.getItem('selected_font') : null) || s.fontFamily || 'arial';
     const savedColor = selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
@@ -132,10 +147,25 @@ function TemplatesPageContent() {
     }
   };
 
+  const [persistToResume] = useState(() =>
+    createCataloguePersister((err) => logger.warn(`Failed to apply catalogue via API: ${err}`))
+  );
+
   const handleCatalogueSelect = (key: string) => {
     setSelectedCatalogue(key);
     localStorage.setItem('selected_catalogue', key);
     persistColorForBuilder(key, selectedBg[key]);
+
+    // Persist only for the resume this page was opened for (?resumeId=).
+    // Without it the choice stays local and the builder applies
+    // `selected_catalogue` when it opens; falling back to current_resume_id
+    // wrote to whichever resume was opened last. With ?source=enhanced the id
+    // is an enhanced resume's, which the regular catalogue endpoint answers
+    // 404 for; the shared persister routes it (and orders fast clicks) as
+    // CatalogueTab does.
+    if (urlResumeId) {
+      persistToResume(urlResumeId, key, urlSource === 'enhanced');
+    }
   };
 
   const handleColorPick = (catalogueKey: string, color: string) => {
@@ -145,6 +175,11 @@ function TemplatesPageContent() {
     localStorage.setItem(`selected_color_${catalogueKey}`, color);
     persistColorForBuilder(catalogueKey, color);
   };
+
+  // Reset pagination when category or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, searchQuery]);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -311,6 +346,59 @@ function TemplatesPageContent() {
     });
   };
 
+  // Paginate results when showing "All Templates"
+  const paginatedGroupedTemplates = useMemo(() => {
+    if (selectedCategory !== 'All') {
+      return filteredGroupedTemplates;
+    }
+
+    const allEntries = Object.entries(filteredGroupedTemplates).filter(([family]) => family !== 'other');
+    const totalDomainCards = allEntries.reduce((sum, [, domains]) => sum + Object.keys(domains).length, 0);
+    const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIdx = startIdx + ITEMS_PER_PAGE;
+
+    let currentIdx = 0;
+    const paginatedResult: typeof filteredGroupedTemplates = {};
+
+    for (const [family, domains] of allEntries) {
+      const familyDomainCount = Object.keys(domains).length;
+
+      if (currentIdx + familyDomainCount > startIdx && currentIdx < endIdx) {
+        const paginatedDomains: Record<string, TemplateResponse[]> = {};
+
+        for (const [domain, templates] of Object.entries(domains)) {
+          if (currentIdx >= startIdx && currentIdx < endIdx) {
+            paginatedDomains[domain] = templates;
+          }
+          currentIdx++;
+
+          if (currentIdx >= endIdx) break;
+        }
+
+        if (Object.keys(paginatedDomains).length > 0) {
+          paginatedResult[family] = paginatedDomains;
+        }
+      } else {
+        currentIdx += familyDomainCount;
+      }
+
+      if (currentIdx >= endIdx) break;
+    }
+
+    return paginatedResult;
+  }, [filteredGroupedTemplates, selectedCategory, currentPage]);
+
+  // Calculate total pages
+  const totalPages = useMemo(() => {
+    if (selectedCategory !== 'All') {
+      return 1;
+    }
+
+    const allEntries = Object.entries(filteredGroupedTemplates).filter(([family]) => family !== 'other');
+    const totalDomainCards = allEntries.reduce((sum, [, domains]) => sum + Object.keys(domains).length, 0);
+    return Math.ceil(totalDomainCards / ITEMS_PER_PAGE);
+  }, [filteredGroupedTemplates, selectedCategory]);
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-gray-900 overflow-x-hidden">
 
@@ -366,9 +454,9 @@ function TemplatesPageContent() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              {selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue] && (
+              {selectedCatalogue && cataloguesMap[selectedCatalogue] && (
                 <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
-                  <span>{STYLE_CATALOGUES[selectedCatalogue].label}</span>
+                  <span>{cataloguesMap[selectedCatalogue]?.label}</span>
                   <span className="text-blue-300">selected</span>
                 </div>
               )}
@@ -387,12 +475,12 @@ function TemplatesPageContent() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-            {Object.entries(STYLE_CATALOGUES).map(([key, catalogue]) => {
+            {Object.entries(cataloguesMap).map(([key, catalogue]) => {
               const isSelected = selectedCatalogue === key;
               const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
               const paletteInfo = CATALOGUE_PALETTES[key];
-              const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor;
-              const primarySwatch = catalogue.swatches[0];
+              const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor ?? catalogue.default_color;
+              const primarySwatch = catalogue.accent_swatches?.[0] || catalogue.swatches?.[0] || '#000000';
 
               const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
               return (
@@ -499,9 +587,9 @@ function TemplatesPageContent() {
 
                   <div className="mt-3 px-0.5">
                     <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
-                      {catalogue.label}
+                      {catalogue?.label}
                     </p>
-                    <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue.description}</p>
+                    <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue?.description}</p>
                   </div>
                 </div>
               );
@@ -608,7 +696,7 @@ function TemplatesPageContent() {
             </div>
           ) : (
             <div className="space-y-10">
-              {Object.entries(filteredGroupedTemplates).filter(([family]) => family !== 'other').map(([family, domains], idx) => (
+              {Object.entries(paginatedGroupedTemplates).map(([family, domains], idx) => (
                 <div key={family} className="scroll-mt-20">
                   <div className="mb-5">
                     <div className="flex items-center gap-3 mb-2">
@@ -624,23 +712,67 @@ function TemplatesPageContent() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Object.entries(domains).map(([domain, domainTemplates]) => (
-                      <DomainCard
-                        key={domain}
-                        domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
-                        templateCount={domainTemplates.length}
-                        previewImage={resolveTemplateImageUrl(
-                          (domainTemplates.find(t =>
-                            t.name?.toLowerCase().includes('early') &&
-                            t.name?.toLowerCase().includes('career')
-                          ) || domainTemplates[0])?.preview_url
-                        ) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
-                        onClick={() => openDomainModal(family, domain)}
-                      />
-                    ))}
+                    {Object.entries(domains).map(([domain, domainTemplates]) => {
+                      const earlyCareerTemplate = domainTemplates.find(t =>
+                        t.name?.toLowerCase().includes('early') &&
+                        t.name?.toLowerCase().includes('career')
+                      ) || domainTemplates[0];
+                      return (
+                        <DomainCard
+                          key={domain}
+                          domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
+                          templateCount={domainTemplates.length}
+                          previewImage={resolveTemplateImageUrl(
+                            earlyCareerTemplate?.preview_url
+                          ) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
+                          previewHtml={((earlyCareerTemplate as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
+                          previewCss={((earlyCareerTemplate as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
+                          onClick={() => openDomainModal(family, domain)}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               ))}
+
+              {/* Pagination Controls */}
+              {selectedCategory === 'All' && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 pt-12 pb-8">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-10 h-10 rounded-lg font-semibold transition-all ${
+                          page === currentPage
+                            ? 'bg-[#2257a7] text-white shadow-md'
+                            : 'border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

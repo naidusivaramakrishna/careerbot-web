@@ -3,6 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
+import { filterSkillsByDomain, hasPrintableSkills } from "./skillsFilterByDomain";
 
 interface Props {
   data: ResumeData;
@@ -31,6 +32,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     projects,
     skills,
     certifications,
+    certificatesAndClearances,
     internships,
     languages,
     achievements,
@@ -43,7 +45,19 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     patents,
     customSections,
     declaration,
+    licenses,
+    vesselsOperated,
+    portsExperience,
+    seaServiceRecord,
+    maritimeCertifications,
+    researchGrants,
+    editorialActivities,
+    conferencePresentations,
+    categorizedSkills,
   } = data;
+
+  // Filter skills by domain
+  const filteredCategorizedSkills = filterSkillsByDomain(categorizedSkills, domainFamily);
 
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
@@ -60,7 +74,6 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return domainFamily === "core_engineering" ? "KEY PROJECTS" : "PROJECTS";
     }
     if (section === "Work Experience") {
-      if (domainFamily === "marine_merchant_navy") return "SEA SERVICE RECORD";
       if (domainFamily === "education") return "TEACHING EXPERIENCE";
       return "PROFESSIONAL EXPERIENCE";
     }
@@ -69,10 +82,13 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       if (domainFamily === "cybersecurity") return "PUBLICATIONS AND CONFERENCES";
       return "PUBLICATIONS";
     }
+    if (section === "Licenses and Credentials") {
+      return "LICENSES AND CREDENTIALS";
+    }
+    if (section === "Certificates and Clearances") {
+      return "CERTIFICATES AND CLEARANCES";
+    }
     if (section === "Certifications") {
-      if (domainFamily === "healthcare") return "LICENSES AND CREDENTIALS";
-      if (domainFamily === "marine_merchant") return "CERTIFICATES AND LICENSES";
-      if (domainFamily === "cybersecurity") return "CERTIFICATES AND CLEARANCES";
       return "CERTIFICATIONS";
     }
     if (section === "Achievements") {
@@ -212,24 +228,21 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         ) : null;
 
       case "Skills":
-        return (data.categorizedSkills && Object.keys(data.categorizedSkills).some(key => {
-          const skillArray = data.categorizedSkills![key as keyof typeof data.categorizedSkills];
-          return Array.isArray(skillArray) && skillArray.length > 0;
-        })) || (skills && skills.length > 0) ? (
+        return hasPrintableSkills(filteredCategorizedSkills, skills) ? (
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && data.categorizedSkills ? (() => {
+              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && filteredCategorizedSkills ? (() => {
                 const allSkills: string[] = [];
-                Object.entries(data.categorizedSkills!)
+                Object.entries(filteredCategorizedSkills!)
                   .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))
                   .forEach(([, arr]) => { if (Array.isArray(arr)) allSkills.push(...(arr as string[]).filter(s => typeof s === 'string')); });
-                (data.categorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
+                (filteredCategorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
                 return allSkills.length > 0 ? <div style={{ ...baseTextStyle, fontSize: '11px', lineHeight: '1.7' }}>{allSkills.join(' | ')}</div> : null;
-              })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
+              })() : filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).length > 0 ? (
                 <>
-                  {Object.entries(data.categorizedSkills)
+                  {Object.entries(filteredCategorizedSkills)
                     .filter(([category]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(category))
                     .map(([category, categorySkills]) => {
                       const skillArr = Array.isArray(categorySkills)
@@ -247,13 +260,13 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                         </div>
                       );
                     })}
-                  {data.categorizedSkills.custom_categories && data.categorizedSkills.custom_categories.length > 0 && (
+                  {filteredCategorizedSkills.custom_categories && filteredCategorizedSkills.custom_categories.length > 0 && (
                     <>
-                      {data.categorizedSkills.custom_categories.map((customCat: { id: string; name: string; skills: string[] }, idx: number) => {
+                      {filteredCategorizedSkills.custom_categories.map((customCat: { id: string; name: string; skills: string[] }, idx: number) => {
                         if (!customCat.name || !customCat.skills || customCat.skills.length === 0) return null;
                         return (
                           <div key={`custom-${idx}`} style={{ marginBottom: "6px" }}>
-                            <span style={{ fontWeight: "600", fontSize: "10px" }}>{customCat.name}:</span>
+                            <span style={{ ...titleStyle, fontSize: "10px" }}>{customCat.name}:</span>
                             <span style={{ marginLeft: "4px", fontSize: "10px" }}>{customCat.skills.join(", ")}</span>
                           </div>
                         );
@@ -482,6 +495,25 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 )}
               </div>
             ))}
+          </div>
+        ) : null;
+
+      case "Certificates and Clearances":
+        return certificatesAndClearances && certificatesAndClearances.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading(getSectionTitle("Certificates and Clearances"))}
+            <div style={sectionBorderStyle("12px")} />
+            <div style={{ paddingLeft: "20px" }}>
+              {certificatesAndClearances.map((cert, idx) => (
+                <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
+                  • <span style={{ ...titleStyle }}>{cert.name}</span>
+                  {(cert.issuedBy) && <span> – {cert.issuedBy}</span>}
+                  {(cert.year) && <span> ({cert.year})</span>}
+                  {(cert.credentialId) && <span> | License: {cert.credentialId}</span>}
+                  {cert.expiryDate && <span> | Expires: {formatDate(cert.expiryDate)}</span>}
+                </div>
+              ))}
+            </div>
           </div>
         ) : null;
 
@@ -882,6 +914,195 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             </div>
           </div>
         );
+
+      case "Licenses":
+      case "Licenses and Credentials":
+        return licenses && licenses.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading(getSectionTitle("Licenses and Credentials"))}
+            <div style={sectionBorderStyle("12px")} />
+            <div style={{ paddingLeft: "20px" }}>
+              {licenses.map((license, idx) => (
+                <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
+                  • <span style={{ ...titleStyle }}>{license.name}</span>
+                  {(license.issuedBy) && <span> – {license.issuedBy}</span>}
+                  {(license.year) && <span> ({license.year})</span>}
+                  {(license.credentialId) && <span> | License: {license.credentialId}</span>}
+                  {license.expiryDate && <span> | Expires: {formatDate(license.expiryDate)}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null;
+
+      case "Vessels Operated":
+        return vesselsOperated && vesselsOperated.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("VESSELS OPERATED")}
+            <div style={sectionBorderStyle("12px")} />
+            {vesselsOperated.map((vessel, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                  <span style={{ ...titleStyle }}>
+                    {vessel.vesselType}
+                  </span>
+                  {vessel.positionHeld && <span> | Position: {vessel.positionHeld}</span>}
+                  {vessel.vesselSize && <span> ({vessel.vesselSize})</span>}
+                  {vessel.tenure && <span> | Tenure: {vessel.tenure}</span>}
+                  {vessel.crewSize && <span> | Crew: {vessel.crewSize}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Ports Experience":
+        return portsExperience && portsExperience.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("PORTS EXPERIENCE")}
+            <div style={sectionBorderStyle("12px")} />
+            {portsExperience.map((port, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                  <span style={{ ...titleStyle }}>
+                    {port.portName}
+                  </span>
+                  {port.countryCode && <span> ({port.countryCode})</span>}
+                  {port.region && <span>, {port.region}</span>}
+                  {port.portCalls && <span> | Port Calls: {port.portCalls}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Sea Service Record":
+        return seaServiceRecord && seaServiceRecord.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("SEA SERVICE RECORD")}
+            <div style={sectionBorderStyle("12px")} />
+            {seaServiceRecord.map((record, idx) => (
+              <div key={idx} style={{ marginBottom: "16px" }}>
+                {record.currentRank && (
+                  <div style={{ ...baseTextStyle, fontSize: "12px", marginBottom: "4px" }}>
+                    <strong className="text-black">Current Rank:</strong> {record.currentRank}
+                  </div>
+                )}
+                {record.currentStatus && (
+                  <div style={{ ...baseTextStyle, fontSize: "12px", marginBottom: "4px" }}>
+                    <strong className="text-black">Current Status:</strong> {record.currentStatus}
+                  </div>
+                )}
+                {record.totalSeaService && (
+                  <div style={{ ...baseTextStyle, fontSize: "12px", marginBottom: "4px" }}>
+                    <strong className="text-black">Total Sea Service:</strong> {record.totalSeaService}
+                  </div>
+                )}
+                {record.licenseType && (
+                  <div style={{ ...baseTextStyle, fontSize: "12px", marginBottom: "4px" }}>
+                    <strong className="text-black">License Type:</strong> {record.licenseType}
+                  </div>
+                )}
+                {record.rankProgression && (
+                  <div style={{ ...baseTextStyle, fontSize: "12px", marginBottom: "4px" }}>
+                    <strong className="text-black">Rank Progression:</strong> {record.rankProgression}
+                  </div>
+                )}
+                {record.verificationDate && (
+                  <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                    <strong className="text-black">Verification Date:</strong> {formatDate(record.verificationDate)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Maritime Certifications":
+        return maritimeCertifications && maritimeCertifications.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("MARITIME CERTIFICATIONS")}
+            <div style={sectionBorderStyle("12px")} />
+            {maritimeCertifications.map((cert, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                  <span style={{ ...titleStyle }}>{cert.certificateType}</span>
+                  {cert.issuingAuthority && <span> | {cert.issuingAuthority}</span>}
+                  {cert.rankLevel && <span> | {cert.rankLevel}</span>}
+                  {cert.expiryDate && <span> | Expires: {formatDate(cert.expiryDate)}</span>}
+                  {cert.issueDate && <span> | Issued: {formatDate(cert.issueDate)}</span>}
+                  {cert.verificationNumber && <span> | Cert #: {cert.verificationNumber}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Research Grants":
+        return researchGrants && researchGrants.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("RESEARCH GRANTS")}
+            <div style={sectionBorderStyle("12px")} />
+            {researchGrants.map((grant, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                  <span style={{ ...titleStyle }}>• {grant.grantTitle}</span>
+                  {grant.amount && <span> | {grant.amount}</span>}
+                  {grant.role && <span> ({grant.role})</span>}
+                  {(grant.startYear || grant.endYear) && (
+                    <span> | {grant.startYear}{grant.startYear && grant.endYear ? "-" : ""}{grant.endYear}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Editorial Activities":
+        return editorialActivities && editorialActivities.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("EDITORIAL ACTIVITIES")}
+            <div style={sectionBorderStyle("12px")} />
+            {editorialActivities.map((activity, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                  <span style={{ ...titleStyle }}>• {activity.activityType}:</span>
+                  {activity.organizationJournal && <span> {activity.organizationJournal}</span>}
+                  {(activity.startYear || activity.endYear) && (
+                    <span>
+                      {" "}({activity.startYear}
+                      {activity.endYear ? `-${activity.endYear}` : ""})
+                    </span>
+                  )}
+                  {activity.reviewCount && (
+                    <span> | {activity.reviewCount} peer reviews</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Conference Presentations":
+        return conferencePresentations && conferencePresentations.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("CONFERENCE PRESENTATIONS")}
+            <div style={sectionBorderStyle("12px")} />
+            {conferencePresentations.map((presentation, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <div style={{ ...baseTextStyle, fontSize: "12px" }}>
+                  <span style={{ ...titleStyle }}>
+                    • {presentation.presentationType && `${presentation.presentationType}: `}
+                    "{presentation.title}"
+                  </span>
+                  {presentation.conferenceName && <span> | {presentation.conferenceName}</span>}
+                  {presentation.location && <span>, {presentation.location}</span>}
+                  {presentation.year && <span> ({presentation.year})</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null;
 
       default:
         return null;

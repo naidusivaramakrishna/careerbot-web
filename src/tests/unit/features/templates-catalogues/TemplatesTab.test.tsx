@@ -277,3 +277,24 @@ describe('TemplatesTab — user_chose_style flag lifecycle', () => {
     });
   });
 });
+
+describe('TemplatesTab — no career-level data (PR #96 regression)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetProfile.mockResolvedValue({ email: USER_EMAIL });
+    mockGetTemplatesByCategory.mockResolvedValue([]);
+    mockGetTemplateCategories.mockResolvedValue(['All']);
+    (window.localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
+      if (key === 'userEmail') return USER_EMAIL;
+      if (key === `user_chose_style_${USER_EMAIL}`) return 'true';
+      return null;
+    });
+  });
+
+  it('shows the template grid instead of a spinner that never resolves', async () => {
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(mockGetProfile).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getAllByText('Modern').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Loading career level templates...')).not.toBeInTheDocument();
+  });
+});

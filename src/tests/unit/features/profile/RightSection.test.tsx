@@ -41,6 +41,8 @@ vi.mock('@/api/userApi', () => ({
   deleteCertification: vi.fn(),
   addCertificationAutoFill: vi.fn(),
   uploadResume: vi.fn(),
+  getEmploymentInfo: vi.fn(),
+  updateEmploymentInfo: vi.fn(),
 }));
 
 vi.mock('@/api/resumeParsingApi', () => ({
@@ -81,7 +83,7 @@ vi.mock('@/app/(user)/profile/_components/LinkedinImportModal', () => ({
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import RightSection from '@/app/(user)/profile/_components/RightSection';
-import { uploadResume } from '@/api/userApi';
+import { uploadResume, getEmploymentInfo, updateEmploymentInfo } from '@/api/userApi';
 import { extractResume } from '@/api/resumeParsingApi';
 import { mapResumeToProfile } from '@/app/(user)/profile/_utils/resumeMapper';
 
@@ -251,6 +253,55 @@ describe('RightSection — uploadResume fire-and-forget', () => {
         expect.stringContaining('could not be saved'),
         expect.any(Object),
       )
+    );
+  });
+});
+
+describe('RightSection — employment status from resume experience', () => {
+  const mockExtractResume = vi.mocked(extractResume);
+  const mockMapResumeToProfile = vi.mocked(mapResumeToProfile);
+  const mockGetEmploymentInfo = vi.mocked(getEmploymentInfo);
+  const mockUpdateEmploymentInfo = vi.mocked(updateEmploymentInfo);
+
+  const experience = (overrides: Record<string, unknown>) => ({
+    company: 'Acme', job_title: 'Intern', location: 'India', start_date: '2023-06-01',
+    end_date: '', description: '', currently_working: false, ...overrides,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockExtractResume.mockResolvedValue({} as Awaited<ReturnType<typeof extractResume>>);
+    mockGetEmploymentInfo.mockResolvedValue({ employment_status: 'student' });
+    mockUpdateEmploymentInfo.mockResolvedValue({});
+    vi.mocked(uploadResume).mockResolvedValue({ resume_url: 'u', message: 'ok', filename: 'resume.pdf' });
+  });
+
+  function triggerUpload() {
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File(['content'], 'resume.pdf', { type: 'application/pdf' })], configurable: true,
+    });
+    fireEvent.change(fileInput);
+  }
+
+  it('does not mark a student employed because an entry has no end date', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      workExperience: [experience({})],
+    } as unknown as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    expect(mockUpdateEmploymentInfo).not.toHaveBeenCalled();
+  });
+
+  it('marks the user employed when the mapper flags a current job', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      workExperience: [experience({ job_title: 'Dev', currently_working: true })],
+    } as unknown as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockUpdateEmploymentInfo).toHaveBeenCalledWith({ employment_status: 'employed' })
     );
   });
 });

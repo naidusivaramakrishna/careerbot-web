@@ -1,6 +1,7 @@
 import { httpClient } from "@/lib/http";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
+import { clearPendingVerification } from '@/lib/pendingVerification';
 
 export interface LoginRequest {
   email: string;
@@ -23,7 +24,8 @@ export interface SignUpRequest {
 }
 
 export interface SignUpResponse {
-  success: boolean;
+  id: string;
+  success?: boolean;
   message?: string;
   tenant_id?: string;
 }
@@ -108,6 +110,11 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
   // Clear user-scoped session data from previous login
   sessionStorage.removeItem('uploaded_resume_filename');
 
+  // A session is only issued to a verified account (signin 403s
+  // EMAIL_NOT_VERIFIED otherwise), so any pending-verification banner record
+  // left in this browser is stale or someone else's.
+  clearPendingVerification();
+
   return response.data;
 };
 
@@ -140,6 +147,7 @@ export const signOut = async () => {
   localStorage.removeItem('token_last_refreshed_at');
   localStorage.removeItem('token_expires_in_seconds');
   localStorage.removeItem('uploaded_resume_filename');
+  clearPendingVerification();
 
   // Job tracking's unscoped savedJobs/appliedJobs buckets are shared across
   // every account on this browser (see jobTracking.ts's scopedKey) — must be
@@ -245,21 +253,26 @@ export const resendVerificationEmail = async (
 };
 
 export interface VerifyEmailRequest {
-  token: string;
+  user_id: string;
+  otp: string;
 }
 
+// careerbot-api POST /auth/email/verify answers 200 {"message": "..."} with no
+// `success` field (app/api/v1/endpoints/auth.py verify_email); failures are
+// non-2xx. `success` stays optional for forward compatibility only.
 export interface VerifyEmailResponse {
-  success: boolean;
+  success?: boolean;
   message: string;
 }
 
 /**
- * Verify user email address
+ * Verify user email address with OTP
  *
- * Confirms email verification using the token sent to the user's email.
+ * Confirms email verification using the 6-digit OTP sent to user's email during signup.
  *
- * @param data - Verification token from email
+ * @param data - User ID and OTP code
  * @returns Success status and message
+ * @throws Error with code OTP_EXPIRED, OTP_INVALID, OTP_MAX_ATTEMPTS, or USER_NOT_FOUND
  */
 export const verifyEmail = async (
   data: VerifyEmailRequest

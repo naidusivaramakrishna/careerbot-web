@@ -464,12 +464,11 @@ export const FAMILY_DOMAINS: Record<string, string[]> = {
     'graphic_design', 'e_commerce_manager', 'growth_marketing',
   ],
   operations_management: [
-    'operations', 'operations_manager', 'project_management', 'project_manager', 'retail_management',
-    'retail_manager', 'hospitality_management',
+    'operations_manager', 'project_manager', 'retail_manager', 'hospitality_management',
     'supply_chain', 'business_analyst', 'process_improvement_specialist',
   ],
   human_resources: [
-    'human_resources', 'hr_manager', 'talent_acquisition', 'recruiter', 'recruitment_coordinator', 'talent_management',
+    'human_resources', 'hr_manager', 'talent_acquisition', 'recruiter', 'recruitment_coordinator',
     'talent_manager', 'hr_business_partner', 'compensation_benefits', 'learning_development',
   ],
 }
@@ -591,6 +590,7 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   growth_marketing: 'Growth Marketing Specialist',
   head_of_product: 'Head of Product',
   hr: 'HR Professional',
+  human_resources: 'HR Professional',
   hr_business_partner: 'HR Business Partner',
   hr_manager: 'HR Manager',
   learning_development: 'Learning & Development Specialist',

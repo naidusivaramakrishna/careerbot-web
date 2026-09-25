@@ -32,6 +32,7 @@ vi.mock('next/navigation', () => ({
 const mockGetProfile = vi.fn();
 const mockGetAllResumes = vi.fn();
 const mockCreateResumeWithAuth = vi.fn();
+const mockApplyTemplateToResume = vi.fn();
 
 vi.mock('@/api/userApi', () => ({
   getProfile: () => mockGetProfile(),
@@ -40,6 +41,7 @@ vi.mock('@/api/userApi', () => ({
 vi.mock('@/api/resumeApi', () => ({
   getAllResumes: () => mockGetAllResumes(),
   createResumeWithAuth: () => mockCreateResumeWithAuth(),
+  applyTemplateToResume: (...args: unknown[]) => mockApplyTemplateToResume(...args),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -79,6 +81,7 @@ describe('DomainTemplatesModal — Apply This Template button', () => {
     // Default: logged-in user with one existing resume
     mockGetProfile.mockResolvedValue({ email: 'user@example.com' });
     mockGetAllResumes.mockResolvedValue([{ id: 'resume-123', _id: 'resume-123' }]);
+    mockApplyTemplateToResume.mockResolvedValue({});
   });
 
   it('renders the Apply This Template button', () => {
@@ -207,5 +210,32 @@ describe('DomainTemplatesModal — Apply This Template button', () => {
     // The cancel button should be disabled too
     const cancelBtn = screen.getByText('Cancel');
     expect(cancelBtn).toBeDisabled();
+  });
+
+  // PR #96 ai-review (f0a7d952) codex P2: the chosen career-level template
+  // was kept only in localStorage. POST /templates/{resume_id}/apply stores it
+  // on the resume (regular or enhanced), as the builder's TemplatesTab does.
+  it('saves the chosen template on the resume it opens, before navigating', async () => {
+    const order: string[] = [];
+    mockApplyTemplateToResume.mockImplementation(async () => { order.push('apply'); return {}; });
+    mockPush.mockImplementationOnce(() => { order.push('push'); });
+
+    render(<DomainTemplatesModal {...defaultProps} sourceResumeId="enh-9" source="enhanced" />);
+    fireEvent.click(screen.getByText('Apply This Template'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enh-9?source=enhanced'));
+    expect(mockApplyTemplateToResume).toHaveBeenCalledWith('enh-9', 'tmpl-1');
+    expect(order).toEqual(['apply', 'push']);
+  });
+
+  it('still opens the builder when saving the template fails', async () => {
+    mockGetAllResumes.mockResolvedValue([{ id: 'resume-abc' }]);
+    mockApplyTemplateToResume.mockRejectedValue(new Error('500'));
+
+    render(<DomainTemplatesModal {...defaultProps} />);
+    fireEvent.click(screen.getByText('Apply This Template'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/resume-abc'));
+    expect(mockApplyTemplateToResume).toHaveBeenCalledWith('resume-abc', 'tmpl-1');
   });
 });

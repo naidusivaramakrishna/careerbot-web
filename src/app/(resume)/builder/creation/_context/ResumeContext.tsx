@@ -416,6 +416,8 @@ function loadFixedSuggestions(resumeId?: string): EnhancedSuggestion[] {
   }
 }
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
+import { getSkillsEditorDomain, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
+import { domainSkillKeyForSlug } from "@/config/domainSkills";
 import logger from "@/lib/logger";
 
 // Extract country code from a combined phone string like "+911234567890"
@@ -447,6 +449,8 @@ export interface CategorizedSkills {
   hidden_predefined_categories?: string[];
   // Maps "CategoryKey:SkillName" → backend skill ID for delete calls
   skill_id_map?: Record<string, string>;
+  // Allow domain-specific skill categories (e.g., clinical_skills, penetration_testing, etc.)
+  [key: string]: string[] | CustomCategory[] | Record<string, string> | undefined;
 }
 
 interface EnhancedScoreSyncOptions {
@@ -468,6 +472,12 @@ interface EnhancedScoreSyncOptions {
 
 type BackendSkillItem = { id?: string; name?: string };
 type BackendSkills = Record<string, BackendSkillItem[]>;
+
+// Keys the loader's flat `skills` list already covers (or that are not skills).
+const FLAT_SKILLS_EXCLUDED_KEYS = new Set([
+  'programming_languages', 'frameworks', 'soft_skills', 'project_management', 'marketing_sales',
+  'custom_categories', 'hidden_predefined_categories', 'skill_id_map',
+]);
 
 const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   programming_languages: [],
@@ -506,7 +516,13 @@ export function expandNestedSkillBuckets(backendSkills: unknown): Record<string,
   }
   return expanded;
 }
-export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
+/**
+ * @param domain Active skills domain (getSkillsEditorDomain). Its predefined
+ *   categories are stored by the API under custom_skills[slug(label)]; they are
+ *   mapped back to their editor key here so they round-trip. Slugs that are not
+ *   a category of this domain stay custom categories, so nothing gets hidden.
+ */
+export function mapBackendSkillsToCategorized(backendSkills: unknown, domain?: string | null): CategorizedSkills {
   if (!backendSkills || typeof backendSkills !== 'object' || Array.isArray(backendSkills)) {
     return { ...EMPTY_CATEGORIZED_SKILLS };
   }
@@ -576,7 +592,15 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
       .trim();
   };
 
+  const domainCategories: Record<string, string[]> = {};
+
   const addCustomCategory = (key: string, items: BackendSkillItem[]) => {
+    const domainKey = domainSkillKeyForSlug(key, domain);
+    if (domainKey) {
+      buildIdMap(domainKey, items);
+      domainCategories[domainKey] = [...(domainCategories[domainKey] || []), ...extractNames(items)];
+      return;
+    }
     const displayName = toDisplayName(key);
     buildIdMap(key, items);
     buildIdMap(displayName, items);
@@ -606,6 +630,7 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
     soft_skills: extractNames(s.softSkills),
     project_management: extractNames(s.projectManagement),
     marketing_sales: extractNames(s.marketingSales),
+    ...domainCategories,
     ...(customCategories.length > 0 && { custom_categories: customCategories }),
     ...(hiddenPredefinedCategories.length > 0 && { hidden_predefined_categories: hiddenPredefinedCategories }),
     skill_id_map: idMap,
@@ -708,6 +733,100 @@ export interface ResumeData {
     expiryDate?: string;
     credentialId?: string;
   }[];
+  licenses: {
+    id?: string;
+    name: string;
+    issuedBy: string;
+    year: string;
+    expiryDate?: string;
+    credentialId?: string;
+  }[];
+  certificatesAndClearances: {
+    id?: string;
+    name: string;
+    issuedBy: string;
+    year: string;
+    expiryDate?: string;
+    credentialId?: string;
+  }[];
+  barAdmissionsAndLicenses: {
+    id?: string;
+    name: string;
+    issuedBy: string;
+    year: string;
+    expiryDate?: string;
+    credentialId?: string;
+  }[];
+  serviceRecord: {
+    id?: string;
+    service: string;
+    batch: string;
+    serviceNumber: string;
+    currentDesignation: string;
+    currentPosting: string;
+    totalServiceDuration: string;
+    careerProgression: string;
+    status: string;
+  }[];
+  vesselsOperated: {
+    id?: string;
+    vesselType: string;
+    vesselSize: string;
+    crewSize: string;
+    tenure: string;
+    positionHeld: string;
+  }[];
+  portsExperience: {
+    id?: string;
+    portName: string;
+    region: string;
+    countryCode: string;
+    portCalls: string;
+  }[];
+  seaServiceRecord: {
+    id?: string;
+    rankProgression: string;
+    totalSeaService: string;
+    licenseType: string;
+    currentRank: string;
+    currentStatus: string;
+    verificationDate: string;
+  }[];
+  maritimeCertifications: {
+    id?: string;
+    certificateType: string;
+    issuingAuthority: string;
+    issueDate: string;
+    expiryDate: string;
+    rankLevel: string;
+    verificationNumber: string;
+  }[];
+  researchGrants: {
+    id?: string;
+    grantTitle: string;
+    fundingAgency: string;
+    amount: string;
+    startYear: string;
+    endYear: string;
+    role: string;
+    status: string;
+  }[];
+  editorialActivities: {
+    id?: string;
+    activityType: string;
+    organizationJournal: string;
+    startYear: string;
+    endYear: string;
+    reviewCount: string;
+  }[];
+  conferencePresentations: {
+    id?: string;
+    presentationType: string;
+    title: string;
+    conferenceName: string;
+    location: string;
+    year: string;
+  }[];
   achievements: {
     id?: string;
     title: string;
@@ -783,6 +902,7 @@ export interface ResumeData {
   declarationDate?: string;
   declarationPlace?: string;
   customSections?: CustomSection[];
+  templateDomain?: string; // Domain from template (healthcare, legal, government, etc.)
 }
 
 // Style settings
@@ -991,6 +1111,17 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         marketing_sales: [],
       },
       certifications: [],
+      licenses: [],
+      certificatesAndClearances: [],
+      barAdmissionsAndLicenses: [],
+      serviceRecord: [],
+      vesselsOperated: [],
+      portsExperience: [],
+      seaServiceRecord: [],
+      maritimeCertifications: [],
+      researchGrants: [],
+      editorialActivities: [],
+      conferencePresentations: [],
       achievements: [],
       volunteering: [],
       references: [],
@@ -1063,6 +1194,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     "Work Experience": false,
     "Projects": false,
     "Certifications": false,
+    "Licenses and Credentials": false,
+    "Certificates and Clearances": false,
+    "Bar Admissions and Licenses": false,
     "Achievements": false,
     "Volunteering": false,
     "Internships": false,
@@ -1298,7 +1432,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         }
 
         // ✅ Parallelize API calls: fetch template and resume data simultaneously
-        const [defaultTemplateData, resumeData] = await Promise.all([
+        // The account email scopes the applied career-level template, i.e. the
+        // domain the skills are mapped for (same source as PreviewPanel).
+        const [defaultTemplateData, resumeData, accountEmail] = await Promise.all([
           (async () => {
             try {
               const { getDefaultTemplate } = await import("@/api/resumeApi");
@@ -1318,6 +1454,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               return await getResumeById(resumeId);
             }
           })(),
+          resolveAccountEmail(),
         ]);
 
         // Process resume data
@@ -1578,6 +1715,25 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             languages: data.personalInfo?.languages || null,
             titlePrefix: data.personalInfo?.titlePrefix || null,
             qualifications: data.personalInfo?.qualifications || null,
+            // Domain-specific fields (government / healthcare / legal / marine /
+            // research). The API returns them in personalInfo; dropping them here
+            // blanked the Personal Info form after every reload.
+            fathersName: data.personalInfo?.fathersName || null,
+            gender: data.personalInfo?.gender || null,
+            maritalStatus: data.personalInfo?.maritalStatus || null,
+            permanentAddress: data.personalInfo?.permanentAddress || null,
+            specialisation: data.personalInfo?.specialisation || null,
+            medicalRegNo: data.personalInfo?.medicalRegNo || null,
+            barEnrollmentNo: data.personalInfo?.barEnrollmentNo || null,
+            yearOfEnrollment: data.personalInfo?.yearOfEnrollment || null,
+            courtsOfPractise: data.personalInfo?.courtsOfPractise || null,
+            rank: data.personalInfo?.rank || null,
+            cocNumber: data.personalInfo?.cocNumber || null,
+            vesselTypes: data.personalInfo?.vesselTypes || null,
+            stcwCertificates: data.personalInfo?.stcwCertificates || null,
+            orcidId: data.personalInfo?.orcidId || null,
+            googleScholarUrl: data.personalInfo?.googleScholarUrl || null,
+            hIndex: data.personalInfo?.hIndex || null,
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
@@ -1596,7 +1752,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             let categorizedSkills: CategorizedSkills;
             if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
               // New backend format: skills is an object with camelCase keys and {id,name} arrays
-              categorizedSkills = mapBackendSkillsToCategorized(data.skills);
+              categorizedSkills = mapBackendSkillsToCategorized(data.skills, getSkillsEditorDomain(accountEmail));
             } else {
               // Legacy format: categorizedSkills with snake_case string arrays
               categorizedSkills = (data.categorizedSkills as CategorizedSkills) || { ...EMPTY_CATEGORIZED_SKILLS };
@@ -1607,6 +1763,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               ...categorizedSkills.soft_skills,
               ...(categorizedSkills.project_management || []),
               ...(categorizedSkills.marketing_sales || []),
+              // Domain categories mapped back from custom_skills (see mapBackendSkillsToCategorized)
+              ...Object.entries(categorizedSkills)
+                .filter(([k, v]) => !FLAT_SKILLS_EXCLUDED_KEYS.has(k) && Array.isArray(v) && v.every(x => typeof x === 'string'))
+                .flatMap(([, v]) => v as string[]),
               ...(categorizedSkills.custom_categories || []).flatMap(c => c.skills),
             ];
             return { skills, categorizedSkills };
@@ -1621,6 +1781,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             expiryDate: cert.expiryDate || cert.expiry_date || "",
             credentialId: cert.credentialId || cert.credential_id || "",
           })),
+          licenses: normalizeId((data.licenses || []) as Record<string, unknown>[]) as ResumeData["licenses"],
+          certificatesAndClearances: normalizeId((data.certificatesAndClearances || []) as Record<string, unknown>[]) as ResumeData["certificatesAndClearances"],
+          barAdmissionsAndLicenses: normalizeId((data.barAdmissionsAndLicenses || []) as Record<string, unknown>[]) as ResumeData["barAdmissionsAndLicenses"],
           achievements: normalizeId((data.achievements || []) as Record<string, unknown>[]) as ResumeData["achievements"],
           volunteering: normalizeId((data.volunteering || []) as Record<string, unknown>[]) as ResumeData["volunteering"],
           references: normalizeId((data.references || []) as Record<string, unknown>[]) as ResumeData["references"],
@@ -1633,7 +1796,17 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             name: (l.name as string) || (l.language as string) || "",
           })) as ResumeData["languages"],
           publications: normalizeId((data.publications || []) as Record<string, unknown>[]) as ResumeData["publications"],
+          serviceRecord: normalizeId(((data.service_record || data.serviceRecord) || []) as Record<string, unknown>[]) as ResumeData["serviceRecord"],
+          vesselsOperated: normalizeId(((data.vessels_operated || data.vesselsOperated) || []) as Record<string, unknown>[]) as ResumeData["vesselsOperated"],
+          portsExperience: normalizeId(((data.ports_experience || data.portsExperience) || []) as Record<string, unknown>[]) as ResumeData["portsExperience"],
+          seaServiceRecord: normalizeId(((data.sea_service_record || data.seaServiceRecord) || []) as Record<string, unknown>[]) as ResumeData["seaServiceRecord"],
+          maritimeCertifications: normalizeId(((data.maritime_certifications || data.maritimeCertifications) || []) as Record<string, unknown>[]) as ResumeData["maritimeCertifications"],
+          researchGrants: normalizeId(((data.research_grants || data.researchGrants) || []) as Record<string, unknown>[]) as ResumeData["researchGrants"],
+          editorialActivities: normalizeId(((data.editorial_activities || data.editorialActivities) || []) as Record<string, unknown>[]) as ResumeData["editorialActivities"],
+          conferencePresentations: normalizeId(((data.conference_presentations || data.conferencePresentations) || []) as Record<string, unknown>[]) as ResumeData["conferencePresentations"],
           customSections: data.customSections || [],
+          // Restore templateDomain from localStorage (set when template was applied)
+          templateDomain: typeof window !== 'undefined' ? localStorage.getItem(`templateDomain_${resumeId}`) || undefined : undefined,
         };
 
         // ✅ Replace data completely (don't merge with previous state)

@@ -3,6 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
+import { filterSkillsByDomain, hasPrintableSkills } from "./skillsFilterByDomain";
 
 
 interface Props {
@@ -32,6 +33,8 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     projects,
     skills,
     certifications,
+    certificatesAndClearances,
+    barAdmissionsAndLicenses,
     internships,
     languages,
     achievements,
@@ -44,7 +47,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     patents,
     customSections,
     declaration,
+    categorizedSkills,
   } = data;
+
+  // Filter skills by domain
+  const filteredCategorizedSkills = filterSkillsByDomain(categorizedSkills, domainFamily);
 
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
@@ -63,8 +70,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     if (section === "Publications") {
       return "PUBLICATIONS / SPEAKING";
     }
-    if (section === "Certifications") {
+    if (section === "Bar Admissions and Licenses") {
       return "BAR ADMISSIONS AND LICENSES";
+    }
+    if (section === "Certificates and Clearances") {
+      return "CERTIFICATIONS AND CLEARANCES";
     }
     if (section === "Achievements") {
       return "KEY MATTERS / REPRESENTATIVE CASES";
@@ -203,24 +213,21 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         ) : null;
 
       case "Skills":
-        return (data.categorizedSkills && Object.keys(data.categorizedSkills).some(key => {
-          const skillArray = data.categorizedSkills![key as keyof typeof data.categorizedSkills];
-          return Array.isArray(skillArray) && skillArray.length > 0;
-        })) || (skills && skills.length > 0) ? (
+        return hasPrintableSkills(filteredCategorizedSkills, skills) ? (
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && data.categorizedSkills ? (() => {
+              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && filteredCategorizedSkills ? (() => {
                 const allSkills: string[] = [];
-                Object.entries(data.categorizedSkills!)
+                Object.entries(filteredCategorizedSkills!)
                   .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))
                   .forEach(([, arr]) => { if (Array.isArray(arr)) allSkills.push(...(arr as string[]).filter(s => typeof s === 'string')); });
-                (data.categorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
+                (filteredCategorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
                 return allSkills.length > 0 ? <div style={{ ...baseTextStyle, fontSize: '11px', lineHeight: '1.7' }}>{allSkills.join(' | ')}</div> : null;
-              })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
+              })() : filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).length > 0 ? (
                 <>
-                  {Object.entries(data.categorizedSkills)
+                  {Object.entries(filteredCategorizedSkills)
                     .filter(([category]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(category))
                     .map(([category, categorySkills]) => {
                       const skillArr = Array.isArray(categorySkills)
@@ -238,13 +245,13 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                         </div>
                       );
                     })}
-                  {data.categorizedSkills.custom_categories && data.categorizedSkills.custom_categories.length > 0 && (
+                  {filteredCategorizedSkills.custom_categories && filteredCategorizedSkills.custom_categories.length > 0 && (
                     <>
-                      {data.categorizedSkills.custom_categories.map((customCat: { id: string; name: string; skills: string[] }, idx: number) => {
+                      {filteredCategorizedSkills.custom_categories.map((customCat: { id: string; name: string; skills: string[] }, idx: number) => {
                         if (!customCat.name || !customCat.skills || customCat.skills.length === 0) return null;
                         return (
                           <div key={`custom-${idx}`} style={{ marginBottom: "6px" }}>
-                            <span style={{ fontWeight: "600", fontSize: "10px" }}>{customCat.name}:</span>
+                            <span style={{ ...titleStyle, fontSize: "10px" }}>{customCat.name}:</span>
                             <span style={{ marginLeft: "4px", fontSize: "10px" }}>{customCat.skills.join(", ")}</span>
                           </div>
                         );
@@ -468,6 +475,44 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   {(cert.issueDate) && <span>{cert.issueDate}</span>}
                   {(cert.issueDate) && cert.expiryDate && <span> – </span>}
                   {cert.expiryDate && <span>{cert.expiryDate}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null;
+
+      case "Bar Admissions and Licenses":
+        return barAdmissionsAndLicenses && barAdmissionsAndLicenses.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading(getSectionTitle("Bar Admissions and Licenses"))}
+            <div style={sectionBorderStyle("12px")} />
+            <div style={{ paddingLeft: "20px" }}>
+              {barAdmissionsAndLicenses.map((license, idx) => (
+                <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
+                  • <span style={{ ...titleStyle }}>{license.name}</span>
+                  {(license.issuedBy) && <span> – {license.issuedBy}</span>}
+                  {(license.year) && <span> ({license.year})</span>}
+                  {(license.credentialId) && <span> | License: {license.credentialId}</span>}
+                  {license.expiryDate && <span> | Expires: {formatDate(license.expiryDate)}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null;
+
+      case "Certificates and Clearances":
+        return certificatesAndClearances && certificatesAndClearances.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading(getSectionTitle("Certificates and Clearances"))}
+            <div style={sectionBorderStyle("12px")} />
+            <div style={{ paddingLeft: "20px" }}>
+              {certificatesAndClearances.map((cert, idx) => (
+                <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
+                  • <span style={{ ...titleStyle }}>{cert.name}</span>
+                  {(cert.issuedBy) && <span> – {cert.issuedBy}</span>}
+                  {(cert.year) && <span> ({cert.year})</span>}
+                  {(cert.credentialId) && <span> | License: {cert.credentialId}</span>}
+                  {cert.expiryDate && <span> | Expires: {formatDate(cert.expiryDate)}</span>}
                 </div>
               ))}
             </div>

@@ -157,3 +157,20 @@ describe('ResendVerificationPage — navigation', () => {
     expect(mockPush).toHaveBeenCalledWith('/?showLogin=true');
   });
 });
+
+describe('ResendVerificationPage — OTP flow copy', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('asks for a code, not a link, and tells the user where to enter it', async () => {
+    mockResendVerificationEmail.mockResolvedValue({ message: 'ok' });
+    render(<ResendVerificationPage />);
+    expect(screen.queryByText(/verification link/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('resend-email-input'), { target: { value: 'user@example.com' } });
+    fireEvent.click(screen.getByTestId('resend-submit-btn'));
+
+    await waitFor(() => expect(screen.getByText('Email Sent!')).toBeInTheDocument());
+    expect(screen.queryByText(/link/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/sign in with your email and password/i)).toBeInTheDocument();
+  });
+});

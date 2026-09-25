@@ -11,6 +11,8 @@ import {
   addCertificationAutoFill,
   addProjectAutoFill,
   uploadResume,
+  updateEmploymentInfo,
+  getEmploymentInfo,
 } from "@/api/userApi";
 
 export type FillStep = "idle" | "parsing" | "saving" | "done" | "error";
@@ -73,6 +75,10 @@ export function useResumeProfileFill(userId?: string) {
         setResumeId(parsed.resume_id);
         localStorage.setItem(storageKey, parsed.resume_id);
       }
+
+      // Store resume filename for display in profile resume section
+      localStorage.setItem('uploaded_resume_filename', file.name);
+
       const profileData = mapResumeToProfile(parsed);
 
       // ── Step 2: Save to backend ───────────────────────────
@@ -141,6 +147,25 @@ export function useResumeProfileFill(userId?: string) {
           } catch {
             // continue
           }
+        }
+
+        // Auto-fill employment status based on current work experience
+        // Only set 'employed' if there's an active job (currently_working flag from mapper)
+        try {
+          const hasCurrentJob = profileData.workExperience.some(exp => exp.currently_working);
+
+          const existingInfo = await getEmploymentInfo();
+          const newStatus = hasCurrentJob ? 'employed' : existingInfo.employment_status;
+
+          // Skip update if status hasn't changed
+          if (newStatus !== existingInfo.employment_status) {
+            await updateEmploymentInfo({
+              ...existingInfo,
+              employment_status: newStatus
+            });
+          }
+        } catch {
+          // non-fatal: continue with other sections
         }
       }
 

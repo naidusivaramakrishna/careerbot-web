@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     getSystemOverview,
     getApiRequestMetrics,
@@ -11,8 +11,18 @@ import {
     type MemoryUsageResponse,
     type SystemLogsResponse,
     type MonitoringPeriod,
+    type LogLevel,
+    type LogSource,
 } from '@/api/adminMonitoringApi'
 import { logger } from '@/lib/logger'
+
+export interface LogsFilters {
+    level: LogLevel | ''
+    source: LogSource | ''
+    search: string
+    startDate: string
+    endDate: string
+}
 
 interface UseSystemMonitoringProps {
     activeTab: string
@@ -22,6 +32,7 @@ interface UseSystemMonitoringProps {
     cpuShowComparison: boolean
     memoryShowComparison: boolean
     autoRefresh: string
+    logsFilters?: LogsFilters
 }
 
 export const useSystemMonitoring = ({
@@ -31,13 +42,19 @@ export const useSystemMonitoring = ({
     apiShowComparison,
     cpuShowComparison,
     memoryShowComparison,
-    autoRefresh
+    autoRefresh,
+    logsFilters
 }: UseSystemMonitoringProps) => {
     const [systemOverview, setSystemOverview] = useState<SystemOverviewResponse | null>(null)
     const [apiMetrics, setApiMetrics] = useState<ApiRequestMetricsResponse | null>(null)
     const [cpuMetrics, setCpuMetrics] = useState<CpuUsageResponse | null>(null)
     const [memoryMetrics, setMemoryMetrics] = useState<MemoryUsageResponse | null>(null)
     const [systemLogs, setSystemLogs] = useState<SystemLogsResponse | null>(null)
+    const [logsError, setLogsError] = useState<string | null>(null)
+    // Id of the most recently started logs request. The debounced filter
+    // fetch, manual Refresh and auto-refresh can overlap and resolve out of
+    // order; only the latest one may update the table.
+    const latestLogsRequest = useRef(0)
     const [loading, setLoading] = useState(true)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [lastRefreshed, setLastRefreshed] = useState<string>("")
@@ -53,7 +70,48 @@ export const useSystemMonitoring = ({
         return periodMap[tab] || "today"
     }, [])
 
-    // Fetch all data
+    // Fetch logs with filters (debounced by effect)
+    const fetchLogs = useCallback(async () => {
+        const requestId = ++latestLogsRequest.current
+        try {
+            const logsParams: Record<string, any> = { page: 1, page_size: 10 }
+            if (logsFilters?.level) logsParams.level = logsFilters.level
+            if (logsFilters?.source) logsParams.source = logsFilters.source
+            if (logsFilters?.search) logsParams.search = logsFilters.search
+            if (logsFilters?.startDate) logsParams.start_date = logsFilters.startDate
+            if (logsFilters?.endDate) logsParams.end_date = logsFilters.endDate
+
+            const logs = await getSystemLogs(logsParams)
+            if (requestId !== latestLogsRequest.current) return
+            setSystemLogs(logs)
+            setLogsError(null)
+        } catch (error) {
+            logger.error('Error fetching logs:', error)
+            if (requestId !== latestLogsRequest.current) return
+            // Don't leave the previous filter's rows on screen under the new
+            // filters. Keep a (empty) response so the filter controls stay
+            // rendered and the user can change them.
+            setSystemLogs((prev) => ({
+                logs: [],
+                total: 0,
+                page: 1,
+                page_size: prev?.page_size ?? 10,
+                total_pages: 0,
+            }))
+            setLogsError('Failed to load logs. Please try again.')
+        }
+    }, [logsFilters])
+
+    // Debounce logs filter changes (500ms)
+    useEffect(() => {
+        const debounceTimer = setTimeout(() => {
+            fetchLogs()
+        }, 500)
+
+        return () => clearTimeout(debounceTimer)
+    }, [logsFilters, fetchLogs])
+
+    // Fetch all data (without logs)
     const fetchAllData = useCallback(async () => {
         setIsRefreshing(true)
         try {
@@ -61,19 +119,17 @@ export const useSystemMonitoring = ({
             const cpuPeriod = getPeriodFromTab(cpuActiveTab || activeTab)
             const memoryPeriod = getPeriodFromTab(memoryActiveTab || activeTab)
 
-            const [overview, api, cpu, memory, logs] = await Promise.all([
+            const [overview, api, cpu, memory] = await Promise.all([
                 getSystemOverview(),
                 getApiRequestMetrics(apiPeriod, apiShowComparison),
                 getCpuUsage(cpuPeriod, cpuShowComparison),
-                getMemoryUsage(memoryPeriod, memoryShowComparison),
-                getSystemLogs({ page: 1, page_size: 10 })
+                getMemoryUsage(memoryPeriod, memoryShowComparison)
             ])
 
             setSystemOverview(overview)
             setApiMetrics(api)
             setCpuMetrics(cpu)
             setMemoryMetrics(memory)
-            setSystemLogs(logs)
             setLastRefreshed(
                 new Date().toLocaleTimeString('en-US', {
                     hour: '2-digit',
@@ -99,10 +155,11 @@ export const useSystemMonitoring = ({
         if (autoRefresh === "On") {
             const interval = setInterval(() => {
                 fetchAllData()
+                fetchLogs()
             }, 30000) // Refresh every 30 seconds
             return () => clearInterval(interval)
         }
-    }, [autoRefresh, fetchAllData])
+    }, [autoRefresh, fetchAllData, fetchLogs])
 
     return {
         systemOverview,
@@ -110,9 +167,11 @@ export const useSystemMonitoring = ({
         cpuMetrics,
         memoryMetrics,
         systemLogs,
+        logsError,
         loading,
         isRefreshing,
         lastRefreshed,
-        fetchAllData
+        fetchAllData,
+        fetchLogs
     }
 }
