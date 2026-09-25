@@ -528,7 +528,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   // ── Loading mode ───────────────────────────────────────────────────────────
   const hasValidJdInput = () => {
     const value = jdText.trim();
-    return Boolean(jdFile) || /^https?:\/\//i.test(value) || value.length >= 200;
+    return Boolean(sessionJdId) || Boolean(jdFile) || /^https?:\/\//i.test(value) || value.length >= 200;
   };
 
   const stepContinueDisabled = () => {
