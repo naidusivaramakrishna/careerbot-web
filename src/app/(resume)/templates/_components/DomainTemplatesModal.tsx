@@ -224,6 +224,7 @@ export default function DomainTemplatesModal({
                   previewHtml={((selectedTemplate as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
                   previewCss={((selectedTemplate as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
                   fallbackImage={resolveTemplateImageUrl(selectedTemplate.preview_url) || domainFallback}
+                  errorFallbackImage={domainFallback}
                   title={selectedTemplate.name}
                   height="100%"
                   width="100%"

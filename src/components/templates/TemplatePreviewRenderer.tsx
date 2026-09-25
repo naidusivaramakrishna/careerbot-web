@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 
 interface TemplatePreviewRendererProps {
   previewHtml?: string | null;
@@ -9,6 +9,7 @@ interface TemplatePreviewRendererProps {
   height?: string;
   width?: string;
   fallbackImage?: string;
+  errorFallbackImage?: string; // Shown if fallbackImage fails to load (e.g. a 404 preview_url)
   scale?: number; // Custom scale for thumbnail view (e.g., 0.2 for small cards)
   hideScroll?: boolean; // Hide scrollbars for thumbnail previews
   fillContainer?: boolean; // Fill container without centering/padding (like image)
@@ -26,10 +27,16 @@ export default function TemplatePreviewRenderer({
   height = "600px",
   width = "100%",
   fallbackImage,
+  errorFallbackImage,
   scale = 0.95,
   hideScroll = false,
   fillContainer = false,
 }: TemplatePreviewRendererProps) {
+  // fallbackImage that failed to load; reset automatically when the prop changes.
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const imageSrc =
+    fallbackImage && failedImage === fallbackImage && errorFallbackImage ? errorFallbackImage : fallbackImage;
+
   // Build complete HTML document for iframe
   const srcDoc = useMemo(() => {
     if (!previewHtml || !previewCss) return null;
@@ -114,8 +121,11 @@ export default function TemplatePreviewRenderer({
   if (fallbackImage) {
     return (
       <img
-        src={fallbackImage}
+        src={imageSrc}
         alt={title}
+        onError={() => {
+          if (imageSrc === fallbackImage) setFailedImage(fallbackImage ?? null);
+        }}
         className={className}
         style={{
           width,

@@ -35,6 +35,7 @@ export default function DomainCard({
           previewHtml={previewHtml}
           previewCss={previewCss}
           fallbackImage={previewImage || FALLBACK_IMAGE}
+          errorFallbackImage={FALLBACK_IMAGE}
           title={domainName}
           height="100%"
           width="100%"

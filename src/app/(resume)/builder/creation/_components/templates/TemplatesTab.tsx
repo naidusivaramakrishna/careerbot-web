@@ -97,6 +97,28 @@ interface TemplatesTabProps {
   resumeId?: string;
 }
 
+/**
+ * Store fetched preview_html/preview_css back into careerLevelTemplates_<email>
+ * so later mounts render the cards without one GET /templates/{id} per card.
+ * Only writes when the stored list is still the one that was enriched.
+ */
+function persistEnrichedCareerLevels(
+  careerLevelKey: string,
+  original: ReadonlyArray<object> | null,
+  enriched: ReadonlyArray<object> | null,
+) {
+  if (!original || !enriched || enriched === original) return;
+  const hasPreview = (tpl: object | undefined) => !!(tpl as { preview_html?: string } | undefined)?.preview_html;
+  if (!enriched.some((tpl, i) => hasPreview(tpl) && !hasPreview(original[i]))) return;
+  try {
+    const stored = localStorage.getItem(careerLevelKey);
+    if (stored !== JSON.stringify(original)) return;
+    localStorage.setItem(careerLevelKey, JSON.stringify(enriched));
+  } catch {
+    // Storage full / unavailable — the cards still render from state.
+  }
+}
+
 const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -130,6 +152,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const enrichCareerLevelData = useCallback(
     async (templates: typeof careerLevelData) => {
       if (!templates || templates.length === 0) return templates;
+      // Cards that already carry their preview (stored from an earlier fetch or
+      // from the list payload) need no GET /templates/{id}.
+      if (templates.every((tpl) => tpl.preview_html && tpl.preview_css)) return templates;
 
       // Return cached result if already enriching
       if (enrichmentCacheRef.current) {
@@ -140,6 +165,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         try {
           const enriched = await Promise.all(
             templates.map(async (tpl) => {
+              if (tpl.preview_html && tpl.preview_css) return tpl;
               try {
                 const fullTemplate = await getTemplateById(tpl.id);
                 return {
@@ -233,7 +259,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         // Enrich with preview data
         const enrichAndSet = async () => {
           const enriched = await enrichCareerLevelData(careerLevels);
+          if (ignore) return; // unmounted / userEmail changed while fetching
           setCareerLevelData(enriched);
+          persistEnrichedCareerLevels(careerLevelKey, careerLevels, enriched);
         };
         enrichAndSet();
       } catch (err) {
@@ -316,7 +344,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
 
             // Enrich with preview data
             const enriched = await enrichCareerLevelData(careerLevelData);
+            if (ignore) return;
             setCareerLevelData(enriched);
+            persistEnrichedCareerLevels(careerLevelKey, careerLevelData, enriched);
             logger.info('Auto-populated software_engineering career levels:', careerLevelData.length, '| applied:', earlyCareerTpl?.name);
           } catch (err) {
             logger.warn('Failed to auto-populate software_engineering templates', err);
@@ -667,6 +697,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                           previewHtml={careerTpl.preview_html}
                           previewCss={careerTpl.preview_css}
                           fallbackImage={cardImgSrc}
+                          errorFallbackImage={familyImage}
                           title={careerLevel}
                           width="100%"
                           height="100%"
@@ -800,6 +831,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     previewHtml={previewTemplate.preview_html}
                     previewCss={previewTemplate.preview_css}
                     fallbackImage={previewImgSrc || FALLBACK_TEMPLATE_IMAGE}
+                    errorFallbackImage={DOMAIN_FAMILY_IMAGES[previewTemplate.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE}
                     title={previewTemplate.name}
                     width="100%"
                     height="100%"
