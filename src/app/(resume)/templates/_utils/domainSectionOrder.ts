@@ -54,11 +54,12 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
   console.warn("🎯 getDomainSectionOrder - domain (lowercased):", domain);
   console.warn("🎯 getDomainSectionOrder - domain.includes('education'):", domain.includes('education'));
 
-  // Healthcare: Certifications moved up before Skills
+  // Healthcare: Certifications & Licenses moved up before Skills
   if (domain.includes('healthcare')) {
     return [
       'Personal Info',
       'Professional Summary',
+      'Licenses and Credentials',
       'Certifications',
       'Skills',
       'Work Experience',
@@ -102,6 +103,9 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
     return [
       'Personal Info',
       'Professional Summary',
+      'Certificates and Clearances',
+      // Keep the existing Certifications section: resumes created before this
+      // domain section existed store their certificates in `certifications`.
       'Certifications',
       'Skills',
       'Work Experience',
@@ -117,6 +121,7 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
     return [
       'Personal Info',
       'Professional Summary',
+      'Service Record',
       'Work Experience',
       'Skills',
       'Projects',
@@ -131,6 +136,8 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
     return [
       'Personal Info',
       'Professional Summary',
+      'Bar Admissions and Licenses',
+      'Certificates and Clearances',
       'Certifications',
       'Skills',
       'Work Experience',
@@ -174,16 +181,20 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
     return [
       'Personal Info',
       'Professional Summary',
+      'Maritime Certifications',
       'Certifications',
       'Skills',
       'Work Experience',
+      'Vessels Operated',
+      'Ports Experience',
+      'Sea Service Record',
       'Projects',
       'Education',
       'Internships',
     ];
   }
 
-  // Research Scholar: Includes Publications
+  // Research Scholar: Includes Publications, Research Grants, Editorial Activities, Conference Presentations
   if (domain.includes('research')) {
     return [
       'Personal Info',
@@ -192,6 +203,9 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
       'Work Experience',
       'Projects',
       'Publications',
+      'Research Grants',
+      'Editorial Activities',
+      'Conference Presentations',
       'Education',
       'Internships',
     ];
@@ -240,14 +254,75 @@ export const getDomainSectionOrder = (domainFamily?: string): string[] => {
     ];
   }
 
-  // Modern Minimal: All 8 sections
-  if (domain.includes('modern') || domain.includes('minimal')) {
+  // Human Resources: Standard order
+  if (domain.includes('human_resources')) {
     return [
       'Personal Info',
       'Professional Summary',
       'Skills',
       'Work Experience',
       'Projects',
+      'Achievements',
+      'Education',
+      'Certifications',
+      'Internships',
+    ];
+  }
+
+  // Operations Management: Standard order
+  if (domain.includes('operations')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Achievements',
+      'Education',
+      'Certifications',
+      'Internships',
+    ];
+  }
+
+  // Customer Support Service: Standard order
+  if (domain.includes('customer_support')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Achievements',
+      'Education',
+      'Certifications',
+      'Internships',
+    ];
+  }
+
+  // Product Engineering Leadership: Standard order with Projects
+  if (domain.includes('product_engineering')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Achievements',
+      'Education',
+      'Certifications',
+      'Internships',
+    ];
+  }
+
+  // Marketing Creative: Standard order
+  if (domain.includes('marketing')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Achievements',
       'Education',
       'Certifications',
       'Internships',
