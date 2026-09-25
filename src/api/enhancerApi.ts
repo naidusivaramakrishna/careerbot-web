@@ -416,7 +416,12 @@ export async function downloadEnhancedResume(
   careerLevel?: string
 ): Promise<Blob> {
   try {
-    const params = new URLSearchParams({ format });
+    // careerbot-api defaults preserve_template to false (resume_enhancer.py
+    // download_enhanced_resume), i.e. "render with an app template". With no
+    // template chosen (resume-list download) keep the uploaded file's own
+    // layout, as before; with a catalogue or domain template, use it.
+    const preserveTemplate = catalogueTemplateId || domainTemplateId ? 'false' : 'true';
+    const params = new URLSearchParams({ format, preserve_template: preserveTemplate });
     if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
     if (domainTemplateId) params.append('template_id', domainTemplateId);
     if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
