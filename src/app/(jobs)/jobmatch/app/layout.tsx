@@ -15,18 +15,17 @@ export default function JobMatchAppLayout({ children }: { readonly children: Rea
           style={{
             marginLeft: "var(--sidebar-width, 64px)",
             transition: "margin 300ms",
-            overflowX: "hidden",
-            // Setting only overflowX forces overflowY to compute as "auto"
-            // per the CSS overflow spec, turning <main> into its own
-            // scroll container. That made it the containing block for any
-            // `position: sticky` descendant (e.g. AnalysisContent's right
-            // column), so a sticky element's `top` offset was measured from
-            // <main>'s scrollport — which itself already starts 56px below
-            // the viewport via `mt-14` — instead of from the real viewport,
-            // double-counting the header's height as a ~112px gap above the
-            // sticky content. Pinning overflowY back to "visible" restores
-            // the viewport as the scrolling ancestor.
-            overflowY: "visible",
+            // "clip", not "hidden": with overflowX "hidden" the CSS overflow
+            // spec computes overflowY as "auto" even if it is set to "visible",
+            // which turns <main> into its own scroll container. That makes it
+            // the containing block for any `position: sticky` descendant (e.g.
+            // AnalysisContent's right column), so the sticky `top` offset is
+            // measured from <main>'s scrollport, which already starts 56px
+            // below the viewport via `mt-14`, and the header's height is
+            // double-counted as a ~112px gap above the sticky content. "clip"
+            // does not create a scroll container, so the viewport stays the
+            // scrolling ancestor.
+            overflowX: "clip",
             minWidth: 0,
           }}
         >

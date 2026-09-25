@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Overview from "@/app/(jobs)/jobmatch/_components/Overview";
-import { getMatchAnalytics, getResume, matchResumeAndJD, parseResume } from "@/api/parserApi";
+import { getMatchAnalytics, getResume, matchResumeAndJD, parseJDText, parseResume } from "@/api/parserApi";
 import { getExtensionSession } from "@/api/extensionApi";
 import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
 
@@ -98,6 +98,40 @@ describe("Overview: results screens", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back from details" }));
     expect(screen.getByTestId("results-overview")).toBeTruthy();
     expect(screen.queryByTestId("detailed-analysis")).toBeNull();
+  });
+});
+
+describe("Overview: editing the job description after an extension session", () => {
+  const NEW_JD = "We are hiring a backend engineer to own our payments platform. ".repeat(5);
+
+  it("analyzes the edited job description, not the stored one", async () => {
+    vi.mocked(matchResumeAndJD).mockResolvedValue(ineligible as never);
+    render(<Overview sessionId="s1" />);
+    await screen.findByText(REASON);
+    expect(matchResumeAndJD).toHaveBeenLastCalledWith("resume-old", "jd-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit job description" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Job description" }), { target: { value: NEW_JD } });
+
+    vi.mocked(parseJDText).mockResolvedValue({ jd_id: "jd-new" } as never);
+    vi.mocked(matchResumeAndJD).mockResolvedValue(eligible as never);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: /Analyze Match/ }));
+
+    await waitFor(() => expect(parseJDText).toHaveBeenCalledWith(NEW_JD.trim()));
+    await waitFor(() => expect(matchResumeAndJD).toHaveBeenLastCalledWith("resume-old", "jd-new"));
+  });
+
+  it("does not let the user continue with a job description they emptied", async () => {
+    vi.mocked(getExtensionSession).mockResolvedValue(session({ job_description: "Short JD" }));
+    vi.mocked(matchResumeAndJD).mockResolvedValue(ineligible as never);
+    render(<Overview sessionId="s1" />);
+    await screen.findByText(REASON);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit job description" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Job description" }), { target: { value: "" } });
+
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
   });
 });
 

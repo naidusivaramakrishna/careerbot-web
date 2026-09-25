@@ -334,7 +334,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Job description file must be under 10MB."); return; }
     const token = ++jdUploadTokenRef.current;
-    setJdFile(file);
+    setJdFile(file); setSessionJdId(null);
     setJdFileParsed(null);
     setJdText("");
     setError(null);
@@ -368,14 +368,14 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   };
 
   const handleJdTextChange = (value: string) => {
-    setJdText(value);
+    setJdText(value); setSessionJdId(null);
     setJdFile(null);
     setJdFileParsed(null);
     setIsExtractingJd(false);
     jdUploadTokenRef.current++;
   };
 
-  const handleJdClear = () => {
+  const handleJdClear = () => { setSessionJdId(null);
     setJdText("");
     setJdFile(null);
     setJdFileParsed(null);
