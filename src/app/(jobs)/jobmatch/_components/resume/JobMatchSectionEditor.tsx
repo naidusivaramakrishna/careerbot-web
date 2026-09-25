@@ -456,14 +456,19 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
   };
 
   return (
+    // Keys typed inside the editor bubble up to this backdrop, so it must react
+    // to Escape only: treating Enter/Space as "close" (as a role="button" would)
+    // closed the editor, and dropped the edits, on the first space typed.
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
-      role="button"
-      tabIndex={0}
+      role="presentation"
       onClick={onClose}
-      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClose(); } }}
+      onKeyDown={e => { if (e.key === "Escape") onClose(); }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={sectionLabel}
         className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[75%] flex flex-col mx-4"
         onClick={e => e.stopPropagation()}
       >

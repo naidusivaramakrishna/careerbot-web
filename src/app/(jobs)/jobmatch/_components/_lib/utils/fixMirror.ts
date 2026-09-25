@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Local mirrors of the two ADDITIVE resume writes the backend persists when a
-// suggestion is applied (job_matcher.py: _resolve_certification_fix ->
+// Local mirrors of the two ADDITIVE resume writes careerbot-api can persist
+// when a suggestion is applied (job_matcher.py: _resolve_certification_fix ->
 // add_resume_certification, and _resolve_new_bullet -> append_resume_bullet).
+// Not every API version has both, so callers must mirror only what the API
+// reports it saved (`resume_updated`; see applyTextFix in AnalysisContent).
 // Rewrites of existing text are mirrored by replaceBulletText in
 // AnalysisContent; these two add something that was never in the preview, so
 // without a mirror the downloaded PDF contains it and the preview does not.

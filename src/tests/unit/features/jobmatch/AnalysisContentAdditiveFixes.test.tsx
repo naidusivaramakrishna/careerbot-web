@@ -49,7 +49,8 @@ function renderWithPenalty(penalty: Record<string, any>) {
 const preview = () => JSON.parse(screen.getByTestId("preview").textContent ?? "{}");
 
 describe("additive fixes reach the resume preview", () => {
-  it("shows an applied missing certification and removes it again on undo", async () => {
+  it("shows an applied missing certification and removes it again on undo (API confirms the write)", async () => {
+    vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, resume_updated: true, score_diff: { after: 83 } });
     renderWithPenalty({
       suggestion_id: "suggest_add_cert_1", category: "certifications", target: "CBAP certification",
       fix_type: "auto", severity: "critical", penalty: -4.75,
@@ -71,6 +72,7 @@ describe("additive fixes reach the resume preview", () => {
   });
 
   it("shows a generated capability bullet in the first experience entry and removes it on undo", async () => {
+    vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, resume_updated: true, score_diff: { after: 83 } });
     renderWithPenalty({
       suggestion_id: "combined_fix_1", category: "capabilities", fix_type: "auto", severity: "important", penalty: -1.2,
       message: "Demonstrate stakeholder workshops",
@@ -91,12 +93,14 @@ describe("additive fixes reach the resume preview", () => {
 
 // careerbot-api's POST /matcher/enhance/apply reports `resume_updated: false`
 // when it wrote nothing to the stored resume (job_matcher.py: `_resume_updated
-// = bool(_text_written or _added_skills)`). Two real payloads hit that:
+// = bool(_text_written or _added_skills)`). Two payloads hit that:
 //  - a bare capability gap from the AI layer (penalties.py: suggest_demonstrate_N
 //    with only `target`), which resolves no resume edit on the API;
-//  - suggest_add_cert_N, for which the API has no resume write at all.
-// The row must not claim "Added" and the preview must not show text the
-// backend never saved.
+//  - suggest_add_cert_N against an API version that has no certification write
+//    (versions with add_resume_certification report `resume_updated: true`).
+// A response that does not say the resume was updated is treated the same way
+// for certifications. The row must not claim "Added" and the preview must not
+// show text the backend never saved.
 describe("fixes the backend did not write to the resume", () => {
   const waitForOutcome = () =>
     waitFor(() => {
@@ -124,6 +128,22 @@ describe("fixes the backend did not write to the resume", () => {
 
   it("does not add a certification to the preview when the backend reports no resume change", async () => {
     vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, resume_updated: false, score_diff: { after: 83 } });
+    renderWithPenalty({
+      suggestion_id: "suggest_add_cert_1", category: "certifications", target: "CBAP certification",
+      fix_type: "auto", severity: "critical", penalty: -4.75, message: "Add 'CBAP certification'.",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Recommendations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Fix" }));
+
+    await waitForOutcome();
+    expect(preview().certifications).toHaveLength(2);
+    expect(preview().certifications).not.toContain("CBAP certification");
+    expect(screen.queryByRole("button", { name: "Undo applied fix" })).toBeNull();
+  });
+
+  it("does not add a certification when the response does not say the resume was updated", async () => {
+    vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, score_diff: { after: 83 } });
     renderWithPenalty({
       suggestion_id: "suggest_add_cert_1", category: "certifications", target: "CBAP certification",
       fix_type: "auto", severity: "critical", penalty: -4.75, message: "Add 'CBAP certification'.",

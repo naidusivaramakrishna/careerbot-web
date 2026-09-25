@@ -797,13 +797,18 @@ export default function AnalysisContent({
     // decide the confident "Added to resume" state, so it must reflect the
     // mirror, not just whether the network call itself succeeded.
     let mirrored: ApplyFixResult = true;
-    // careerbot-api reports `resume_updated: false` when it wrote nothing to
-    // the stored resume (e.g. suggest_add_cert_* and a bare
-    // suggest_demonstrate_* gap resolve no resume edit there). The additive
-    // branches below must not invent content the backend never saved, or the
-    // preview would disagree with the stored resume and the export. Absent
-    // (older responses) is treated as "wrote it", the previous behaviour.
+    // careerbot-api's `resume_updated` says whether it wrote to the stored
+    // resume. The additive branches below must not invent content the backend
+    // never saved, or the preview would disagree with the stored resume and the
+    // export. What it reports depends on the API version: one without a
+    // certification write reports false for suggest_add_cert_*, one with
+    // add_resume_certification reports true (a bare suggest_demonstrate_* gap
+    // resolves no resume edit and reports false either way). So a certification
+    // is mirrored only when the API explicitly confirms the write (=== true);
+    // a generated bullet keeps the previous, lenient rule (absent counts as
+    // "wrote it").
     const backendWroteResume = res?.resume_updated !== false;
+    const backendConfirmedResumeWrite = res?.resume_updated === true;
 
     if (category === "job_title") {
       const newTitle = penalty?.target || jobTitle?.jd_title;
@@ -865,13 +870,12 @@ export default function AnalysisContent({
         } else {
           mirrored = false;
         }
-      } else if (backendWroteResume && category === "certifications" && suggestion_id.startsWith("suggest_add_cert_") && typeof penalty?.target === "string") {
+      } else if (backendConfirmedResumeWrite && category === "certifications" && suggestion_id.startsWith("suggest_add_cert_") && typeof penalty?.target === "string") {
         // Additive fixes have no `before` to replace, so the rewrite above
-        // never touches them. careerbot-api develop2 writes a generated
-        // bullet (append_resume_bullet) but has no certification write yet,
-        // so it reports resume_updated:false for suggest_add_cert_* and this
-        // branch is skipped by the backendWroteResume gate. It mirrors a
-        // certification only once the backend says it saved one. Order: a
+        // never touches them. A certification is mirrored only when the API
+        // confirmed it saved one (resume_updated === true); with an API version
+        // that has no certification write, this branch is skipped and the row
+        // falls through to "applied, not in preview" below. Order: a
         // certification by id prefix (name = penalty.target), then a new
         // bullet placed by mapping_section.
         const added = addCertification(resumeSectionsRef.current, penalty.target);
