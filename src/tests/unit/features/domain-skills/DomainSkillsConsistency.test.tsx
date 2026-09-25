@@ -207,3 +207,20 @@ describe('core_engineering Project Management', () => {
     expect(screen.getByTestId('chips-Project Management').textContent).toBe('Scrum');
   });
 });
+
+describe('custom categories whose slug matches another domain key (P2)', () => {
+  it('stays visible in the editor, since every template prints custom_categories', () => {
+    applyCareerTemplate('healthcare');
+    const data = {
+      resume_id: 'r1',
+      categorizedSkills: {
+        ...skills(),
+        // A user-named "Tools & Platforms" comes back from the API as this id;
+        // tools_platforms is a sales_business_development key.
+        custom_categories: [{ id: 'custom_backend_tools_platforms', name: 'Tools platforms', skills: ['Salesforce'] }],
+      },
+    };
+    render(<Harness initial={data} />);
+    expect(screen.getByTestId('chips-Add Tools platforms skills...').textContent).toBe('Salesforce');
+  });
+});

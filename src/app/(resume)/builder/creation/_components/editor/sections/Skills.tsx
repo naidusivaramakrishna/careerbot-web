@@ -9,7 +9,7 @@ import TechnologyChipsInput, { type TechnologyChipsInputHandle } from "../Techno
 import { addSkillToCategory, deleteSkillCategory, deleteSkillById } from "@/api/resumeApi";
 import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCategoryFromEnhancedResume } from "@/api/enhancerApi";
 import { toast } from "sonner";
-import { getSkillsForDomain, DOMAIN_SKILLS, skillCategoryApiName, type SkillCategory, type SkillDomain } from "@/config/domainSkills";
+import { getSkillsForDomain, skillCategoryApiName, type SkillDomain } from "@/config/domainSkills";
 import { getSkillsEditorDomain, getStoredUserEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 import logger from "@/lib/logger";
 
@@ -87,59 +87,13 @@ const Skills: React.FC = () => {
 
   const categorizedSkills = getFilteredCategorizedSkills() || defaultCategorizedSkills;
 
-  // Get all domain-specific category keys (to identify which categories belong to which domains)
-  const allDomainCategoryKeys = new Set<string>();
-  Object.values(DOMAIN_SKILLS).forEach((categories) => {
-    (categories as SkillCategory[]).forEach((cat) => allDomainCategoryKeys.add(cat.key));
-  });
-
-  // Add backend naming variants (e.g., healthcare_it_systems vs healthcare_systems)
-  const backendVariants = [
-    'healthcare_it_systems', // backend variant of healthcare_systems
-  ];
-  backendVariants.forEach((key) => allDomainCategoryKeys.add(key));
-
-  // Get current domain's category keys
-  const currentDomainCategoryKeys = new Set(SKILL_CATEGORIES.map((cat) => cat.key));
-
   const allCustomCategories: CustomCategory[] = (categorizedSkills as any).custom_categories || [];
-
-  // Filter out domain-specific custom categories from OTHER domains
-  // Keep domain-specific categories from the CURRENT domain and true user-created categories
-  const customCategories: CustomCategory[] = allCustomCategories.filter((cat) => {
-    const catId = (cat.id || '').toLowerCase();
-    const isCustomBackendCategory = catId.startsWith('custom_backend_');
-
-    if (isCustomBackendCategory) {
-      // Extract the original key from the ID (e.g., 'custom_backend_clinical_skills' -> 'clinical_skills')
-      const originalKey = catId.replace('custom_backend_', '');
-
-      // Check if this key belongs to ANY domain AND if it's in the CURRENT domain
-      const isFromAnyDomain = allDomainCategoryKeys.has(originalKey);
-      const isFromCurrentDomain = currentDomainCategoryKeys.has(originalKey);
-
-      // Filter out if it's from ANY domain but NOT the current one
-      if (isFromAnyDomain && !isFromCurrentDomain) {
-        logger.debug('Filtering out OLD domain category:', {
-          name: cat.name,
-          key: originalKey,
-          currentDomain: rawDomain,
-          isFromCurrentDomain
-        });
-        return false; // Filter out
-      }
-
-      if (isFromCurrentDomain) {
-        logger.debug('Keeping current domain category:', {
-          name: cat.name,
-          key: originalKey,
-          currentDomain: rawDomain
-        });
-      }
-    }
-    // User-created custom categories don't have the custom_backend_ prefix, so keep them
-    return true;
-  });
+  // Every custom category is shown: all resume templates print
+  // custom_categories regardless of domain (filterSkillsByDomain keeps them),
+  // so hiding one here would leave skills on the PDF the user cannot edit.
+  // Categories of the active domain never land here — the loader maps them
+  // back to their predefined key (mapBackendSkillsToCategorized).
+  const customCategories: CustomCategory[] = allCustomCategories;
 
   const hiddenPredefined: string[] = (categorizedSkills as any).hidden_predefined_categories || [];
 
@@ -148,14 +102,6 @@ const Skills: React.FC = () => {
     skillCategoriesKeys: SKILL_CATEGORIES.map((c) => c.key),
     categorizedSkillsKeys: Object.keys(categorizedSkills).filter((k) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(k)),
     allCategorizedSkillsInData: Object.keys(resumeData.categorizedSkills || {}),
-  });
-
-  // DEBUG: Log custom categories after filtering
-  logger.debug('Custom categories after filtering:', {
-    total: allCustomCategories.length,
-    kept: customCategories.length,
-    filtered: allCustomCategories.length - customCategories.length,
-    names: customCategories.map((c) => c.name),
   });
 
   const updateSkills = (updated: Record<string, unknown>) => {
