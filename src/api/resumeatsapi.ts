@@ -55,11 +55,13 @@ function storeAtsAnalysis(key: string, payload: unknown): void {
 
 /** Reads an ATS analysis written by storeAtsAnalysis (localStorage first, then the quota fallback). */
 function readAtsAnalysis(key: string): string | null {
-  try {
-    return localStorage.getItem(key) ?? sessionStorage.getItem(key);
-  } catch {
-    return null;
+  for (const storage of [() => localStorage, () => sessionStorage]) {
+    try {
+      const value = storage().getItem(key);
+      if (value !== null) return value;
+    } catch { /* storage unavailable -- try the next one */ }
   }
+  return null;
 }
 
 function hasScoreProjectionContract(value: unknown): boolean {

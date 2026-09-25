@@ -69,4 +69,16 @@ describe("ATS analysis storage when localStorage is full", () => {
     expect(enhanceResume).not.toHaveBeenCalled();
     expect(result).toMatchObject({ success: true, finalWeightedScore: 71 });
   });
+
+  it("still reads the sessionStorage copy when localStorage itself throws on read", async () => {
+    const cachedPayload = { resume_id: "r-1", ats_score: { score_status: "ok" }, finalWeightedScore: 64 };
+    window.sessionStorage.setItem("atsAnalysis_r-1", JSON.stringify(cachedPayload));
+    vi.mocked(window.localStorage.getItem).mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: {} }));
+
+    const result = await processResumeComplete(file());
+
+    expect(enhanceResume).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: true, finalWeightedScore: 64 });
+  });
 });
