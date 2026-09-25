@@ -73,8 +73,7 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
   const score = getEnhancedCurrentScore(enhancedAtsScore);
   const scoreColor = tier(score);
   const trackedSuggestions = enhancedSuggestions.filter((suggestion) => {
-    const status = suggestion.status ?? "pending";
-    if (status !== "pending" && status !== "fixed") return false;
+    if (suggestion.status !== "pending" && suggestion.status !== "fixed") return false;
     // A stale bulk action has no remaining server IDs after its concrete
     // recommendations are already fixed. This applies to every ATS section
     // (for example, Leadership bullets and Keywords). Hiding it prevents a

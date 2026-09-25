@@ -32,10 +32,23 @@ export interface CataloguesResponse {
   catalogues: CatalogueConfig[];
 }
 
-// Relative to httpClient's baseURL ('/api/v1' or NEXT_PUBLIC_BASE_URL).
+// Relative to httpClient's baseURL ('/api/v1' or NEXT_PUBLIC_BASE_URL, src/lib/http.ts);
+// an '/api/v1/...' path here would be requested as '/api/v1/api/v1/...'.
 const CATALOGUES_API_URL = '/templates/catalogues/all';
 const CACHE_KEY = 'catalogues_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * localStorage is not trusted input: earlier builds of this hook cached the
+ * raw response body under the same key, and storage can hold anything. Only
+ * an array of objects with a string `key` is safe to hand to
+ * getCataloguesMap(), which runs during PreviewPanel's render.
+ */
+const isCatalogueList = (value: unknown): value is CatalogueConfig[] =>
+  Array.isArray(value) &&
+  value.every(
+    (c) => typeof c === 'object' && c !== null && typeof (c as { key?: unknown }).key === 'string'
+  );
 
 /**
  * Hook to fetch and cache catalogues from the backend
@@ -54,7 +67,9 @@ export const useCatalogues = () => {
         if (cached) {
           try {
             const { data, timestamp } = JSON.parse(cached);
-            if (Date.now() - timestamp < CACHE_DURATION) {
+            if (!isCatalogueList(data)) {
+              logger.debug('Cached catalogues have an unexpected shape, fetching fresh');
+            } else if (Date.now() - timestamp < CACHE_DURATION) {
               setCatalogues(data);
               setLoading(false);
               logger.info('Catalogues loaded from cache');

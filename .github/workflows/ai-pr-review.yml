@@ -8,11 +8,21 @@ on:
     # through was to hunt for "Re-run failed jobs" -- or to admin-merge, which is
     # the record-free bypass the label exists to replace. The job condition below
     # ignores every other label so this does not re-review on unrelated ones.
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   issue_comment:
+    # REQUIRES A MASTER SYNC: GitHub runs issue_comment (and schedule) workflows
+    # from the DEFAULT branch's copy of this file, which is `master`, not the
+    # branch this file is on. Until master carries this file, comments are
+    # handled by master's copy: no OWNER/MEMBER/COLLABORATOR check on
+    # `/ai-review`, the plain concurrency group, and its hourly
+    # `schedule: cron "47 * * * *"` sweep keeps running. Removing `schedule:`
+    # here and the author_association gate below do nothing until then.
+    #
+    # Security invariant: this privileged trigger checks out the default branch.
+    # The review script may fetch the PR ref for git diff/show, but must never
+    # check it out or execute PR-authored code. Dynamic commands run only from
+    # this trusted checkout. Keep this true if the review harness is changed.
     types: [created]
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       pr:
@@ -32,34 +42,67 @@ permissions:
 # Per-PR group: two different PRs no longer block each other (they still
 # serialise at the runner, which is the real capacity limit).
 # cancel-in-progress: a new push supersedes the previous review of that same
-# PR. Scheduled runs group by github.ref, so a newer hourly sweep replaces an
-# older one rather than stacking behind it.
+# PR.
 #
-# This block is copied verbatim from the master copy of this workflow, which
-# already had the fix. The feature branches were carrying a stale version.
+# cancel-in-progress came from the master copy of this workflow, which already
+# had the fix. The group below has since diverged from master's (see there).
 concurrency:
-  group: ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  # NOT unconditional -- see the default-branch copy, which is the one that
-  # actually cancels. Any comment on a PR fires an issue_comment run whose group
-  # resolves to ai-pr-review-<PR#> via github.event.issue.number, landing it in
+  # pull_request runs whose ai-review job is SKIPPED (draft PR, or a label other
+  # than ai-review-waive) get their own `-noreview` group. Concurrency applies to
+  # the whole RUN, so inside the review group such a run would either cancel the
+  # in-flight review (cancel-in-progress) or -- whatever cancel-in-progress says --
+  # replace a PENDING requested /ai-review run, because GitHub keeps at most one
+  # pending run per group. In their own group they only supersede each other.
+  # issue_comment runs that are NOT a trusted `/ai-review` on a PR (an ordinary
+  # comment, or `/ai-review` from a CONTRIBUTOR/NONE) get `-comment` for the same
+  # reason: every job in them is skipped, yet in the review group they would
+  # replace a pending requested /ai-review; in `-noreview` they would replace a
+  # pending draft run. Only a trusted `/ai-review` comment enters the review group.
+  # (Takes effect for comments only after the master sync noted under `on:`.)
+  # The two conditions are the negations of the pull_request and issue_comment
+  # clauses of the ai-review job `if` below; keep them in sync
+  # (tests/unit/test_ci_draft_policy.py).
+  group: >-
+    ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}${{
+    (github.event_name == 'pull_request' &&
+    (github.event.pull_request.draft ||
+    ((github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+    github.event.label.name != 'ai-review-waive'))) && '-noreview' ||
+    (github.event_name == 'issue_comment' &&
+    !(github.event.issue.pull_request != null &&
+    contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+    github.event.comment.author_association) &&
+    startsWith(github.event.comment.body, '/ai-review'))) && '-comment' || '' }}
+  # NOT unconditional -- see the default-branch (master) copy, which is the one
+  # that handles issue_comment today. Any comment on a PR fires an issue_comment
+  # run whose group resolves to ai-pr-review-<PR#> via github.event.issue.number
+  # (in master's copy; above, only a trusted `/ai-review` does), landing it in
   # the SAME group as a review already running for that PR. The job-level `if`
   # skips the JOB, but the RUN still joins the group and cancel-in-progress kills
   # the real review first (careerbot-web#61: twice, ~5s after each comment).
   #
   # Kept in sync here so a merge down to the default branch does not silently
   # revert the fix -- this branch is thousands of commits ahead of it.
+  # Draft runs no longer need an exception here: they are in the `-noreview`
+  # group above, where superseding each other is exactly what we want.
+  # The issue_comment exception is still needed: a trusted `/ai-review` enters
+  # the review group and must queue behind a running review, not kill it.
   cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
 
 jobs:
   ai-review:
+    # The issue_comment clause (incl. the author_association gate) is live only
+    # once master carries this file -- see the note under `on: issue_comment`.
     if: >
-      github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&
+       github.event.pull_request.draft == false &&
        (github.event.action != 'labeled' && github.event.action != 'unlabeled'
         || github.event.label.name == 'ai-review-waive')) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.comment.author_association) &&
        startsWith(github.event.comment.body, '/ai-review'))
     runs-on: [self-hosted, ai-review]
     env:
@@ -91,11 +134,14 @@ jobs:
             --repo "${{ github.repository }}" \
             ${{ steps.t.outputs.args }}
 
-  # careerbot-web has no Python test runner of its own -- this is the repo's only
-  # .py file. Without this job its copy of the gate would be the one nobody checks,
-  # which is exactly the blind spot this PR exists to close. The suite is the same
-  # one that guards careerbot-ai and careerbot-api.
+  # careerbot-web has no Python test runner of its own. Without this job its copy
+  # of the gate (and the workflow-policy tests next to it) would be the code
+  # nobody checks. test_ai_review_gate.py is the same suite that guards
+  # careerbot-ai and careerbot-api.
   gate-self-test:
+    # issue_comment fires for every comment on every issue/PR, from anyone;
+    # there is nothing for this job to test on those events.
+    if: github.event_name != 'issue_comment'
     runs-on: [self-hosted, ai-review]
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +149,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install pytest
-        run: python3 -m pip install --quiet pytest
-      - name: Run the gate's own test suite
-        run: python3 -m pytest tests/unit/test_ai_review_gate.py -q --override-ini="addopts="
+        run: python3 -m pip install --quiet pytest pyyaml
+      - name: Run the gate's own test suite and the workflow-policy tests
+        run: python3 -m pytest tests/unit -q --override-ini="addopts="

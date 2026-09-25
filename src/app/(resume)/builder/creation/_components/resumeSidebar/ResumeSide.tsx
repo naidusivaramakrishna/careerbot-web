@@ -115,7 +115,7 @@ interface ResumeSideProps {
   defaultOpen?: boolean;
   /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
   openSection?: string;
-  /** Tab change request from external trigger */
+  /** Lets a parent switch the sidebar tab (and open it) from outside. */
   tabRequest?: { tab: string; id: number } | null;
   /** Changes whenever an ATS recommendation is selected, including the same section twice. */
   openSectionRequestId?: number;

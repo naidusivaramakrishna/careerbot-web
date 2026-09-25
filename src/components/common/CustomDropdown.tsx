@@ -10,6 +10,7 @@ interface DropdownProps {
   bgColor?: string;
   bgOptions?: string;
   textColor?: string;
+  disabledOptions?: string[];
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -19,7 +20,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   className = "",
   bgColor = "bg-white",
   bgOptions = "bg-white",
-  textColor = "text-gray-700"
+  textColor = "text-gray-700",
+  disabledOptions = []
 }) => {
   const [selected, setSelected] = useState(defaultValue || options[1]);
   const [open, setOpen] = useState(false);
@@ -63,7 +65,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           className={`absolute z-10 mt-1 border border-gray-200 rounded-md shadow-lg ${bgColor} ${className}`}
         >
           {options.map((option, index) => {
-            const isDisabled = index === 0;
+            const isDisabled = index === 0 || disabledOptions.includes(option);
             const isSelected = selected === option && !isDisabled;
 
             return (

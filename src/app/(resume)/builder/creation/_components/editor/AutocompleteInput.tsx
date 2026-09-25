@@ -21,7 +21,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   onChange,
   onBlur,
   placeholder,
-  suggestions,
+  suggestions: suggestionsProp,
   label,
   required,
   error,
@@ -30,6 +30,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   maxLength,
 }) => {
   const value = valueProp ?? "";
+  const suggestions = suggestionsProp ?? [];
   const [isOpen, setIsOpen] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);

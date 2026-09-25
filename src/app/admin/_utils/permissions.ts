@@ -37,10 +37,11 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // hold none of them, so the nav must not offer them a page whose every
   // request would be refused.
   // PLATFORM_ADMIN is here because running the colleges is the whole of its
-  // job. It is absent from 'dashboard', 'ai-spend', 'user-management',
-  // 'admin-management' and 'settings' on purpose -- those carry revenue,
-  // consumer data or platform configuration, and the role exists so the
-  // college estate can be delegated without them.
+  // job. It is absent from 'dashboard', 'ai-spend', and 'user-management',
+  // 'admin-management' on purpose -- those carry revenue, consumer data or
+  // platform configuration, and the role exists so the college estate can be
+  // delegated without them. Note: Feature Flags and System configuration tabs
+  // are restricted to SUPER_ADMIN by backend; browser UI only disables them.
   'colleges': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN'],
   'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT'],
   // SAME ROLES AS COLLEGES, and for the same reason the backend gates the
@@ -53,7 +54,7 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // every cost field for this role, so the split is enforced there and merely
   // reflected here.
   'ai-usage': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN'],
-  'settings': ['SUPER_ADMIN'],
+  'settings': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'PLATFORM_ADMIN'],
 };
 
 /**

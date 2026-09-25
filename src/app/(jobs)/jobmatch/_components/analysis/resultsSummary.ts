@@ -14,6 +14,7 @@ export function resultsSummary(results: unknown) {
   const tech = record(match.Technical_Skills_Check ?? match.Technical_Skills);
   const soft = record(match.Soft_Skills_Check ?? match.Soft_Skills);
   const careerProg = record(match.Career_Progression_Check);
+  const leadership = record(match.Leadership_Check);
   const names = (values: unknown[]) => Array.from(new Set(values.map(value => typeof value === "string" ? value : String(record(value).skill ?? "")).filter(Boolean)));
   const matched = names([ ...list(tech.matched_critical_skills), ...list(tech.matched_important_skills), ...list(tech.matched_nice_to_have), ...list(soft.matched_skills)]);
   const missing = names([ ...list(tech.missing_critical_skills), ...list(tech.missing_important_skills), ...list(tech.missing_nice_to_have), ...list(soft.missing_skills)]);
@@ -22,9 +23,9 @@ export function resultsSummary(results: unknown) {
   const sectionScore = (section: RecordValue) => section.execution_failed ? null : resultScore(section.match_score);
   // Mirrors every section ScoreBreakdown.tsx renders on the detailed analysis
   // page, so the Overview's quick table and the detailed page never disagree
-  // on which categories exist. Career Progression is the one section that's
-  // conditionally absent from a match (see careerProg.applicable below) —
-  // same gate ScoreBreakdown.tsx uses to hide its card entirely.
+  // on which categories exist. Career Progression and Leadership are
+  // conditionally absent from a match — same `!= null` gates ScoreBreakdown.tsx
+  // uses to hide their cards entirely (a missing block or a null score).
   const breakdown = [
     {label: "Overall Match", score},
     {label: "Technical Skills", score: sectionScore(tech)},
@@ -38,9 +39,10 @@ export function resultsSummary(results: unknown) {
     {label: "Education", score: sectionScore(record(match.Education_Check))},
     {label: "Certifications", score: sectionScore(record(match.Certifications_Check))},
     {label: "ATS Formatting", score: sectionScore(record(match.Formatting_Check))},
-    ...(careerProg.applicable !== false && careerProg.match_score !== undefined
+    ...(careerProg.applicable !== false && careerProg.match_score != null
       ? [{label: "Career Progression", score: sectionScore(careerProg)}] : []),
-    {label: "Leadership", score: sectionScore(record(match.Leadership_Check))},
+    ...(leadership.match_score != null
+      ? [{label: "Leadership", score: sectionScore(leadership)}] : []),
   ];
   return {
     score, matched, missing, areas, breakdown,

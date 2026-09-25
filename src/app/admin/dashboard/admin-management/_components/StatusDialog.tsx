@@ -15,10 +15,12 @@ interface StatusDialogProps {
     actionLoading: boolean;
     onUpdate: () => void;
     onClose: () => void;
+    currentStatus: string;
 }
 
-const StatusDialog = memo(({ statusForm, setStatusForm, actionLoading, onUpdate, onClose }: StatusDialogProps) => {
+const StatusDialog = memo(({ statusForm, setStatusForm, actionLoading, onUpdate, onClose, currentStatus }: StatusDialogProps) => {
     const [confirmed, setConfirmed] = useState(false);
+    const isStatusChanged = statusForm.status !== currentStatus;
 
     const handleClick = () => {
         if (!confirmed) { setConfirmed(true); return; }
@@ -39,6 +41,7 @@ const StatusDialog = memo(({ statusForm, setStatusForm, actionLoading, onUpdate,
                             bgColor="bg-gray-100"
                             bgOptions="bg-white"
                             className="w-full"
+                            disabledOptions={[Object.keys(statusMap).find(key => statusMap[key] === currentStatus) || ""]}
                         />
                     </div>
                     <div>
@@ -65,8 +68,9 @@ const StatusDialog = memo(({ statusForm, setStatusForm, actionLoading, onUpdate,
                 <div className="flex gap-2 mt-4">
                     <button
                         onClick={handleClick}
-                        disabled={actionLoading}
+                        disabled={actionLoading || !isStatusChanged}
                         className="flex-1 bg-yellow-500 text-white py-2 rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors"
+                        title={!isStatusChanged ? "Select a different status to proceed" : ""}
                     >
                         {actionLoading ? "Updating..." : confirmed ? "Confirm" : "Update Status"}
                     </button>
