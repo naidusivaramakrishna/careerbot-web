@@ -27,4 +27,15 @@ describe("match results summary", () => {
     expect(resultColor(60)).toBe("#CA8A04");
     expect(resultColor(80)).toBe("#07845E");
   });
+  // Same guards as ScoreBreakdown.tsx: a Leadership / Career Progression card
+  // only renders when its match_score is present (`!= null`), so the Overview
+  // table and the PDF must not add a "N/A" row the detailed page doesn't show.
+  it("omits Leadership and Career Progression rows the detailed breakdown hides", () => {
+    const labels = (match: Record<string, unknown>) => resultsSummary({data: {ats_score: 70, match_result: match}}).breakdown.map(row => row.label);
+    expect(labels({})).not.toContain("Leadership");
+    expect(labels({Leadership_Check: {match_score: null}})).not.toContain("Leadership");
+    expect(labels({Career_Progression_Check: {applicable: true, match_score: null}})).not.toContain("Career Progression");
+    expect(labels({Leadership_Check: {match_score: 0}})).toContain("Leadership");
+    expect(labels({Career_Progression_Check: {match_score: 60}})).toContain("Career Progression");
+  });
 });
