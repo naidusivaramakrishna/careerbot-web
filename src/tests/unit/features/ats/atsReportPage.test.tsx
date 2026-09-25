@@ -87,6 +87,20 @@ describe("ATS report workspace setup", () => {
     expect(enhanceResume).toHaveBeenCalledTimes(1);
   });
 
+  it("sends the credit-charging enhance request once under a StrictMode double mount", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume).mockResolvedValue({
+      success: true,
+      enhanced_resume_id: "enh-1",
+      enhanced_resume: { contact: { name: "Avery" } },
+    } as never);
+
+    render(<React.StrictMode><ATSLoginReportPage /></React.StrictMode>);
+
+    await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+    expect(enhanceResume).toHaveBeenCalledTimes(1);
+  });
+
   it("does not write embedded images from a pre-existing cached report back into browser storage", async () => {
     // Reports cached before this change were stored unstripped.
     window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({
