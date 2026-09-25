@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Overview from "@/app/(jobs)/jobmatch/_components/Overview";
-import { getMatchAnalytics, getResume, matchResumeAndJD, parseJDText, parseResume } from "@/api/parserApi";
+import { getMatchAnalytics, getResume, matchResumeAndJD, parseJDFile, parseJDText, parseResume } from "@/api/parserApi";
 import { getExtensionSession } from "@/api/extensionApi";
 import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
 
@@ -154,4 +154,47 @@ describe("Overview: replacing the resume from an extension session", () => {
     await waitFor(() => expect(parseResume).toHaveBeenCalledWith(file));
     await waitFor(() => expect(matchResumeAndJD).toHaveBeenLastCalledWith("resume-new", "jd-1"));
   });
+});
+
+// Generous waits: these go through a full analysis run and flake with the 1 s default on a loaded machine.
+const SLOW = { timeout: 5000 };
+const TEST_TIMEOUT = 20000;
+
+describe("Overview: replacing the job description with a file after an extension session", () => {
+  it("analyzes the uploaded file, not the stored job description ID", async () => {
+    vi.mocked(matchResumeAndJD).mockResolvedValue(ineligible as never);
+    render(<Overview sessionId="s1" />);
+    await screen.findByText(REASON, undefined, SLOW);
+    expect(matchResumeAndJD).toHaveBeenLastCalledWith("resume-old", "jd-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit job description" }));
+    vi.mocked(parseJDFile).mockResolvedValue({ jd_id: "jd-file", jd_text: "Parsed JD text" } as never);
+    const file = new File(["%PDF"], "New JD.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Choose job description file"), { target: { files: [file] } });
+    await waitFor(() => expect(parseJDFile).toHaveBeenCalledWith(file), SLOW);
+
+    vi.mocked(matchResumeAndJD).mockResolvedValue(eligible as never);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }, SLOW));
+    fireEvent.click(screen.getByRole("button", { name: /Analyze Match/ }));
+
+    await waitFor(() => expect(matchResumeAndJD).toHaveBeenLastCalledWith("resume-old", "jd-file"), SLOW);
+  }, TEST_TIMEOUT);
+});
+
+describe("Overview: the wizard during analysis", () => {
+  it("stays open on Escape and backdrop clicks while the match is running", async () => {
+    vi.mocked(matchResumeAndJD).mockReturnValue(new Promise(() => {}) as never); // never settles
+    render(<Overview sessionId="s1" />);
+
+    const dialog = await screen.findByRole("dialog", undefined, SLOW);
+    await waitFor(() => expect(matchResumeAndJD).toHaveBeenCalled(), SLOW);
+    expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    fireEvent.click(dialog.parentElement!); // the backdrop
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+    expect(screen.getByText("Analyzing")).toBeTruthy();
+  }, TEST_TIMEOUT);
 });
