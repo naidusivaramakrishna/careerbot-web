@@ -1237,6 +1237,156 @@ def label_actor(repo, pr, label):
     return logins[-1] if logins else None
 
 
+# ── label-event runs ────────────────────────────────────────────────────────
+# `ai-review` is a REQUIRED check, and GitHub counts a SKIPPED job as a passing
+# check run; the newest run of a check name on the head commit is the one that
+# counts. The workflow used to skip this job on `labeled`/`unlabeled` for any
+# label but ai-review-waive / ai-review-large, so adding ANY other label to a PR
+# whose review had failed turned the required check green, unreviewed (#117:
+# BLOCKED -> CLEAN on a skipped label run). The job now runs on every label
+# event, and these helpers keep that cheap: the same-head skip path in
+# review_one re-derives the verdict from the review already posted, and a label
+# run that arrives while the real review for this head is still running waits
+# for it instead of paying for a second one.
+LABEL_EVENT_ACTIONS = ("labeled", "unlabeled")
+# The workflow file, for looking up this PR head's other runs of it.
+WORKFLOW_FILE = "ai-pr-review.yml"
+INFLIGHT_WAIT_SECONDS = 40 * 60  # a full review takes ~25 min
+INFLIGHT_POLL_SECONDS = 60
+
+
+def label_event():
+    """The label whose `labeled`/`unlabeled` event started this run, else None.
+
+    Read from AI_REVIEW_EVENT_ACTION / AI_REVIEW_EVENT_LABEL, which the workflow
+    sets from the event payload (env, never interpolated into the shell).
+    """
+    if os.environ.get("AI_REVIEW_EVENT_ACTION") not in LABEL_EVENT_ACTIONS:
+        return None
+    return os.environ.get("AI_REVIEW_EVENT_LABEL") or ""
+
+
+def is_unrelated_label_event():
+    """A label event for a label the gate does not act on (not waive / large)."""
+    lb = label_event()
+    return lb is not None and lb not in (WAIVER_LABEL, SIZE_OVERRIDE_LABEL)
+
+
+# ── pull_request runs: live draft state and stale heads ─────────────────────
+# The job is never skipped for a pull_request event, drafts included: "Re-run
+# all jobs" replays the ORIGINAL payload, so a re-run of a run from when the PR
+# was a draft skipped again (`draft: true`) and became the newest -- passing --
+# `ai-review` check run on a head whose real review had failed. The payload is
+# therefore only a hint; the PR's LIVE state decides.
+class Superseded(Exception):
+    """The PR head moved past the commit this run's check run is attached to."""
+
+
+def event_head():
+    """Head sha in the pull_request payload that started this run -- the commit
+    its check run is attached to -- or None when this is not a pull_request run.
+    From AI_REVIEW_EVENT_HEAD; a re-run replays the payload, so it may be stale."""
+    return os.environ.get("AI_REVIEW_EVENT_HEAD", "").strip() or None
+
+
+def event_was_draft():
+    """The pull_request payload said draft (AI_REVIEW_EVENT_DRAFT). Such a run is
+    in the `-noreview` group; whether the PR is a draft NOW is live_pr_state's."""
+    return os.environ.get("AI_REVIEW_EVENT_DRAFT") == "true"
+
+
+def live_pr_state(repo, pr):
+    """{"isDraft": bool, "headRefOid": sha} as the PR is NOW.
+
+    Raises on any failure. A draft exits 0, so "could not tell" must never be
+    read as "draft" -- main() turns the exception into a red check."""
+    try:
+        r = run(["gh", "pr", "view", str(pr), "--repo", repo,
+                 "--json", "isDraft,headRefOid"], timeout=60)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        raise RuntimeError(f"#{pr}: could not read the PR's live draft state ({e}); "
+                           f"failing closed") from e
+    if r is None or r.returncode != 0:
+        raise RuntimeError(f"#{pr}: could not read the PR's live draft state "
+                           f"(gh exit {getattr(r, 'returncode', None)}); failing closed")
+    try:
+        state = json.loads(r.stdout or "")
+    except ValueError as e:
+        raise RuntimeError(f"#{pr}: unreadable live PR state; failing closed") from e
+    if not (isinstance(state, dict) and isinstance(state.get("isDraft"), bool)
+            and isinstance(state.get("headRefOid"), str) and state["headRefOid"]):
+        raise RuntimeError(f"#{pr}: incomplete live PR state {state!r}; failing closed")
+    return state
+
+
+def superseded_message(pr, event_sha, now_sha):
+    return (f"#{pr}: this run is for {event_sha[:8]}, but the PR head is now "
+            f"{now_sha[:8]} — superseded. Its check run is attached to "
+            f"{event_sha[:8]}, which no longer gates the merge; the run for "
+            f"{now_sha[:8]} does. Not reviewing a stale head, and not asserting a "
+            f"verdict for it either (fail closed).")
+
+
+def check_not_superseded(repo, pr, event_sha):
+    """Raise Superseded if the PR head is no longer `event_sha`."""
+    now = live_pr_state(repo, pr)["headRefOid"]
+    if now != event_sha:
+        raise Superseded(superseded_message(pr, event_sha, now))
+
+
+def earlier_run_in_flight(repo, head):
+    """True if an EARLIER run of this workflow for `head` is queued or running.
+
+    Only runs with a smaller run id count, so two label runs never wait on each
+    other. Unknown (API error, timeout) is False: the caller then reviews, which
+    costs tokens but never gets the verdict wrong.
+    """
+    own = os.environ.get("GITHUB_RUN_ID", "")
+    own_filter = f" and .id < {int(own)}" if own.isdigit() else ""
+    try:
+        r = run(["gh", "api", f"repos/{repo}/actions/workflows/{WORKFLOW_FILE}/runs"
+                 f"?head_sha={head}&per_page=100",
+                 "-q", f'.workflow_runs[] | select(.status != "completed"{own_filter}) | .id'],
+                timeout=60)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    if r is None or r.returncode != 0:
+        return False
+    return bool((r.stdout or "").strip())
+
+
+def wait_for_inflight_review(repo, pr, head, reviewed_sha):
+    """Label run, no review at `head` yet: wait while an earlier run (the
+    opened/synchronize review for this head) is still going, then return the
+    reviewed sha as it is after the wait. Without this, a PR opened WITH labels
+    -- which fires `opened` and one `labeled` per label at once -- would pay for
+    a full review per label on the parallel ai-review runners."""
+    deadline = time.monotonic() + INFLIGHT_WAIT_SECONDS
+    announced = False
+    while not (reviewed_sha and head.startswith(reviewed_sha)):
+        if not earlier_run_in_flight(repo, head):
+            if announced and event_head() is not None:
+                # The run we waited for ended without posting -- cancelled by a
+                # push, most likely. Do not fall through to a full review of a
+                # head the PR has moved past (nothing would cancel it: this run
+                # is in `-noreview`).
+                check_not_superseded(repo, pr, head)
+            break
+        if time.monotonic() >= deadline:
+            print(f"::warning::#{pr}: the earlier review run for {head[:8]} is still going "
+                  f"after {INFLIGHT_WAIT_SECONDS // 60} min; reviewing here instead")
+            break
+        if not announced:
+            print(f"#{pr}: label event; an earlier run is reviewing {head[:8]} — waiting "
+                  f"for its verdict instead of reviewing twice")
+            announced = True
+        time.sleep(INFLIGHT_POLL_SECONDS)
+        if event_head() is not None:
+            check_not_superseded(repo, pr, head)
+        _, reviewed_sha = existing_review_sha(repo, pr)
+    return reviewed_sha
+
+
 def existing_review_body(repo, pr):
     """Body of the most recent ai-review comment, or None.
 
@@ -1285,9 +1435,37 @@ def existing_review_body(repo, pr):
 def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
     meta = pr_meta(repo, pr)
     base, head = meta["baseRefOid"], meta["headRefOid"]
+    event_sha = event_head()
+    if event_sha is not None:
+        # A pull_request run, possibly a re-run replaying an old payload. The
+        # job is never skipped (see the workflow), so decide on LIVE state.
+        state = live_pr_state(repo, pr)  # raises -> red check (fail closed)
+        if state["isDraft"]:
+            # GitHub refuses to merge a draft whatever its checks say, and
+            # `ready_for_review` starts a new run -- the newest check run on the
+            # head -- which reviews it. No model is called for a draft.
+            print(f"#{pr} is a draft — not reviewing it; marking it ready for review "
+                  f"starts the review.")
+            return 0
+        if head != event_sha or state["headRefOid"] != event_sha:
+            # A push landed after this event (a waiting label run, or a re-run of
+            # an old run). The synchronize run for the new head does the work;
+            # this check run sits on a commit that no longer gates anything.
+            print(f"::error::{superseded_message(pr, event_sha, state['headRefOid'])}")
+            return 1
     run(["git", "fetch", "origin", base, f"refs/pull/{pr}/head"], timeout=300)
 
     _, reviewed_sha = existing_review_sha(repo, pr)
+    if (label_event() is not None or event_was_draft()) and not force and not live:
+        # A label run -- or a draft-payload run of a PR that is ready now, e.g. a
+        # re-run of a run from its draft days -- gates exactly like a push run
+        # (its check run is the newest one on the head), but should not pay for
+        # a second review of a head that is being reviewed right now.
+        try:
+            reviewed_sha = wait_for_inflight_review(repo, pr, head, reviewed_sha)
+        except Superseded as e:
+            print(f"::error::{e}")
+            return 1
     # --live always re-runs (it adds a tier); otherwise skip already-reviewed heads.
     if reviewed_sha and head.startswith(reviewed_sha) and not force and not live:
         # RE-COUNT THE EXISTING REVIEW. Returning 0 here would let a re-run
@@ -1345,6 +1523,22 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
                   f"`{SIZE_OVERRIDE_LABEL}`, which has been removed, and without it this PR "
                   f"is over the size limits ({limits_line(stats_now)}). Re-apply "
                   f"`{SIZE_OVERRIDE_LABEL}`, split the PR, or apply `{WAIVER_LABEL}`.")
+            return 1
+        elif TIER_FAILURE_MARKER in prior and (is_unrelated_label_event()
+                                               or event_was_draft()):
+            # An unrelated label is not a request to retry the review: carry the
+            # failure forward (fail closed, waivable) without spending tokens.
+            # A push, or re-running the push's review run, is the retry. Same
+            # for a draft-payload run: it is in `-noreview`, where a push would
+            # not cancel a paid retry.
+            if has_waiver(meta):
+                print(f"::warning::#{pr}: the review at {head[:8]} recorded a FAILED tier; "
+                      f"shipping it unreviewed, waived via `{WAIVER_LABEL}`.")
+                return 0
+            print(f"::error::#{pr}: the review at {head[:8]} recorded a FAILED tier, so "
+                  f"nothing was reviewed. A label event (or a re-run of a draft-era run) "
+                  f"does not retry it; "
+                  f"push, re-run the push's review run, or apply `{WAIVER_LABEL}`.")
             return 1
         elif TIER_FAILURE_MARKER in prior:
             # A failed tier left no verdict to carry forward either -- but unlike

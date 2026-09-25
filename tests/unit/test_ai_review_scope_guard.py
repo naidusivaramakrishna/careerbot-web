@@ -10,6 +10,7 @@ careerbot-ai and careerbot-api.
 """
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -724,3 +725,419 @@ class TestLockfileCheckInTheReview:
         h = _Harness(monkeypatch, self.ROWS, labels=(gate.WAIVER_LABEL,))
         monkeypatch.setattr(gate, "run", fail)
         assert h.run() == 0
+
+
+# --------------------------------------------------------------------------
+# Label-event runs: the job is never skipped, so the script must re-derive the
+# verdict cheaply (#117 went BLOCKED -> CLEAN on a skipped label run)
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def label_env(monkeypatch):
+    def set_label(action, label):
+        monkeypatch.setenv("AI_REVIEW_EVENT_ACTION", action)
+        monkeypatch.setenv("AI_REVIEW_EVENT_LABEL", label)
+    for k in ("AI_REVIEW_EVENT_ACTION", "AI_REVIEW_EVENT_LABEL",
+              "AI_REVIEW_EVENT_HEAD", "AI_REVIEW_EVENT_DRAFT"):
+        monkeypatch.delenv(k, raising=False)
+    return set_label
+
+
+def _scope_guard_prior():
+    return (f"## 🤖 AI Code Review — SCOPE GUARD\n\nnothing was reviewed\n\n"
+            f"<sub>{gate.MARKER.format(sha=HEAD)}</sub>\n<sub>{gate.SCOPE_GUARD_MARKER}</sub>")
+
+
+BLOCKING_PRIOR_FINDINGS = "### [P1] broken\n`src/a.ts:1` x"
+SMALL = [(10, 0, "src/a.ts")]
+
+
+class TestLabelEventDetection:
+    def test_no_label_event_by_default(self, label_env):
+        assert gate.label_event() is None and not gate.is_unrelated_label_event()
+
+    @pytest.mark.parametrize("action", ["labeled", "unlabeled"])
+    def test_label_events(self, label_env, action):
+        label_env(action, "bug")
+        assert gate.label_event() == "bug" and gate.is_unrelated_label_event()
+        for review_label in (gate.WAIVER_LABEL, gate.SIZE_OVERRIDE_LABEL):
+            label_env(action, review_label)
+            assert gate.label_event() == review_label
+            assert not gate.is_unrelated_label_event()
+
+    def test_other_actions_are_not_label_events(self, label_env):
+        label_env("synchronize", "")
+        assert gate.label_event() is None and not gate.is_unrelated_label_event()
+
+
+class TestUnrelatedLabelRederivesTheVerdict:
+    """Unrelated label, review already posted at this head: no model is called,
+    nothing is posted, and the exit code is the prior verdict's."""
+
+    @pytest.fixture(autouse=True)
+    def _label(self, label_env, monkeypatch):
+        label_env("labeled", "bug")
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: False)
+
+    def test_prior_blocking_review_stays_red(self, monkeypatch, capsys):
+        h = _Harness(monkeypatch, SMALL,
+                     prior=_prior_review(override=False, findings=BLOCKING_PRIOR_FINDINGS))
+        assert h.run() != 0
+        assert h.reviewed == [] and h.posted == []
+        assert "::error::" in capsys.readouterr().out
+
+    def test_prior_scope_guard_refusal_stays_red(self, monkeypatch):
+        h = _Harness(monkeypatch, _rows_117(), prior=_scope_guard_prior())
+        assert h.run() == 1
+        assert h.reviewed == [] and h.posted == []
+
+    def test_prior_scope_guard_refusal_can_be_waived(self, monkeypatch):
+        h = _Harness(monkeypatch, _rows_117(), labels=(gate.WAIVER_LABEL,),
+                     prior=_scope_guard_prior())
+        assert h.run() == 0 and h.reviewed == []
+
+    def test_prior_scope_guard_with_size_override_now_reviews(self, monkeypatch):
+        """#117's case: ai-review-large was applied but its own run never
+        reviewed (stale merge ref). The next label run honours it."""
+        h = _Harness(monkeypatch, _rows_117(), labels=(gate.SIZE_OVERRIDE_LABEL,),
+                     prior=_scope_guard_prior())
+        assert h.run() == 0 and len(h.reviewed) == 1
+
+    def test_prior_clean_review_stays_green(self, monkeypatch):
+        h = _Harness(monkeypatch, SMALL, prior=_prior_review(override=False))
+        assert h.run() == 0
+        assert h.reviewed == [] and h.posted == []
+
+    def test_prior_tier_failure_is_not_retried(self, monkeypatch, capsys):
+        prior = _prior_review(override=False) + f"\n<sub>{gate.TIER_FAILURE_MARKER}</sub>"
+        h = _Harness(monkeypatch, SMALL, prior=prior)
+        assert h.run() == 1
+        assert h.reviewed == [] and h.posted == []
+        assert "::error::" in capsys.readouterr().out
+        h = _Harness(monkeypatch, SMALL, labels=(gate.WAIVER_LABEL,), prior=prior)
+        assert h.run() == 0 and h.reviewed == []
+
+    def test_no_review_at_this_head_gets_a_full_review(self, monkeypatch):
+        h = _Harness(monkeypatch, SMALL)
+        assert h.run() == 0
+        assert len(h.reviewed) == 1 and len(h.posted) == 1
+
+    def test_no_review_at_this_head_with_findings_is_red(self, monkeypatch):
+        h = _Harness(monkeypatch, SMALL)
+        h.claude_text = BLOCKING_PRIOR_FINDINGS
+        assert h.run() != 0 and len(h.reviewed) == 1
+
+
+class TestReviewLabelTierFailureStillRetries:
+    def test_waive_label_run_keeps_the_retry(self, monkeypatch, label_env):
+        label_env("labeled", gate.WAIVER_LABEL)
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: False)
+        prior = _prior_review(override=False) + f"\n<sub>{gate.TIER_FAILURE_MARKER}</sub>"
+        h = _Harness(monkeypatch, SMALL, labels=(gate.WAIVER_LABEL,), prior=prior)
+        assert h.run() == 0 and len(h.reviewed) == 1
+
+    def test_push_run_keeps_the_retry(self, monkeypatch, label_env):
+        prior = _prior_review(override=False) + f"\n<sub>{gate.TIER_FAILURE_MARKER}</sub>"
+        h = _Harness(monkeypatch, SMALL, prior=prior)
+        assert h.run() == 0 and len(h.reviewed) == 1
+
+
+class TestLabelRunWaitsForTheInFlightReview:
+    """A PR opened WITH labels fires `opened` plus one `labeled` per label at
+    once; with parallel runners each label run would pay for its own review."""
+
+    def _setup(self, monkeypatch, label_env, in_flight, appears_after):
+        label_env("labeled", "bug")
+        h = _Harness(monkeypatch, SMALL)
+        polls = {"n": 0}
+
+        def review_sha(*a, **k):
+            polls["n"] += 1
+            return (1, HEAD) if polls["n"] > appears_after else (None, None)
+        monkeypatch.setattr(gate, "existing_review_sha", review_sha)
+        monkeypatch.setattr(gate, "existing_review_body",
+                            lambda *a, **k: _prior_review(override=False,
+                                                          findings=BLOCKING_PRIOR_FINDINGS))
+        monkeypatch.setattr(gate, "earlier_run_in_flight", in_flight)
+        self.slept = []
+        monkeypatch.setattr(gate.time, "sleep", self.slept.append)
+        return h
+
+    def test_waits_then_carries_the_posted_verdict(self, monkeypatch, label_env):
+        h = self._setup(monkeypatch, label_env, lambda *a, **k: True, appears_after=2)
+        assert h.run() != 0, "the posted review's P1 blocks"
+        assert h.reviewed == [], "no second review was paid for"
+        assert len(self.slept) == 2
+
+    def test_nothing_in_flight_reviews_immediately(self, monkeypatch, label_env):
+        h = self._setup(monkeypatch, label_env, lambda *a, **k: False, appears_after=99)
+        assert h.run() == 0 and len(h.reviewed) == 1 and self.slept == []
+
+    def test_gives_up_after_the_deadline_and_reviews(self, monkeypatch, label_env, capsys):
+        h = self._setup(monkeypatch, label_env, lambda *a, **k: True, appears_after=99)
+        monkeypatch.setattr(gate, "INFLIGHT_WAIT_SECONDS", 0)
+        assert h.run() == 0 and len(h.reviewed) == 1
+        assert "::warning::" in capsys.readouterr().out
+
+    def test_push_runs_never_wait(self, monkeypatch, label_env):
+        h = _Harness(monkeypatch, SMALL)
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: (
+            _ for _ in ()).throw(AssertionError("only label runs look for other runs")))
+        assert h.run() == 0 and len(h.reviewed) == 1
+
+
+class TestEarlierRunInFlight:
+    def _run(self, monkeypatch, result, run_id="500"):
+        seen = []
+
+        def fake_run(cmd, **kw):
+            seen.append(cmd)
+            if isinstance(result, BaseException):
+                raise result
+            return result
+        monkeypatch.setattr(gate, "run", fake_run)
+        if run_id is None:
+            monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+        else:
+            monkeypatch.setenv("GITHUB_RUN_ID", run_id)
+        return gate.earlier_run_in_flight("o/r", HEAD), seen
+
+    def test_only_earlier_unfinished_runs_of_this_workflow_at_this_head(self, monkeypatch):
+        got, (cmd,) = self._run(monkeypatch, subprocess.CompletedProcess([], 0, "480\n", ""))
+        assert got is True
+        assert f"actions/workflows/{gate.WORKFLOW_FILE}/runs?head_sha={HEAD}" in cmd[2]
+        assert '.status != "completed" and .id < 500' in cmd[-1]
+
+    def test_none_in_flight(self, monkeypatch):
+        got, _ = self._run(monkeypatch, subprocess.CompletedProcess([], 0, "", ""))
+        assert got is False
+
+    def test_without_a_run_id_any_unfinished_run_counts(self, monkeypatch):
+        got, (cmd,) = self._run(monkeypatch, subprocess.CompletedProcess([], 0, "1\n", ""),
+                                run_id=None)
+        assert got is True and ".id <" not in cmd[-1]
+
+    @pytest.mark.parametrize("result", [
+        subprocess.CompletedProcess([], 1, "", "HTTP 403"),
+        subprocess.TimeoutExpired(["gh"], 60),
+        OSError("gh missing"),
+    ])
+    def test_unknown_means_not_in_flight(self, monkeypatch, result):
+        """Then the label run reviews: costs tokens, never a wrong verdict."""
+        got, _ = self._run(monkeypatch, result)
+        assert got is False
+
+
+# --------------------------------------------------------------------------
+# pull_request runs: the job is never skipped (drafts included), so the script
+# decides on the PR's LIVE state. "Re-run all jobs" replays the original payload:
+# a re-run of a draft-era run used to skip again (`draft: true`) and turn the
+# required check green on a head whose real review had failed.
+# --------------------------------------------------------------------------
+
+NEW_HEAD = "fedcba98" * 5
+EVENT_ENV = ("AI_REVIEW_EVENT_ACTION", "AI_REVIEW_EVENT_LABEL",
+             "AI_REVIEW_EVENT_HEAD", "AI_REVIEW_EVENT_DRAFT")
+
+
+@pytest.fixture
+def pr_run(monkeypatch):
+    """Make the NEXT review_one a pull_request run, after _Harness is built.
+
+    `live` is what `gh pr view --json isDraft,headRefOid` answers now: a list of
+    (is_draft, head) answers in call order (the last one repeats), or an
+    exception / CompletedProcess to return instead."""
+    for k in EVENT_ENV:
+        monkeypatch.delenv(k, raising=False)
+
+    def configure(*, action="synchronize", label="", event_head=HEAD,
+                  payload_draft=False, live=((False, HEAD),)):
+        monkeypatch.setenv("AI_REVIEW_EVENT_ACTION", action)
+        monkeypatch.setenv("AI_REVIEW_EVENT_LABEL", label)
+        monkeypatch.setenv("AI_REVIEW_EVENT_HEAD", event_head)
+        monkeypatch.setenv("AI_REVIEW_EVENT_DRAFT", "true" if payload_draft else "false")
+        views, inner = [], gate.run
+
+        def fake_run(cmd, **kw):
+            if cmd[:3] == ["gh", "pr", "view"] and "isDraft,headRefOid" in cmd:
+                views.append(cmd)
+                if isinstance(live, BaseException):
+                    raise live
+                if isinstance(live, subprocess.CompletedProcess):
+                    return live
+                draft, head = live[min(len(views), len(live)) - 1]
+                return subprocess.CompletedProcess(
+                    cmd, 0, json.dumps({"isDraft": draft, "headRefOid": head}), "")
+            return inner(cmd, **kw)
+        monkeypatch.setattr(gate, "run", fake_run)
+        return views
+    return configure
+
+
+def _no_inflight_lookup(monkeypatch):
+    monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: (
+        _ for _ in ()).throw(AssertionError("must not look for other runs")))
+
+
+def _fetched(h):
+    return [c for c in h.cmds if c[:2] == ["git", "fetch"]]
+
+
+class TestLiveDraftState:
+    @pytest.mark.parametrize("payload_draft", [True, False])
+    def test_a_draft_now_exits_0_without_calling_a_model(self, monkeypatch, pr_run,
+                                                         payload_draft):
+        """Blocking review on file, PR is a draft: 0 at once (GitHub will not merge
+        a draft; ready_for_review starts a new run). Covers a ready-era payload on
+        a PR converted back to draft, too."""
+        h = _Harness(monkeypatch, SMALL,
+                     prior=_prior_review(override=False, findings=BLOCKING_PRIOR_FINDINGS))
+        _no_inflight_lookup(monkeypatch)
+        views = pr_run(payload_draft=payload_draft, live=((True, HEAD),))
+        assert h.run() == 0
+        assert h.reviewed == [] and h.posted == [] and _fetched(h) == []
+        (cmd,) = views
+        assert cmd[:4] == ["gh", "pr", "view", "117"] and "o/r" in cmd
+
+    def test_rerun_of_a_draft_era_run_keeps_the_failed_review_red(self, monkeypatch,
+                                                                  pr_run, capsys):
+        """The P1: run D fired while the PR was a draft; it is ready now and its
+        review at this head found a P1. Re-running D must stay red."""
+        h = _Harness(monkeypatch, SMALL,
+                     prior=_prior_review(override=False, findings=BLOCKING_PRIOR_FINDINGS))
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: False)
+        pr_run(action="synchronize", payload_draft=True, live=((False, HEAD),))
+        assert h.run() != 0
+        assert h.reviewed == [] and h.posted == []
+        assert "::error::" in capsys.readouterr().out
+
+    def test_rerun_of_a_draft_era_run_keeps_a_clean_review_green(self, monkeypatch, pr_run):
+        h = _Harness(monkeypatch, SMALL, prior=_prior_review(override=False))
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: False)
+        pr_run(payload_draft=True, live=((False, HEAD),))
+        assert h.run() == 0 and h.reviewed == [] and h.posted == []
+
+    def test_rerun_of_a_draft_era_run_does_not_retry_a_failed_tier(self, monkeypatch,
+                                                                  pr_run):
+        prior = _prior_review(override=False) + f"\n<sub>{gate.TIER_FAILURE_MARKER}</sub>"
+        h = _Harness(monkeypatch, SMALL, prior=prior)
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: False)
+        pr_run(payload_draft=True, live=((False, HEAD),))
+        assert h.run() == 1 and h.reviewed == []
+
+    def test_rerun_of_a_draft_era_run_with_the_scope_guard_refusal_stays_red(
+            self, monkeypatch, pr_run):
+        h = _Harness(monkeypatch, _rows_117(), prior=_scope_guard_prior())
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: False)
+        pr_run(payload_draft=True, live=((False, HEAD),))
+        assert h.run() == 1 and h.reviewed == [] and h.posted == []
+
+    def test_draft_era_run_waits_for_the_in_flight_review(self, monkeypatch, pr_run):
+        h = _Harness(monkeypatch, SMALL)
+        polls = {"n": 0}
+
+        def review_sha(*a, **k):
+            polls["n"] += 1
+            return (1, HEAD) if polls["n"] > 1 else (None, None)
+        monkeypatch.setattr(gate, "existing_review_sha", review_sha)
+        monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: _prior_review(
+            override=False, findings=BLOCKING_PRIOR_FINDINGS))
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: True)
+        monkeypatch.setattr(gate.time, "sleep", lambda s: None)
+        pr_run(payload_draft=True, live=((False, HEAD),))
+        assert h.run() != 0 and h.reviewed == []
+
+    def test_ready_pr_with_no_review_gets_a_full_review(self, monkeypatch, pr_run):
+        h = _Harness(monkeypatch, SMALL)
+        pr_run(action="ready_for_review", live=((False, HEAD),))
+        assert h.run() == 0 and len(h.reviewed) == 1 and len(h.posted) == 1
+
+    @pytest.mark.parametrize("live", [
+        subprocess.CompletedProcess([], 1, "", "HTTP 502"),
+        subprocess.CompletedProcess([], 0, "", ""),
+        subprocess.CompletedProcess([], 0, "not json", ""),
+        subprocess.CompletedProcess([], 0, '{"headRefOid": "%s"}' % HEAD, ""),
+        subprocess.CompletedProcess([], 0, '{"isDraft": "false", "headRefOid": "%s"}' % HEAD, ""),
+        subprocess.TimeoutExpired(["gh"], 60),
+        OSError("gh missing"),
+    ], ids=["exit1", "empty", "garbage", "no-isDraft", "string-isDraft", "timeout", "no-gh"])
+    def test_unreadable_live_state_fails_closed(self, monkeypatch, pr_run, live, capsys):
+        """Never read "could not tell" as "draft" (which exits 0)."""
+        h = _Harness(monkeypatch, SMALL, prior=_prior_review(override=False))
+        pr_run(payload_draft=True, live=live)
+        with pytest.raises(RuntimeError, match="failing closed"):
+            h.run()
+        assert h.reviewed == [] and h.posted == []
+        monkeypatch.setattr(sys, "argv", ["ai_pr_review.py", "--repo", "o/r", "--pr", "117"])
+        assert gate.main() == 1
+        assert "::error::" in capsys.readouterr().out
+
+    def test_non_pull_request_runs_do_not_look(self, monkeypatch, pr_run):
+        """/ai-review comments and workflow_dispatch set no event head: a draft
+        can still be reviewed on request."""
+        h = _Harness(monkeypatch, SMALL)
+        views = pr_run()
+        monkeypatch.delenv("AI_REVIEW_EVENT_HEAD")
+        monkeypatch.delenv("AI_REVIEW_EVENT_ACTION")
+        assert h.run() == 0 and len(h.reviewed) == 1 and views == []
+
+
+class TestStaleEventHead:
+    """Decision: a pull_request run whose head moved exits NON-ZERO without a
+    review. Its check run sits on the event head, which no longer gates the
+    merge; the synchronize run for the new head does the work. Non-zero, not 0:
+    a green check on a commit must mean "reviewed, nothing blocking" there, and
+    this run established neither."""
+
+    @pytest.mark.parametrize("event_head,live_head", [
+        (HEAD, NEW_HEAD),   # pushed while this run was queued
+        (NEW_HEAD, HEAD),   # re-run of an older run
+    ])
+    def test_moved_head_is_superseded_without_a_review(self, monkeypatch, pr_run, capsys,
+                                                       event_head, live_head):
+        h = _Harness(monkeypatch, SMALL)
+        _no_inflight_lookup(monkeypatch)
+        pr_run(action="labeled", label="bug", event_head=event_head,
+               live=((False, live_head),))
+        assert h.run() == 1
+        assert h.reviewed == [] and h.posted == [] and _fetched(h) == []
+        out = capsys.readouterr().out
+        assert "::error::" in out and "superseded" in out
+
+    def test_draft_wins_over_a_moved_head(self, monkeypatch, pr_run):
+        h = _Harness(monkeypatch, SMALL)
+        pr_run(event_head=HEAD, live=((True, NEW_HEAD),))
+        assert h.run() == 0 and h.reviewed == []
+
+    def _waiting(self, monkeypatch, in_flight):
+        h = _Harness(monkeypatch, SMALL)
+        monkeypatch.setattr(gate, "existing_review_sha", lambda *a, **k: (None, None))
+        answers = iter(in_flight)
+        monkeypatch.setattr(gate, "earlier_run_in_flight", lambda *a, **k: next(answers))
+        self.slept = []
+        monkeypatch.setattr(gate.time, "sleep", self.slept.append)
+        return h
+
+    def test_push_during_the_wait_stops_the_label_run(self, monkeypatch, pr_run, capsys):
+        """#126 P2: the push cancels the review being waited for; the label run
+        (in `-noreview`, so nothing cancels it) must not review the dead head."""
+        h = self._waiting(monkeypatch, [True, True, True])
+        views = pr_run(action="labeled", label="bug",
+                       live=((False, HEAD), (False, NEW_HEAD)))
+        assert h.run() == 1
+        assert h.reviewed == [] and h.posted == [] and len(self.slept) == 1
+        assert len(views) == 2 and "superseded" in capsys.readouterr().out
+
+    def test_waited_for_run_ends_without_posting_after_a_push(self, monkeypatch, pr_run):
+        """The poll right after the sleep still saw the old head; the push lands
+        before the in-flight lookup, which then finds nothing."""
+        h = self._waiting(monkeypatch, [True, False])
+        views = pr_run(action="labeled", label="bug",
+                       live=((False, HEAD), (False, HEAD), (False, NEW_HEAD)))
+        assert h.run() == 1 and h.reviewed == [] and len(views) == 3
+
+    def test_waited_for_run_ends_without_posting_at_the_same_head(self, monkeypatch, pr_run):
+        """No push: the earlier run died without posting, so this run reviews."""
+        h = self._waiting(monkeypatch, [True, False])
+        pr_run(action="labeled", label="bug", live=((False, HEAD),))
+        assert h.run() == 0 and len(h.reviewed) == 1

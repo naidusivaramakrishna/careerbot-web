@@ -10,9 +10,14 @@ on:
     # here for the same reason: a maintainer applies it to lift the size caps on
     # a PR the scope guard refused, and that must start the review. ONLY
     # MAINTAINERS should apply `ai-review-large` -- the report names who did
-    # (see SIZE_OVERRIDE_LABEL in scripts/ai_review/ai_pr_review.py). The job
-    # condition below ignores every other label so this does not re-review on
-    # unrelated ones.
+    # (see SIZE_OVERRIDE_LABEL in scripts/ai_review/ai_pr_review.py).
+    # EVERY other label event runs the ai-review job too -- it must, because
+    # `ai-review` is a required check, a SKIPPED job counts as a PASSING check
+    # run, and the newest run on the head commit is the one that counts: when
+    # unrelated labels skipped the job, adding any label to a PR whose review
+    # had failed turned it mergeable, unreviewed (#117). Such a run does not
+    # re-review: the script re-derives the verdict from the review already
+    # posted for the head (see label_event in ai_pr_review.py).
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   issue_comment:
     # REQUIRES A MASTER SYNC: GitHub runs issue_comment (and schedule) workflows
@@ -36,6 +41,9 @@ on:
 
 permissions:
   contents: read
+  # Label runs look up whether an earlier run is still reviewing this head
+  # (earlier_run_in_flight in ai_pr_review.py) instead of reviewing it twice.
+  actions: read
   pull-requests: write
   issues: write
 
@@ -52,20 +60,25 @@ permissions:
 # cancel-in-progress came from the master copy of this workflow, which already
 # had the fix. The group below has since diverged from master's (see there).
 concurrency:
-  # pull_request runs whose ai-review job is SKIPPED (draft PR, or a label other
-  # than ai-review-waive / ai-review-large) get their own `-noreview` group. Concurrency applies to
-  # the whole RUN, so inside the review group such a run would either cancel the
-  # in-flight review (cancel-in-progress) or -- whatever cancel-in-progress says --
-  # replace a PENDING requested /ai-review run, because GitHub keeps at most one
-  # pending run per group. In their own group they only supersede each other.
+  # pull_request runs that do not START a review -- a draft PR (job runs, sees
+  # the PR is still a draft and exits 0 without calling a model), or a label
+  # other than ai-review-waive / ai-review-large (job runs, but only re-derives
+  # the verdict already posted for the head; it waits for an in-flight review
+  # rather than repeating it) -- get their own `-noreview` group. Concurrency applies to the whole RUN, so inside the review group such
+  # a run would either cancel the in-flight review (cancel-in-progress) or --
+  # whatever cancel-in-progress says -- replace a PENDING requested /ai-review
+  # run, because GitHub keeps at most one pending run per group. In their own
+  # group they only supersede each other.
   # issue_comment runs that are NOT a trusted `/ai-review` on a PR (an ordinary
   # comment, or `/ai-review` from a CONTRIBUTOR/NONE) get `-comment` for the same
   # reason: every job in them is skipped, yet in the review group they would
   # replace a pending requested /ai-review; in `-noreview` they would replace a
   # pending draft run. Only a trusted `/ai-review` comment enters the review group.
   # (Takes effect for comments only after the master sync noted under `on:`.)
-  # The two conditions are the negations of the pull_request and issue_comment
-  # clauses of the ai-review job `if` below; keep them in sync
+  # The issue_comment condition is the negation of the issue_comment clause of
+  # the ai-review job `if` below; the pull_request condition is the payload's
+  # draft flag (the script's draft exit, event_was_draft) plus the
+  # unrelated-label case (is_unrelated_label_event). Keep them in sync
   # (tests/unit/test_ci_draft_policy.py).
   group: >-
     ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}${{
@@ -99,13 +112,36 @@ jobs:
   ai-review:
     # The issue_comment clause (incl. the author_association gate) is live only
     # once master carries this file -- see the note under `on: issue_comment`.
+    #
+    # NEVER skip this job for ANY pull_request event, whatever the action, the
+    # label or the draft flag: `ai-review` is a required check and a skipped job
+    # is a passing check run, so any skipped pull_request run turns the gate
+    # green (#117). Unrelated-label runs stay cheap in the script (label_event).
+    # Drafts are NOT skipped here either: "Re-run all jobs" replays the ORIGINAL
+    # event payload, so re-running a run from when the PR was a draft kept
+    # `draft: true`, skipped again, and that skipped run became the newest
+    # `ai-review` check run on a head whose real review had failed. Instead the
+    # script reads the PR's LIVE draft state (live_pr_state): still a draft ->
+    # exit 0 at once, no model call (GitHub refuses to merge a draft, and
+    # `ready_for_review` starts a new run); ready -> the verdict already posted
+    # for the head is re-derived, exactly as for a label run. The draft flag is
+    # still used above, only to keep such runs in the `-noreview` group.
+    #
+    # LIMIT: a re-run replays the original run's commit, and with it that
+    # commit's copy of this file. A skipped draft/label run created BEFORE this
+    # fix (e.g. 36172176433 on #117) can still be re-run into a skipped, passing
+    # `ai-review`; nothing in this file can reach those runs. The remedy is
+    # branch protection (who may re-run and merge) plus this fix, which covers
+    # every run created from now on; an open PR whose newest check run is such
+    # a pre-fix skip needs a fresh pull_request event (a push, or a label) once
+    # this is merged.
+    # issue_comment runs cannot open this hole: their check runs attach to the
+    # default branch's head commit, not the PR's head (checked on #117: run
+    # 36173496504 has head_sha 94e3f8e = master), so a skipped comment run never
+    # touches the PR's required check.
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.draft == false &&
-       (github.event.action != 'labeled' && github.event.action != 'unlabeled'
-        || github.event.label.name == 'ai-review-waive'
-        || github.event.label.name == 'ai-review-large')) ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
@@ -136,6 +172,15 @@ jobs:
           fi
 
       - name: Run review (T1 static + T2 build/lint)
+        env:
+          # Via env, not ${{ }} in the script: a label name is user-supplied text.
+          AI_REVIEW_EVENT_ACTION: ${{ github.event_name == 'pull_request' && github.event.action || '' }}
+          AI_REVIEW_EVENT_LABEL: ${{ github.event.label.name }}
+          # The head this run's check run is attached to, and whether the PR was
+          # a draft when the event fired. Both are from the (possibly replayed)
+          # payload; the script compares them with the PR's live state.
+          AI_REVIEW_EVENT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          AI_REVIEW_EVENT_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'true' || 'false' }}
         run: |
           python3 scripts/ai_review/ai_pr_review.py \
             --repo "${{ github.repository }}" \

@@ -238,15 +238,45 @@ def test_evaluator_matches_github_loose_equality():
     assert not _cond("github.event.pull_request.draft", push_event())
 
 
+REVIEW_LABELS = ("ai-review-waive", "ai-review-large")
+
+
+def _unrelated_label(ctx):
+    ev = ctx["event"]
+    return (ev["action"] in ("labeled", "unlabeled")
+            and ev["label"]["name"] not in REVIEW_LABELS)
+
+
 @pytest.mark.parametrize("ctx", PULL_REQUEST_EVENTS, ids=_ids(PULL_REQUEST_EVENTS))
-def test_pull_request_run_joins_review_group_only_if_it_reviews(ai_review, ctx):
-    """A run whose ai-review job is SKIPPED (draft push, unrelated label) must
+def test_pull_request_run_joins_review_group_only_if_it_starts_a_review(ai_review, ctx):
+    """A run that does not START a review -- a draft push (job runs, exits 0 on
+    the live draft state) or an unrelated label (job runs, but only re-derives
+    the posted verdict) -- must
     not enter the per-PR review group. Concurrency is workflow-level: inside the
     group it either cancels the in-flight review (cancel-in-progress: true) or,
     whatever the flag says, replaces a PENDING requested /ai-review run -- GitHub
     keeps at most one pending run per group."""
-    reviews = _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
-    assert (_group(ai_review, ctx) == REVIEW_GROUP) is reviews
+    starts_review = (not ctx["event"]["pull_request"]["draft"]
+                     and not _unrelated_label(ctx))
+    assert (_group(ai_review, ctx) == REVIEW_GROUP) is starts_review
+
+
+@pytest.mark.parametrize("ctx", PULL_REQUEST_EVENTS, ids=_ids(PULL_REQUEST_EVENTS))
+def test_ai_review_is_never_skipped_for_a_pull_request(ai_review, ctx):
+    """`ai-review` is a REQUIRED check and GitHub counts a SKIPPED job as a
+    passing check run; the newest run on the head is the one that counts. So a
+    pull_request run whose job is skipped turns the gate green with no review --
+    #117 went BLOCKED -> CLEAN on a label run (36172176433) that skipped it.
+    Drafts included: "Re-run all jobs" replays the original payload, so a re-run
+    of a draft-era run kept `draft: true` and skipped again on a head whose real
+    review had failed. The script reads the LIVE draft state instead."""
+    assert _cond(ai_review["jobs"]["ai-review"]["if"], ctx) is True
+
+
+def test_ai_review_job_if_does_not_look_at_the_draft_flag(ai_review):
+    """The payload's draft flag is stale on a re-run; only the concurrency group
+    (never the job `if`) may use it."""
+    assert "draft" not in ai_review["jobs"]["ai-review"]["if"]
 
 
 def plain_issue_comment_event(body="/ai-review", association="OWNER"):
@@ -331,16 +361,85 @@ def test_review_labels_start_a_review(ai_review, label):
     assert _group(ai_review, ctx) == REVIEW_GROUP
 
 
-def test_unrelated_label_does_not_start_a_review(ai_review):
-    ctx = pr_event("labeled", draft=False, label="ai-review-largest")
-    assert not _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
-    assert _group(ai_review, ctx) != REVIEW_GROUP
+@pytest.mark.parametrize("action", ["labeled", "unlabeled"])
+@pytest.mark.parametrize("label", ["bug", "ai-review-largest", "documentation"])
+def test_unrelated_label_runs_the_gate_outside_the_review_group(ai_review, action, label):
+    """The job RUNS (a skipped job would pass the required check), but the run
+    stays out of the review group, so it can neither cancel the in-flight review
+    nor displace a pending requested one. It lands with draft runs in
+    `-noreview`, where runs only supersede each other."""
+    ctx = pr_event(action, draft=False, label=label)
+    assert _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
+    group = _group(ai_review, ctx)
+    assert group != REVIEW_GROUP
+    assert group == _group(ai_review, pr_event("synchronize", True)) == f"{REVIEW_GROUP}-noreview"
+    # Nothing in the review group is affected by whatever it cancels.
+    assert _group(ai_review, pr_event("synchronize", False)) == REVIEW_GROUP
+    assert _group(ai_review, comment_event()) == REVIEW_GROUP
+
+
+def test_draft_label_event_runs_outside_the_review_group(ai_review):
+    ctx = pr_event("labeled", draft=True, label="bug")
+    assert _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
+    assert _group(ai_review, ctx) == f"{REVIEW_GROUP}-noreview"
+
+
+def _review_step(wf):
+    steps = wf["jobs"]["ai-review"]["steps"]
+    return next(s for s in steps if "ai_pr_review.py" in s.get("run", ""))
+
+
+@pytest.mark.parametrize("ctx,action,label", [
+    (pr_event("labeled", False, "bug"), "labeled", "bug"),
+    (pr_event("unlabeled", False, "ai-review-large"), "unlabeled", "ai-review-large"),
+    (pr_event("synchronize", False), "synchronize", ""),
+    (comment_event(), "", ""),
+])
+def test_review_step_is_told_about_label_events(ai_review, ctx, action, label):
+    """The script's label-event path (label_event) reads these two variables.
+    They go through env, not ${{ }} in `run:` -- a label name is user text."""
+    step = _review_step(ai_review)
+    assert "github.event.label" not in step["run"]
+    env = {k: _render(v, ctx) for k, v in step["env"].items()}
+    assert env["AI_REVIEW_EVENT_ACTION"] == action
+    assert env["AI_REVIEW_EVENT_LABEL"] == label
+
+
+def _with_head(ctx, sha):
+    ctx = {**ctx, "event": {**ctx["event"]}}
+    ctx["event"]["pull_request"] = {**ctx["event"]["pull_request"], "head": {"sha": sha}}
+    return ctx
+
+
+@pytest.mark.parametrize("ctx,head,draft", [
+    (_with_head(pr_event("synchronize", True), "a" * 40), "a" * 40, "true"),
+    (_with_head(pr_event("labeled", False, "bug"), "b" * 40), "b" * 40, "false"),
+    (_with_head(pr_event("ready_for_review", False), "c" * 40), "c" * 40, "false"),
+    (comment_event(), "", "false"),
+])
+def test_review_step_is_told_the_event_head_and_draft_flag(ai_review, ctx, head, draft):
+    """live_pr_state is compared with these: the payload head (the commit the
+    check run is attached to) and the payload draft flag, which a re-run replays.
+    Only pull_request runs set a head -- that is how the script tells them apart."""
+    env = {k: _render(v, ctx) for k, v in _review_step(ai_review)["env"].items()}
+    assert env["AI_REVIEW_EVENT_HEAD"] == head
+    assert env["AI_REVIEW_EVENT_DRAFT"] == draft
+
+
+def test_workflow_can_read_its_own_runs(ai_review):
+    """earlier_run_in_flight lists this workflow's runs; with an explicit
+    `permissions:` block every scope not named is `none`."""
+    assert ai_review["permissions"].get("actions") in ("read", "write")
 
 
 def test_draft_pr_is_not_ai_reviewed_until_ready(ai_review):
+    """The draft run's job RUNS (never skipped) but outside the review group; the
+    script exits 0 on the live draft state. ready_for_review starts the review."""
     job_if = ai_review["jobs"]["ai-review"]["if"]
-    assert not _cond(job_if, pr_event("synchronize", True))
+    assert _cond(job_if, pr_event("synchronize", True))
+    assert _group(ai_review, pr_event("synchronize", True)) == f"{REVIEW_GROUP}-noreview"
     assert _cond(job_if, pr_event("ready_for_review", False))
+    assert _group(ai_review, pr_event("ready_for_review", False)) == REVIEW_GROUP
     assert "ready_for_review" in ai_review["on"]["pull_request"]["types"]
 
 
