@@ -19,7 +19,7 @@ load_config() for the schema + defaults). This one script serves every repo.
 
 Idempotency: each comment carries `<!-- ai-review:<headSHA> -->`. A PR whose
 current head already has a review comment is SKIPPED (unless --force / --live),
-so the 30-min sweep only reviews new/changed PRs. Each NEW commit gets its own
+so a manual `--all` sweep only reviews new/changed PRs. Each NEW commit gets its own
 fresh review comment (visible per-commit history); a forced/live re-run of the
 same head edits that commit's comment in place instead of posting a duplicate.
 
@@ -1021,11 +1021,9 @@ def main():
     if errors:
         note = f"{errors} PR review(s) errored. A crashed review is not a clean one."
         if a.all:
-            # Same reasoning as the `blocked` branch below: the 6-hourly sweep
-            # gates nothing (each PR's own pull_request run is the required
-            # check), and one transient `gh` failure on some OTHER PR would
-            # make the scheduled job permanently red and teach everyone to
-            # ignore it.
+            # The manual --all sweep gates nothing (each PR's own pull_request
+            # run is the required check), so a failure on some OTHER PR is
+            # reported without misrepresenting the current PR's required gate.
             print(f"::warning::{note} Each PR's own ai-review check is what gates its merge.")
         else:
             print(f"::error::{note} Failing the check (no silent green).")
@@ -1033,10 +1031,8 @@ def main():
     if blocked:
         detail = ", ".join(f"#{pr} ({n} blocking)" for pr, n in sorted(blocked.items()))
         if a.all:
-            # The 6-hourly sweep reviews every open PR. Failing it because some
-            # OTHER PR has findings makes the scheduled job permanently red and
-            # teaches everyone to ignore it -- and it gates nothing: each PR's
-            # own pull_request run is the required check.
+            # A manual --all sweep reviews every open PR, but gates nothing:
+            # each PR's own pull_request run is the required check.
             print(f"::warning::open PRs with blocking findings: {detail}. Each PR's own "
                   f"ai-review check is what gates its merge.")
             return 0
