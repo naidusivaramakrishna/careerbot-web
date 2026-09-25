@@ -484,6 +484,12 @@ function ATSLoginReport() {
       <div style={{ maxWidth: 480, width: "100%", padding: 28, textAlign: "center", background: "#fff", border: "1px solid #fecaca", borderRadius: 16, boxShadow: "0 8px 26px rgba(15,23,42,0.08)" }}>
         <XCircle style={{ width: 32, height: 32, color: "#dc2626", margin: "0 auto 12px" }} />
         <h2 style={{ margin: 0, color: "#172554", fontSize: 20 }}>Could not prepare ATS fixes</h2>
+        {/* The scan itself succeeded: keep its score visible even though the fix workspace could not be set up. */}
+        {scoreData.FinalWeightedScore > 0 && (
+          <p data-testid="ats-score-fallback" style={{ margin: "12px 0 0", color: "#172554", fontSize: 15, fontWeight: 700 }}>
+            Your ATS score: {Math.round(scoreData.FinalWeightedScore)} / 100
+          </p>
+        )}
         <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 13, lineHeight: 1.55 }}>{workspaceError}</p>
         <button type="button" onClick={() => { setWorkspaceError(null); setAtsWorkspaceId(null); }} style={{ marginTop: 20, padding: "10px 16px", border: "none", borderRadius: 8, background: "#1677e8", color: "#fff", fontWeight: 800, cursor: "pointer" }}>Try again</button>
       </div>

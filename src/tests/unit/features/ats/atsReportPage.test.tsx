@@ -122,6 +122,17 @@ describe("ATS report workspace setup", () => {
     expect(JSON.parse(readBack!).enhanced_resume_id).toBe("enh-2");
   });
 
+  it("still shows the scanned ATS score when workspace setup fails", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ finalWeightedScore: 64 })));
+    vi.mocked(enhanceResume).mockRejectedValueOnce(new Error("Service unavailable"));
+
+    render(<ATSLoginReportPage />);
+
+    await waitFor(() => expect(screen.getByText("Could not prepare ATS fixes")).toBeTruthy());
+    expect(screen.getByTestId("ats-score-fallback").textContent).toMatch(/64\s*\/\s*100/);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
   describe("preview toolbar buttons", () => {
     const renderWorkspace = async () => {
       window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-1" })));
