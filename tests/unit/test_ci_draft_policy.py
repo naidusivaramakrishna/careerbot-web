@@ -191,7 +191,8 @@ PULL_REQUEST_EVENTS = [
     for action, label in [
         ("opened", None), ("synchronize", None), ("reopened", None),
         ("ready_for_review", None), ("labeled", "ai-review-waive"),
-        ("unlabeled", "ai-review-waive"), ("labeled", "bug"), ("unlabeled", "bug"),
+        ("unlabeled", "ai-review-waive"), ("labeled", "ai-review-large"),
+        ("unlabeled", "ai-review-large"), ("labeled", "bug"), ("unlabeled", "bug"),
     ]
 ]
 
@@ -209,6 +210,12 @@ def ai_review():
 
 @pytest.fixture(scope="module")
 def frontend_ci():
+    # `master` (the default branch) carries the ai-review workflow -- it is the
+    # copy issue_comment runs use -- but not frontend-ci.yml. This file is kept
+    # identical on both branches, so the frontend-ci policy tests skip where the
+    # workflow they test does not exist rather than fail on a missing file.
+    if not FRONTEND_CI.exists():
+        pytest.skip(f"{FRONTEND_CI.relative_to(ROOT)} is not on this branch")
     return _load(FRONTEND_CI)
 
 
@@ -313,6 +320,21 @@ def test_draft_pushes_supersede_each_other(ai_review):
     first, second = pr_event("synchronize", True), pr_event("synchronize", True)
     assert _group(ai_review, first) == _group(ai_review, second) != REVIEW_GROUP
     assert _cancels(ai_review, second) is True
+
+
+@pytest.mark.parametrize("label", ["ai-review-waive", "ai-review-large"])
+def test_review_labels_start_a_review(ai_review, label):
+    """Applying `ai-review-large` (size override) or `ai-review-waive` must start
+    a run that reviews; the label is otherwise inert until the next push."""
+    ctx = pr_event("labeled", draft=False, label=label)
+    assert _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
+    assert _group(ai_review, ctx) == REVIEW_GROUP
+
+
+def test_unrelated_label_does_not_start_a_review(ai_review):
+    ctx = pr_event("labeled", draft=False, label="ai-review-largest")
+    assert not _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
+    assert _group(ai_review, ctx) != REVIEW_GROUP
 
 
 def test_draft_pr_is_not_ai_reviewed_until_ready(ai_review):

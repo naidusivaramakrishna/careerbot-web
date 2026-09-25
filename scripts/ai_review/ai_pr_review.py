@@ -26,10 +26,35 @@ same head edits that commit's comment in place instead of posting a duplicate.
 Never merges. Advisory. A human approves.
 """
 from __future__ import annotations
-import argparse, json, os, re, signal, subprocess, sys, tempfile, time, traceback, urllib.request
-from pathlib import Path
+import argparse, codecs, fnmatch, json, os, re, signal, subprocess, sys, tempfile, time, traceback, urllib.request
+from pathlib import Path, PurePosixPath
 
 MAX_FILES, MAX_ADDED_LINES, MAX_COMMITS, MAX_AUTHORS = 120, 8000, 40, 4
+
+# Machine-generated files whose ADDED lines do not count toward MAX_ADDED_LINES.
+# A regenerated lockfile can add ~17k lines on its own (#114) and says nothing
+# about how much there is for a reviewer to read. They still count as FILES,
+# and every report lists each one with its line count, so nothing is hidden --
+# they just do not trip the added-lines cap, and the review tiers are told not
+# to spend tokens reading them line by line.
+# Deliberately NOT here: *.svg and CSS. Both are hand-edited often enough that a
+# large change to them is something a reviewer should see counted.
+# A pattern without "/" matches the basename; "**/" matches any directory depth
+# (including none).
+GENERATED_FILE_PATTERNS = (
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "npm-shrinkwrap.json",
+    "*.min.js", "*.min.css", "*.map", "**/__snapshots__/*.snap",
+)
+
+# Applying this label lifts the four size caps (files / added lines / commits /
+# authors) for ONE PR: the review runs anyway and the report says, at the top,
+# that the limits were overridden and who applied the label. Only MAINTAINERS
+# should apply it -- it is a judgement that a large diff is still reviewable
+# (e.g. one mechanical rename), not a way to skip review. GitHub records who
+# added it, and the report repeats that. It is NOT `ai-review-waive` (below):
+# the waiver ships a PR with findings open or unreviewed; this label gets it
+# reviewed.
+SIZE_OVERRIDE_LABEL = "ai-review-large"
 MARKER = "<!-- ai-review:{sha} -->"
 MARKER_RE = re.compile(r"<!-- ai-review:([0-9a-f]{7,40}) -->")
 HERE = Path(__file__).resolve().parent
@@ -133,25 +158,116 @@ def pr_context(repo, pr):
 
 
 # ── T0 scope guard ──────────────────────────────────────────────────────────
+def _numstat_path(field: str) -> str:
+    """Destination path of a `git diff --numstat` path field.
+
+    Renames print as `old => new` or `dir/{old => new}/f`; the file that ends
+    up in the tree is the one that matters. A path git had to quote (non-ASCII
+    or special characters; core.quotePath) is C-unescaped: "caf\\303\\251/x"
+    becomes "café/x". A quoted rename is printed as two separately quoted full
+    paths (`"a" => "b"`), never in the brace form.
+    """
+    p = field.strip()
+    if " => " in p:
+        if p.startswith('"') or "{" not in p:
+            p = p.split(" => ", 1)[1].strip()
+        else:
+            p = re.sub(r"\{[^{}]* => ([^{}]*)\}", r"\1", p).replace("//", "/")
+    if len(p) >= 2 and p[0] == p[-1] == '"':
+        try:
+            p = codecs.escape_decode(p[1:-1].encode("ascii"))[0].decode("utf-8", "replace")
+        except (UnicodeEncodeError, ValueError):
+            p = p[1:-1]
+    return p
+
+
+def is_generated(path: str) -> bool:
+    """Does `path` match GENERATED_FILE_PATTERNS?"""
+    parts = PurePosixPath(_numstat_path(path)).parts
+    if not parts:
+        return False
+    for pat in GENERATED_FILE_PATTERNS:
+        segs = pat.split("/")
+        if segs[0] == "**":
+            segs = segs[1:]
+        elif len(segs) > 1 and len(segs) != len(parts):
+            continue  # an anchored multi-segment pattern must match the whole path
+        if len(segs) > len(parts):
+            continue
+        if all(fnmatch.fnmatchcase(p, s) for p, s in zip(parts[-len(segs):], segs)):
+            return True
+    return False
+
+
+def size_stats(numstat: str) -> dict:
+    """Split `git diff --numstat` output into reviewable and generated sizes.
+
+    Binary files print `-\t-\t<path>` and count 0 added lines, as before.
+    """
+    files, added, added_total, removed, excluded = 0, 0, 0, 0, []
+    for line in numstat.splitlines():
+        if not line.strip():
+            continue
+        files += 1
+        p = line.split("\t", 2)
+        n = int(p[0]) if p[0].isdigit() else 0
+        if len(p) > 1 and p[1].isdigit():
+            removed += int(p[1])
+        added_total += n
+        path = p[2] if len(p) > 2 else ""
+        if is_generated(path):
+            excluded.append((_numstat_path(path), n))
+        else:
+            added += n
+    return {"files": files, "added": added, "added_total": added_total,
+            "removed": removed, "excluded": excluded,
+            "excluded_added": sum(n for _p, n in excluded)}
+
+
+# (stats key, label, cap) -- the order the limits are reported in.
+_SIZE_LIMITS = (("added", "added lines", MAX_ADDED_LINES), ("files", "files", MAX_FILES),
+                ("commits", "commits", MAX_COMMITS), ("authors", "authors", MAX_AUTHORS))
+
+
+def tripped_limits(stats):
+    """(tripped, within): 'added lines 9,204 > 8,000' / 'files 13 ≤ 120 ✓'."""
+    tripped, within = [], []
+    for key, label, cap in _SIZE_LIMITS:
+        v = int(stats.get(key) or 0)
+        if v > cap:
+            tripped.append(f"{label} {v:,} > {cap:,}")
+        else:
+            within.append(f"{label} {v:,} ≤ {cap:,} ✓")
+    return tripped, within
+
+
+def limits_line(stats) -> str:
+    """'added lines 9,204 > 8,000 — files 13 ≤ 120 ✓, commits 1 ≤ 40 ✓, ...'"""
+    tripped, within = tripped_limits(stats)
+    return "; ".join(tripped) + (" — " if tripped and within else "") + ", ".join(within)
+
+
+def size_line(stats, limit=40) -> str:
+    """'reviewable +X lines; excluded generated +Y lines: `a` (+n), ...'"""
+    excl = stats.get("excluded") or []
+    shown = ", ".join(f"`{p}` (+{n:,})" for p, n in excl[:limit])
+    if len(excl) > limit:
+        shown += f", …and {len(excl) - limit} more"
+    return (f"reviewable +{int(stats.get('added') or 0):,} lines; excluded generated "
+            f"+{int(stats.get('excluded_added') or 0):,} lines: {shown or 'none'}")
+
+
 def scope_guard(base, head):
-    files = [l for l in out(["git", "diff", "--numstat", f"{base}...{head}"]).splitlines() if l.strip()]
-    added = sum(int(c.split("\t")[0]) for c in files if c.split("\t")[0].isdigit())
-    removed = sum(int(p[1]) for p in (c.split("\t") for c in files)
-                  if len(p) > 1 and p[1].isdigit())
+    stats = size_stats(out(["git", "diff", "--numstat", f"{base}...{head}"]))
     # Fully-deleted files (D) — surfaced prominently so a human confirms the
     # removal was intentional (cleanup/optimization) and not an accidental drop.
-    deleted = [l for l in out(["git", "diff", "--diff-filter=D", "--name-only",
-                               f"{base}...{head}"]).splitlines() if l.strip()]
-    commits = int(out(["git", "rev-list", "--count", f"{base}..{head}"]) or 0)
-    authors = len({a for a in out(["git", "log", "--format=%an", f"{base}..{head}"]).splitlines() if a})
-    stats = {"files": len(files), "added": added, "removed": removed,
-             "deleted": deleted, "commits": commits, "authors": authors}
-    reasons = []
-    if stats["files"] > MAX_FILES: reasons.append(f"{stats['files']} files>{MAX_FILES}")
-    if stats["added"] > MAX_ADDED_LINES: reasons.append(f"+{stats['added']}>{MAX_ADDED_LINES}")
-    if stats["commits"] > MAX_COMMITS: reasons.append(f"{stats['commits']} commits>{MAX_COMMITS}")
-    if stats["authors"] > MAX_AUTHORS: reasons.append(f"{stats['authors']} authors>{MAX_AUTHORS}")
-    return (not reasons), "; ".join(reasons), stats
+    stats["deleted"] = [l for l in out(["git", "diff", "--diff-filter=D", "--name-only",
+                                        f"{base}...{head}"]).splitlines() if l.strip()]
+    stats["commits"] = int(out(["git", "rev-list", "--count", f"{base}..{head}"]) or 0)
+    stats["authors"] = len({a for a in out(["git", "log", "--format=%an",
+                                            f"{base}..{head}"]).splitlines() if a})
+    tripped, _within = tripped_limits(stats)
+    return (not tripped), "; ".join(tripped), stats
 
 
 # ── T1 static (Claude + Codex) ──────────────────────────────────────────────
@@ -168,7 +284,7 @@ description leaves a contract/back-compat question open, make verifying it a fin
 === AUTHOR INTENT (PR description + conversation) ===
 {context}
 === END INTENT ===
-
+{generated}
 DELETIONS: if this diff DELETES files or removes functions/classes/exports/routes,
 treat each removal as suspect until proven safe. For EVERY deleted file or removed
 symbol, grep the repo AT head for remaining importers/callers/route-registrations/
@@ -182,7 +298,27 @@ then each finding as [sev] title | file:line | quoted code | why | fix. Add an S
 intentional? orphaned refs?). Evidence-only; no speculation."""
 
 
-def claude_pass(base, head, context):
+def generated_note(stats) -> str:
+    """Prompt note naming the generated files in this diff, or "".
+
+    The review tiers read the diff themselves (`git diff base...head`), so the
+    scope guard's file list never feeds them directly. Without this note a
+    regenerated lockfile is ~17k lines of tokens spent on nothing; with it the
+    files are still named, so a model can flag one whose PRESENCE is wrong
+    (e.g. a lockfile change with no matching package.json change).
+    """
+    excl = (stats or {}).get("excluded") or []
+    if not excl:
+        return ""
+    names = "\n".join(f"- {p} (+{n})" for p, n in excl[:100])
+    more = f"\n- ...and {len(excl) - 100} more" if len(excl) > 100 else ""
+    return ("\nGENERATED FILES (lockfiles / minified / source maps / snapshots): do NOT read "
+            "these line by line -- they are machine-generated. Only flag one if its presence "
+            "or absence is itself wrong (e.g. lockfile changed without a matching manifest "
+            f"change, or a manifest changed without its lockfile):\n{names}{more}\n")
+
+
+def claude_pass(base, head, context, generated=""):
     """(review_text, ok). `ok` is False when the primary reviewer did not run.
 
     run() never raises on a non-zero exit, so a `claude` CLI that is present
@@ -193,7 +329,8 @@ def claude_pass(base, head, context):
     about a PR nothing reviewed. codex_pass already handles exactly this for
     the cross-check tier; the primary tier had no equivalent.
     """
-    r = run(["claude", "-p", CLAUDE_PROMPT.format(base=base, head=head, context=context)],
+    r = run(["claude", "-p", CLAUDE_PROMPT.format(base=base, head=head, context=context,
+                                                   generated=generated)],
             timeout=900)
     text = (r.stdout or "").strip()
     if r.returncode != 0 or not text:
@@ -203,7 +340,7 @@ def claude_pass(base, head, context):
     return text, True
 
 
-def codex_pass(base, head, claude, context):
+def codex_pass(base, head, claude, context, generated=""):
     prompt = (f"ROLE: OUTSIDER senior reviewer. Cross-check the review below AND find what it "
               f"missed. Inspect only diff {base}...{head}. file:line evidence required. Use the "
               f"author's INTENT to judge whether flagged 'bugs' are deliberate and whether the "
@@ -212,7 +349,7 @@ def codex_pass(base, head, claude, context):
               f"DELETIONS: independently check every deleted file / removed symbol for "
               f"surviving importers, callers, route registrations, or config references "
               f"AT head — a live reference to a deleted target is a [P0] the first pass "
-              f"may have missed.\n\n"
+              f"may have missed.\n{generated}\n"
               f"=== AUTHOR INTENT ===\n{context}\n\n=== REVIEW TO CROSS-CHECK ===\n{claude}\n")
     # The Codex cross-check is a SECONDARY tier. It must never crash the primary
     # Claude review: a missing `codex` binary (FileNotFoundError) or any codex
@@ -391,6 +528,23 @@ def live_section(live):
             f"<details><summary>output</summary>\n\n```\n" + "\n".join(live.get("tail", [])) + "\n```\n</details>")
 
 
+def override_banner(stats) -> str:
+    """Top-of-report notice when SIZE_OVERRIDE_LABEL lifted the caps, else ""."""
+    ov = stats.get("size_override")
+    if not ov:
+        return ""
+    tripped, _within = tripped_limits(stats)
+    # Plain login, not an @mention: the report is re-posted on every push and
+    # should not ping the maintainer each time.
+    by = ov.get("actor") or "unknown (label events unreadable)"
+    return (f"\n> ⚠️ **Size limits overridden by label {SIZE_OVERRIDE_LABEL} "
+            f"(added by {by}).** "
+            + (f"Over the limit: {'; '.join(tripped)}. " if tripped else
+               "The PR is currently within every limit. ")
+            + "A maintainer judged it reviewable as one PR; the review below still covers "
+              "all of it.\n")
+
+
 def build_report(head, stats, claude, codex, dyn, live):
     live_md = live_section(live)
     live_block = (f"""
@@ -411,7 +565,9 @@ def build_report(head, stats, claude, codex, dyn, live):
         del_block = ""
     return f"""## 🤖 AI Code Review — Claude + Codex (advisory)
 
-**Scope:** {stats['files']} files, +{stats['added']}/-{stats.get('removed', 0)} lines, {stats['commits']} commits, {stats['authors']} author(s). Advisory — a human still approves/merges. Findings **confirmed by both** models are highest-confidence.
+{override_banner(stats)}
+**Scope:** {stats['files']} files, +{stats.get('added_total', stats['added'])}/-{stats.get('removed', 0)} lines, {stats['commits']} commits, {stats['authors']} author(s). Advisory — a human still approves/merges. Findings **confirmed by both** models are highest-confidence.
+**Size:** {size_line(stats)}.
 {del_block}
 
 <details open><summary><b>T1 · Claude static review</b></summary>
@@ -800,6 +956,28 @@ def has_waiver(meta) -> bool:
     return any((lb or {}).get("name") == WAIVER_LABEL for lb in (meta.get("labels") or []))
 
 
+def has_size_override(meta) -> bool:
+    """SIZE_OVERRIDE_LABEL on the PR, read exactly the way has_waiver reads its label."""
+    return any((lb or {}).get("name") == SIZE_OVERRIDE_LABEL
+               for lb in (meta.get("labels") or []))
+
+
+def label_actor(repo, pr, label):
+    """Login of whoever most recently added `label` to the PR, or None.
+
+    Read from the issue's event log, which GitHub writes itself -- the audit
+    trail the report repeats. Best effort: an unreadable log yields None and
+    the report says the actor is unknown; it never blocks the review.
+    """
+    r = run(["gh", "api", f"repos/{repo}/issues/{pr}/events", "--paginate",
+             "-q", f'.[] | select(.event == "labeled" and .label.name == "{label}") '
+                   f'| .actor.login'], timeout=60)
+    if r is None or r.returncode != 0:
+        return None
+    logins = [l.strip() for l in (r.stdout or "").splitlines() if l.strip()]
+    return logins[-1] if logins else None
+
+
 def existing_review_body(repo, pr):
     """Body of the most recent ai-review comment, or None.
 
@@ -866,7 +1044,15 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
             raise RuntimeError(
                 f"#{pr}: existing_review_sha matched a review comment but "
                 f"existing_review_body found none; refusing to count zero")
-        if SCOPE_GUARD_MARKER in prior:
+        if SCOPE_GUARD_MARKER in prior and has_size_override(meta):
+            # A maintainer applied SIZE_OVERRIDE_LABEL after the scope guard
+            # refused this head. Re-reviewing now CAN succeed -- the caps are
+            # lifted -- so fall through to a real review, exactly as the
+            # TIER_FAILURE_MARKER branch below does. The new report replaces
+            # the refusal in place (same head SHA => same comment).
+            print(f"#{pr}: the scope guard refused {head[:8]}, but `{SIZE_OVERRIDE_LABEL}` "
+                  f"is now applied — reviewing it despite its size")
+        elif SCOPE_GUARD_MARKER in prior:
             # The prior run rejected this PR UNREAD. There is no verdict to carry
             # forward -- counting its zero [Pn] tags scored 0 and turned the
             # second run green on a PR no model ever read. Re-reviewing does not
@@ -880,9 +1066,10 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
                 return 0
             print(f"::error::#{pr} was not reviewed at all (scope guard, {head[:8]}), so its "
                   f"zero findings mean 'nothing ran', not 'nothing wrong'. Split it into "
-                  f"focused PRs, or apply `{WAIVER_LABEL}` to ship it unreviewed.")
+                  f"focused PRs; a maintainer can apply `{SIZE_OVERRIDE_LABEL}` to review it "
+                  f"anyway, or `{WAIVER_LABEL}` to ship it unreviewed.")
             return 1
-        if TIER_FAILURE_MARKER in prior:
+        elif TIER_FAILURE_MARKER in prior:
             # A failed tier left no verdict to carry forward either -- but unlike
             # the scope guard, re-reviewing CAN succeed once the tier is healthy.
             # Returning 1 here made that unreachable: the skip path is bypassed
@@ -907,12 +1094,31 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
             return n_prior
 
     ok, reason, stats = scope_guard(base, head)
+    if has_size_override(meta):
+        # The caps are not enforced, but the report says so at the top and names
+        # who applied the label (build_report -> override_banner).
+        stats["size_override"] = {"actor": label_actor(repo, pr, SIZE_OVERRIDE_LABEL)}
+        if not ok:
+            print(f"::warning::#{pr} exceeds the size limits ({reason}); reviewing anyway "
+                  f"because `{SIZE_OVERRIDE_LABEL}` is applied "
+                  f"(added by {stats['size_override']['actor'] or 'unknown'}).")
+        ok = True
     if not ok:
         body = (f"## 🤖 AI Code Review — SCOPE GUARD\n\nThis PR is too large for a meaningful "
-                f"single review ({reason}); stats {stats}. **Split into focused, single-concern "
-                f"PRs** (or rebase onto the current base). Re-run `/ai-review` on the splits.\n\n"
+                f"single review, so **nothing was reviewed**.\n\n"
+                f"- **Limit exceeded:** {limits_line(stats)}\n"
+                f"- **Size:** {size_line(stats)}\n"
+                f"- Removed lines: -{stats.get('removed', 0):,}; deleted files: "
+                f"{len(stats.get('deleted') or [])}\n\n"
+                f"Generated files ({', '.join(f'`{g}`' for g in GENERATED_FILE_PATTERNS)}) do "
+                f"not count toward the added-lines limit.\n\n"
+                f"**Split into focused, single-concern PRs** (or rebase onto the current base) "
+                f"and re-run `/ai-review` on the splits. If the change genuinely cannot be "
+                f"split (e.g. one mechanical rename), a maintainer can apply "
+                f"`{SIZE_OVERRIDE_LABEL}` to review it anyway, or `{WAIVER_LABEL}` to ship it "
+                f"unreviewed.\n\n"
                 f"<sub>{MARKER.format(sha=head)}</sub>\n<sub>{SCOPE_GUARD_MARKER}</sub>")
-        print(f"#{pr}: SCOPE-GUARD reject ({reason})")
+        print(f"#{pr}: SCOPE-GUARD reject ({limits_line(stats)})")
         if not dry_run: upsert_comment(repo, pr, body)
         if has_waiver(meta):
             print(f"::warning::#{pr} was too large to review ({reason}) and ships unreviewed, "
@@ -921,13 +1127,18 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
         # Nothing was reviewed, so a green check here would assert "reviewed and
         # nothing blocking is open" about a PR no model ever read. Unlike the
         # batch-cap case this IS clearable: split the PR, or waive it.
-        print(f"::error::#{pr} was not reviewed at all ({reason}). Split it into focused "
-              f"PRs, or apply `{WAIVER_LABEL}` to ship it unreviewed.")
+        print(f"::error::#{pr} was not reviewed at all ({limits_line(stats)}). Split it into "
+              f"focused PRs; a maintainer can apply `{SIZE_OVERRIDE_LABEL}` to review it "
+              f"anyway, or `{WAIVER_LABEL}` to ship it unreviewed.")
         return 1
 
     context = pr_context(repo, pr)
-    claude, claude_ok = claude_pass(base, head, context)
-    codex = codex_pass(base, head, claude, context)
+    # Generated files are NOT sent for line-by-line review (tokens spent on a
+    # lockfile buy nothing) but they ARE named to both tiers, and listed in the
+    # report's Size line.
+    gen = generated_note(stats)
+    claude, claude_ok = claude_pass(base, head, context, generated=gen)
+    codex = codex_pass(base, head, claude, context, generated=gen)
     dyn = run_dynamic(cfg, base, head) if dynamic else None
     live_res = run_live_llm(cfg) if live else None
     body = build_report(head, stats, claude, codex, dyn, live_res)
