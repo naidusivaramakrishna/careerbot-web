@@ -8,6 +8,8 @@ import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeRespo
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
   __raw: unknown;
+  /** HTTP status of the failed response, when there was one. */
+  status?: number;
 }
 
 async function safePost<T = unknown>(
@@ -29,6 +31,9 @@ async function safePost<T = unknown>(
         typeof raw === 'string' ? raw : JSON.stringify(raw)
       ) as ApiErrorWithRaw;
       apiError.__raw = raw;
+      // Keep the status: a gateway 502/503/504 has an HTML or plain-text body,
+      // so callers (e.g. processResumeComplete) can only classify it by status.
+      if (err.response?.status !== undefined) apiError.status = err.response.status;
       throw apiError;
     }
     throw err;

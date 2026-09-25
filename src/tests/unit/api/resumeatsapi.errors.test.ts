@@ -57,6 +57,44 @@ describe("processResumeComplete error reporting", () => {
     expect(enhanceResume).not.toHaveBeenCalled();
   });
 
+  // careerbot-api's catch-all handler (app/core/exception_handler.py,
+  // general_exception_handler) never sends a plain "Internal Server Error"
+  // body: it returns this JSON envelope with error_code INTERNAL_SERVER_ERROR.
+  const apiUnhandled500 = {
+    success: false,
+    error: {
+      message: "An unexpected error occurred. Our team has been notified and is working to fix it.",
+      error_code: "INTERNAL_SERVER_ERROR",
+      error_id: "0b8f9c1e-1111-4222-8333-444455556666",
+      request_id: "0b8f9c1e-1111-4222-8333-444455556666",
+      timestamp: "2026-09-24T10:00:00+00:00",
+      support_message: "Please reference Error ID '0b8f9c1e-1111-4222-8333-444455556666' when contacting support.",
+    },
+  };
+
+  it("shows the friendly parse message for careerbot-api's JSON 500 envelope, not the raw JSON", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(apiUnhandled500, 500));
+
+    const result = await processResumeComplete(file());
+
+    expect(result).toMatchObject({ success: false });
+    expect((result as { error: string }).error).toMatch(/could not read your resume/i);
+    expect((result as { error: string }).error).not.toMatch(/error_code|INTERNAL_SERVER_ERROR|\{/);
+    expect(enhanceResume).not.toHaveBeenCalled();
+  });
+
+  it("labels careerbot-api's JSON 500 envelope from the enhance step as an ATS analysis failure", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: {} }));
+    // enhancerApi.safePost rethrows axios errors as Error(JSON.stringify(response.data)).
+    vi.mocked(enhanceResume).mockRejectedValueOnce(new Error(JSON.stringify(apiUnhandled500)));
+
+    const result = await processResumeComplete(file());
+
+    expect(result).toMatchObject({ success: false });
+    expect((result as { error: string }).error).toMatch(/ATS analysis could not be completed after your resume was parsed/i);
+    expect((result as { error: string }).error).not.toMatch(/error_code|INTERNAL_SERVER_ERROR|\{/);
+  });
+
   it("labels a 500 from the enhance step as an ATS analysis failure", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: {} }));
     vi.mocked(enhanceResume).mockRejectedValueOnce(new Error("Internal Server Error"));

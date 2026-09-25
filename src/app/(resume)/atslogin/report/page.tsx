@@ -6,11 +6,12 @@ import { RefreshCw, XCircle, X } from "lucide-react";
 import ResumeSide from "@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide";
 import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/TemplatesTab";
+import JobMatchTab from "@/app/(resume)/builder/creation/_components/job/JobMatchTab";
 
 import { ResumeProvider } from "@/app/(resume)/builder/creation/_context/ResumeContext";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
-import { cacheBuilderResume, rememberEnhancedResumeId } from "./atsReportCache";
+import { cacheBuilderResume, readEnhancedResumeIds, rememberEnhancedResumeId, writeReportCache } from "./atsReportCache";
 import type { EnhancedResumeHistoryItem } from "@/types/api.types";
 
 
@@ -208,7 +209,10 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
 function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  // Toolbar panels: Templates and Job Match open in the side drawer (as the
+  // builder's TemplatesSidebar does); Score switches the ATS sidebar's tab.
+  const [drawerTab, setDrawerTab] = useState<"Templates" | "Job Match" | null>(null);
+  const [sidebarTabRequest, setSidebarTabRequest] = useState<{ tab: string; id: number } | null>(null);
 
   // The shared item editors use this source marker to select enhanced-resume
   // update/delete APIs. Keep it in the ATS URL as well; otherwise a project or
@@ -243,12 +247,17 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
           resumeId={resumeId}
           initialTab="Score"
           defaultOpen={true}
+          tabRequest={sidebarTabRequest}
         />
         <main className="min-w-0 flex-1 bg-gray-50">
           <PreviewPanel
             isTemplateSidebarOpen={false}
             onTabClick={(tab) => {
-              if (tab === "Templates") setIsTemplatesOpen(true);
+              if (tab === "Score") {
+                setSidebarTabRequest((prev) => ({ tab: "Score", id: (prev?.id ?? 0) + 1 }));
+              } else if (tab === "Templates" || tab === "Job Match") {
+                setDrawerTab(tab);
+              }
             }}
             resumeId={resumeId}
             isEnhancedResume
@@ -256,33 +265,41 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
         </main>
       </div>
 
-      {isTemplatesOpen && (
+      {drawerTab && (
         <div
           className="fixed inset-0 z-[70] flex justify-end bg-slate-950/35"
           role="dialog"
           aria-modal="true"
-          aria-label="Resume templates"
+          aria-label={drawerTab === "Templates" ? "Resume templates" : "Job Match"}
         >
           <div className="flex h-full w-full max-w-[520px] flex-col border-l border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Templates</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Choose a layout without leaving ATS Scan.</p>
+                <h2 className="text-lg font-bold text-slate-900">{drawerTab}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {drawerTab === "Templates"
+                    ? "Choose a layout without leaving ATS Scan."
+                    : "Jobs that match this resume."}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsTemplatesOpen(false)}
+                onClick={() => setDrawerTab(null)}
                 className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                aria-label="Close templates"
+                aria-label={drawerTab === "Templates" ? "Close templates" : "Close job match"}
               >
                 <X size={20} />
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              <TemplatesTab
-                resumeId={resumeId}
-                onTemplateSelect={() => setIsTemplatesOpen(false)}
-              />
+              {drawerTab === "Templates" ? (
+                <TemplatesTab
+                  resumeId={resumeId}
+                  onTemplateSelect={() => setDrawerTab(null)}
+                />
+              ) : (
+                <JobMatchTab />
+              )}
             </div>
           </div>
         </div>
@@ -331,9 +348,8 @@ function ATSLoginReport() {
 
       if (data) {
         if (requestedResumeId) {
-          const serialized = JSON.stringify(data);
-          try { localStorage.setItem(`atsAnalysis_${requestedResumeId}`, serialized); } catch { /* non-fatal cache recovery */ }
-          try { sessionStorage.setItem(`atsAnalysis_${requestedResumeId}`, serialized); } catch { /* non-fatal cache recovery */ }
+          // Non-fatal cache recovery; also strips images from reports cached before image stripping existed.
+          writeReportCache(`atsAnalysis_${requestedResumeId}`, data);
         }
         setReportPayload(data);
         setScoreData(transformData(data));
@@ -351,16 +367,12 @@ function ATSLoginReport() {
 
   const persistReport = (payload: Record<string, unknown>) => {
     const resumeId = typeof payload.resume_id === "string" ? payload.resume_id : undefined;
-    const serialized = JSON.stringify(payload);
     // Quota/availability is a cache concern only -- it must never turn a
-    // server-confirmed fix into an uncaught error (see the same pattern in
-    // resumeatsapi.ts's storeAtsAnalysis and the recovery block above).
-    try { localStorage.setItem("atsAnalysisData", serialized); } catch { /* non-fatal cache write */ }
-    try { sessionStorage.setItem("atsAnalysisData", serialized); } catch { /* non-fatal cache write */ }
-    if (resumeId) {
-      try { localStorage.setItem(`atsAnalysis_${resumeId}`, serialized); } catch { /* non-fatal cache write */ }
-      try { sessionStorage.setItem(`atsAnalysis_${resumeId}`, serialized); } catch { /* non-fatal cache write */ }
-    }
+    // server-confirmed fix into an uncaught error. writeReportCache strips
+    // embedded images (as storeAtsAnalysis does) and drops a stale
+    // localStorage copy when the fresh write fails.
+    writeReportCache("atsAnalysisData", payload);
+    if (resumeId) writeReportCache(`atsAnalysis_${resumeId}`, payload);
     setReportPayload(payload);
     setScoreData(transformData(payload));
   };
@@ -377,7 +389,7 @@ function ATSLoginReport() {
       ? d.enhanced_resume_id.trim()
       : undefined;
     if (!enhancedResumeId) {
-      const knownIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+      const knownIds = readEnhancedResumeIds();
       const results = await Promise.allSettled(knownIds.map((id) => getEnhancedResume(id)));
       for (const result of results) {
         if (result.status === "fulfilled" && result.value.original_resume_id === resumeId) {
@@ -397,7 +409,6 @@ function ATSLoginReport() {
       cacheBuilderResume(enhancedResumeId, sourceData);
       rememberEnhancedResumeId(enhancedResumeId);
       const updated = { ...d, enhanced_resume_id: enhancedResumeId, enhanced_resume: sourceData };
-      persistReport(updated);
       return { enhancedResumeId, report: updated };
     }
 
@@ -412,7 +423,6 @@ function ATSLoginReport() {
     cacheBuilderResume(result.enhanced_resume_id, sourceData);
     rememberEnhancedResumeId(result.enhanced_resume_id);
     const updated = { ...d, ...response, enhanced_resume_id: result.enhanced_resume_id, enhanced_resume: sourceData };
-    persistReport(updated);
     return { enhancedResumeId: result.enhanced_resume_id, report: updated };
   };
 
@@ -422,15 +432,20 @@ function ATSLoginReport() {
     if (!reportPayload || atsWorkspaceId || workspaceError) return;
     let active = true;
     ensureEnhancedResumeForReport()
-      .then(({ enhancedResumeId }) => {
-        if (active) setAtsWorkspaceId(enhancedResumeId);
+      .then(({ enhancedResumeId, report }) => {
+        if (!active) return;
+        // Persist here, in the same batch as setAtsWorkspaceId: calling
+        // setReportPayload inside the setup itself re-triggered this effect
+        // before the ID was set (an endless loop under React act()).
+        persistReport(report);
+        setAtsWorkspaceId(enhancedResumeId);
       })
       .catch((error) => {
         if (active) setWorkspaceError(error instanceof Error ? error.message : "Could not prepare the ATS editing workspace.");
       });
     return () => { active = false; };
-    // reportPayload is replaced only after a server-confirmed save; once an ID
-    // is available the guard above prevents a second enhancement request.
+    // reportPayload is replaced only together with atsWorkspaceId (above), so
+    // the guard prevents a second setup/enhancement request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportPayload, atsWorkspaceId, workspaceError]);
 
@@ -469,6 +484,12 @@ function ATSLoginReport() {
       <div style={{ maxWidth: 480, width: "100%", padding: 28, textAlign: "center", background: "#fff", border: "1px solid #fecaca", borderRadius: 16, boxShadow: "0 8px 26px rgba(15,23,42,0.08)" }}>
         <XCircle style={{ width: 32, height: 32, color: "#dc2626", margin: "0 auto 12px" }} />
         <h2 style={{ margin: 0, color: "#172554", fontSize: 20 }}>Could not prepare ATS fixes</h2>
+        {/* The scan itself succeeded: keep its score visible even though the fix workspace could not be set up. */}
+        {scoreData.FinalWeightedScore > 0 && (
+          <p data-testid="ats-score-fallback" style={{ margin: "12px 0 0", color: "#172554", fontSize: 15, fontWeight: 700 }}>
+            Your ATS score: {Math.round(scoreData.FinalWeightedScore)} / 100
+          </p>
+        )}
         <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 13, lineHeight: 1.55 }}>{workspaceError}</p>
         <button type="button" onClick={() => { setWorkspaceError(null); setAtsWorkspaceId(null); }} style={{ marginTop: 20, padding: "10px 16px", border: "none", borderRadius: 8, background: "#1677e8", color: "#fff", fontWeight: 800, cursor: "pointer" }}>Try again</button>
       </div>

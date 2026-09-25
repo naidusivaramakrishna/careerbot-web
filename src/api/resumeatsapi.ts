@@ -46,8 +46,22 @@ export function storeAtsAnalysis(key: string, payload: unknown): void {
   } catch {
     // Storage availability/quota is a cache concern and must never turn a
     // successful parse + ATS analysis into a frontend processing failure.
+    // Readers prefer localStorage, so drop the older entry there; otherwise it
+    // would shadow the fresh sessionStorage copy (same rule as writeReportCache).
+    try { localStorage.removeItem(key); } catch { /* non-fatal */ }
     try { sessionStorage.setItem(key, serialized); } catch { /* non-fatal */ }
   }
+}
+
+/** Reads an ATS analysis written by storeAtsAnalysis (localStorage first, then the quota fallback). */
+function readAtsAnalysis(key: string): string | null {
+  for (const storage of [() => localStorage, () => sessionStorage]) {
+    try {
+      const value = storage().getItem(key);
+      if (value !== null) return value;
+    } catch { /* storage unavailable -- try the next one */ }
+  }
+  return null;
 }
 
 function hasScoreProjectionContract(value: unknown): boolean {
@@ -59,6 +73,26 @@ function hasScoreProjectionContract(value: unknown): boolean {
   ));
 }
 const SERVER_ERROR_PATTERN = /internal server error|status code 500|http 500/i;
+// careerbot-api returns 5xx failures as a JSON envelope
+// {"success":false,"error":{"message","error_code",...}} (app/core/exception_handler.py).
+// Its catch-all handler uses INTERNAL_SERVER_ERROR and the enhance endpoint's
+// catch-all uses SERVER_ERROR; neither contains the plain-text phrases above.
+const SERVER_ERROR_CODES = new Set(["INTERNAL_SERVER_ERROR", "SERVER_ERROR"]);
+
+function isServerFailure(err: unknown): boolean {
+  const status = isObject(err) ? err.status : undefined;
+  if (typeof status === "number" && status >= 500) return true;
+
+  const message = (err as { message?: string })?.message ?? String(err);
+  if (SERVER_ERROR_PATTERN.test(message)) return true;
+  try {
+    const body: unknown = JSON.parse(message);
+    const code = isObject(body) && isObject(body.error) ? body.error.error_code : undefined;
+    return typeof code === "string" && (SERVER_ERROR_CODES.has(code) || /^HTTP_5\d\d$/.test(code));
+  } catch {
+    return false;
+  }
+}
 const PARSE_SERVER_ERROR_MESSAGE =
   "We could not read your resume right now. Please try again in a moment. If the problem continues, contact support with the time of this attempt.";
 const ENHANCE_SERVER_ERROR_MESSAGE =
@@ -143,7 +177,9 @@ export const parseResume = async (file: File) => {
         // ignore JSON parse errors and fall through to throwing raw text
       }
 
-      throw new Error(text);
+      // Keep the HTTP status so callers can classify 5xx failures even when
+      // the body is careerbot-api's JSON envelope rather than plain text.
+      throw Object.assign(new Error(text), { status: response.status });
     }
     return response.json();
   } catch (error) {
@@ -182,7 +218,7 @@ export const processResumeComplete = async (file: File) => {
       parsed = await parseResume(file);
     } catch (parseErr) {
       const parseMessage = (parseErr as { message?: string })?.message ?? String(parseErr);
-      throw new Error(SERVER_ERROR_PATTERN.test(parseMessage) ? PARSE_SERVER_ERROR_MESSAGE : parseMessage);
+      throw new Error(isServerFailure(parseErr) ? PARSE_SERVER_ERROR_MESSAGE : parseMessage);
     }
     const parserError = parserFailureMessage(parsed);
     if (parserError) throw new Error(parserError);
@@ -197,7 +233,7 @@ export const processResumeComplete = async (file: File) => {
       const localKey = `atsAnalysis_${resumeId}`;
 
       // Check resume-specific key first
-      const cached = localStorage.getItem(localKey);
+      const cached = readAtsAnalysis(localKey);
       if (cached) {
         try {
           const cachedPayload = JSON.parse(cached);
@@ -212,7 +248,7 @@ export const processResumeComplete = async (file: File) => {
 
       // Fallback: check the legacy "atsAnalysisData" key — if it belongs to
       // this same resume_id, reuse it and migrate it to the new key.
-      const legacy = localStorage.getItem("atsAnalysisData");
+      const legacy = readAtsAnalysis("atsAnalysisData");
       if (legacy) {
         try {
           const legacyPayload = JSON.parse(legacy);
@@ -230,7 +266,7 @@ export const processResumeComplete = async (file: File) => {
       enhanceResult = await enhanceResume({ resume_id: resumeId });
     } catch (enhanceErr) {
       const enhanceMessage = (enhanceErr as { message?: string })?.message ?? String(enhanceErr);
-      throw new Error(SERVER_ERROR_PATTERN.test(enhanceMessage) ? ENHANCE_SERVER_ERROR_MESSAGE : enhanceMessage);
+      throw new Error(isServerFailure(enhanceErr) ? ENHANCE_SERVER_ERROR_MESSAGE : enhanceMessage);
     }
     if (!enhanceResult || enhanceResult.success === false) {
       throw new Error("ATS analysis could not be completed after your resume was parsed. Please try again.");
