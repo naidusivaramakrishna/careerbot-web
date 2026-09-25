@@ -46,7 +46,19 @@ function storeAtsAnalysis(key: string, payload: unknown): void {
   } catch {
     // Storage availability/quota is a cache concern and must never turn a
     // successful parse + ATS analysis into a frontend processing failure.
+    // Readers prefer localStorage, so drop the older entry there; otherwise it
+    // would shadow the fresh sessionStorage copy (same rule as writeReportCache).
+    try { localStorage.removeItem(key); } catch { /* non-fatal */ }
     try { sessionStorage.setItem(key, serialized); } catch { /* non-fatal */ }
+  }
+}
+
+/** Reads an ATS analysis written by storeAtsAnalysis (localStorage first, then the quota fallback). */
+function readAtsAnalysis(key: string): string | null {
+  try {
+    return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+  } catch {
+    return null;
   }
 }
 
@@ -219,7 +231,7 @@ export const processResumeComplete = async (file: File) => {
       const localKey = `atsAnalysis_${resumeId}`;
 
       // Check resume-specific key first
-      const cached = localStorage.getItem(localKey);
+      const cached = readAtsAnalysis(localKey);
       if (cached) {
         try {
           const cachedPayload = JSON.parse(cached);
@@ -234,7 +246,7 @@ export const processResumeComplete = async (file: File) => {
 
       // Fallback: check the legacy "atsAnalysisData" key — if it belongs to
       // this same resume_id, reuse it and migrate it to the new key.
-      const legacy = localStorage.getItem("atsAnalysisData");
+      const legacy = readAtsAnalysis("atsAnalysisData");
       if (legacy) {
         try {
           const legacyPayload = JSON.parse(legacy);
