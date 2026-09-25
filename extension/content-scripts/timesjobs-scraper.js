@@ -36,8 +36,18 @@
            document.querySelector('.jd-desc') !== null;
   }
 
-  function extractJobDescription() {
-    // 1. Try known TimesJobs class selectors
+  // Searches within a few ancestor levels of anchorEl (e.g. the job title)
+  // instead of the whole document, so a generic class-substring selector
+  // doesn't match an unrelated element elsewhere on the page (a search bar's
+  // location filter, a different job card in a results list, ...).
+  function nearbyElement(anchorEl, selector) {
+    let scope = anchorEl;
+    for (let i = 0; i < 4 && scope?.parentElement; i++) scope = scope.parentElement;
+    return (scope || document).querySelector(selector);
+  }
+
+  // 1. Try known TimesJobs class selectors
+  function extractByFixedSelectors() {
     const selectors = [
       '.dang-inner-html',
       '.jd-desc',
@@ -55,28 +65,44 @@
       const el = document.querySelector(sel);
       if (el && el.innerText.trim().length > 50) return el.innerText.trim();
     }
+    return null;
+  }
 
-    // 2. Fallback: find the container that holds the "Job Description" heading
+  // Walk up to 4 ancestors from a "Job Description" heading looking for a
+  // container with enough text to be the actual description.
+  function extractFromHeadingAncestors(heading) {
+    let el = heading.parentElement;
+    for (let i = 0; i < 4 && el; i++, el = el.parentElement) {
+      const text = el.innerText.trim();
+      if (text.length > 200) return text;
+    }
+    return null;
+  }
+
+  // 2. Fallback: find the container that holds the "Job Description" heading
+  function extractByJobDescHeading() {
     const headings = document.querySelectorAll('h2, h3, h4, strong, b');
     for (const heading of headings) {
-      if (/^job\s*desc/i.test(heading.textContent.trim())) {
-        let el = heading.parentElement;
-        for (let i = 0; i < 4 && el; i++, el = el.parentElement) {
-          const text = el.innerText.trim();
-          if (text.length > 200) return text;
-        }
-      }
+      if (!/^job\s*desc/i.test(heading.textContent.trim())) continue;
+      const text = extractFromHeadingAncestors(heading);
+      if (text) return text;
     }
+    return null;
+  }
 
-    // 3. Last resort: largest text block in the main content area
+  // Skip nav, header, footer, sidebar
+  function isChromeContainer(el) {
+    return /nav|header|footer|sidebar|menu|ad-|banner/i.test(el.className + el.id);
+  }
+
+  // 3. Last resort: largest text block in the main content area
+  function extractByCandidateTextBlock() {
     const candidates = document.querySelectorAll('div, article, section');
     let best = null;
     for (const el of candidates) {
-      // Skip nav, header, footer, sidebar
-      if (/nav|header|footer|sidebar|menu|ad-|banner/i.test(el.className + el.id)) continue;
+      if (isChromeContainer(el)) continue;
       // Only consider direct text containers (avoid nested giant divs)
-      const children = el.children.length;
-      if (children > 20) continue;
+      if (el.children.length > 20) continue;
       const text = el.innerText.trim();
       if (text.length > 300 && (!best || text.length < best.length)) {
         best = text;
@@ -85,14 +111,22 @@
     return best;
   }
 
+  function extractJobDescription() {
+    return extractByFixedSelectors()
+      || extractByJobDescHeading()
+      || extractByCandidateTextBlock();
+  }
+
   function extractMeta() {
-    const titleEl   = document.querySelector('h1.jd-job-title, h1[class*="job-title"], .heading-tit h1, h1');
-    const companyEl = document.querySelector('.jd-header-comp-name a, .comp-name a, [class*="comp-name"]');
+    const titleEl    = document.querySelector('h1.jd-job-title, h1[class*="job-title"], .heading-tit h1, h1');
+    const companyEl  = document.querySelector('.jd-header-comp-name a, .comp-name a, [class*="comp-name"]');
+    const locationEl = nearbyElement(titleEl, '[class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'timesjobs',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'timesjobs',
     };
   }
 
@@ -110,7 +144,11 @@
       return;
     }
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();

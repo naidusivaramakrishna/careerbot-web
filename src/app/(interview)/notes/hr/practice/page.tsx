@@ -19,7 +19,7 @@ import {
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
 import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
 import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
-import { submitPracticeAnswer, getNotes, SubmitAnswerResponse, HrQuestion, GenerateHrQuestionsResponse } from "@/api/mockInterviewApi";
+import { submitPracticeAnswer, getNotes, SubmitAnswerResponse, HrQuestion, GenerateHrQuestionsResponse } from "@/api/interviewPrepApi";
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
@@ -421,7 +421,7 @@ function HRPracticeContent() {
           <p className="mt-0.5 text-[11px] font-medium text-gray-500">Practice warm, specific answers for fit and recruiter screens.</p>
         </div>
 
-        <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto py-1">
           {questions.map((q, i) => (
             <button
               key={q.question_id}
@@ -535,14 +535,6 @@ function HRPracticeContent() {
           {/* Navigation buttons */}
           {currentAnswer && (
             <div className="flex flex-col gap-3 sm:flex-row">
-              {currentIndex > 0 && (
-                <button
-                  onClick={() => { setCurrentIndex((i) => i - 1); setCurrentAnswer(answeredMap[questions[currentIndex - 1].question_id] ?? null); }}
-                  className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-600 shadow-sm hover:bg-gray-50"
-                >
-                  <ChevronLeft size={15} /> Back
-                </button>
-              )}
               <button
                 onClick={handleTryAgain}
                 className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50"

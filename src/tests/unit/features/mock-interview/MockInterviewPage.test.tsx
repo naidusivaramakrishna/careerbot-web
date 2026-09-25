@@ -1,5 +1,5 @@
 import React from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
 
@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   buildWsUrl: vi.fn((url: string) => `ws://test.local${url}`),
   isAuthenticated: false,
   authLoading: false,
+  setPendingAvatarSession: vi.fn(),
+  consumePendingAvatarSession: vi.fn(() => null as unknown),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -46,6 +48,10 @@ vi.mock("@/app/(interview)/mock-interview/_context/MockInterviewContext", () => 
     setPracticeAnswered: vi.fn(),
     setPracticeTotal: vi.fn(),
     setReadinessPassed: vi.fn(),
+    // Avatar (interview-avatar.txt) — in-memory relay from the "starting"
+    // page to the session page. No avatar session by default in these tests.
+    setPendingAvatarSession: mocks.setPendingAvatarSession,
+    consumePendingAvatarSession: mocks.consumePendingAvatarSession,
   }),
 }));
 
@@ -142,6 +148,41 @@ class MockWebSocket {
   emit(data: unknown) { this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent); }
 }
 
+// Covers both the continuous mic-capture pipeline (createScriptProcessor,
+// createMediaStreamSource, createAnalyser) and the PCM interviewer-audio
+// streaming player (createBuffer, createBufferSource, createGain).
+class MockAudioContext {
+  static gainInstances: { gain: { value: number }; connect: ReturnType<typeof vi.fn> }[] = [];
+  static scriptProcessors: { onaudioprocess: null | ((event: unknown) => void) }[] = [];
+  state: string = "running";
+  destination = {};
+  currentTime = 0;
+  sampleRate: number;
+  static contexts: MockAudioContext[] = [];
+  constructor(options?: { sampleRate?: number }) { this.sampleRate = options?.sampleRate ?? 48000; MockAudioContext.contexts.push(this); }
+  createOscillator() { return { type: "sine", frequency: { value: 0 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() }; }
+  createGain() {
+    const gainNode = { gain: { value: 1 }, connect: vi.fn() };
+    MockAudioContext.gainInstances.push(gainNode);
+    return gainNode;
+  }
+  createAnalyser() { return { fftSize: 0, smoothingTimeConstant: 0, frequencyBinCount: 32, connect: vi.fn(), getByteFrequencyData: vi.fn((data: Uint8Array) => data.fill(20)) }; }
+  createMediaStreamSource() { return { connect: vi.fn() }; }
+  createScriptProcessor() {
+    const processor = { connect: vi.fn(), disconnect: vi.fn(), onaudioprocess: null as ((event: unknown) => void) | null };
+    MockAudioContext.scriptProcessors.push(processor);
+    return processor;
+  }
+  createBuffer(_channels: number, length: number, sampleRate: number) {
+    return { getChannelData: () => new Float32Array(length), duration: length / sampleRate };
+  }
+  createBufferSource() {
+    return { buffer: null as unknown, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+  }
+  resume() { return Promise.resolve(); }
+  close() { return Promise.resolve(); }
+}
+
 function mediaStream() {
   return { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream;
 }
@@ -188,10 +229,13 @@ beforeEach(() => {
   mocks.buildWsUrl.mockImplementation((url: string) => `ws://test.local${url}`);
   MockAudio.instances = [];
   MockWebSocket.instances = [];
+  MockAudioContext.gainInstances = [];
+  MockAudioContext.scriptProcessors = [];
+  MockAudioContext.contexts = [];
   vi.stubGlobal("Audio", MockAudio);
   vi.stubGlobal("WebSocket", MockWebSocket);
   vi.stubGlobal("ResizeObserver", class { observe = vi.fn(); unobserve = vi.fn(); disconnect = vi.fn(); });
-  vi.stubGlobal("AudioContext", class { state = "running"; destination = {}; createOscillator() { return { type: "sine", frequency: { value: 0 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() }; } createGain() { return { gain: { value: 0 }, connect: vi.fn() }; } createAnalyser() { return { fftSize: 0, smoothingTimeConstant: 0, frequencyBinCount: 32, connect: vi.fn(), getByteFrequencyData: vi.fn((data: Uint8Array) => data.fill(20)) }; } createMediaStreamSource() { return { connect: vi.fn() }; } createMediaElementSource() { return { connect: vi.fn() }; } resume() { return Promise.resolve(); } close() { return Promise.resolve(); } });
+  vi.stubGlobal("AudioContext", MockAudioContext);
   Object.defineProperty(window, "sessionStorage", { configurable: true, value: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() } });
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: vi.fn().mockResolvedValue([{ kind: "audioinput", deviceId: "mic-1", label: "Studio Mic" }, { kind: "videoinput", deviceId: "cam-1", label: "Webcam" }]), getUserMedia: vi.fn().mockResolvedValue(mediaStream()) } });
   Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
@@ -264,7 +308,6 @@ describe("MockSidebar", () => {
     expect(screen.getByRole("navigation", { name: /mock interview navigation/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /01 mock interview/i })).toHaveAttribute("title", "Mock Interview");
     expect(screen.getByRole("button", { name: /02 history & reports/i })).toHaveAttribute("title", "History & Reports");
-    expect(screen.getByLabelText("Session progress 0 of 2")).toHaveTextContent("0/2");
     fireEvent.click(screen.getByRole("button", { name: /01 mock interview/i }));
     fireEvent.click(screen.getByRole("button", { name: /02 history & reports/i }));
     fireEvent.click(screen.getByRole("button", { name: /optional prep notes and practice/i }));
@@ -299,74 +342,80 @@ describe("ReadinessGate", () => {
   });
 });
 
+// Info screen -> device-check screen -> role-selection screen. The consent
+// gate from the old flow is gone entirely (POST /consent "no longer gates
+// anything" per live-interview.txt) — there's no decline/cancel step anymore.
+async function completePreflight() {
+  fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
+  fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
+  await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+  await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
+  await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
+  fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
+  fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
+}
+
 describe("LiveSetupPage", () => {
-  it("requires consent before preflight and returns to landing on decline", async () => {
+  it("runs device checks, then opens the role-confirmation modal", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
-    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    expect(mocks.push).toHaveBeenCalledWith("/mock-interview");
-  });
+    expect(screen.getByRole("heading", { name: /room setup workflow/i })).toBeInTheDocument();
+    await completePreflight();
 
-  it("runs device checks before setup", async () => {
-    const LiveSetupPage = await importLiveSetupPage();
-    render(<LiveSetupPage />);
-    expect(screen.getByRole("heading", { name: /mock interview room information/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
-    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
-    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
-    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
-    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
-    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
-    expect(screen.getByRole("button", { name: /start interview now/i })).toBeInTheDocument();
-  });
+    expect(screen.getByRole("heading", { name: "Choose your interview role" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
 
-  it("stores the selected interviewer with a gender-matched voice before starting", async () => {
-    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Frontend Developer");
+    // Start Interview stays disabled until an interview type is chosen.
+    expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
+    expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeEnabled();
+  }, 15_000);
+
+  it("stores the single fixed interviewer identity before starting", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
-    expect(screen.getByRole("heading", { name: /mock interview room information/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
-    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
-    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
-    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
-    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
-    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Technical" }));
-    fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
+    await completePreflight();
+
+    fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /start interview/i }));
 
     expect(mocks.createLiveSession).not.toHaveBeenCalled();
     expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_params", JSON.stringify({
       session_type: "technical",
       resume_id: undefined,
-      enable_streaming_stt: true,
-      voice: "fable",
-      use_orchestrator: true,
-      interviewer_index: 3,
-      interviewer_slug: "nisha",
-      interviewer_name: "Nisha",
+      target_role: "Frontend Developer",
+      voice: "nova",
+      interviewer_index: 0,
+      interviewer_slug: "ananya",
+      interviewer_name: "Ananya",
       gender: "female",
       session_type_label: "Technical",
     }));
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/starting");
-    randomSpy.mockRestore();
   }, 15_000);
 
-  it("creates the live session with the selected avatar voice and metadata", async () => {
-    mocks.createLiveSession.mockResolvedValue({ session_id: "created-session", ticket_id: "ticket-1", ticket_expires_at: "2026-07-17T10:00:00Z", ws_url: "/ws" });
+  it("creates the live session and relays the avatar session in memory, never through storage", async () => {
+    mocks.createLiveSession.mockResolvedValue({
+      session_id: "created-session",
+      ticket_id: "ticket-1",
+      ticket_expires_at: "2026-07-17T10:00:00Z",
+      ws_url: "/ws",
+      avatar: { livekit_url: "wss://avatar.test", livekit_client_token: "secret-token", avatar_id: "a1", provider_session_id: "p1", mode: "LITE" },
+    });
     vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
       session_type: "technical",
-      enable_streaming_stt: true,
-      voice: "alloy",
-      use_orchestrator: true,
-      interviewer_index: 3,
-      interviewer_slug: "nisha",
-      interviewer_name: "Nisha",
+      resume_id: "resume-1",
+      target_role: "Frontend Developer",
+      voice: "nova",
+      interviewer_index: 0,
+      interviewer_slug: "ananya",
+      interviewer_name: "Ananya",
       gender: "female",
       session_type_label: "Technical",
     }) : null);
@@ -374,23 +423,30 @@ describe("LiveSetupPage", () => {
     const LiveStartingPage = await importLiveStartingPage();
     render(<LiveStartingPage />);
 
+    // Only the documented fields go over the wire — enable_streaming_stt,
+    // voice and use_orchestrator are retired per live-interview.txt.
     await waitFor(() => expect(mocks.createLiveSession).toHaveBeenCalledWith({
       session_type: "technical",
-      resume_id: undefined,
-      enable_streaming_stt: true,
-      voice: "fable",
-      interviewer_index: 3,
-      interviewer_name: "Nisha",
-      interviewer_gender: "female",
-      interviewer_slug: "nisha",
-      use_orchestrator: true,
+      resume_id: "resume-1",
+      target_role: "Frontend Developer",
     }));
+
+    // livekit_client_token is a live credential — never persisted, only
+    // relayed in-memory via the context.
+    expect(mocks.setPendingAvatarSession).toHaveBeenCalledWith(
+      "created-session",
+      { livekit_url: "wss://avatar.test", livekit_client_token: "secret-token", avatar_id: "a1", provider_session_id: "p1", mode: "LITE" }
+    );
+    const storedSessionData = vi.mocked(window.sessionStorage.setItem).mock.calls.find(([key]) => key === "live_session_data")?.[1];
+    expect(storedSessionData).toBeDefined();
+    expect(JSON.parse(storedSessionData as string)).not.toHaveProperty("avatar");
+
     expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_interviewer", JSON.stringify({
       session_id: "created-session",
-      interviewer_index: 3,
-      interviewer_name: "Nisha",
+      interviewer_index: 0,
+      interviewer_name: "Ananya",
       gender: "female",
-      voice: "fable",
+      voice: "nova",
     }));
     expect(mocks.replace).toHaveBeenCalledWith("/mock-interview/live/created-session");
   });
@@ -399,13 +455,11 @@ describe("LiveSetupPage", () => {
     mocks.createLiveSession.mockRejectedValue(new Error("network"));
     vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
       session_type: "hr",
-      enable_streaming_stt: true,
-      voice: "nova",
-      use_orchestrator: true,
-      interviewer_index: 2,
-      interviewer_slug: "meera",
-      interviewer_name: "Meera",
+      interviewer_index: 0,
+      interviewer_slug: "ananya",
+      interviewer_name: "Ananya",
       gender: "female",
+      voice: "nova",
       session_type_label: "HR",
     }) : null);
 
@@ -417,165 +471,279 @@ describe("LiveSetupPage", () => {
 });
 
 describe("LiveInterviewSessionPage", () => {
-  it("opens websocket from stored setup data", async () => {
+  it("opens websocket from stored setup data and always shows the single fixed interviewer", async () => {
+    // A stale higher interviewer_index (from before interviewers collapsed to
+    // one entry) must safely fall back to Ananya, not crash or show garbage.
     vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_data" ? JSON.stringify({ session_id: "live-session-123", ticket_id: "ticket-1", ws_url: "/live/ws-ticket" }) : key === "live_session_type" ? "HR" : key === "live_session_interviewer" ? JSON.stringify({ session_id: "live-session-123", interviewer_index: 2, interviewer_name: "Meera", gender: "female", voice: "nova" }) : null);
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     expect(MockWebSocket.instances[0].url).toBe("ws://test.local/live/ws-ticket?ticket=ticket-1");
     act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
     expect(screen.getByText(/connected/i)).toBeInTheDocument();
-    expect(screen.getByText("1/6")).toBeInTheDocument();
-    expect(screen.getByText(/Meera, AI Interviewer/i)).toBeInTheDocument();
+    expect(screen.getByText("Question 1/6")).toBeInTheDocument();
+    expect(screen.queryByText("1/6")).not.toBeInTheDocument();
+    expect(screen.getByText("Ananya, AI Interviewer")).toBeInTheDocument();
   }, 15_000);
 
-  it("reveals question word by word, then enters listening mode", async () => {
-    vi.useFakeTimers();
+  it("streams the interviewer's question via transcript deltas, then enters listening on turn_complete", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
-    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); MockWebSocket.instances[0].emit({ type: "question_audio", question_number: 1, text: "Tell me about a difficult project you handled.", audio: null, time_limit_s: 60 }); });
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+    });
     expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
-    expect(screen.queryByText("Tell me about a difficult project you handled.")).not.toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(115); });
-    expect(screen.getByText(/^Tell\s*$/)).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(2_000); });
-    expect(screen.getByText("Tell me about a difficult project you handled.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /done speaking/i })).toBeInTheDocument();
-  });
-
-  it("uses backend lip sync timings to reveal words and select mouth visemes", async () => {
-    const rafCallbacks: FrameRequestCallback[] = [];
-    const originalRaf = window.requestAnimationFrame;
-    const originalCancelRaf = window.cancelAnimationFrame;
-    Object.defineProperty(window, "requestAnimationFrame", {
-      configurable: true,
-      value: vi.fn((callback: FrameRequestCallback) => {
-        rafCallbacks.push(callback);
-        return rafCallbacks.length;
-      }),
-    });
-    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: vi.fn() });
-
-    const LiveSessionPage = await importLiveSessionPage();
-    render(<LiveSessionPage />);
 
     act(() => {
-      MockWebSocket.instances[0].open();
-      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
-      MockWebSocket.instances[0].emit({
-        type: "question_audio",
-        question_number: 1,
-        text: "Can you describe teamwork?",
-        audio: "AA==",
-        time_limit_s: 60,
-        lip_sync: {
-          schema_version: "1.0",
-          sync_source: "provider_viseme",
-          timebase: "audio_start_ms",
-          words: [
-            { word: "Can", start_ms: 0, end_ms: 120 },
-            { word: "you", start_ms: 240, end_ms: 360 },
-            { word: "describe", start_ms: 500, end_ms: 650 },
-            { word: "teamwork", start_ms: 680, end_ms: 900 },
-          ],
-          visemes: [
-            { viseme_id: "sil", start_ms: 0, end_ms: 100, intensity: 0 },
-            { viseme_id: "AA", start_ms: 100, end_ms: 500, intensity: 1 },
-            { viseme_id: "O", start_ms: 680, end_ms: 900, intensity: 0.8 },
-          ],
-        },
-      });
+      ws.emit({ type: "interviewer_transcript_delta", text: "Tell me " });
+      ws.emit({ type: "interviewer_transcript_delta", text: "about a difficult project." });
+      // currentQuestion (what non-streaming phases render) is only set once
+      // the final frame arrives — the delta stream alone drives visibleQuestionText.
+      ws.emit({ type: "interviewer_transcript_final", text: "Tell me about a difficult project." });
     });
+    expect(screen.getByText("Tell me about a difficult project.")).toBeInTheDocument();
 
-    const audio = MockAudio.instances.at(-1)!;
-    audio.currentTime = 0.32;
-    act(() => { rafCallbacks.at(-1)?.(320); });
+    act(() => { ws.emit({ type: "turn_complete" }); });
+    expect(screen.queryByText(/interviewer speaking/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /done speaking/i })).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByText(/^Can you\s*$/)).toBeInTheDocument();
-    expect(screen.getByTestId("interviewer-mouth-cue")).toHaveAttribute("data-viseme", "AA");
-
-    audio.currentTime = 0.72;
-    act(() => { rafCallbacks.at(-1)?.(720); });
-
-    expect(screen.getByText("Can you describe teamwork?")).toBeInTheDocument();
-    expect(screen.getByTestId("interviewer-mouth-cue")).toHaveAttribute("data-viseme", "O");
-
-    Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: originalRaf });
-    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: originalCancelRaf });
-  }, 15_000);
-
-  it("maps every Rhubarb A-H/X mouth cue without breaking audio synchronization", async () => {
-    const rafCallbacks: FrameRequestCallback[] = [];
-    const originalRaf = window.requestAnimationFrame;
-    const originalCancelRaf = window.cancelAnimationFrame;
-    Object.defineProperty(window, "requestAnimationFrame", {
-      configurable: true,
-      value: vi.fn((callback: FrameRequestCallback) => {
-        rafCallbacks.push(callback);
-        return rafCallbacks.length;
-      }),
-    });
-    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: vi.fn() });
-
-    const rhubarbCues = [
-      ["A", "PP"],
-      ["B", "SS"],
-      ["C", "E"],
-      ["D", "AA"],
-      ["E", "O"],
-      ["F", "U"],
-      ["G", "FF"],
-      ["H", "DD"],
-      ["X", "sil"],
-    ] as const;
-
+  it("numbers the opening question as 1 when the backend announces it via question_next, then counts up", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
-
+    const ws = MockWebSocket.instances[0];
     act(() => {
-      MockWebSocket.instances[0].open();
-      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
-      MockWebSocket.instances[0].emit({
-        type: "question_audio",
-        question_number: 1,
-        text: "Walk me through your recent project.",
-        audio: "AA==",
-        time_limit_s: 60,
-        lip_sync: {
-          schema_version: "1.0",
-          sync_source: "forced_alignment",
-          provider: "rhubarb",
-          timebase: "audio_start_ms",
-          audio_start_offset_ms: 0,
-          visemes: rhubarbCues.map(([visemeId], index) => ({
-            viseme_id: visemeId,
-            provider_viseme_id: visemeId,
-            start_ms: index * 120,
-            end_ms: index * 120 + 120,
-            intensity: 1,
-          })),
-        },
-      });
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 20, estimated_duration_m: 20 });
+      ws.emit({ type: "question_next", question_text: "Tell me about yourself." });
     });
+    expect(screen.getByText("Question 1/20")).toBeInTheDocument();
+    expect(screen.queryByText("Question 2/20")).not.toBeInTheDocument();
 
-    const audio = MockAudio.instances.at(-1)!;
-    rhubarbCues.forEach(([, expectedViseme], index) => {
-      audio.currentTime = (index * 120 + 60) / 1000;
-      act(() => { rafCallbacks.at(-1)?.(index * 120 + 60); });
-      expect(screen.getByTestId("interviewer-mouth-cue")).toHaveAttribute("data-viseme", expectedViseme);
-    });
-
-    Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: originalRaf });
-    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: originalCancelRaf });
+    act(() => { ws.emit({ type: "question_next", question_text: "Why this role?" }); });
+    expect(screen.getByText("Question 2/20")).toBeInTheDocument();
   });
-  it("shows transcript updates and sends end_answer", async () => {
+
+  it("streams live transcript while listening and finalizes it when the candidate's turn closes, without sending a retired end_answer", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "turn_complete" });
+      ws.emit({ type: "candidate_turn_open" });
+      ws.emit({ type: "transcript_partial", text: "I worked with a cross functional team" });
+    });
+    expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "candidate_turn_closed" }); });
+    expect(screen.getByText(/reviewing answer/i)).toBeInTheDocument();
+    expect(screen.getByText("Your answer")).toBeInTheDocument();
+    expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
+    expect(ws.send).not.toHaveBeenCalledWith(JSON.stringify({ type: "end_answer" }));
+  });
+
+  it("treats partials as temporary: a closed turn does not promote one to the final answer, and it clears when no final arrives", async () => {
     vi.useFakeTimers();
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
-    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); ws.emit({ type: "question_audio", question_number: 1, text: "Tell me about teamwork.", audio: null, time_limit_s: 60 }); vi.advanceTimersByTime(1_600); ws.emit({ type: "transcript_partial", text: "I worked with a cross functional team" }); });
-    expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /done speaking/i }));
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_answer" }));
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "turn_complete" });
+      ws.emit({ type: "transcript_partial", item_id: "item-1", text: "I led" });
+      ws.emit({ type: "transcript_partial", item_id: "item-1", text: " a small" });
+      ws.emit({ type: "transcript_partial", item_id: "item-1", text: " team" });
+    });
+    // Each partial carries only the new piece; the caption continues from the previous one.
+    expect(screen.getByText("I led a small team")).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "candidate_turn_closed" }); });
+    expect(screen.getByText("I led a small team")).toBeInTheDocument();
+
+    act(() => { vi.advanceTimersByTime(5_100); });
+    expect(screen.queryByText("I led a small team")).not.toBeInTheDocument();
+  });
+
+  it("starts a fresh caption when partials arrive for a different item_id", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "turn_complete" });
+      ws.emit({ type: "transcript_partial", item_id: "item-1", text: "First part" });
+      ws.emit({ type: "transcript_partial", item_id: "item-2", text: "Second" });
+      ws.emit({ type: "transcript_partial", item_id: "item-2", text: " part" });
+    });
+    expect(screen.getByText("Second part")).toBeInTheDocument();
+    expect(screen.queryByText(/First part/)).not.toBeInTheDocument();
+  });
+
+  it("replaces the partial caption with transcript_final", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "turn_complete" });
+      ws.emit({ type: "transcript_partial", item_id: "item-1", text: "I led a smal" });
+      ws.emit({ type: "transcript_final", item_id: "item-1", text: "I led a small team." });
+    });
+    expect(screen.getByText("I led a small team.")).toBeInTheDocument();
+    expect(screen.queryByText("I led a smal")).not.toBeInTheDocument();
+  });
+
+  it("shows a transcription-unavailable notice on transcription_error and ignores late/ignored transcript events", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "turn_complete" });
+      ws.emit({ type: "transcript_partial_ignored", text: "should not show" });
+      ws.emit({ type: "transcript_late", text: "late text" });
+      ws.emit({ type: "candidate_turn_late" });
+    });
+    expect(screen.queryByText("should not show")).not.toBeInTheDocument();
+    expect(screen.queryByText("late text")).not.toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "transcription_error", message: "stt down" }); });
+    expect(screen.getByText(/transcription unavailable/i)).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "transcript_partial", text: "back again" }); });
+    expect(screen.queryByText(/transcription unavailable/i)).not.toBeInTheDocument();
+    expect(screen.getByText("back again")).toBeInTheDocument();
+  });
+
+  it("noise-gates mic upload (silence is sent as zeros) and sends silence while the interviewer's audio is playing", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+    });
+    await waitFor(() => expect(MockAudioContext.scriptProcessors.length).toBeGreaterThan(0));
+    const processor = MockAudioContext.scriptProcessors[0];
+
+    const feed = (amplitude: number) => {
+      ws.send.mockClear();
+      processor.onaudioprocess?.({ inputBuffer: { getChannelData: () => new Float32Array(4800).fill(amplitude) } });
+      const frame = ws.send.mock.calls.map(([raw]) => JSON.parse(raw as string)).find((m) => m.type === "audio_chunk");
+      expect(frame).toBeDefined();
+      return Buffer.from(frame.data, "base64").some((byte) => byte !== 0);
+    };
+
+    expect(feed(0.2)).toBe(true);                     // speech goes through
+    for (let i = 0; i < 5; i++) feed(0.0005);         // hangover tail after speech
+    expect(feed(0.0005)).toBe(false);                 // then background noise is gated to silence
+
+    expect(feed(0.2)).toBe(true);
+    act(() => { ws.emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" }); });
+    expect(feed(0.2)).toBe(false);                    // interviewer audio is still scheduled: mic sends silence
+  });
+
+  it("never mutes the mic because the avatar reports 'talking', so the interviewer can hear the answer", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      // The avatar stays "talking" until the AI hears the candidate; muting on
+      // it would deadlock (silence -> answer timeout -> next question).
+      ws.emit({ type: "avatar_state", state: "talking" });
+    });
+    await waitFor(() => expect(MockAudioContext.scriptProcessors.length).toBeGreaterThan(0));
+    const processor = MockAudioContext.scriptProcessors[0];
+
+    ws.send.mockClear();
+    processor.onaudioprocess?.({ inputBuffer: { getChannelData: () => new Float32Array(4800).fill(0.2) } });
+    const frame = ws.send.mock.calls.map(([raw]) => JSON.parse(raw as string)).find((m) => m.type === "audio_chunk");
+    expect(frame).toBeDefined();
+    expect(Buffer.from(frame.data, "base64").some((byte) => byte !== 0)).toBe(true);
+  });
+
+  it("does not mute the mic when the audio context is suspended (its clock never advances)", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" });
+    });
+    await waitFor(() => expect(MockAudioContext.scriptProcessors.length).toBeGreaterThan(0));
+
+    // Audio is queued, but the interviewer's context is suspended, so it is not really playing.
+    MockAudioContext.contexts.forEach((c) => { c.state = "suspended"; });
+    const processor = MockAudioContext.scriptProcessors[0];
+    ws.send.mockClear();
+    processor.onaudioprocess?.({ inputBuffer: { getChannelData: () => new Float32Array(4800).fill(0.2) } });
+    const frame = ws.send.mock.calls.map(([raw]) => JSON.parse(raw as string)).find((m) => m.type === "audio_chunk");
+    expect(Buffer.from(frame.data, "base64").some((byte) => byte !== 0)).toBe(true);
+  });
+
+  it("switches from 'speaking' to 'listening' once the interviewer's audio has finished playing, even if the server sends no turn_complete", async () => {
+    vi.useFakeTimers();
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" });
+    });
+    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+
+    // Still playing (the mock clock has not reached the end of the scheduled audio).
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+
+    // Playback ends: the audio clock passes the scheduled end and stays quiet.
+    MockAudioContext.contexts.forEach((c) => { c.currentTime = 100; });
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(screen.queryByText(/interviewer speaking/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
+  });
+
+  it("treats the candidate speaking (turn open, live transcript, avatar 'listening') as their turn, without overriding a finished interview", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+    });
+    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "candidate_turn_open" }); });
+    expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
+
+    // Live transcript alone is enough too (new question -> speaking -> partial).
+    act(() => { ws.emit({ type: "question_next", question_text: "Why this role?" }); });
+    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    act(() => { ws.emit({ type: "transcript_partial", text: "Because I enjoy" }); });
+    expect(screen.getByText("Because I enjoy")).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "question_next", question_text: "Any questions for us?" }); });
+    act(() => { ws.emit({ type: "avatar_state", state: "listening" }); });
+    expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
+
+    // A late candidate event never pulls a completed interview back into the room.
+    act(() => {
+      ws.emit({ type: "interview_complete", report_id: "r1", overall_score: 50 });
+      ws.emit({ type: "candidate_turn_open" });
+    });
+    expect(screen.getByText("Interview Complete!")).toBeInTheDocument();
   });
 
   it("handles mic and camera failures with visible recovery", async () => {
@@ -587,24 +755,25 @@ describe("LiveInterviewSessionPage", () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
-    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); ws.emit({ type: "question_audio", question_number: 1, text: "Answer this.", audio: null, time_limit_s: 60 }); });
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1600)); });
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
     expect(await screen.findByText(/camera unavailable/i)).toBeInTheDocument();
     expect(await screen.findByText(/microphone permission needs attention/i)).toBeInTheDocument();
     vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValue(mediaStream());
     fireEvent.click(screen.getByRole("button", { name: /retry mic/i }));
-    await waitFor(() => expect(screen.queryByText(/microphone access is unavailable/i)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/microphone permission needs attention/i)).not.toBeInTheDocument());
   });
 
-  it("confirms end interview before sending end_interview", async () => {
+  it("confirms end interview before sending end_interview, then routes to history not a report", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
     act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
-    fireEvent.click(screen.getByRole("button", { name: /^end$/i }));
-    expect(screen.getByRole("dialog", { name: /end interview early/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /end & get report/i }));
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    const dialog = screen.getByRole("dialog", { name: /end interview early/i });
+    expect(dialog).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "End" }));
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_interview" }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
   });
 
   it("uses backend report_id when interview completes", async () => {
@@ -632,7 +801,7 @@ describe("LiveInterviewSessionPage", () => {
     });
 
     expect(screen.queryByRole("dialog", { name: /connection lost/i })).not.toBeInTheDocument();
-    expect(screen.getByText("3/6")).toBeInTheDocument();
+    expect(screen.getByText("Question 3/6")).toBeInTheDocument();
   });
 
   it("reconnects with a recovery ticket when the connection is interrupted", async () => {
@@ -674,40 +843,25 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.queryByText("Speech service timed out. Please continue.")).not.toBeInTheDocument();
   });
 
-  it("auto-submits the answer when the question timer reaches zero", async () => {
-    vi.useFakeTimers();
+  it("mutes and unmutes interviewer audio by adjusting the persistent player's gain, without tearing it down", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
     act(() => {
       ws.open();
       ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
-      ws.emit({ type: "question_audio", question_number: 1, text: "Keep it concise.", audio: null, time_limit_s: 2 });
-      vi.advanceTimersByTime(1_600);
+      // Base64 for two Int16 PCM samples — enough to create the player.
+      ws.emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" });
     });
 
-    expect(screen.getByRole("timer", { name: /time remaining: 2 seconds/i })).toBeInTheDocument();
+    const gainNode = MockAudioContext.gainInstances.at(-1)!;
+    expect(gainNode.gain.value).toBe(1);
 
-    act(() => { vi.advanceTimersByTime(2_000); });
-
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_answer" }));
-    expect(screen.getByText(/reviewing answer/i)).toBeInTheDocument();
-  });
-
-  it("pauses and resumes interviewer audio from the speaker control", async () => {
-    const LiveSessionPage = await importLiveSessionPage();
-    render(<LiveSessionPage />);
-    act(() => {
-      MockWebSocket.instances[0].open();
-      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
-      MockWebSocket.instances[0].emit({ type: "question_audio", question_number: 1, text: "Can you introduce yourself?", audio: "AA==", time_limit_s: 60 });
-    });
-
-    const audio = MockAudio.instances.at(-1)!;
     fireEvent.click(screen.getByRole("button", { name: /mute interviewer audio/i }));
-    expect(audio.pause).toHaveBeenCalled();
+    expect(gainNode.gain.value).toBe(0);
+
     fireEvent.click(screen.getByRole("button", { name: /unmute interviewer audio/i }));
-    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(gainNode.gain.value).toBe(1);
   });
 });
 
@@ -722,6 +876,189 @@ describe("ReportPage", () => {
     expect(screen.getByText("Tell me about teamwork.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /share report/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /download pdf/i })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["HR", "/notes/hr"],
+    ["live_technical", "/notes/technical"],
+    ["live_managerial", "/notes/managerial"],
+    ["something_else", "/notes/generate"],
+  ])("sends 'Practice Weak Questions' to the notes page matching a %s report", async (type, expectedHref) => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue(report({ type }));
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /practice weak questions/i }));
+    expect(mocks.push).toHaveBeenCalledWith(expectedHref);
+  });
+
+  it("shows low 0-100 scores below 10 as sent, and only scales the 0-10 fields", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue({
+      report_id: "r1",
+      session_id: "report-123",
+      user_id: "u1",
+      type: "live_hr",
+      overall_score: 8, // 0-100: a very weak interview, NOT 8/10
+      scores: { hr_score: 8, communication_score: 5, confidence_score: 9 }, // 0-100
+      competency_scores: { communication: 0.8 }, // report-level competencies are 0-10 -> 8
+      answers: [
+        {
+          question_id: "q1",
+          question_text: "Tell me about yourself.",
+          score: 0.8,
+          note: "Very brief.",
+          // Per-answer competencies are 0-100, so 1.8 is 2, not 18.
+          competency_scores: { confidence_articulation: 1.8 },
+        },
+      ],
+      pressure_tag: null,
+      score_source: "openai_realtime_text/turn_timeout",
+      created_at: "2026-09-24T08:25:45.713000",
+    });
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    // Overall score stays 8 (not 80 / "Strong").
+    expect(screen.getByRole("img", { name: /overall score 8 out of 100, needs improvement/i })).toBeInTheDocument();
+    // Report-level competency 0.8 on the 0-10 scale is 8.
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "8");
+
+    // Per-answer competency 1.8 on the 0-100 scale is 2, not 18.
+    fireEvent.click(screen.getByRole("button", { name: /tell me about yourself/i }));
+    expect(screen.getByRole("meter", { name: "Confidence articulation" })).toHaveAttribute("aria-valuenow", "2");
+  });
+
+  it("uses the *_score keys as 0-100 in the category fallback, and the old keys as 0-10", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue({
+      report_id: "r1", session_id: "report-123", user_id: "u1", type: "live_hr", overall_score: 40,
+      scores: { hr_score: 6, communication: 7, confidence_score: 9 }, // 6 and 9 are 0-100, 7 is 0-10
+      answers: [], pressure_tag: null, weighted_score: 40, created_at: "2026-09-24T08:25:45.713000",
+    });
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    expect(screen.getByRole("meter", { name: "HR readiness" })).toHaveAttribute("aria-valuenow", "6");
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "70");
+    expect(screen.getByRole("meter", { name: "Confidence" })).toHaveAttribute("aria-valuenow", "9");
+  });
+
+  it("keeps older 0-10 reports working (overall_score 8.1 is 81)", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue(report()); // scores.overall 8.1, no live markers
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    expect(screen.getByRole("img", { name: /overall score 81 out of 100, strong/i })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "80");
+  });
+
+  it("renders the live realtime backend's real report payload accurately, without fabricated values", async () => {
+    mocks.params = { sessionId: "report-123" };
+    const answer = (id: string, text: string, score: number, note: string, comm: number) => ({
+      question_id: id,
+      question_text: text,
+      score,
+      competency_scores: { communication: comm, behavioral_competency: 22.0, confidence_articulation: 21.8 },
+      question_competencies: [],
+      performance_level: "Incomplete",
+      note,
+    });
+    // Shape taken from a real live_hr report: duration_seconds, *_score keys
+    // on a 0-100 scale, a `note` per answer, overall competency_scores on a
+    // 0-10 scale, end_reason, grade and interview_readiness.
+    mocks.getReport.mockResolvedValue({
+      report_id: "r1",
+      session_id: "report-123",
+      user_id: "u1",
+      type: "live_hr",
+      overall_score: 21.6,
+      scores: { hr_score: 21.6, communication_score: 30.0, confidence_score: 22.0 },
+      answers: [
+        answer("HR_OPENAI_001", "Tell me about yourself.", 1.73, "Lacked detail and connection to the role.", 20),
+        answer("HR_OPENAI_002", "Which projects sparked your interest?", 6.5, "Solid motivation shared.", 27.4),
+        answer("HR_OPENAI_006", "Describe a time you collaborated.", 2.35, "Minimal explanation of teamwork.", 26),
+      ],
+      not_scored: false,
+      pressure_tag: null,
+      end_reason: "max_questions_reached",
+      duration_seconds: 906.1,
+      competency_scores: { communication: 3.7, behavioral_competency: 3.2, confidence_articulation: 2.3 },
+      performance_level: "Incomplete",
+      grade: "D",
+      performance_summary: "Significant areas for improvement in self-introduction and collaboration.",
+      strengths: ["Showed basic communication skills."],
+      improvement_areas: ["Enhance clarity and structure in self-introduction."],
+      interview_readiness: { ready_for_interview: false, recommended_practice_areas: ["self-introduction", "team collaboration"] },
+      created_at: "2026-09-24T08:25:45.713000",
+    });
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    // Header facts come from the real fields.
+    expect(screen.getAllByText("15 min").length).toBeGreaterThan(0);
+    expect(screen.getByText("HR interview")).toBeInTheDocument();
+    expect(screen.getByText("Session ended: Question limit reached")).toBeInTheDocument();
+
+    // Backend grade, level and written summary are shown.
+    expect(screen.getByText("D")).toBeInTheDocument();
+    expect(screen.getAllByText("Incomplete").length).toBeGreaterThan(0);
+    expect(screen.getByText("Significant areas for improvement in self-introduction and collaboration.")).toBeInTheDocument();
+
+    // Readiness verdict and recommended practice areas.
+    expect(screen.getByText("Not yet interview-ready")).toBeInTheDocument();
+    expect(screen.getByText("team collaboration")).toBeInTheDocument();
+
+    // Competency breakdown uses the backend's competencies (0-10 scaled to 0-100), lowest flagged.
+    const confidence = screen.getByRole("meter", { name: "Confidence articulation" });
+    expect(confidence).toHaveAttribute("aria-valuenow", "23");
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "37");
+    expect(screen.getByText("Focus area")).toBeInTheDocument();
+
+    // Redo list keeps each question's REAL number (Q1 and Q3, not Q1 and Q2) and its note.
+    expect(screen.getByText("Q1: Tell me about yourself.")).toBeInTheDocument();
+    expect(screen.getByText("Q3: Describe a time you collaborated.")).toBeInTheDocument();
+    expect(screen.queryByText("Q2: Which projects sparked your interest?")).not.toBeInTheDocument();
+    expect(screen.getByText("Lacked detail and connection to the role.")).toBeInTheDocument();
+
+    // Values the backend did not send are not invented.
+    expect(screen.queryByText("0 min")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Interviewer.s perspective/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pressure Handling/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Performance affected by pressure/i)).not.toBeInTheDocument();
+  });
+
+  it("falls back to category scores for the breakdown on older payloads, and shows question details only on expand", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue(report({
+      scores: { overall: 8.1, hr_score: 21.6, communication_score: 30.0, confidence_score: 22.0 },
+    }));
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    await screen.findByRole("heading", { name: "Mock Interview Report" });
+
+    expect(screen.getByRole("meter", { name: "Communication" })).toHaveAttribute("aria-valuenow", "30");
+
+    const row = screen.getByRole("button", { name: /tell me about teamwork/i });
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Clear structure.")).not.toBeInTheDocument();
+    fireEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Clear structure.")).toBeInTheDocument();
+  });
+
+  it("uses a plain 'Back' button that returns to the live interview page", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue(report());
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^back$/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
   });
 
   it("retries delayed report and then shows final not-found state", async () => {

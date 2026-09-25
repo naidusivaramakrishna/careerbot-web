@@ -110,7 +110,7 @@
   // from the scraped JD text, since a clean comma-separated version is
   // appended separately by the caller and would otherwise be duplicated.
   function stripRawKeySkillsLines(jdText, skills) {
-    if (!skills || !skills.length) return jdText;
+    if (!skills?.length) return jdText;
     const lines = jdText.split('\n').filter(line => {
       const trimmed = line.trim();
       if (!trimmed) return true;
@@ -124,7 +124,13 @@
           matched++;
         }
       }
-      return !(matched >= 2 && remainder.trim().length === 0);
+      // Loosened from requiring an exactly-empty remainder: Naukri's raw
+      // innerText can carry a stray star/bullet glyph or extra whitespace
+      // around each chip that the DOM-extracted skill text doesn't include
+      // (e.g. a "☆" preferred-skill marker), so an exact-match check left a
+      // tiny non-empty remainder and kept the whole un-separated blob line
+      // instead of dropping it.
+      return !(matched >= 2 && remainder.trim().length <= 3);
     });
     return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
@@ -159,13 +165,28 @@
   }
 
   function extractMeta() {
-    const titleEl   = document.querySelector('h1.styles_jd-header-title__rZwM1, h1[class*="title"], .jd-header-title');
-    const companyEl = document.querySelector('.styles_jd-header-comp-name__MvqAI a, [class*="comp-name"] a');
+    const titleEl    = document.querySelector('h1.styles_jd-header-title__rZwM1, h1[class*="title"], .jd-header-title');
+    const companyEl  = document.querySelector('.styles_jd-header-comp-name__MvqAI a, [class*="comp-name"] a');
+    // Naukri renders location differently depending on page type:
+    //  - Search-results card view (e.g. naukri.com/jobs-in-<city>, job shown
+    //    inline in a list): location is a link with a native title tooltip
+    //    ("Jobs in Bengaluru") — its class is the abbreviated "loc", which
+    //    [class*="location"] does NOT match (it's a substring check the
+    //    other way around: "loc" doesn't contain "location").
+    //  - Standalone job-detail page: location sits near the header, scoped
+    //    query below.
+    // An unscoped [class*="location"] query as a last resort risks matching
+    // the search bar's own location filter or a different job's location
+    // elsewhere on the page, but it's better than nothing if both misses.
+    const locationEl = document.querySelector('a[title^="Jobs in "]')
+      || document.querySelector('[class*="jd-header"] [class*="location" i]')
+      || document.querySelector('[class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'naukri',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'naukri',
     };
   }
 
@@ -176,7 +197,11 @@
     const jd = extractJobDescription();
     if (!jd) return;
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();

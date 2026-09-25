@@ -212,6 +212,7 @@ export default function ReportPage() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={handleDownloadReport}
                 disabled={isDownloading}
                 className="shrink-0 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center gap-2"
@@ -260,6 +261,7 @@ export default function ReportPage() {
           {/* Back to Dashboard */}
           <div className="flex justify-center">
             <button
+              type="button"
               onClick={() => router.push('/dashboard')}
               className="bg-[#2557a7] hover:bg-[#1e4a94] text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors"
             >

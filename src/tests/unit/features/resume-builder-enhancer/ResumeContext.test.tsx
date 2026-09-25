@@ -296,6 +296,40 @@ describe('ResumeContext', () => {
     expect(mockToast.success).toHaveBeenCalledWith('Resume loaded successfully!');
   });
 
+  it('keeps domain-specific personal info fields when loading a saved resume', async () => {
+    // careerbot-api GET /resumes/{id} returns these under camelCase keys in
+    // personalInfo (PersonalInfoOut). EditorTab now requires them for the
+    // active domain, so dropping them on load blanks the form after a reload
+    // and blocks the next Personal Info save.
+    const domainFields = {
+      fathersName: 'R. Builder',
+      gender: 'Female',
+      maritalStatus: 'Single',
+      permanentAddress: '12 Harbour Rd',
+      specialisation: 'Cardiology',
+      medicalRegNo: 'MCI-123',
+      barEnrollmentNo: 'D/123/2015',
+      yearOfEnrollment: '2015',
+      courtsOfPractise: 'Delhi High Court',
+      rank: 'Chief Officer',
+      cocNumber: 'COC-9',
+      vesselTypes: 'Tanker',
+      stcwCertificates: 'BST, AFF',
+      orcidId: '0000-0002-1825-0097',
+      googleScholarUrl: 'https://scholar.google.com/citations?user=x',
+      hIndex: '12',
+    };
+    mockGetResumeById.mockResolvedValue({
+      ...builderResume,
+      personalInfo: { ...builderResume.personalInfo, ...domainFields },
+    } as never);
+
+    renderProvider({ resumeId: 'builder-1' });
+
+    expect(await screen.findByText('Loading: false')).toBeInTheDocument();
+    expect(latestContext.resumeData.personalInfo).toMatchObject(domainFields);
+  });
+
   it('uses matching cached resume data and removes stale cache after loading', async () => {
     const cachedResume = JSON.stringify({
       resumeId: 'builder-1',

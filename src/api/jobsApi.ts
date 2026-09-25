@@ -309,6 +309,12 @@ export const chatAboutJob = async (
 export const getSmartMatchedJobs = async (params: SmartMatchParams = {}): Promise<SmartMatchResponse> => {
   const response = await httpClient.get<SmartMatchResponse>('/jobs/scored', {
     params,
+    // A brand-new/just-updated profile has no cached score yet (cache_hit:
+    // false) and this scores every job in the pool from scratch, which can
+    // take 1-2 minutes — right at the shared client's 120s default timeout.
+    // Give it real headroom so a genuinely-slow-but-successful first score
+    // doesn't get cut off and misreported as a load failure.
+    timeout: 180000,
     ...getRequestConfig(),
   });
   return response.data;

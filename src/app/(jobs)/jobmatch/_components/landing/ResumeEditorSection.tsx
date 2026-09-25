@@ -40,7 +40,7 @@ function EditorMockup() {
       {/* Section tabs */}
       <div className="flex border-b border-slate-100 bg-slate-50/40 overflow-x-auto">
         {sections.map((s, i) => (
-          <button key={s} onClick={() => setActiveTab(i)}
+          <button key={s} type="button" onClick={() => setActiveTab(i)}
             className={`px-4 py-2.5 text-[11px] font-bold whitespace-nowrap border-b-2 transition-all duration-200 ${
               activeTab === i
                 ? "border-[#2557a7] text-[#2557a7] bg-white"
@@ -58,7 +58,7 @@ function EditorMockup() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Professional Summary</p>
-              <button onClick={toggle}
+              <button type="button" onClick={toggle}
                 className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#2557a7] bg-[#EEF4FF] border border-[#dde8f8] px-3 py-1.5 rounded-full hover:bg-[#dde8f8] transition-all">
                 <Sparkles className="w-3 h-3" /> AI Improve
               </button>
@@ -108,7 +108,7 @@ function EditorMockup() {
               <p className="text-[10px] text-[#2557a7] font-bold uppercase tracking-wider mb-2">Suggested from JD — click to add</p>
               <div className="flex flex-wrap gap-1.5">
                 {skillsToAdd.filter(s => !addedSkills.includes(s)).map(s => (
-                  <button key={s} onClick={() => addSkill(s)}
+                  <button key={s} type="button" onClick={() => addSkill(s)}
                     className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-[#2557a7] border border-blue-200 hover:bg-blue-100 transition-colors">
                     + {s}
                   </button>
@@ -159,7 +159,7 @@ function EditorMockup() {
             <p className="text-[11.5px] text-slate-400 max-w-48">
               Click AI Suggest to get role-specific improvements for this section.
             </p>
-            <button className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#2557a7] bg-[#EEF4FF] border border-[#dde8f8] px-3 py-1.5 rounded-full">
+            <button type="button" className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#2557a7] bg-[#EEF4FF] border border-[#dde8f8] px-3 py-1.5 rounded-full">
               <Sparkles className="w-3 h-3" /> AI Suggest
             </button>
           </div>

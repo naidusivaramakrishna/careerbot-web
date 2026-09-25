@@ -1,14 +1,14 @@
 // Match-related TypeScript interfaces
 
 export interface AnalysisContentProps {
-  jdText: string;
+  readonly jdText: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  matchResults: any;
+  readonly matchResults: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  parsedResumeData?: any;
+  readonly parsedResumeData?: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  parsedJDData?: any;
-  onBackToUpload?: () => void;
+  readonly parsedJDData?: any;
+  readonly onBackToUpload?: () => void;
 }
 
 export interface MatchedMap {

@@ -39,7 +39,7 @@
            /\/jobs\//.test(window.location.pathname);
   }
 
-  function extractJobDescription() {
+  function extractByFixedSelectors() {
     const selectors = [
       // Current LinkedIn selectors (2024-2025)
       '#job-details',
@@ -57,45 +57,56 @@
       const el = document.querySelector(sel);
       if (el && el.innerText.trim().length > 100) return el.innerText.trim();
     }
+    return null;
+  }
 
-    // LinkedIn labels this section "About the job" on every layout (standalone
-    // /jobs/view/ page and the /jobs/search-results/ split-pane preview alike),
-    // even when the surrounding CSS class names differ between them — anchoring
-    // on that heading text survives LinkedIn's frequent class renames better
-    // than any fixed selector list.
-    // textContent, not innerText — innerText forces a synchronous layout on
-    // every call, and this scan runs across every leaf element in the page
-    // each time the mutation observer below fires (LinkedIn mutates the DOM
-    // constantly). For a leaf node's exact-string test, textContent is
-    // equivalent; innerText is only needed (and only used) on the final
-    // matched container below, where layout-aware visibility actually matters.
+  // LinkedIn labels this section "About the job" on every layout (standalone
+  // /jobs/view/ page and the /jobs/search-results/ split-pane preview alike),
+  // even when the surrounding CSS class names differ between them — anchoring
+  // on that heading text survives LinkedIn's frequent class renames better
+  // than any fixed selector list.
+  // textContent, not innerText — innerText forces a synchronous layout on
+  // every call, and this scan runs across every leaf element in the page
+  // each time the mutation observer below fires (LinkedIn mutates the DOM
+  // constantly). For a leaf node's exact-string test, textContent is
+  // equivalent; innerText is only needed (and only used) on the final
+  // matched container below, where layout-aware visibility actually matters.
+  function extractByAboutTheJobHeading() {
     const heading = Array.from(document.querySelectorAll('h1, h2, h3, h4, strong, span, div'))
       .find(el => el.children.length === 0 && /^about the job$/i.test(el.textContent?.trim() || ''));
-    if (heading) {
-      const container = (heading.parentElement || heading).closest('section, article, div');
-      const text = container?.innerText?.trim();
-      if (text && text.length > 100) return text;
-    }
+    if (!heading) return null;
+    const container = (heading.parentElement || heading).closest('section, article, div');
+    const text = container?.innerText?.trim();
+    return text && text.length > 100 ? text : null;
+  }
 
-    // Last resort: find any element with substantial text near "job-details" or
-    // "description". Reject a candidate that IS nav/header chrome itself, or
-    // that contains a nav/header descendant with enough links to be real site
-    // navigation (a proxy for "this wraps the whole page" — e.g. the global
-    // nav plus the signed-in user's profile card) — but not on ANY nested
-    // <nav>/<header>, since LinkedIn's small card sub-widgets use those tags
-    // too and over-rejecting on that previously disqualified otherwise-valid
-    // candidates.
+  // A candidate IS nav/header chrome itself, or contains a nav/header
+  // descendant with enough links to be real site navigation (a proxy for
+  // "this wraps the whole page" — e.g. the global nav plus the signed-in
+  // user's profile card) — but not on ANY nested <nav>/<header>, since
+  // LinkedIn's small card sub-widgets use those tags too and over-rejecting
+  // on that previously disqualified otherwise-valid candidates.
+  function isChromeElement(el) {
+    if (el.tagName === 'NAV' || el.tagName === 'HEADER') return true;
+    return el.querySelectorAll('nav a, header a').length > 5;
+  }
+
+  // Last resort: find any element with substantial text near "job-details" or
+  // "description".
+  function extractByLargestTextCandidate() {
     const candidates = document.querySelectorAll('article, section, div[id*="job"], div[class*="description"]');
     for (const el of candidates) {
-      if (el.tagName === 'NAV' || el.tagName === 'HEADER') continue;
-      const chromeLinkCount = el.querySelectorAll('nav a, header a').length;
-      if (chromeLinkCount > 5) continue;
+      if (isChromeElement(el)) continue;
       const text = el.innerText?.trim();
-      if (text && text.length > 200) {
-        return text;
-      }
+      if (text && text.length > 200) return text;
     }
     return null;
+  }
+
+  function extractJobDescription() {
+    return extractByFixedSelectors()
+      || extractByAboutTheJobHeading()
+      || extractByLargestTextCandidate();
   }
 
   function extractMeta() {
@@ -105,11 +116,15 @@
     const companyEl = document.querySelector(
       '.job-details-jobs-unified-top-card__company-name a, .jobs-unified-top-card__company-name a, .topcard__org-name-link'
     );
+    const locationEl = document.querySelector(
+      '.job-details-jobs-unified-top-card__primary-description-container .tvm__text, .jobs-unified-top-card__bullet, .topcard__flavor--bullet'
+    );
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'linkedin',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'linkedin',
     };
   }
 
@@ -125,7 +140,11 @@
 
     // Avoid re-sending the same JD / re-injecting the banner on repeated
     // retries or rapid SPA navigation callbacks.
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
     staleJdAfterNavigation = null;
 

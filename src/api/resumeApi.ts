@@ -1155,6 +1155,38 @@ export const applyTemplateToResume = async (
 };
 
 /**
+ * Persist the chosen style catalogue on the resume
+ * (POST /templates/catalogues/{resume_id}/apply?catalogue_key=...).
+ */
+export const applyCatalogueToResume = async (resumeId: string, catalogueKey: string): Promise<void> => {
+  await httpClient.post(`/templates/catalogues/${encodeURIComponent(resumeId)}/apply`, undefined, {
+    params: { catalogue_key: catalogueKey },
+  });
+};
+
+/**
+ * Persist the chosen style catalogue on an enhanced resume. The catalogue
+ * endpoint above only looks in the regular `resumes` collection; enhanced
+ * resumes store `applied_catalogue` through their bulk update, and their
+ * download reads it back. Backend: PATCH /api/v1/resume/enhance/{enhanced_id}.
+ */
+export const applyCatalogueToEnhancedResume = async (enhancedId: string, catalogueKey: string): Promise<void> => {
+  await httpClient.patch(`/resume/enhance/${encodeURIComponent(enhancedId)}`, {
+    applied_catalogue: catalogueKey,
+  });
+};
+
+/**
+ * Get one template by id, including preview_html / preview_css for iframe
+ * rendering. Backend: GET /api/v1/templates/{template_id} (TemplateOut).
+ * Errors propagate so callers can fall back to the list data.
+ */
+export const getTemplateById = async (templateId: string): Promise<TemplateResponse> => {
+  const response = await httpClient.get<TemplateResponse>(`/templates/${encodeURIComponent(templateId)}`);
+  return response.data;
+};
+
+/**
  * Get all template categories
  */
 export const getTemplateCategories = async (): Promise<string[]> => {

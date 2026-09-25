@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CareerBot - ATS Resume Checker & Job Matcher",
   "version": "1.2.0",
-  "description": "Auto-detect job descriptions from LinkedIn, Naukri, Indeed, Glassdoor, Shine, TimesJobs, Internshala, Foundit, ZipRecruiter, Wellfound, Greenhouse, Lever and tailor your resume in 1 click.",
+  "description": "Auto-detect job descriptions from LinkedIn, Naukri, Indeed, Glassdoor, Shine, TimesJobs, Internshala, Foundit, ZipRecruiter, Wellfound, Greenhouse, Lever, Dice, JobLeads, Zippia and tailor your resume in 1 click.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -130,6 +130,31 @@
       "js": ["content-scripts/lever-scraper.js"],
       "css": ["content-scripts/banner.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.dice.com/job-detail/*",
+        "https://www.dice.com/jobs*"
+      ],
+      "js": ["content-scripts/dice-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.jobleads.com/*"
+      ],
+      "js": ["content-scripts/jobleads-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.zippia.com/*"
+      ],
+      "js": ["content-scripts/zippia-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
     }
   ],
   "permissions": [
@@ -142,6 +167,7 @@
   "host_permissions": [
     "http://localhost:8000/*",
     "http://localhost:3000/*",
+    "https://careerbot-staging.southindia.cloudapp.azure.com/*",
     "https://www.linkedin.com/*",
     "https://www.naukri.com/*",
     "https://www.indeed.co.in/*",
@@ -164,7 +190,10 @@
     "https://angel.co/*",
     "https://boards.greenhouse.io/*",
     "https://job-boards.greenhouse.io/*",
-    "https://jobs.lever.co/*"
+    "https://jobs.lever.co/*",
+    "https://www.dice.com/*",
+    "https://www.jobleads.com/*",
+    "https://www.zippia.com/*"
   ],
   "web_accessible_resources": [
     {
@@ -193,7 +222,10 @@
         "https://angel.co/*",
         "https://boards.greenhouse.io/*",
         "https://job-boards.greenhouse.io/*",
-        "https://jobs.lever.co/*"
+        "https://jobs.lever.co/*",
+        "https://www.dice.com/*",
+        "https://www.jobleads.com/*",
+        "https://www.zippia.com/*"
       ]
     }
   ]

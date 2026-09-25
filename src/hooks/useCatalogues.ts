@@ -32,7 +32,7 @@ export interface CataloguesResponse {
   catalogues: CatalogueConfig[];
 }
 
-// Relative to httpClient's baseURL ('/api/v1' by default, src/lib/http.ts);
+// Relative to httpClient's baseURL ('/api/v1' or NEXT_PUBLIC_BASE_URL, src/lib/http.ts);
 // an '/api/v1/...' path here would be requested as '/api/v1/api/v1/...'.
 const CATALOGUES_API_URL = '/templates/catalogues/all';
 const CACHE_KEY = 'catalogues_cache';

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart2, Mic, MessageSquare, Users } from "lucide-react";
-import { generateHrQuestions } from "@/api/mockInterviewApi";
+import { generateHrQuestions } from "@/api/interviewPrepApi";
 import PracticeLandingPage from "../_components/PracticeLandingPage";
 
 const STATS = [

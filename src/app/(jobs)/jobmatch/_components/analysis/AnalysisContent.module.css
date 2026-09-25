@@ -1,0 +1,252 @@
+.analysis {
+  color: #182230;
+}
+
+.analysis :global(svg.lucide) {
+  stroke-width: 2;
+}
+
+.analysis button > :global(svg.lucide) {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.analysis button:focus-visible,
+.analysis a:focus-visible {
+  outline: 2px solid #2257a7;
+  outline-offset: 3px;
+}
+
+.analysis button:disabled {
+  cursor: not-allowed;
+}
+
+/* Compact the on-screen document without changing the shared resume template. */
+@media screen {
+  .resumePreview [data-resume-preview="true"] {
+    background: transparent !important;
+  }
+
+  .resumePreview [data-resume-document="true"] {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 16px 8px !important;
+  }
+
+  .resumePreview [data-summary-updated="true"] {
+    border-left: 3px solid #68b78a;
+    padding-left: 12px;
+  }
+
+  .resumePreview [data-summary-updated="true"] > p > span {
+    background-color: transparent !important;
+    padding: 0 !important;
+  }
+
+  .resumePreview div:has(> [id="resume-section-contact"]) {
+    padding: 8px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .resumePreview [id="resume-section-contact"] {
+    text-align: left;
+  }
+
+  .resumePreview [id="resume-section-contact"] h1 {
+    font-size: 28px !important;
+    letter-spacing: 0 !important;
+    overflow-wrap: anywhere;
+  }
+
+  .resumePreview [id="resume-section-contact"] > div {
+    justify-content: flex-start !important;
+    overflow-wrap: anywhere;
+  }
+
+  .resumePreview h2 {
+    letter-spacing: 0 !important;
+  }
+
+  .resumePreview p {
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+
+  .resumePreview :global(.page-break-inside-avoid) > div {
+    flex-wrap: wrap;
+    column-gap: 8px;
+  }
+}
+
+/* Detailed report: one shared grid aligns the document with the analysis. */
+.analysis { background: #f3f9ff; color: #0b1045; font-family: Arial, Helvetica, sans-serif; }
+.layout { display: grid; grid-template-columns: minmax(0, .76fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: start; gap: 10px 16px; width: 100%; max-width: 1600px; margin: 0 auto; padding: 14px 22px; }
+.pageHeading { grid-column: 1; grid-row: 1; min-width: 0; align-self: center; }
+.pageHeading button { margin-bottom: 5px; font-size: 14px; font-weight: 500; color: #17244d; }
+.pageHeading h1 { margin: 0; font-size: 32px; line-height: 1.15; letter-spacing: -.8px; color: #101014; }
+.pageHeading p { margin: 3px 0 0; color: #3e5ab3; font-size: 14px; line-height: 1.3; }
+.rightColumn { display: contents; }
+.scoreCards { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: 1.35fr .9fr 1.3fr; gap: 7px; min-width: 0; align-self: stretch; }
+.scoreCards > section { border: 1px solid #e0edff; border-radius: 4px; background: #ffffffeb; padding: 10px; min-width: 0; }
+.scoreCards h2 { margin: 0 0 6px; font-size: 14px; font-weight: 700; line-height: 1.3; color: #111936; }
+.scoreCards p { font-size: 12px; line-height: 1.35; color: #5262a4; margin: 5px 0 0; }
+.currentScore { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.scoreGauge { position: relative; flex: 0 0 76px; width: 76px; height: 76px; }
+.scoreGauge svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+.scoreGauge strong { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 750; }
+.scoreBadge { display: inline-block; padding: 3px 7px; border-radius: 3px; font-size: 12px; font-weight: 600; }
+.potentialScore > strong { font-size: 30px; font-weight: 750; line-height: 1; }
+.downloadCard progress { display: block; width: 100%; height: 6px; appearance: none; overflow: hidden; border: 0; border-radius: 5px; background: #e4e6e9; margin-bottom: 6px; }
+.downloadCard progress::-webkit-progress-bar { background: #e4e6e9; }
+.downloadCard progress::-webkit-progress-value { background: #0062ff; border-radius: 5px; }
+.downloadCard progress::-moz-progress-bar { background: #0062ff; }
+.downloadCard button { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 36px; flex-wrap: wrap; padding: 7px 6px; border: 1px solid #bad3ff; border-radius: 3px; background: white; color: #005bff; font-size: 12px; font-weight: 500; line-height: 1.2; }
+.downloadCard button span { font-size: 12px; white-space: nowrap; }
+.downloadCard button > :global(svg.lucide) { width: 18px; height: 18px; }
+.downloadCard button:disabled { opacity: .5; }
+.downloadCard p { text-align: center; font-size: 11px; }
+.documentColumn { grid-column: 1; grid-row: 2; min-width: 0; height: calc(100dvh - 88px); min-height: 520px; position: sticky; top: 64px; }
+.documentColumn > div { height: 100%; }
+.documentCard { display: flex; flex-direction: column; height: 100%; overflow: hidden; border: 1px solid #e0ebff; border-radius: 8px; background: white; }
+.documentFile { order: 0; display: flex; flex-wrap: wrap; flex-shrink: 0; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e4edff; background: white; }
+.documentFile button { min-height: 36px; padding: 6px 11px; border-radius: 3px; font-size: 14px; font-weight: 500; color: #0061ff; }
+.documentTabs { order: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 0 6px; border-bottom: 1px solid #e5ecff; flex-shrink: 0; }
+.documentTabs > div { gap: 0; }
+.documentTabs > div > button { min-height: 42px; padding: 9px 12px; font-size: 14px; font-weight: 600; }
+.documentFile .compareButton { margin-left: auto; background: white; color: #0061ff; padding: 5px 8px; border: 1px solid #b9ceff; border-radius: 3px; font-size: 12px; white-space: nowrap; }
+.viewerToolbar { order: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px; background: #f8fafc; color: #252c51; font-size: 12px; flex-shrink: 0; }
+.viewerToolbar > div { display: flex; align-items: center; gap: 12px; }
+.viewerToolbar button { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; padding: 5px; color: #101837; border: 0; background: transparent; }
+.viewerToolbar button:disabled { opacity: .4; }
+.viewerToolbar output { background: #eef2f7; padding: 2px 8px; min-width: 44px; text-align: center; }
+.resumePreview, .jdPreview { order: 3; min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 12px 18px; scrollbar-width: thin; scrollbar-color: #ccc transparent; }
+.jdPreview { font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.previewNotes { color: #5366a0; font-size: 12px; margin-bottom: 5px; }
+.previewNotes summary { cursor: pointer; }
+.previewNotes p, .previewNotes > div { font-size: 12px; }
+.documentCard:fullscreen { width: 100%; height: 100%; padding: 12px; }
+.comparing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); }
+.comparing > .documentFile, .comparing > .documentTabs, .comparing > .viewerToolbar { grid-column: 1 / -1; }
+.comparing > .resumePreview { grid-column: 1; grid-row: 4; padding: 10px; }
+.comparing > .jdPreview { grid-column: 2; grid-row: 4; border-left: 1px solid #dce8ff; padding: 10px; }
+.analysisPanel { grid-column: 2; grid-row: 2; min-width: 0; height: calc(100dvh - 88px); min-height: 520px; overflow: auto; scrollbar-width: thin; scrollbar-color: #ccd8eb transparent; }
+.analysisPanel > div { background: transparent; }
+.analysisTabs { background: white; border: 1px solid #e2ecff; border-radius: 8px 8px 0 0; position: sticky; top: 0; z-index: 2; }
+.analysisTabs > div { display: grid; grid-template-columns: repeat(3, 1fr); }
+.analysisTabs button { min-height: 42px; padding: 9px 6px; font-size: 14px; font-weight: 500; color: #253a8f; }
+.analysisTabs button[aria-pressed="true"] { color: #0061ff; border-color: #0061ff; }
+.analysisBody { min-width: 0; border: 0; margin: 0; padding: 0; }
+.detailHeading h2 { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.3; color: #11152d; }
+.detailHeading { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 6px; }
+.detailHeading button { display: flex; align-items: center; gap: 2px; background: transparent; border: 0; color: #0061ff; font-size: 12px; }
+.detailHeading button > :global(svg.lucide) { width: 18px; height: 18px; }
+.analysisPanel [data-compact="true"] > div { margin-top: 0; }
+.analysisPanel [data-fix-group] { border-color: #deebff; border-radius: 3px; margin-top: 0; }
+.analysisPanel [data-fix-group] + [data-fix-group] { border-top: 0; }
+.analysisPanel [data-fix-group] > [role="button"] { min-height: 50px; padding: 9px 12px; background: white; gap: 8px; }
+.analysisPanel [data-fix-group] > [role="button"] > div:first-child { width: 30px; height: 30px; background: transparent !important; }
+.analysisPanel [data-fix-group] > [role="button"] > div:first-child svg { color: #0061ff !important; width: 24px; height: 24px; }
+.analysisPanel [data-fix-group] > [role="button"] p:first-child { font-size: 14px; font-weight: 700; }
+.analysisPanel [data-fix-group] > [role="button"] p + p { font-size: 12px; color: #50619c; }
+.analysisPanel [data-fix-group] > [role="button"] > span { font-size: 14px; }
+.analysisPanel [data-fix-title] + p { font-size: 12px; color: #50619c; }
+.analysisPanel [data-fix-group] table { table-layout: fixed; width: 100%; }
+.analysisPanel [data-fix-group] th, .analysisPanel [data-fix-group] td { min-width: 0; padding: 6px 8px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; vertical-align: top; }
+.analysisPanel [data-fix-group] th { background: #f0f5ff; color: #1b2856; font-size: 12px; }
+.analysisPanel [data-fix-group] th:nth-child(1) { width: 17%; }
+.analysisPanel [data-fix-group] th:nth-child(2) { width: 23%; }
+.analysisPanel [data-fix-group] th:nth-child(3) { width: 30%; }
+.analysisPanel [data-fix-group] th:nth-child(4) { width: 13%; }
+.analysisPanel [data-fix-group] th:nth-child(5) { width: 17%; }
+.analysisPanel [data-fix-group] td { color: #46558a; }
+.analysisPanel [data-fix-group] td:first-child { color: #161b43; }
+.analysisPanel [data-fix-group] td button { min-height: 34px; padding: 7px 9px; gap: 3px; border-radius: 3px; font-size: 12px; font-weight: 500; box-shadow: none; }
+.analysisPanel [data-fix-group] td button:not(:disabled):first-child { background: #0061ff !important; }
+@media screen {
+  .resumePreview [data-resume-document="true"] { padding: 8px 4px !important; }
+  .resumePreview [data-resume-document="true"] p, .resumePreview [data-resume-document="true"] li { font-size: 14px !important; line-height: 1.5 !important; }
+  .resumePreview [data-resume-document="true"] h2 { font-size: 14px !important; }
+  .resumePreview [data-resume-document="true"] h3 { font-size: 14px !important; }
+  .resumePreview [id="resume-section-contact"] h1 { font-size: 30px !important; font-weight: 750; letter-spacing: -.8px !important; }
+}
+@media (min-width: 1500px) { .layout { gap: 12px 18px; } .scoreCards h2 { font-size: 14px; } .scoreCards p { font-size: 12px; } .analysisPanel [data-fix-group] th, .analysisPanel [data-fix-group] td { font-size: 14px; } }
+@media (max-width: 1050px) and (min-width: 761px) {
+  .layout { padding: 10px 16px; gap: 8px 12px; }
+  .pageHeading h1 { font-size: 28px; } .pageHeading p { font-size: 12px; }
+  .scoreCards { gap: 5px; } .scoreCards > section { padding: 7px; }
+  .scoreCards h2 { font-size: 11px; margin-bottom: 4px; } .scoreCards p { font-size: 11px; }
+  .scoreGauge { width: 64px; height: 64px; flex-basis: 64px; } .scoreGauge strong { font-size: 18px; }
+  .currentScore { gap: 6px; } .scoreBadge { font-size: 11px; padding: 3px 5px; }
+  .potentialScore > strong { font-size: 26px; } .downloadCard button { font-size: 11px; } .downloadCard button span { font-size: 11px; }
+  .documentColumn, .analysisPanel { height: calc(100dvh - 88px); min-height: 480px; }
+  .documentTabs > div > button { padding: 6px 9px; font-size: 12px; } .documentFile .compareButton { font-size: 12px; padding: 5px; }
+  .resumePreview { padding: 10px 14px; }
+  .analysisPanel [data-fix-group] th, .analysisPanel [data-fix-group] td { font-size: 11px; padding: 5px 6px; }
+  .analysisPanel [data-fix-group] td button { padding: 4px 6px; font-size: 11px; min-height: 32px; }
+}
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; padding: 14px; gap: 12px; }
+  .pageHeading { grid-column: 1; grid-row: 1; }
+  .scoreCards { grid-column: 1; grid-row: 2; grid-template-columns: 1fr 1fr; }
+  .downloadCard { grid-column: 1 / -1; }
+  .documentColumn { grid-column: 1; grid-row: 3; position: static; height: 740px; min-height: 0; }
+  .analysisPanel { grid-column: 1; grid-row: 4; height: auto; min-height: 0; overflow: visible; }
+  .documentFile .compareButton { font-size: 12px; padding: 5px; }
+  .documentTabs > div > button { padding: 7px; font-size: 12px; }
+  .viewerToolbar { font-size: 12px; gap: 4px; }
+  .viewerToolbar > div { gap: 6px; }
+  .analysisPanel [data-fix-group] table { min-width: 620px; }
+}
+.analysisPanel [data-fix-title] { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.analysisPanel [data-priority] { display: inline-block; padding: 3px 7px; border-radius: 3px; font-size: 12px; font-weight: 600; line-height: 1.2; }
+.analysisPanel [data-fix-group] > [role="button"][aria-expanded="false"] { min-height: 44px; }
+.analysisPanel [data-fix-group] > [role="button"][aria-expanded="false"] [data-fix-title] + p { display: none; }
+.analysisPanel [data-compact="true"] > div > [data-fix-group] { margin-block: 0; }
+
+.matchLegend { position: sticky; bottom: -12px; z-index: 1; display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; margin: 16px -18px -12px; padding: 12px 16px; background: #fff; border-top: 1px solid #e2ecff; color: #3155ac; font-size: 12px; line-height: 1.4; }
+.matchLegend > span { display: inline-flex; align-items: center; gap: 7px; }
+.matchLegend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.matchLegend i[data-status="matched"] { background: #00b894; }
+.matchLegend i[data-status="missing"] { background: #fff3f5; }
+
+/* Documents share equal tracks; the header retains its normal 0.76:1 split. */
+@media (min-width: 761px) {
+  .comparisonLayout { --comparison-gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .comparisonLayout .pageHeading { grid-column: 1 / -1; width: calc((100% - var(--comparison-gap)) * 0.4318181818); }
+  .comparisonLayout .scoreCards { grid-column: 1 / -1; justify-self: end; width: calc((100% - var(--comparison-gap)) * 0.5681818182); }
+}
+@media (min-width: 761px) and (max-width: 1050px) {
+  .comparisonLayout { --comparison-gap: 12px; }
+}
+@media (min-width: 1500px) {
+  .comparisonLayout { --comparison-gap: 18px; }
+}
+.comparisonJd { grid-column: 2; }
+.comparisonJd .documentTabs { min-height: 43px; padding: 10px 14px; color: #2257a7; font-size: 14px; }
+.comparisonJd .documentFile { min-height: 57px; }
+.comparisonJd .documentFile button { display: flex; align-items: center; gap: 6px; }
+@media (max-width: 760px) {
+  .comparisonLayout { grid-template-columns: minmax(0, 1fr); }
+  .comparisonJd { grid-column: 1; grid-row: 4; }
+}
+
+.analysis button:focus-visible, .analysis select:focus-visible { outline: 2px solid #2257a7; outline-offset: 3px; }
+.analysis button:disabled { cursor: not-allowed; }
+.viewerToolbar button { border-radius: 6px; }
+.viewerToolbar button:hover:not(:disabled) { background: #e8eef7; }
+.documentFile .compareButton:hover { background: #eff6ff; }
+.documentFile button { transition: background-color 150ms, border-color 150ms; }
+.matchLegend i[data-status="missing"] { border: 1px solid #f3c8d1; }
+@media (max-width: 480px) {
+  .viewerToolbar { flex-wrap: wrap; padding: 8px; }
+  .viewerToolbar > span { flex: 1 0 100%; }
+  .viewerToolbar button { min-width: 36px; min-height: 36px; }
+  .documentFile { gap: 8px; padding: 10px; }
+  .documentFile button { font-size: 12px; }
+  .resumePreview, .jdPreview { padding: 12px; }
+  .matchLegend { margin-inline: -12px; gap: 8px; }
+}

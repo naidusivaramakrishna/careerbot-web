@@ -40,12 +40,6 @@ const createDashboardSummary = (
     name: 'John Doe',
     email: 'john@example.com',
   },
-  plan: {
-    plan_id: 'premium',
-    plan_name: 'Premium',
-    credits_total: 500,
-    credits_remaining: creditsRemaining,
-  },
   profile: {
     completeness: 80,
     missing_fields: [],
@@ -63,17 +57,18 @@ const createDashboardSummary = (
     resume_uploaded: true,
     profile_completed: true,
     ats_scan_done: true,
-    resume_enhanced: false,
     job_applied: false,
   },
   usage_counts: {
     resumes_created: 1,
     resumes_parsed: 1,
     ats_scans: 1,
-    resumes_enhanced: 0,
     job_matches: 0,
     job_applications: 0,
     assessments_taken: 0,
+    mock_tests_taken: 0,
+    mock_interviews_taken: 0,
+    coding_tests_taken: 0,
   },
   best_scores: {
     ats_score: 82,

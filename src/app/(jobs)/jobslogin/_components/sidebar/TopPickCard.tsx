@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 import { memo } from "react";
-import { Star, ArrowRight, MapPin, Briefcase } from "lucide-react";
+import { Star } from "lucide-react";
 
 interface Job {
   id: string;
@@ -13,17 +13,28 @@ interface Job {
 }
 
 interface TopPickCardProps {
-  jobs?: Job[];
-  loading?: boolean;
-  emptyMessage?: string;
-  onViewAll?: () => void;
+  readonly jobs?: Job[];
+  readonly loading?: boolean;
+  readonly emptyMessage?: string;
+  readonly onViewAll?: () => void;
 }
 
-const RANK_COLORS = [
-  "bg-amber-50 text-amber-500 border-amber-200",
-  "bg-gray-50 text-gray-400 border-gray-200",
-  "bg-orange-50 text-orange-400 border-orange-200",
+// Company-initial avatar — a flat colored square with the company's first
+// letter, standing in for a logo. Color is a stable hash of the company
+// name (not match quality) so the same company always gets the same tint.
+const AVATAR_TINTS = [
+  { bg: "#e8f0fb", fg: "#215299" },
+  { bg: "#fbeee8", fg: "#b3492b" },
+  { bg: "#eaf3ee", fg: "#0f7a3d" },
+  { bg: "#f3ecfb", fg: "#6b3fa0" },
+  { bg: "#fdf3e4", fg: "#b3781f" },
 ];
+
+function avatarTint(company: string) {
+  let hash = 0;
+  for (let i = 0; i < company.length; i++) hash = (hash * 31 + company.charCodeAt(i)) | 0;
+  return AVATAR_TINTS[Math.abs(hash) % AVATAR_TINTS.length];
+}
 
 function TopPickCard({ jobs = [], loading = false, emptyMessage, onViewAll }: TopPickCardProps) {
   const topPicks = jobs.slice(0, 3);
@@ -31,93 +42,80 @@ function TopPickCard({ jobs = [], loading = false, emptyMessage, onViewAll }: To
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 shadow-inner shadow-white">
-          <Star size={13} className="text-amber-500 fill-amber-400" />
+      <div className="flex items-center gap-2.5 px-4 py-3.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
+          <Star size={13} className="text-gray-600" />
         </div>
         <div>
-          <h3 className="text-[14px] font-extrabold leading-tight text-slate-950">Top picks for you</h3>
-          <p className="text-[10.5px] font-medium text-slate-400">Personalised · refreshed hourly</p>
+          <h3 className="text-[15px] font-semibold leading-tight text-gray-900">Top picks for you</h3>
+          <p className="text-[12px] text-gray-500">Personalised &middot; refreshed hourly</p>
         </div>
       </div>
 
-      <div className="border-t border-slate-100" />
-
-      {/* Job list */}
-      <div className="px-3 py-2">
-        {loading ? (
-          <div className="py-6 text-center">
-            <div className="space-y-1.5 animate-pulse">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-12 bg-gray-100 rounded-lg" />
-              ))}
-            </div>
-          </div>
-        ) : topPicks.length === 0 ? (
-          <div className="py-6 text-center px-3">
-            <p className="text-[12px] text-gray-400 leading-relaxed">
-              {emptyMessage ?? "No personalised picks yet."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {topPicks.map((job, idx) => (
+      {/* List — plain rows separated by hairline dividers, no card-in-card. */}
+      <div>
+        {(() => {
+          if (loading) {
+            return (
+              <div className="animate-pulse space-y-3 px-4 py-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-12 rounded bg-gray-100" />
+                ))}
+              </div>
+            );
+          }
+          if (topPicks.length === 0) {
+            return (
+              <div className="px-4 py-6 text-center">
+                <p className="text-[12px] leading-relaxed text-gray-400">
+                  {emptyMessage ?? "No personalised picks yet."}
+                </p>
+              </div>
+            );
+          }
+          return topPicks.map((job) => {
+            const hasMatchScore = !!job.matchScore && Math.round(job.matchScore) > 0;
+            const tint = avatarTint(job.company || job.title);
+            return (
               <div
                 key={job.id}
-                className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 transition-all hover:-translate-y-px hover:border-blue-100 hover:bg-[#f7faff] hover:shadow-[0_10px_24px_rgba(79,70,229,0.08)]"
+                className="flex cursor-pointer items-start gap-3 border-t border-gray-100 px-4 py-3 first:border-t-0"
               >
-                {/* Rank badge */}
-                <span className={`w-5 h-5 rounded-full border text-[9px] font-black flex items-center justify-center shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${RANK_COLORS[idx]}`}>
-                  {idx + 1}
-                </span>
-
-                {/* Content */}
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 text-[13px] font-extrabold leading-tight text-slate-800 transition-colors group-hover:text-[#4F46E5]">
-                    {job.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-[10.5px] text-gray-400 truncate">{job.company}</span>
-                    {job.location && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-gray-400 shrink-0">
-                        <MapPin size={8} className="text-gray-300" />
-                        {job.location.split(",")[0]}
-                      </span>
-                    )}
-                    {job.type && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-gray-400 shrink-0">
-                        <Briefcase size={8} className="text-gray-300" />
-                        {job.type}
-                      </span>
-                    )}
-                  </div>
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[14px] font-bold"
+                  style={{ background: tint.bg, color: tint.fg }}
+                >
+                  {(job.company || job.title || "?").charAt(0).toUpperCase()}
                 </div>
 
-                {/* Match score OR arrow — flat brand color, not the red/amber
-                    "quality" scale used elsewhere: these are curated picks
-                    already, so coding them as warnings undercuts the panel's
-                    own "recommended for you" framing. */}
-                {!!job.matchScore && Math.round(job.matchScore) > 0 ? (
-                  <span className="shrink-0 text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-md text-indigo-600 bg-indigo-50">
-                    {Math.round(job.matchScore)}%
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-[14px] font-semibold leading-snug text-[#4F46E5] hover:underline">
+                    {job.title}
+                  </p>
+                  <p className="mt-0.5 text-[12px] leading-snug text-gray-500">
+                    {[job.company, job.location, job.type].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+
+                {hasMatchScore && (
+                  <span className="shrink-0 pt-0.5 text-[11px] font-medium text-gray-500">
+                    {Math.round(job.matchScore!)}% match
                   </span>
-                ) : (
-                  <ArrowRight size={13} className="shrink-0 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-[#4F46E5]" />
                 )}
               </div>
-            ))}
-          </div>
-        )}
+            );
+          });
+        })()}
       </div>
 
       {/* Footer */}
-      <div className="border-t border-slate-100 px-4 py-2.5">
+      <div className="border-t border-gray-100 px-4 pb-3 pt-0">
         <button
           type="button"
           onClick={onViewAll}
-          className="w-full flex items-center justify-center gap-1.5 text-[11.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] hover:gap-2 transition-all"
+          className="text-[13px] font-semibold text-[#4F46E5] hover:underline"
         >
-          View all recommendations <ArrowRight size={11} />
+          Show all recommendations
         </button>
       </div>
     </div>

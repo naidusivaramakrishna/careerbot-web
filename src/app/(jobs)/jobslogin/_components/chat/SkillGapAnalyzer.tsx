@@ -1,7 +1,7 @@
 "use client";
 
 interface SkillGapAnalyzerProps {
-  skills: string[];
+  readonly skills: string[];
 }
 
 export default function SkillGapAnalyzer({ skills }: SkillGapAnalyzerProps) {

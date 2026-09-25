@@ -167,13 +167,15 @@
   }
 
   function extractMeta() {
-    const titleEl   = document.querySelector('.profile h1, .heading_4_5.profile, h1[class*="profile"]');
-    const companyEl = document.querySelector('.company_name a, .company-name a, [class*="company_name"] a');
+    const titleEl    = document.querySelector('.profile h1, .heading_4_5.profile, h1[class*="profile"]');
+    const companyEl  = document.querySelector('.company_name a, .company-name a, [class*="company_name"] a');
+    const locationEl = document.querySelector('#location_names, .locations, [class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'internshala',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'internshala',
     };
   }
 
@@ -184,7 +186,11 @@
     const jd = extractJobDescription();
     if (!jd) return;
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — checking document.getElementById
+    // ('cb-shadow-host') here treated the user's own close click as "not
+    // shown yet" and reopened the banner on the next retry/mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();

@@ -1,131 +1,6 @@
 import { httpClient } from '@/lib/http';
-import logger from '@/lib/logger';
 
 // ==================== INTERFACES ====================
-
-// ── Generate Notes ─────────────────────────────────────────────────────────────
-
-export interface GenerateNotesRequest {
-  resume_id: string;
-  target_role?: string;
-  experience_level?: 'fresher' | 'mid' | 'senior';
-}
-
-export interface HRAnswer {
-  question_id: string;
-  question_text: string;
-  why_asked: string;
-  answer_script: string;
-  practice_tip: string;
-  common_mistake: string;
-  experience_level: 'fresher' | 'experienced' | 'both';
-}
-
-export interface ProjectNote {
-  project_name: string;
-  overview: string;
-  your_role: string;
-  tech_stack: string;
-  how_it_works: string;
-  challenges: string;
-  results: string;
-  follow_up_questions: { q: string; hint: string }[];
-}
-
-export interface GenerateNotesResponse {
-  notes: {
-    self_introduction?: string;
-    project_explanations?: ProjectNote[];
-    hr_answers?: HRAnswer[];
-    additional_notes?: {
-      hobbies: string[];
-      hobbies_custom: string;
-      career_goals_short: string;
-      career_goals_long: string;
-      why_this_field: string;
-      teamwork_example: string;
-      handling_gaps: string;
-      learning_attitude: string;
-    };
-    unfilled_count?: number;
-    [key: string]: unknown;
-  };
-  cached: boolean;
-}
-
-// ── Get / Update Notes ─────────────────────────────────────────────────────────
-
-export interface NotesRecord {
-  resume_id: string;
-  target_role: string;
-  notes: GenerateNotesResponse['notes'];
-  updated_at: string;
-  source: 'ai' | 'manual' | 'hybrid';
-}
-
-export interface UpdateNotesResponse {
-  updated: boolean;
-  notes: GenerateNotesResponse['notes'];
-}
-
-// ── Practice ───────────────────────────────────────────────────────────────────
-
-export interface PracticeQuestion {
-  id: string;
-  text: string;
-  category: string;
-  key_points: string[];
-  time_limit_s: number;
-}
-
-export interface StartPracticeRequest {
-  round_number: number;
-  category?: string;
-  target_role?: string;
-}
-
-export interface StartPracticeResponse {
-  session_id: string;
-  questions: PracticeQuestion[];
-  round_number: number;
-}
-
-export interface SubmitAnswerResponse {
-  transcript: string;
-  rule_based: boolean;
-  scores: {
-    content_score: number;
-    clarity_score: number;
-    structure_score: number;
-    length_score: number;
-    weighted_score: number;
-  };
-  feedback: {
-    good_points: string[];
-    improvements: string[];
-    improved_answer: string;
-    encouragement: string;
-  };
-  rule_scores: {
-    filler_count: number;
-    key_points_hit: string[];
-    key_points_missed: string[];
-    fillers_detected: string[];
-    rule_score: number;
-  };
-  usage?: { input_tokens: number; output_tokens: number; total_tokens: number };
-  model?: string;
-  processing_time_ms?: number;
-}
-
-export interface PracticeProgress {
-  session_id: string;
-  total_questions: number;
-  answered: number;
-  avg_score: number;
-  round_number: number;
-  scores: { question_id: string; score: number }[];
-}
 
 // ── Readiness ──────────────────────────────────────────────────────────────────
 
@@ -165,118 +40,7 @@ export interface UserProgress {
   last_activity: string;
 }
 
-// ── English Essentials ─────────────────────────────────────────────────────────
-
-export interface EnglishEssentials {
-  phrases: string[];
-  filler_replacements: Record<string, string>;
-  common_mistakes: { wrong: string; correct: string }[];
-  phrasal_verbs: { verb: string; meaning: string }[];
-}
-
 // ==================== API FUNCTIONS ====================
-
-/**
- * Generate AI-powered interview prep notes from user's resume
- * POST /api/v1/mock-interview/generate-notes
- * Credit cost: 10 credits
- */
-export const generateNotes = async (data: GenerateNotesRequest): Promise<GenerateNotesResponse> => {
-  try {
-    logger.debug('📝 Generating mock interview notes', data);
-    const response = await httpClient.post<GenerateNotesResponse>(
-      '/mock-interview/generate-notes',
-      data as unknown as Record<string, unknown>,
-      { timeout: 180_000 } // 3 min — AI generation takes longer than the default 30s
-    );
-    logger.info('✅ Notes generated successfully');
-    return response.data;
-  } catch (error) {
-    logger.error('❌ Error generating notes:', error);
-    throw error;
-  }
-};
-
-/**
- * Fetch stored interview prep notes for a resume
- * GET /api/v1/mock-interview/notes/{resume_id}
- */
-export const getNotes = async (resumeId: string): Promise<NotesRecord> => {
-  const response = await httpClient.get<NotesRecord>(`/mock-interview/notes/${resumeId}`);
-  return response.data;
-};
-
-/**
- * Partially update interview prep notes (user edits)
- * PUT /api/v1/mock-interview/notes/{user_id}
- *
- * NOTE: this takes a USER id, unlike getNotes above which takes a resume id.
- * That asymmetry is the backend's, not a mistake here:
- *   - GET  /notes/{resume_id} resolves resume-scoped, falling back to
- *     user-scoped when the segment is the caller's own id.
- *   - PUT  /notes/{user_id}   compares the segment to the authenticated user
- *     and returns 403 Access denied on any mismatch.
- * The stored notes document is keyed on user_id alone (see save_notes in
- * careerbot-api's mock_interview repository), so a user-scoped write and a
- * resume-filtered read address the SAME record — passing a resume id here
- * only produces a 403, it does not address a different document.
- */
-export const updateNotes = async (
-  userId: string,
-  notes: Record<string, unknown>
-): Promise<UpdateNotesResponse> => {
-  const response = await httpClient.put<UpdateNotesResponse>(
-    `/mock-interview/notes/${userId}`,
-    { notes } as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
-
-/**
- * Return interview English phrases and filler replacements
- * GET /api/v1/mock-interview/english-essentials (public)
- */
-export const getEnglishEssentials = async (): Promise<EnglishEssentials> => {
-  const response = await httpClient.get<EnglishEssentials>('/mock-interview/english-essentials');
-  return response.data;
-};
-
-/**
- * Start a new practice round with questions
- * POST /api/v1/mock-interview/practice/start
- */
-export const startPractice = async (data: StartPracticeRequest): Promise<StartPracticeResponse> => {
-  const response = await httpClient.post<StartPracticeResponse>(
-    '/mock-interview/practice/start',
-    data as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
-
-/**
- * Submit a recorded audio answer for AI scoring
- * POST /api/v1/mock-interview/practice/answer  (multipart/form-data)
- * Credit cost: 5 credits (only if LLM is called; 0 if rule score >= 7.0)
- */
-export const submitPracticeAnswer = async (formData: FormData): Promise<SubmitAnswerResponse> => {
-  const response = await httpClient.post<SubmitAnswerResponse>(
-    '/mock-interview/practice/answer',
-    formData as unknown as Record<string, unknown>,
-    { headers: { 'Content-Type': 'multipart/form-data' } }
-  );
-  return response.data;
-};
-
-/**
- * Return progress for an active practice session
- * GET /api/v1/mock-interview/practice/progress?session_id=
- */
-export const getPracticeProgress = async (sessionId: string): Promise<PracticeProgress> => {
-  const response = await httpClient.get<PracticeProgress>('/mock-interview/practice/progress', {
-    params: { session_id: sessionId },
-  });
-  return response.data;
-};
 
 /**
  * Check if user meets criteria to start a live interview
@@ -304,30 +68,6 @@ export const recoverSession = async (): Promise<RecoverSessionResponse> => {
  */
 export const getUserProgress = async (): Promise<UserProgress> => {
   const response = await httpClient.get<UserProgress>('/mock-interview/user-progress');
-  return response.data;
-};
-
-// ==================== FEEDBACK RATING ====================
-
-export interface RateFeedbackRequest {
-  answer_id: string;
-  helpful: boolean;
-  comment?: string;
-}
-
-export interface RateFeedbackResponse {
-  recorded: boolean;
-}
-
-/**
- * Submit thumbs up/down rating on an AI feedback response
- * POST /api/v1/mock-interview/feedback/rate
- */
-export const rateAnswerFeedback = async (data: RateFeedbackRequest): Promise<RateFeedbackResponse> => {
-  const response = await httpClient.post<RateFeedbackResponse>(
-    '/mock-interview/feedback/rate',
-    data as unknown as Record<string, unknown>
-  );
   return response.data;
 };
 
@@ -399,125 +139,21 @@ export const getLiveSessions = async (): Promise<{ sessions: LiveSession[] }> =>
   return response.data;
 };
 
-// ==================== TECHNICAL QUESTIONS ====================
-
-export interface TechnicalQuestion {
-  question_id: string;
-  question_text: string;
-  category: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  key_points: string[];
-  skills_tested: string[];
-}
-
-export interface GenerateTechnicalQuestionsRequest {
-  skills?: string[];
-  experience_level?: 'fresher' | 'mid' | 'senior';
-  target_role?: string;
-  question_bank_gaps?: string[];
-  num_questions?: number; // 1-20, default 9
-}
-
-export interface GenerateTechnicalQuestionsResponse {
-  questions: TechnicalQuestion[];
-}
-
-/**
- * Generate AI-powered technical interview questions
- * POST /api/v1/mock-interview/generate-technical-questions
- * Credit cost: 5 credits (MOCK_INTERVIEW_TECH_Q)
- */
-export const generateTechnicalQuestions = async (
-  data: GenerateTechnicalQuestionsRequest
-): Promise<GenerateTechnicalQuestionsResponse> => {
-  const response = await httpClient.post<GenerateTechnicalQuestionsResponse>(
-    '/mock-interview/generate-technical-questions',
-    data as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
-
-// ==================== HR QUESTIONS ====================
-
-export interface HrQuestion {
-  id: string;
-  text: string;
-  category: string;
-  key_points: string[];
-  time_limit_s: number;
-}
-
-export interface GenerateHrQuestionsResponse {
-  session_id: string;
-  questions: HrQuestion[];
-  round_number: number;
-}
-
-/**
- * Generate HR interview questions
- * POST /api/v1/mock-interview/generate-hr-questions
- */
-export const generateHrQuestions = async (
-  numQuestions = 10
-): Promise<GenerateHrQuestionsResponse> => {
-  const response = await httpClient.post<GenerateHrQuestionsResponse>(
-    '/mock-interview/generate-hr-questions',
-    { num_questions: numQuestions } as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
-
-// ==================== MR / TR QUESTIONS ====================
-
-export interface MrTrQuestion {
-  id: string;
-  text: string;
-  category: string;
-  key_points: string[];
-  time_limit_s: number;
-}
-
-export interface GenerateMrTrQuestionsRequest {
-  mode: 'TR' | 'MR';
-  num_questions?: number;
-  resume_id?: string;
-  target_role?: string;
-  experience_level?: string;
-  difficulty?: string;
-  years_experience?: number;
-  industry?: string;
-  focus_areas?: string[];
-  question_bank_gaps?: string[];
-}
-
-export interface GenerateMrTrQuestionsResponse {
-  session_id: string;
-  questions: MrTrQuestion[];
-  round_number: number;
-}
-
-/**
- * Generate Technical Role (TR) or Managerial Role (MR) interview questions
- * POST /api/v1/mock-interview/generate-mr-tr-questions
- */
-export const generateMrTrQuestions = async (
-  data: GenerateMrTrQuestionsRequest
-): Promise<GenerateMrTrQuestionsResponse> => {
-  const response = await httpClient.post<GenerateMrTrQuestionsResponse>(
-    '/mock-interview/generate-mr-tr-questions',
-    data as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
-
 // ==================== PHASE 2 — REPORT INTERFACES ====================
 
 export interface ReportAnswer {
   question_text: string;
   score: number;
-  feedback: string;
-  key_points_hit: number;
-  key_points_total: number;
+  // The live realtime backend sends a short `note` per answer; older payloads
+  // sent `feedback`. Read both.
+  feedback?: string;
+  note?: string;
+  question_id?: string;
+  // Per-competency scores for this answer (live realtime backend, 0-100).
+  competency_scores?: Record<string, number>;
+  performance_level?: string;
+  key_points_hit?: number;
+  key_points_total?: number;
   transcript?: string;
   duration_s?: number;
   filler_count?: number;
@@ -529,15 +165,37 @@ export interface ReportResponse {
   user_id: string;
   type: string;
   overall_score: number;
+  // Older payloads use overall/hr/communication/confidence on a 0-10 scale;
+  // the live realtime backend sends hr_score/communication_score/
+  // confidence_score on a 0-100 scale.
   scores: {
-    overall: number;
+    overall?: number;
     hr?: number;
     communication?: number;
     confidence?: number;
     technical?: number;
+    hr_score?: number;
+    communication_score?: number;
+    confidence_score?: number;
+    technical_score?: number;
     [key: string]: number | undefined;
   };
   answers: ReportAnswer[];
+  duration_seconds?: number;
+  // Live realtime backend fields.
+  weighted_score?: number;
+  score_source?: string;
+  provider?: string;
+  not_scored?: boolean;
+  performance_level?: string;
+  end_reason?: string;
+  time_limit_seconds?: number;
+  // Overall competency scores (0-10 scale on the current backend).
+  competency_scores?: Record<string, number>;
+  interview_readiness?: {
+    ready_for_interview?: boolean;
+    recommended_practice_areas?: string[];
+  };
   recommendations?: string[];
   pressure_tag: 'pressure_affected' | null;
   grade?: string;
@@ -634,16 +292,24 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 // ==================== PHASE 3 — LIVE INTERVIEW INTERFACES ====================
 
 export interface LiveCreateRequest {
-  session_type: 'hr' | 'technical' | 'managerial' | 'technical_coding';
-  resume_id?: string;
+  // Only these three are accepted — "mixed" (and the old "technical_coding")
+  // are rejected (422). There is no separate coding-round flag: this backend
+  // release has no live-interview coding round at all.
+  session_type: 'hr' | 'technical' | 'managerial';
   target_role?: string;
-  enable_streaming_stt?: boolean;
-  voice?: string;
-  interviewer_index?: number;
-  interviewer_name?: string;
-  interviewer_gender?: string;
-  interviewer_slug?: string;
-  use_orchestrator?: boolean;
+  experience_level?: string;
+  focus_areas?: string[];
+  resume_id?: string;
+}
+
+// interview-avatar.txt section 3. `null` is the normal/default case — feature
+// off, concurrency cap reached, or LiveAvatar refused/timed out. Never an error.
+export interface LiveAvatarSession {
+  livekit_url: string;
+  livekit_client_token: string;
+  avatar_id: string;
+  provider_session_id: string;
+  mode: string; // always "LITE" in Phase 1
 }
 
 export interface LiveCreateResponse {
@@ -651,6 +317,15 @@ export interface LiveCreateResponse {
   ticket_id: string;
   ticket_expires_at: string;
   ws_url: string;
+  time_limit_seconds: number;
+  time_limit_minutes: number;
+  live_provider: string;
+  audio_input_format: string;
+  audio_output_format: string;
+  supports_audio_delta: boolean;
+  supports_interruption: boolean;
+  supports_transcript_delta: boolean;
+  avatar: LiveAvatarSession | null;
 }
 
 export interface LiveSessionState {
@@ -674,57 +349,70 @@ export interface LiveSession {
   pressure_tag?: 'pressure_affected' | null;
 }
 
-// ── WS Message types (client → server) ──
+// ── WS message types ──
+// Rewritten for the realtime-voice protocol (backend PR #204). Every server
+// frame also carries session_id, event_id (dedup'd generically at the parse
+// site) and sometimes timestamp_ms/version — omitted here since nothing reads
+// them per-variant.
+//
+// coding_answer / coding_round_start are NOT part of this backend release's
+// documented protocol (live-interview.txt has no coding-round section at
+// all) — kept here only so the existing coding-round UI keeps compiling
+// as inert, unused code until that feature ships server-side again.
 
-export interface LipSyncWord {
-  word: string;
-  start_ms: number;
-  end_ms: number;
+export interface AnswerEvaluation {
+  weighted_score: number;
   confidence?: number;
+  score_source?: string;
+  scoring_skipped?: boolean;
+  excluded_from_scoring?: boolean;
+  one_line_observation?: string;
 }
 
-export interface LipSyncViseme {
-  viseme_id?: string;
-  provider_viseme_id?: string | number;
-  start_ms: number;
-  end_ms: number;
-  intensity?: number;
-}
-
-export interface LipSyncPayload {
-  schema_version: string;
-  sync_source: 'provider_viseme' | 'forced_alignment' | 'unavailable' | string;
-  provider?: 'azure_speech' | 'rhubarb' | string;
-  sync_provider?: 'azure_speech' | 'rhubarb' | string;
-  timebase?: 'audio_start_ms' | string;
-  audio_start_offset_ms?: number;
-  words?: LipSyncWord[];
-  visemes?: LipSyncViseme[];
-}
 export type WsClientMessage =
-  | { type: 'audio_chunk'; data: string; sequence: number }
-  | { type: 'submit_answer'; text: string }
-  | { type: 'end_answer'; text?: string }
-  | { type: 'skip_question' }
+  | { type: 'audio_chunk'; data: string }
   | { type: 'end_interview' }
-  | { type: 'coding_answer'; submission_id: string | null; score: number | null; problem_slug: string }
-  | { type: 'ping' };
+  | { type: 'skip_question' }
+  | { type: 'ping' }
+  | { type: 'coding_answer'; submission_id: string | null; score: number | null; problem_slug: string };
 
-// ── WS Message types (server → client) ──
 export type WsServerMessage =
-  | { type: 'session_ready'; session_id: string; total_questions: number; estimated_duration_m: number }
-  | { type: 'session_resumed'; session_id: string; questions_asked: number; total_questions: number; current_question: string; pending_answer?: boolean; resumed_from_event_id?: number }
-  | { type: 'question_audio'; question_number: number; text: string; audio: string | null; time_limit_s: number; is_follow_up?: boolean; audio_format?: string; sample_rate?: number; duration_ms?: number; lip_sync?: LipSyncPayload | null }
-  | { type: 'transcript_partial'; text: string; new_word?: string; word_index?: number; timestamp_ms?: number; is_final?: boolean }
-  | { type: 'transcript_final'; text: string; is_final: true }
-  | { type: 'answer_scored'; question_number: number; score: number; feedback?: string; key_points_hit?: number; key_points_total?: number }
-  | { type: 'follow_up'; text: string; audio: string | null; audio_format?: string; sample_rate?: number; duration_ms?: number; time_limit_s?: number; lip_sync?: LipSyncPayload | null }
-  | { type: 'question_skipped'; skipped_question_number: number }
+  | { type: 'session_ready' }
+  | { type: 'session_resumed'; questions_asked: number; current_question?: string; resumed_from_event_id?: number; pending_answer?: boolean }
+  | { type: 'interviewer_audio_delta'; audio_base64: string; mime_type: string }
+  | { type: 'interviewer_transcript_delta'; text: string }
+  | { type: 'interviewer_transcript_final'; text: string }
+  | { type: 'interviewer_generation_complete' }
+  | { type: 'turn_complete' }
+  | { type: 'interviewer_interrupted' }
+  // Doc: "question text in question_text, text or question.question_text" — all three optional, checked in that order.
+  | { type: 'question_next'; question_text?: string; text?: string; question?: { question_text?: string } }
+  | { type: 'candidate_turn_open' }
+  | { type: 'candidate_turn_closed' }
+  // item_id groups the partials of one spoken item; a transcript_final replaces them.
+  | { type: 'transcript_partial'; text: string; item_id?: string }
+  | { type: 'transcript_final'; text: string; item_id?: string }
+  | { type: 'transcription_error'; message?: string }
+  // Never shown as captions — ignored on purpose.
+  | { type: 'transcript_partial_ignored' }
+  | { type: 'transcript_late' }
+  | { type: 'candidate_turn_late' }
+  | { type: 'turn_timeout' }
+  | { type: 'answer_scored'; question_id: string; evaluation: AnswerEvaluation }
+  | { type: 'session_closing' }
   | { type: 'interview_complete'; report_id: string; overall_score: number }
   | { type: 'session_paused'; reason: string; reconnect_token: string | null }
+  | { type: 'heartbeat'; ts_ms?: number }
+  | { type: 'error'; code: string; message: string; recoverable?: boolean }
+  | { type: 'pong' }
   | { type: 'coding_round_start'; problem_slug: string; problem_title: string; time_limit_s: number }
-  | { type: 'error'; code: string; message: string }
-  | { type: 'pong' };
+  // interview-avatar.txt section 6. Purely presentational (safe to ignore) —
+  // "listening" is driven by the AI detecting candidate speech.
+  | { type: 'avatar_state'; state: 'idle' | 'listening' | 'talking' }
+  // reason: connect_failed (avatar never came up) or stream_lost (dropped
+  // mid-interview, including LiveAvatar's own session time limit). The
+  // avatar never returns in the same session — fall back to audio deltas.
+  | { type: 'avatar_unavailable'; reason: 'connect_failed' | 'stream_lost' | string };
 
 // ==================== PHASE 3 — LIVE INTERVIEW FUNCTIONS ====================
 

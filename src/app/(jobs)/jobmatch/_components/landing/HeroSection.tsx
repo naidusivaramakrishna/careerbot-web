@@ -106,8 +106,8 @@ function JDPreview() {
           <span className="text-[11px] font-semibold text-slate-400 pb-0.5 cursor-pointer">Paste Text</span>
         </div>
         <div className="flex justify-end gap-2">
-          <button className="px-4 py-1.5 rounded-lg border border-slate-200 text-[12px] font-semibold text-slate-600">Cancel</button>
-          <button className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold shadow-sm">Continue</button>
+          <button type="button" className="px-4 py-1.5 rounded-lg border border-slate-200 text-[12px] font-semibold text-slate-600">Cancel</button>
+          <button type="button" className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold shadow-sm">Continue</button>
         </div>
       </motion.div>
     </div>
@@ -316,11 +316,11 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onAnalyzeClick }) => {
 
             {/* CTA Row */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <button onClick={onAnalyzeClick}
+              <button type="button" onClick={onAnalyzeClick}
                 className="bg-[#2557a7] hover:bg-[#1a3a8f] text-white font-bold px-9 py-4 rounded-full shadow-[0_4px_24px_rgba(37,87,167,0.35)] hover:shadow-[0_8px_32px_rgba(37,87,167,0.5)] hover:scale-105 active:scale-100 transition-all duration-300 text-base whitespace-nowrap inline-flex items-center gap-2">
                 Tailor My Resume <ArrowRight size={15} />
               </button>
-              <button onClick={onAnalyzeClick}
+              <button type="button" onClick={onAnalyzeClick}
                 className="inline-flex items-center gap-2 text-[#2557a7] font-bold text-sm px-6 py-3.5 rounded-full border border-[#c7d9f5] hover:bg-[#eef4ff] hover:border-[#2557a7] transition-all duration-200">
                 Try it free
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -390,7 +390,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onAnalyzeClick }) => {
               {/* Progress dots */}
               <div className="flex items-center justify-center gap-1.5 mt-4">
                 {STEPS.map((_, i) => (
-                  <button key={i} onClick={() => { setActive(i); startTimer(); }}
+                  <button key={i} type="button" onClick={() => { setActive(i); startTimer(); }}
                     className={`transition-all duration-300 rounded-full ${i === active ? "w-6 h-1.5 bg-blue-600" : "w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400"}`} />
                 ))}
               </div>

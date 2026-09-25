@@ -16,12 +16,22 @@ export function writeJobmatchSessionSnapshot(fields: {
   parsedResumeData: unknown;
   parsedJDData: unknown;
   jdText: string;
+  resumeName?: string;
+  jobDescriptionName?: string;
+  resumeSizeMB?: number;
+  jdSizeMB?: number;
+  analyzedAt?: string;
 }): boolean {
   const entries: [string, string][] = [
     ["jm_matchResults", JSON.stringify(fields.matchResults)],
     ["jm_parsedResumeData", JSON.stringify(fields.parsedResumeData)],
     ["jm_parsedJDData", JSON.stringify(fields.parsedJDData)],
     ["jm_jdText", fields.jdText],
+    ["jm_resumeName", fields.resumeName ?? ""],
+    ["jm_jdName", fields.jobDescriptionName ?? ""],
+    ["jm_resumeSizeMB", fields.resumeSizeMB != null ? String(fields.resumeSizeMB) : ""],
+    ["jm_jdSizeMB", fields.jdSizeMB != null ? String(fields.jdSizeMB) : ""],
+    ["jm_analyzedAt", fields.analyzedAt ?? ""],
   ];
   const priorValues = entries.map(([key]) => {
     try { return sessionStorage.getItem(key); } catch { return null; }

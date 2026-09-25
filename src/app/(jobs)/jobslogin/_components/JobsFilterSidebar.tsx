@@ -13,27 +13,25 @@ import {
   MapPin,
   BookOpen,
   Calendar,
-  Globe2,
   SlidersHorizontal,
 } from "lucide-react";
 import {
   WORK_MODELS,
   JOB_TYPES,
   DATE_PRESETS,
-  JOB_SOURCES,
   type FilterParams,
 } from "./filters/filterConstants";
 import { matchesEducation, matchesLocation } from "./utils/jobFilterUtils";
 
 interface JobsFilterPanelProps {
-  selectedFilters: string[];
-  onFilterToggle: (filter: string) => void;
-  onFilterChange: (filters: FilterParams) => void;
+  readonly selectedFilters: string[];
+  readonly onFilterToggle: (filter: string) => void;
+  readonly onFilterChange: (filters: FilterParams) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  jobs: any[];
+  readonly jobs: any[];
 }
 
-type DropdownKey = "workModel" | "jobType" | "experience" | "salary" | "location" | "education" | "datePosted" | "source" | null;
+type DropdownKey = "workModel" | "jobType" | "experience" | "salary" | "location" | "education" | "datePosted" | null;
 
 const SCORE_STEPS = [50, 60, 70, 80, 90];
 
@@ -50,12 +48,20 @@ const SCORE_CHIP_PREFIXES: Record<string, string> = {
   "eduscore:": "Education",
 };
 
+// Shared class resolver for the 8 filter pills below — every pill uses the
+// exact same active/open/default class triad, only the two booleans differ.
+function pillClassName(hasActive: boolean, isOpen: boolean): string {
+  if (hasActive) return "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]";
+  if (isOpen) return "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm";
+  return "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm";
+}
+
 function formatActiveFilterLabel(filter: string): string {
   const scorePrefix = Object.keys(SCORE_CHIP_PREFIXES).find((p) => filter.startsWith(p));
   if (scorePrefix) {
     return `${SCORE_CHIP_PREFIXES[scorePrefix]} ${filter.slice(scorePrefix.length)}`;
   }
-  return filter.replace(/^(date:|source:|salary:|years:|location:|education:)/, "");
+  return filter.replace(/^(date:|salary:|years:|location:|education:)/, "");
 }
 
 export default function JobsFilterSidebar({
@@ -79,7 +85,6 @@ export default function JobsFilterSidebar({
   const locationRef = useRef<HTMLDivElement>(null);
   const educationRef = useRef<HTMLDivElement>(null);
   const datePostedRef = useRef<HTMLDivElement>(null);
-  const sourceRef = useRef<HTMLDivElement>(null);
   const dropdownRefs: Record<Exclude<DropdownKey, null>, React.RefObject<HTMLDivElement | null>> = {
     workModel: workModelRef,
     jobType: jobTypeRef,
@@ -88,7 +93,6 @@ export default function JobsFilterSidebar({
     location: locationRef,
     education: educationRef,
     datePosted: datePostedRef,
-    source: sourceRef,
   };
 
   // Salary slider state — index into salarySteps
@@ -224,8 +228,6 @@ export default function JobsFilterSidebar({
   const hasEduFilter = activeEduFilters.length > 0;
   const activeDateFilter = selectedFilters.find((f) => f.startsWith("date:")) ?? null;
   const hasDateFilter = activeDateFilter !== null;
-  const activeSourceFilter = selectedFilters.find((f) => f.startsWith("source:")) ?? null;
-  const hasSourceFilter = activeSourceFilter !== null;
 
   const selectedExpFilter = selectedFilters.find((f) => f.startsWith("years:"));
   const selectedExpValue = selectedExpFilter ? selectedExpFilter.replace("years:", "") : null;
@@ -264,7 +266,7 @@ export default function JobsFilterSidebar({
   };
 
   const handleSalaryApply = () => {
-    const step = salarySteps[salarySliderIndex] ?? salarySteps[salarySteps.length - 1];
+    const step = salarySteps[salarySliderIndex] ?? salarySteps.at(-1);
     if (selectedSalaryFilter) onFilterToggle(selectedSalaryFilter);
     if (step.value > 0) {
       onFilterToggle(`salary:${step.label}`);
@@ -324,13 +326,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("workModel")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              activeWorkModels.length > 0
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "workModel"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(activeWorkModels.length > 0, openDropdown === "workModel")}`}
           >
             <Building2 size={14} className={activeWorkModels.length > 0 ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>Work Model</span>
@@ -369,6 +365,14 @@ export default function JobsFilterSidebar({
                     <label
                       key={model}
                       onClick={() => onFilterToggle(model)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onFilterToggle(model);
+                        }
+                      }}
                       className={`flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer transition-all ${
                         isChecked ? "bg-[#f0f4ff]" : "hover:bg-gray-50"
                       }`}
@@ -396,13 +400,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("jobType")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              activeJobTypes.length > 0
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "jobType"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(activeJobTypes.length > 0, openDropdown === "jobType")}`}
           >
             <Briefcase size={14} className={activeJobTypes.length > 0 ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>Job Type</span>
@@ -441,6 +439,14 @@ export default function JobsFilterSidebar({
                     <label
                       key={type}
                       onClick={() => onFilterToggle(type)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onFilterToggle(type);
+                        }
+                      }}
                       className={`flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer transition-all ${
                         isChecked ? "bg-[#f0f4ff]" : "hover:bg-gray-50"
                       }`}
@@ -468,13 +474,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("experience")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              hasExpFilter
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "experience"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(hasExpFilter, openDropdown === "experience")}`}
           >
             <GraduationCap size={14} className={hasExpFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>Experience</span>
@@ -561,13 +561,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("salary")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              hasSalaryFilter
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "salary"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(hasSalaryFilter, openDropdown === "salary")}`}
           >
             <IndianRupee size={14} className={hasSalaryFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>Salary</span>
@@ -686,13 +680,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("location")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              hasLocFilter
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "location"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(hasLocFilter, openDropdown === "location")}`}
           >
             <MapPin size={14} className={hasLocFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>Location</span>
@@ -826,13 +814,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("education")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              hasEduFilter
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "education"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(hasEduFilter, openDropdown === "education")}`}
           >
             <BookOpen size={14} className={hasEduFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>Education</span>
@@ -957,13 +939,7 @@ export default function JobsFilterSidebar({
           <button
             type="button"
             onClick={() => toggleDropdown("datePosted")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              hasDateFilter
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "datePosted"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${pillClassName(hasDateFilter, openDropdown === "datePosted")}`}
           >
             <Calendar size={14} className={hasDateFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
             <span>{activeDateFilter ? activeDateFilter.replace("date:", "") : "Date Posted"}</span>
@@ -982,7 +958,7 @@ export default function JobsFilterSidebar({
                 {hasDateFilter && (
                   <button
                     type="button"
-                    onClick={() => { if (activeDateFilter) onFilterToggle(activeDateFilter); setOpenDropdown(null); }}
+                    onClick={() => { if (activeDateFilter) { onFilterToggle(activeDateFilter); } setOpenDropdown(null); }}
                     className="text-[11px] text-[#4F46E5] hover:text-[#4338CA] font-semibold"
                   >
                     Reset
@@ -998,6 +974,15 @@ export default function JobsFilterSidebar({
                     <label
                       key={preset.label}
                       onClick={() => { onFilterToggle(filterVal); setOpenDropdown(null); }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onFilterToggle(filterVal);
+                          setOpenDropdown(null);
+                        }
+                      }}
                       className={`flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer transition-all ${
                         isChecked ? "bg-[#f0f4ff]" : "hover:bg-gray-50"
                       }`}
@@ -1009,72 +994,6 @@ export default function JobsFilterSidebar({
                       </div>
                       <span className={`text-[13px] ${isChecked ? "text-[#4F46E5] font-semibold" : "text-gray-700"}`}>
                         {preset.label}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── SOURCE PILL ── */}
-        <div className="relative" ref={sourceRef}>
-          <button
-            type="button"
-            onClick={() => toggleDropdown("source")}
-            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
-              hasSourceFilter
-                ? "bg-[#4F46E5] text-white shadow-md shadow-[#4F46E5]/20 hover:bg-[#4338CA]"
-                : openDropdown === "source"
-                ? "bg-[#f0f4ff] text-[#4F46E5] border border-[#4F46E5]/30 shadow-sm"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-[#4F46E5]/40 hover:bg-[#fafbff] hover:shadow-sm"
-            }`}
-          >
-            <Globe2 size={14} className={hasSourceFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
-            <span>{activeSourceFilter ? activeSourceFilter.replace("source:", "") : "Source"}</span>
-            <ChevronDown
-              size={13}
-              className={`transition-transform duration-200 ${openDropdown === "source" ? "rotate-180" : ""} ${
-                hasSourceFilter ? "text-white/60" : "text-gray-400"
-              }`}
-            />
-          </button>
-
-          {openDropdown === "source" && (
-            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
-              <div className="px-4 py-2 flex items-center justify-between">
-                <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Source</p>
-                {hasSourceFilter && (
-                  <button
-                    type="button"
-                    onClick={() => { if (activeSourceFilter) onFilterToggle(activeSourceFilter); setOpenDropdown(null); }}
-                    className="text-[11px] text-[#4F46E5] hover:text-[#4338CA] font-semibold"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mx-3" />
-              <div className="p-1.5">
-                {JOB_SOURCES.map((source) => {
-                  const filterVal = `source:${source}`;
-                  const isChecked = activeSourceFilter === filterVal;
-                  return (
-                    <label
-                      key={source}
-                      onClick={() => { onFilterToggle(filterVal); setOpenDropdown(null); }}
-                      className={`flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer transition-all ${
-                        isChecked ? "bg-[#f0f4ff]" : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
-                        isChecked ? "border-[#4F46E5]" : "border-gray-300"
-                      }`}>
-                        {isChecked && <div className="w-2 h-2 rounded-full bg-[#4F46E5]" />}
-                      </div>
-                      <span className={`text-[13px] ${isChecked ? "text-[#4F46E5] font-semibold" : "text-gray-700"}`}>
-                        {source}
                       </span>
                     </label>
                   );
@@ -1105,44 +1024,12 @@ export default function JobsFilterSidebar({
 
       </div>
 
-      {/* ── ACTIVE FILTER CHIPS STRIP ── */}
-      {selectedFilters.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2.5 border-t border-gray-200/70">
-          <span className="text-[10.5px] text-gray-400 font-bold uppercase tracking-widest shrink-0">Active:</span>
-          {selectedFilters.map((f) => {
-            const label = formatActiveFilterLabel(f);
-            return (
-              <span
-                key={f}
-                className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eef3ff] text-[#4338CA] text-[11.5px] font-semibold rounded-full border border-[#4F46E5]/20 shrink-0"
-              >
-                {label}
-                <button
-                  type="button"
-                  onClick={() => onFilterToggle(f)}
-                  className="text-[#4F46E5]/50 hover:text-[#4338CA] ml-0.5 transition-colors"
-                >
-                  <X size={10} />
-                </button>
-              </span>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => [...selectedFilters].forEach((f) => onFilterToggle(f))}
-            className="text-[11px] text-gray-400 hover:text-gray-700 ml-1 font-semibold transition-colors shrink-0"
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
       {/* More Filters — portal drawer so it escapes sticky/overflow parents */}
       {showMoreFiltersModal && typeof document !== "undefined" && createPortal((() => {
         const DRAWER_SECTIONS = [
           { key: "basic",        label: "Basic Job Criteria",        sub: "Job Type / Work Model / Experience" },
           { key: "compensation", label: "Compensation",              sub: "Annual Salary" },
-          { key: "date",         label: "Date & Source",             sub: "Date Posted / Source" },
+          { key: "date",         label: "Date Posted",               sub: "Date Posted" },
           { key: "education",    label: "Education",                 sub: "Qualification / Degree" },
           { key: "location",     label: "Location",                  sub: "City / State" },
           { key: "matchQuality", label: "Match Quality",             sub: "Overall / Skills / Experience / Education score" },
@@ -1157,7 +1044,6 @@ export default function JobsFilterSidebar({
             workModels={WORK_MODELS}
             jobTypes={JOB_TYPES}
             datePresets={DATE_PRESETS}
-            jobSources={JOB_SOURCES}
             salarySteps={salarySteps}
             experienceOptions={experienceOptions}
             visibleLocOptions={visibleLocOptions}
@@ -1205,9 +1091,17 @@ export default function JobsFilterSidebar({
 }
 
 // ── Checkbox item ─────────────────────────────────────────────────────────
-function CheckItem({ label, checked, onChange, helpText }: { label: string; checked: boolean; onChange: () => void; helpText?: string }) {
+function CheckItem({ label, checked, onChange, helpText }: { readonly label: string; readonly checked: boolean; readonly onChange: () => void; readonly helpText?: string }) {
   return (
     <label onClick={onChange}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onChange();
+        }
+      }}
       className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border cursor-pointer transition-all select-none group ${
         checked
           ? "bg-[#eef3ff] border-[#4F46E5]/40 shadow-[0_1px_4px_rgba(79,70,229,0.08)]"
@@ -1228,6 +1122,43 @@ function CheckItem({ label, checked, onChange, helpText }: { label: string; chec
   );
 }
 
+// ── localToggle branch helpers ──────────────────────────────────────────
+// Each returns the next filters array if it "claims" this filter (matches
+// its prefix), or null to let localToggle try the next branch. Extracted
+// verbatim from the original sequential if-chain — same order, same logic.
+function toggleSalaryFilter(prev: string[], filter: string): string[] | null {
+  if (!filter.startsWith("salary:")) return null;
+  const without = prev.filter((f) => !f.startsWith("salary:"));
+  if (filter === "salary:Any salary" || prev.includes(filter)) return without;
+  return [...without, filter];
+}
+
+function toggleYearsFilter(prev: string[], filter: string): string[] | null {
+  if (!filter.startsWith("years:")) return null;
+  const without = prev.filter((f) => !f.startsWith("years:"));
+  if (filter === "years:Any requirements" || prev.includes(filter)) return without;
+  return [...without, filter];
+}
+
+function toggleLocationOrEducationFilter(prev: string[], filter: string): string[] | null {
+  if (!filter.startsWith("location:") && !filter.startsWith("education:")) return null;
+  return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
+}
+
+function toggleDateFilter(prev: string[], filter: string): string[] | null {
+  if (!filter.startsWith("date:")) return null;
+  const without = prev.filter((f) => !f.startsWith("date:"));
+  return prev.includes(filter) ? without : [...without, filter];
+}
+
+// Match Quality chips are radio-style per component, same as date: above.
+function toggleScoreFilter(prev: string[], filter: string): string[] | null {
+  const scorePrefix = ["matchscore:", "skillscore:", "expscore:", "eduscore:"].find((p) => filter.startsWith(p));
+  if (!scorePrefix) return null;
+  const without = prev.filter((f) => !f.startsWith(scorePrefix));
+  return prev.includes(filter) ? without : [...without, filter];
+}
+
 // ── Right-side drawer ──────────────────────────────────────────────────────
 // DrawerContent receives 40+ parent-scope props (filters, state, setters).
 // Typing each individually would create a fragile 100-line interface;
@@ -1246,36 +1177,14 @@ function DrawerContent(props: any) {
   const [pendingSalaryMin, setPendingSalaryMin] = useState<number | undefined>(undefined);
 
   const localToggle = (filter: string) => {
-    setLocalFilters((prev) => {
-      if (filter.startsWith("salary:")) {
-        const without = prev.filter((f) => !f.startsWith("salary:"));
-        if (filter === "salary:Any salary" || prev.includes(filter)) return without;
-        return [...without, filter];
-      }
-      if (filter.startsWith("years:")) {
-        const without = prev.filter((f) => !f.startsWith("years:"));
-        if (filter === "years:Any requirements" || prev.includes(filter)) return without;
-        return [...without, filter];
-      }
-      if (filter.startsWith("location:") || filter.startsWith("education:")) {
-        return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
-      }
-      if (filter.startsWith("date:")) {
-        const without = prev.filter((f) => !f.startsWith("date:"));
-        return prev.includes(filter) ? without : [...without, filter];
-      }
-      if (filter.startsWith("source:")) {
-        const without = prev.filter((f) => !f.startsWith("source:"));
-        return prev.includes(filter) ? without : [...without, filter];
-      }
-      // Match Quality chips are radio-style per component, same as date:/source: above.
-      const scorePrefix = ["matchscore:", "skillscore:", "expscore:", "eduscore:"].find((p) => filter.startsWith(p));
-      if (scorePrefix) {
-        const without = prev.filter((f) => !f.startsWith(scorePrefix));
-        return prev.includes(filter) ? without : [...without, filter];
-      }
-      return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
-    });
+    setLocalFilters((prev) =>
+      toggleSalaryFilter(prev, filter) ??
+      toggleYearsFilter(prev, filter) ??
+      toggleLocationOrEducationFilter(prev, filter) ??
+      toggleDateFilter(prev, filter) ??
+      toggleScoreFilter(prev, filter) ??
+      (prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter])
+    );
   };
 
   const handleConfirm = () => {
@@ -1304,7 +1213,7 @@ function DrawerContent(props: any) {
       const without = prev.filter((f) => !f.startsWith("salary:"));
       return step.value > 0 ? [...without, `salary:${step.label}`] : without;
     });
-    setPendingSalaryMin(step.value > 0 ? step.value : 0);
+    setPendingSalaryMin(Math.max(step.value, 0));
   };
 
   const handleLocalExpApply = () => {
@@ -1331,7 +1240,6 @@ function DrawerContent(props: any) {
   };
 
   const localActiveDateFilter = localFilters.find((f) => f.startsWith("date:")) ?? null;
-  const localActiveSourceFilter = localFilters.find((f) => f.startsWith("source:")) ?? null;
   const totalActive = localFilters.length;
 
   const addJobFunction = (val: string) => {
@@ -1368,7 +1276,19 @@ function DrawerContent(props: any) {
   return (
     <div className="fixed inset-0 z-[999]">
       {/* Backdrop — click to close */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={props.onClose} />
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        onClick={props.onClose}
+        role="button"
+        tabIndex={0}
+        aria-label="Close filters"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            props.onClose();
+          }
+        }}
+      />
 
       {/* Left-side drawer — slides in from left */}
       <div className="absolute right-0 top-0 bottom-0 w-[55vw] max-w-[780px] animate-in slide-in-from-right duration-300 flex flex-col bg-white shadow-[-8px_0_48px_rgba(15,23,42,0.18)] overflow-hidden">
@@ -1637,7 +1557,7 @@ function DrawerContent(props: any) {
               </div>
             )}
 
-            {/* DATE & SOURCE */}
+            {/* DATE POSTED */}
             {activeSection === "date" && (
               <div className="space-y-7">
                 <div>
@@ -1650,22 +1570,6 @@ function DrawerContent(props: any) {
                           key={preset.label}
                           label={preset.label}
                           checked={localActiveDateFilter === filterVal}
-                          onChange={() => localToggle(filterVal)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[13px] font-bold text-gray-900 mb-3">Job Source</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {props.jobSources.map((source: string) => {
-                      const filterVal = `source:${source}`;
-                      return (
-                        <CheckItem
-                          key={source}
-                          label={source}
-                          checked={localActiveSourceFilter === filterVal}
                           onChange={() => localToggle(filterVal)}
                         />
                       );

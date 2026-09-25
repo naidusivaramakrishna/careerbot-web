@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { ArrowRight } from "lucide-react";
 
 interface TopAnalysisBarProps {
   matchScore: number;

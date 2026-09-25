@@ -5,6 +5,7 @@ import { countryCodes } from "../../../_utils/sectionsConfig";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { ChevronDown } from "lucide-react";
 import logger from "@/lib/logger";
+import { getActiveTemplateDomain, useAccountEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 
 interface Field {
   field: string;
@@ -34,26 +35,13 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   const [isMarineTemplate, setIsMarineTemplate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get domain from localStorage to check if it's government_standard or healthcare
+  // Domain of the applied career-level template, read under the logged-in
+  // account's email like the preview (not the resume's contact email, which
+  // differs for uploaded/enhanced resumes).
+  const accountEmail = useAccountEmail();
   useEffect(() => {
     try {
-      const userEmail = resumeData.personalInfo?.email || localStorage.getItem('userEmail') || '';
-      const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
-      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
-
-      const careerLevelStorage = localStorage.getItem(careerLevelKey);
-      const selectedTemplateId = localStorage.getItem(selectedTemplateKey);
-
-      let domainFamily = '';
-
-      if (careerLevelStorage && selectedTemplateId) {
-        const careerLevels = JSON.parse(careerLevelStorage) as Array<{
-          id?: string | number;
-          domain_family?: string;
-        }>;
-        const activeTemplate = careerLevels.find(t => String(t.id) === String(selectedTemplateId));
-        domainFamily = activeTemplate?.domain_family || '';
-      }
+      const domainFamily = getActiveTemplateDomain(accountEmail) || '';
 
       setIsGovernmentTemplate(domainFamily === 'government_standard');
       setIsHealthcareTemplate(domainFamily === 'healthcare');
@@ -64,7 +52,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     } catch (err) {
       logger.warn('Error checking template domain:', err);
     }
-  }, [resumeData.personalInfo?.email]);
+  }, [accountEmail]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -132,11 +120,14 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     return yyyymmdd;
   };
 
-  const renderGovField = (fieldName: DomainFieldKey, label: string, placeholder?: string, type: string = "text", maxLength?: number) => {
+  const renderGovField = (fieldName: DomainFieldKey, label: string, placeholder?: string, type: string = "text", maxLength?: number, isRequired: boolean = false) => {
     if (fieldName === "dateOfBirth") {
       return (
         <div className="flex flex-col gap-1 w-full">
-          <label className="text-sm font-semibold text-[#3b3b3b]">{label}</label>
+          <label className="text-sm font-semibold text-[#3b3b3b]">
+            {label}
+            {isRequired && <span className="text-red-500">*</span>}
+          </label>
           <input
             type="date"
             name={fieldName}
@@ -156,7 +147,10 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
 
     return (
       <div className="flex flex-col gap-1 w-full">
-        <label className="text-sm font-semibold text-[#3b3b3b]">{label}</label>
+        <label className="text-sm font-semibold text-[#3b3b3b]">
+          {label}
+          {isRequired && <span className="text-red-500">*</span>}
+        </label>
         <input
           type={type}
           name={fieldName}
@@ -294,20 +288,20 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             <div className="my-2 border-t border-gray-300 w-full"></div>
             <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Government Standard — Additional Information</p>
             <div className="flex gap-10">
-              {renderGovField("dateOfBirth", "Date of Birth", "", "date")}
-              {renderGovField("gender", "Gender", "e.g., Male, Female, Other", "text", 20)}
+              {renderGovField("dateOfBirth", "Date of Birth", "", "date", undefined, true)}
+              {renderGovField("gender", "Gender", "e.g., Male, Female, Other", "text", 20, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("fathersName", "Father's / Guardian's Name", "e.g., Ramesh Kumar", "text", 100)}
-              {renderGovField("maritalStatus", "Marital Status", "e.g., Single, Married", "text", 30)}
+              {renderGovField("fathersName", "Father's / Guardian's Name", "e.g., Ramesh Kumar", "text", 100, true)}
+              {renderGovField("maritalStatus", "Marital Status", "e.g., Single, Married", "text", 30, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("nationality", "Nationality", "e.g., Indian", "text", 60)}
-              {renderGovField("category", "Category", "e.g., General, SC, ST, OBC, EWS", "text", 80)}
+              {renderGovField("nationality", "Nationality", "e.g., Indian", "text", 60, true)}
+              {renderGovField("category", "Category", "e.g., General, SC, ST, OBC, EWS", "text", 80, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("languages", "Languages Known", "e.g., English, Hindi, Tamil", "text", 150)}
-              {renderGovField("permanentAddress", "Permanent Address", "e.g., 12, Gandhi Nagar, Delhi - 110001", "text", 200)}
+              {renderGovField("languages", "Languages Known", "e.g., English, Hindi, Tamil", "text", 150, true)}
+              {renderGovField("permanentAddress", "Permanent Address", "e.g., 12, Gandhi Nagar, Delhi - 110001", "text", 200, true)}
             </div>
           </>
         )}
@@ -318,12 +312,12 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             <div className="my-2 border-t border-gray-300 w-full"></div>
             <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Healthcare — Professional Details</p>
             <div className="flex gap-10">
-              {renderGovField("titlePrefix", "Title/Prefix", "e.g., Dr., Prof.", "text", 20)}
-              {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS", "text", 100)}
+              {renderGovField("titlePrefix", "Title/Prefix", "e.g., Dr., Prof.", "text", 20, true)}
+              {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS", "text", 100, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("specialisation", "Specialisation", "e.g., Cardiology, Neurology", "text", 100)}
-              {renderGovField("medicalRegNo", "Medical Council Reg. No.", "e.g., MCI/2019/12345", "text", 80)}
+              {renderGovField("specialisation", "Specialisation", "e.g., Cardiology, Neurology", "text", 100, true)}
+              {renderGovField("medicalRegNo", "Medical Council Reg. No.", "e.g., MCI/2019/12345", "text", 80, true)}
             </div>
           </>
         )}
@@ -334,12 +328,12 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             <div className="my-2 border-t border-gray-300 w-full"></div>
             <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Legal — Professional Details</p>
             <div className="flex gap-10">
-              {renderGovField("qualifications", "Qualifications", "e.g., LLB, LLD, BA LLB", "text", 100)}
-              {renderGovField("barEnrollmentNo", "Bar Council Enrollment No.", "e.g., D/1234/2018", "text", 80)}
+              {renderGovField("qualifications", "Qualifications", "e.g., LLB, LLD, BA LLB", "text", 100, true)}
+              {renderGovField("barEnrollmentNo", "Bar Council Enrollment No.", "e.g., D/1234/2018", "text", 80, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("yearOfEnrollment", "Year of Enrollment", "e.g., 2018", "text", 10)}
-              {renderGovField("courtsOfPractise", "Courts Practised In", "e.g., Delhi HC, Supreme Court", "text", 150)}
+              {renderGovField("yearOfEnrollment", "Year of Enrollment", "e.g., 2018", "text", 10, true)}
+              {renderGovField("courtsOfPractise", "Courts Practised In", "e.g., Delhi HC, Supreme Court", "text", 150, true)}
             </div>
           </>
         )}
@@ -350,12 +344,12 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             <div className="my-2 border-t border-gray-300 w-full"></div>
             <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Marine / Merchant Navy — Professional Details</p>
             <div className="flex gap-10">
-              {renderGovField("rank", "Rank", "e.g., Chief Officer, Second Engineer", "text", 80)}
-              {renderGovField("cocNumber", "CoC Number", "e.g., IND/COC/2019/12345", "text", 80)}
+              {renderGovField("rank", "Rank", "e.g., Chief Officer, Second Engineer", "text", 80, true)}
+              {renderGovField("cocNumber", "CoC Number", "e.g., IND/COC/2019/12345", "text", 80, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("vesselTypes", "Vessel Types", "e.g., Bulk Carrier, VLCC, Container", "text", 150)}
-              {renderGovField("stcwCertificates", "STCW Certificates", "e.g., STCW-95, GMDSS, ECDIS", "text", 200)}
+              {renderGovField("vesselTypes", "Vessel Types", "e.g., Bulk Carrier, VLCC, Container", "text", 150, true)}
+              {renderGovField("stcwCertificates", "STCW Certificates", "e.g., STCW-95, GMDSS, ECDIS", "text", 200, true)}
             </div>
           </>
         )}
@@ -366,12 +360,12 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             <div className="my-2 border-t border-gray-300 w-full"></div>
             <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Research Scholar — Academic Details</p>
             <div className="flex gap-10">
-              {renderGovField("qualifications", "Qualifications", "e.g., PhD, M.Phil, MSc", "text", 100)}
-              {renderGovField("hIndex", "h-index", "e.g., 12", "text", 10)}
+              {renderGovField("qualifications", "Qualifications", "e.g., PhD, M.Phil, MSc", "text", 100, true)}
+              {renderGovField("hIndex", "h-index", "e.g., 12", "text", 10, true)}
             </div>
             <div className="flex gap-10">
-              {renderGovField("orcidId", "ORCID ID", "e.g., 0000-0001-2345-6789", "text", 30)}
-              {renderGovField("googleScholarUrl", "Google Scholar URL", "e.g., scholar.google.com/...", "url", 300)}
+              {renderGovField("orcidId", "ORCID ID", "e.g., 0000-0001-2345-6789", "text", 30, true)}
+              {renderGovField("googleScholarUrl", "Google Scholar URL", "e.g., scholar.google.com/...", "url", 300, true)}
             </div>
           </>
         )}

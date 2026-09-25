@@ -34,8 +34,19 @@
   function isJobPage() {
     return /shine\.com\/jobs\/.+/.test(window.location.href) ||
            /shine\.com\/job-search\/.+/.test(window.location.href) ||
+           /shine\.com\/job-detail\/.+/.test(window.location.href) ||
            document.querySelector('[class*="jd-"]') !== null ||
            document.querySelector('[class*="jobDesc"]') !== null;
+  }
+
+  // Searches within a few ancestor levels of anchorEl (e.g. the job title)
+  // instead of the whole document, so a generic class-substring selector
+  // doesn't match an unrelated element elsewhere on the page (a search bar's
+  // location filter, a different job card in a results list, ...).
+  function nearbyElement(anchorEl, selector) {
+    let scope = anchorEl;
+    for (let i = 0; i < 4 && scope?.parentElement; i++) scope = scope.parentElement;
+    return (scope || document).querySelector(selector);
   }
 
   function extractJobDescription() {
@@ -78,22 +89,32 @@
     const companyEl = document.querySelector(
       '[class*="company-name"] a, [class*="companyName"] a, [class*="company"] a, [class*="company-name"]'
     );
+    // Scoped near the title instead of a page-wide query — an unscoped
+    // [class*="location"] match picks the FIRST such element anywhere on the
+    // page, which on a search/detail split page is often the search bar's
+    // location filter or a different job card's location, not this job's own.
+    const locationEl = nearbyElement(titleEl, '[class*="location" i]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'shine',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'shine',
     };
   }
 
   let lastDetectedJd = null;
+  let mutationTimer = null;
 
   function tryDetect() {
     if (!isJobPage()) return;
     const jd = extractJobDescription();
     if (!jd) return;
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Same JD as the one already published: nothing to do. lastDetectedJd is kept
+    // across URL changes, so the previous job's text is never published again
+    // under a new URL, and a closed banner stays closed for this job.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
 
     const meta = extractMeta();
@@ -295,7 +316,33 @@
     });
   }
 
-  setTimeout(tryDetect, 2000);
+  // Shine's job description can hydrate well after document_idle, so retry
+  // detection on a schedule instead of a single fixed-delay attempt (tryDetect
+  // is idempotent once a JD is found — see the lastDetectedJd guard above).
+  [1000, 2500, 4500, 7000, 10000, 14000].forEach((delay) => setTimeout(tryDetect, delay));
+
+  // Re-run for both URL changes and in-place job-panel replacements — clicking
+  // a different job card on a listing page often swaps the visible JD without
+  // a full page navigation, so a one-time detection on initial load would
+  // otherwise never see it.
+  let lastUrl = location.href;
+  const urlObserver = new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      // A URL change (even only the hash or query) doesn't mean the job changed,
+      // so keep the banner and lastDetectedJd; tryDetect swaps in a new job as
+      // soon as different content shows up. Leaving the job page clears both.
+      if (!isJobPage()) {
+        lastDetectedJd = null;
+        document.getElementById('cb-shadow-host')?.remove();
+      }
+    }
+
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(tryDetect, 250);
+  });
+  urlObserver.observe(document.body || document.documentElement, { subtree: true, childList: true });
+  window.addEventListener('pagehide', () => urlObserver.disconnect(), { once: true });
 
   // Show the CareerBot brand icon in the banner (static — not the company's logo).
   function setBrandIcon(iconEl) {

@@ -13,11 +13,11 @@ const JDHeader: React.FC = () => (
       </div>
       <div className="flex items-center gap-3 text-[11px] font-semibold">
         <span className="flex items-center gap-1.5 text-emerald-600">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-200" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-200" />{" "}
           Matched
         </span>
         <span className="flex items-center gap-1.5 text-orange-600">
-          <span className="w-2.5 h-2.5 rounded-full bg-orange-400 shadow-sm shadow-orange-200" />
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-400 shadow-sm shadow-orange-200" />{" "}
           Missing
         </span>
       </div>

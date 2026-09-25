@@ -236,6 +236,7 @@ export default function StoryAudioPlayer({ onFirstPlay }: Props) {
 
       <div className="flex items-center gap-4 mb-3">
         <button
+          type="button"
           onClick={play}
           disabled={playedOnce}
           className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors ${

@@ -9,7 +9,6 @@ export interface FilterParams {
   job_type?: string;
   work_model?: string;
   location?: string;
-  source?: string;
   date_from?: string;
   date_to?: string;
 }
@@ -21,15 +20,6 @@ export const DATE_PRESETS = [
   { label: "Last 30 days", days: 30 },
   { label: "Last 3 months", days: 90 },
 ] as const;
-
-export const JOB_SOURCES = [
-  "Naukri",
-  "LinkedIn",
-  "Indeed",
-  "Internshala",
-  "Glassdoor",
-  "Company Website",
-];
 
 export const WORK_MODELS = ["Onsite", "Hybrid", "Remote"];
 
@@ -71,7 +61,7 @@ export function extractSalaryPresets(
     const nums = String(job.salary).match(/\d+(\.\d+)?/g);
     if (!nums) return;
     nums.forEach((n) => {
-      let val = parseFloat(n);
+      let val = Number.parseFloat(n);
       if (val < 1000) val = val * 100000;
       val = Math.round(val / 200000) * 200000;
       if (val > 0) values.add(val);

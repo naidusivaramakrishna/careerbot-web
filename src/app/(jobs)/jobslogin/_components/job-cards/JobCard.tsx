@@ -1,13 +1,12 @@
 ﻿"use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MapPin, Sparkles, Briefcase, CircleDollarSign, Layers, MoreHorizontal, Home, Calendar, XCircle, CheckCircle, Share2, Flag, AlertTriangle, Trash2 } from "lucide-react";
+import { Heart, MapPin, Sparkles, Briefcase, CircleDollarSign, Layers, MoreHorizontal, Home, Calendar, XCircle, CheckCircle, Share2, Flag, Trash2, ChevronDown } from "lucide-react";
 import { GoLocation } from "react-icons/go";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { isJobSaved, toggleJobSaved, recordJobApplication } from "@/utils/jobTracking";
-import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
 import ApplicationModal, { ApplicationData } from "./ApplicationModal";
 import MatchAnalysisModal from "./MatchAnalysisModal";
 import JobPreviewModal from "./JobPreviewModal";
@@ -15,117 +14,54 @@ import ResumeCustomizePrompt from "./ResumeCustomizePrompt";
 import { applyToJob } from "@/utils/jobApplication";
 import { getMatchExplanation } from "@/api/insightsApi";
 import type { MatchExplanationResponse } from "@/api/insightsApi";
-import { parseResumeFromProfile, parseJdByJob } from "@/api/premiumApi";
-import { matchResumeAndJD, getResume, getMatchAnalytics, parseJDText } from "@/api/parserApi";
-import { isValidBackendJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { getSafeExternalUrl } from "@/utils/validators";
 import { getMatchBandConfig } from "../utils/matchBand";
+import { runFixResumeForJob, describeFixResumeError } from "../utils/fixResumeForJob";
 
 const SKIP_RESUME_PROMPT_KEY = "skipResumeCustomizePrompt";
-
-// Error codes the backend returns with no usable `message` field (the generic
-// exception handler falls back to "HTTP 404" etc. in that case) — map them to
-// text a user can act on.
-const FIX_RESUME_ERROR_MESSAGES: Record<string, string> = {
-  jd_not_found: "This job's listing could not be matched — it may have expired. Please try again.",
-  resume_not_found: "No resume found for matching. Please upload a resume to your profile first.",
-  no_resume_in_profile: "No resume found on your profile. Please upload a resume first.",
-  job_not_found: "This job listing could not be found. Please refresh the page and try again.",
-  job_has_no_description: "This job listing has no description to match against.",
-};
-
-/**
- * handleFixResume's calls span two API modules with different error shapes:
- * premiumApi.ts (parseResumeFromProfile/parseJdByJob) rethrows the raw Axios
- * error with `.response` intact, while parserApi.ts's safePost
- * (matchResumeAndJD, parseJDText, getMatchAnalytics) wraps failures into a
- * plain Error whose `.message` is the JSON-stringified backend envelope and
- * whose `__raw` carries the parsed envelope instead. Normalize both into one
- * user-facing message so the raw envelope is never shown in a toast.
- */
-function describeFixResumeError(err: unknown): string {
-  const fallback = "Could not prepare your match analysis. Please try again.";
-
-  const axiosData = (err as { response?: { data?: unknown } })?.response?.data;
-  const rawData = (err as { __raw?: unknown })?.__raw;
-  let envelope: unknown = axiosData ?? rawData;
-
-  if (envelope === undefined && err instanceof Error) {
-    try { envelope = JSON.parse(err.message); } catch { /* not JSON */ }
-  }
-  if (!envelope || typeof envelope !== "object") {
-    // Plain Errors thrown directly by handleFixResume (e.g. "no description
-    // text to match against") have no JSON envelope — their message IS the
-    // user-facing text, so surface it instead of the generic fallback.
-    if (err instanceof Error && err.message.trim() && !/^HTTP \d+$/i.test(err.message.trim())) {
-      return err.message;
-    }
-    return fallback;
-  }
-
-  const top = envelope as Record<string, unknown>;
-  const errorObj = (typeof top.error === "object" && top.error)
-    ? (top.error as Record<string, unknown>)
-    : undefined;
-  const details = (typeof errorObj?.details === "object" && errorObj?.details)
-    ? (errorObj.details as Record<string, unknown>)
-    : undefined;
-
-  const code = (details?.error as string | undefined) ?? (errorObj?.error_code as string | undefined);
-  if (typeof code === "string" && FIX_RESUME_ERROR_MESSAGES[code]) {
-    return FIX_RESUME_ERROR_MESSAGES[code];
-  }
-
-  const message = (errorObj?.message as string | undefined) ?? (top.message as string | undefined) ?? (top.detail as string | undefined);
-  if (typeof message === "string" && message.trim() && !/^HTTP \d+$/i.test(message.trim())) {
-    return message;
-  }
-
-  return fallback;
-}
+const SKIP_RESUME_PROMPT_EVENT = "skipResumeCustomizePromptChanged";
 
 interface JobCardProps {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  logo?: string;
-  type: string;
-  mode?: string;
-  salary?: string;
-  time: string;
-  posted_date?: string | null;
-  created_at?: string | null;
-  education?: string;
-  matchScore?: number;
-  matchText?: string;
-  url?: string;
-  application_url?: string;
-  recruiter_id?: string;
-  source?: string;
-  company_website?: string;
-  skills?: string;
-  experience?: string;
-  experience_level?: string;
-  description?: string;
-  roleTrending?: boolean;
-  highHiring?: boolean;
-  is_applied?: boolean;
-  matched_skills?: string[];
-  missing_skills?: string[];
-  match_band?: string;
-  applicant_count?: number | string;
-  h1b_sponsor?: boolean;
-  remote?: boolean;
-  requirements?: string[];
-  responsibilities?: string;
-  onBotClick: () => void;
-  onRemove?: () => void;
-  onApplyClick?: () => void;
-  onSaveToggle?: (saved: boolean) => void;
-  onRemoveApplication?: () => void;
-  onAppliedToggle?: (jobId: string) => void;
+  readonly id: string;
+  readonly title: string;
+  readonly company: string;
+  readonly location: string;
+  readonly logo?: string;
+  readonly type: string;
+  readonly mode?: string;
+  readonly salary?: string;
+  readonly posted_date?: string | null;
+  readonly created_at?: string | null;
+  readonly education?: string;
+  readonly matchScore?: number;
+  readonly url?: string;
+  readonly application_url?: string;
+  readonly recruiter_id?: string;
+  readonly source?: string;
+  readonly skills?: string;
+  readonly experience?: string;
+  readonly experience_level?: string;
+  readonly description?: string;
+  readonly is_applied?: boolean;
+  readonly matched_skills?: string[];
+  readonly missing_skills?: string[];
+  readonly match_band?: string;
+  readonly applicant_count?: number | string;
+  readonly h1b_sponsor?: boolean;
+  readonly remote?: boolean;
+  readonly requirements?: string[];
+  readonly responsibilities?: string;
+  readonly onBotClick: () => void;
+  readonly onRemove?: () => void;
+  readonly onApplyClick?: () => void;
+  readonly onSaveToggle?: (saved: boolean) => void;
+  readonly onRemoveApplication?: () => void;
+  readonly onAppliedToggle?: (jobId: string) => void;
+  // Title click preference: when provided, the caller handles "view details"
+  // itself (e.g. JobsContents swaps the list for an inline details panel)
+  // instead of this card opening its own JobPreviewModal overlay.
+  readonly onTitleClick?: () => void;
 }
 
 // Assign a consistent color to each company based on first letter
@@ -145,7 +81,7 @@ const LOGO_PALETTE = [
 ];
 
 function getLogoColor(company: string) {
-  const code = (company || "J").toUpperCase().charCodeAt(0);
+  const code = (company || "J").toUpperCase().codePointAt(0)!;
   return LOGO_PALETTE[code % LOGO_PALETTE.length];
 }
 
@@ -153,13 +89,15 @@ const deriveExperienceLevelFromYears = (yearsStr?: string): string | null => {
   if (!yearsStr) return null;
   const matches = yearsStr.match(/\d+/g);
   if (!matches || matches.length === 0) return null;
-  const years = parseInt(matches[matches.length - 1], 10);
+  const years = Number.parseInt(matches.at(-1)!, 10);
   if (years <= 1) return "Intern/New Grad";
   if (years <= 3) return "Entry Level";
   if (years <= 6) return "Mid Level";
   if (years <= 10) return "Senior Level";
   return "Lead/Staff";
 };
+
+const pluralizeAgo = (n: number, unit: string): string => `${n} ${unit}${n === 1 ? "" : "s"} ago`;
 
 const formatPostedTime = (dateStr?: string | null): string => {
   if (!dateStr) return "Recently";
@@ -169,17 +107,24 @@ const formatPostedTime = (dateStr?: string | null): string => {
     const hours = Math.floor(diffMs / 3600000);
     const days = Math.floor(diffMs / 86400000);
     if (mins < 1) return "Just now";
-    if (mins < 60) return `${mins} ${mins === 1 ? "minute" : "minutes"} ago`;
-    if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-    if (days < 7) return `${days} ${days === 1 ? "day" : "days"} ago`;
+    if (mins < 60) return pluralizeAgo(mins, "minute");
+    if (hours < 24) return pluralizeAgo(hours, "hour");
+    if (days < 7) return pluralizeAgo(days, "day");
     const weeks = Math.floor(days / 7);
-    if (days < 30) return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`;
+    if (days < 30) return pluralizeAgo(weeks, "week");
     const months = Math.floor(days / 30);
-    return `${months} ${months === 1 ? "month" : "months"} ago`;
+    return pluralizeAgo(months, "month");
   } catch {
     return "Recently";
   }
 };
+
+function getScoreColors(score: number): { color: string; track: string } {
+  if (score >= 75) return { color: "#10b981", track: "#d1fae5" };
+  if (score >= 50) return { color: "#3b82f6", track: "#dbeafe" };
+  if (score >= 30) return { color: "#f59e0b", track: "#fef3c7" };
+  return { color: "#ef4444", track: "#fee2e2" };
+}
 
 export default function JobCard(props: JobCardProps) {
   const { userId } = useCurrentUserId();
@@ -204,6 +149,19 @@ export default function JobCard(props: JobCardProps) {
   });
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuPortalRef = useRef<HTMLDivElement>(null);
+
+  // JobCard is mounted once per job in a list — each instance's
+  // skipResumePrompt above is seeded from localStorage only at its own mount
+  // time. Without this listener, checking "Do not remind me again" on one
+  // job's popup persists to localStorage but leaves every other already-
+  // mounted job card's in-memory state stale at `false`, so the popup kept
+  // reappearing for the next job in the same session even though the user
+  // had just opted out.
+  useEffect(() => {
+    const handleSkipChanged = () => setSkipResumePrompt(true);
+    window.addEventListener(SKIP_RESUME_PROMPT_EVENT, handleSkipChanged);
+    return () => window.removeEventListener(SKIP_RESUME_PROMPT_EVENT, handleSkipChanged);
+  }, []);
 
   useEffect(() => {
     if (!showMenu) return;
@@ -282,19 +240,6 @@ export default function JobCard(props: JobCardProps) {
     toast.error("Job application method not configured");
   };
 
-  // Applying from inside the preview modal opens either ApplicationModal
-  // (internal/recruiter job) or a new tab (external job) — close the
-  // preview first in both cases so it isn't left stacked/stranded
-  // underneath once the user comes back to this tab.
-  const handlePreviewApplyClick = () => {
-    setShowPreview(false);
-    if (externalUrl) {
-      handleExternalApplyClick();
-      return;
-    }
-    handleApplyNow();
-  };
-
   const handleModalSubmit = async (applicationData: ApplicationData) => {
     setIsSubmitting(true);
     try {
@@ -315,10 +260,36 @@ export default function JobCard(props: JobCardProps) {
   };
 
   const handleSaveJob = () => {
-    const newState = toggleJobSaved(props.id, props.title, props.company, props.location, props.type, userId);
+    const newState = toggleJobSaved(
+      props.id,
+      props.title,
+      props.company,
+      props.location,
+      props.type,
+      userId,
+      props.url || props.application_url,
+    );
     setIsSaved(newState);
     toast[newState ? "success" : "info"](newState ? "Job saved!" : "Job removed from saved");
     props.onSaveToggle?.(newState);
+  };
+
+  const handleTitleClick = () => {
+    if (props.onTitleClick) { props.onTitleClick(); return; }
+    setShowPreview(true);
+  };
+
+  // Applying from inside the preview modal opens either ApplicationModal
+  // (internal/recruiter job) or a new tab (external job) — close the
+  // preview first in both cases so it isn't left stacked/stranded
+  // underneath once the user comes back to this tab.
+  const handlePreviewApplyClick = () => {
+    setShowPreview(false);
+    if (externalUrl) {
+      handleExternalApplyClick();
+      return;
+    }
+    handleApplyNow();
   };
 
   const level = deriveExperienceLevelFromYears(props.experience) || props.experience_level;
@@ -329,7 +300,7 @@ export default function JobCard(props: JobCardProps) {
   const isNew = (() => {
     const d = props.created_at || props.posted_date;
     if (!d) return false;
-    try { return Date.now() - new Date(d).getTime() < 86400000; } catch { return false; }
+    try { return Date.now() - new Date(d).getTime() < 604800000; } catch { return false; } // 7 days
   })();
   const sourceLabel = props.source && props.source !== "portal" ? props.source : "";
   const hasMatchScore = !!props.matchScore && Math.round(props.matchScore) > 0;
@@ -349,12 +320,11 @@ export default function JobCard(props: JobCardProps) {
     if (!dontRemindAgain) return;
     setSkipResumePrompt(true);
     try { localStorage.setItem(SKIP_RESUME_PROMPT_KEY, "true"); } catch { /* ignore */ }
+    // Tell every other already-mounted JobCard to flip its own state too —
+    // see the listener effect above for why this is necessary.
+    window.dispatchEvent(new Event(SKIP_RESUME_PROMPT_EVENT));
   };
 
-  // Runs the same free match pipeline the jobmatch page itself runs when a
-  // resume_id + jd_id are already known, then seeds its sessionStorage in the
-  // exact shape Overview.tsx expects (see its analyzeMatch()) so it renders
-  // results (with resume preview) directly instead of the upload wizard.
   const handleFixResume = async () => {
     if (isPreparingResumeFix) return;
     persistSkipIfChecked();
@@ -364,80 +334,7 @@ export default function JobCard(props: JobCardProps) {
     // navigation at the end lands.
     setIsPreparingResumeFix(true);
     try {
-      // parseJdByJob requires the backend to already have this job's JD
-      // pre-indexed, which isn't true for every source (e.g. newer/less
-      // common listings) — fall back to parsing the description text we
-      // already have on the card, same as the manual "paste JD" wizard step.
-      const resolveJdId = async (): Promise<string> => {
-        // Aggregated listings often use a client-generated composite id that
-        // parseJdByJob cannot accept. Skip that endpoint for those listings
-        // and parse the JD text directly instead of rejecting the action.
-        if (isValidBackendJobId(props.id)) {
-          try {
-            const byJob = await parseJdByJob(props.id);
-            if (byJob.jd_id) return byJob.jd_id;
-          } catch { /* fall through to text-based parse */ }
-        }
-        if (!props.description?.trim()) {
-          throw new Error("This job has no description text to match against.");
-        }
-        const byText = await parseJDText(props.description);
-        if (!byText.jd_id) throw new Error("Could not parse this job's description.");
-        return byText.jd_id;
-      };
-
-      const [profileRes, jd_id] = await Promise.all([
-        parseResumeFromProfile(),
-        resolveJdId(),
-      ]);
-
-      const fullResumeData = await getResume(profileRes.resume_id).catch(() => null);
-
-      // A freshly-created JD (from the parseJDText fallback above) can 404
-      // with "jd_not_found" for a moment before the backend finishes making
-      // it queryable — retry with backoff, same as Overview.tsx's analyzeMatch().
-      let matchResp: Record<string, unknown> | undefined;
-      let matchAttempt = 0;
-      const maxMatchRetries = 2;
-      while (matchAttempt <= maxMatchRetries) {
-        try {
-          matchResp = await matchResumeAndJD(profileRes.resume_id, jd_id) as Record<string, unknown>;
-          break;
-        } catch (matchErr) {
-          matchAttempt++;
-          if (matchAttempt > maxMatchRetries) throw matchErr;
-          await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, matchAttempt - 1)));
-        }
-      }
-
-      let finalMatchData = (matchResp?.data ?? matchResp) as Record<string, unknown>;
-      try {
-        const analytics = await getMatchAnalytics(profileRes.resume_id, jd_id);
-        if (analytics) finalMatchData = { ...finalMatchData, analytics };
-      } catch { /* optional enrichment */ }
-
-      const newMatchResults = {
-        data: finalMatchData,
-        match_id: matchResp?.match_id ?? finalMatchData?.match_id,
-        jd_id,
-        duplicate: matchResp?.duplicate,
-      };
-
-      const snapshotWritten = writeJobmatchSessionSnapshot({
-        matchResults: newMatchResults,
-        parsedResumeData: fullResumeData,
-        parsedJDData: null,
-        jdText: props.description || `${props.title} at ${props.company}`,
-      });
-      if (!snapshotWritten) {
-        throw new Error("Could not save your match results. Please try again.");
-      }
-
-      // Hard navigation, not router.push(): if /jobmatch/app was already
-      // visited earlier this session, Next's client-side route cache can
-      // reuse that mounted page instead of remounting it, which would skip
-      // re-reading the sessionStorage we just seeded.
-      window.location.href = "/jobmatch/app";
+      await runFixResumeForJob({ id: props.id, title: props.title, company: props.company, description: props.description });
     } catch (err: unknown) {
       toast.error(describeFixResumeError(err));
       setShowResumePrompt(false);
@@ -452,117 +349,100 @@ export default function JobCard(props: JobCardProps) {
     handleExternalApplyClick();
   };
 
-  // "Why you match" — a one-line summary built from real matched/missing
-  // skill counts already on the job, so it's visible without an extra
-  // per-card API call (unlike the 5-dimension flip panel below).
-  const whyYouMatch = (() => {
-    const matchedCount = props.matched_skills?.length ?? 0;
-    const missingCount = props.missing_skills?.length ?? 0;
-    // Only lead with this line when there's a matched skill to point to —
-    // with 0 matches, "N to grow" alone is a bare negative right under the
-    // title, and the Missing Skills chips below already say the same thing.
-    if (!hasMatchScore || matchedCount === 0) return null;
-    const parts: string[] = [`Matches ${matchedCount} required skill${matchedCount === 1 ? "" : "s"}`];
-    if (missingCount > 0) parts.push(`${missingCount} to grow`);
-    return parts.join(" · ");
-  })();
-
-  const circleR = 27;
+  const circleR = 33;
   const circleC = 2 * Math.PI * circleR;
   const circleOffset = circleC - ((props.matchScore || 0) / 100) * circleC;
   const bandCfg = getMatchBandConfig(props.match_band);
-  const circleStroke = props.match_band ? bandCfg.color : "#14b8a6";
-  const circleLabel = props.match_band ? bandCfg.label.toUpperCase() : "";
+  // Fixed teal, not band-dependent — matches the reference score card, which
+  // keeps the same ring/label color regardless of match quality.
+  const circleStroke = "#2dd4bf";
+  // Simple two-tier label off the numeric score itself, not the backend's
+  // multi-tier match_band — 75%+ reads as a good match, anything under as fair.
+  const circleLabel = props.match_band ? ((props.matchScore ?? 0) >= 75 ? "GOOD MATCH" : "FAIR MATCH") : "";
 
-  const skillsNode = (() => {
-    const hasMatchData =
-      (props.matched_skills && props.matched_skills.length > 0) ||
-      (props.missing_skills && props.missing_skills.length > 0);
-
-    if (!hasMatchData) {
-      return skillChips.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {skillChips.map((skill) => (
-            <span key={skill} className="px-3 py-1 bg-gray-50 text-gray-600 text-[11px] font-medium rounded-full border border-gray-200/70">
-              {skill}
-            </span>
-          ))}
-        </div>
-      ) : null;
-    }
-
-    const matchedSet = new Set((props.matched_skills || []).map((s) => s.toLowerCase()));
-    const missingSet = new Set((props.missing_skills || []).map((s) => s.toLowerCase()));
-    const displayed = new Set<string>();
-    const chips: { skill: string; state: "matched" | "missing" | "neutral" }[] = [];
-
-    skillChips.forEach((skill) => {
-      const key = skill.toLowerCase();
-      displayed.add(key);
-      if (matchedSet.has(key)) chips.push({ skill, state: "matched" });
-      else if (missingSet.has(key)) chips.push({ skill, state: "missing" });
-      else chips.push({ skill, state: "neutral" });
-    });
-
-    [...(props.matched_skills || []), ...(props.missing_skills || [])]
-      .slice(0, 6)
-      .forEach((skill) => {
-        const key = skill.toLowerCase();
-        if (!displayed.has(key)) {
-          displayed.add(key);
-          chips.push({ skill, state: matchedSet.has(key) ? "matched" : "missing" });
-        }
-      });
-
-    if (chips.length === 0) return null;
-
-    const visible = chips.slice(0, 7);
-    const matchedNeutral = visible.filter((c) => c.state !== "missing");
-    const missingChips   = visible.filter((c) => c.state === "missing");
-
-    return (
-      <div className="mt-2 space-y-1.5">
-        {/* Matched + neutral chips */}
-        {matchedNeutral.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {matchedNeutral.map(({ skill, state }) => (
-              <span
-                key={skill}
-                className={`px-2.5 py-0.5 text-[10.5px] font-medium rounded-full border transition-colors ${
-                  state === "matched"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/70 hover:bg-emerald-100"
-                    : "bg-gray-50 text-gray-500 border-gray-200/60 hover:bg-gray-100"
-                }`}
-              >
-                {state === "matched" ? "✓ " : ""}{skill}
-              </span>
+  // "Why This Job Matches" flip-panel body — loading skeleton, resolved
+  // explanation, or an unavailable-state message, depending on the async
+  // getMatchExplanation() call kicked off by handleScoreHover.
+  const analysisBodyNode = (() => {
+    if (explanationLoading) {
+      return (
+        <>
+          <style>{`
+            @keyframes jc-shimmer { 0%{background-position:-800px 0} 100%{background-position:800px 0} }
+            .jc-shimmer { background:linear-gradient(90deg,#e4eaf8 25%,#d8e2f6 50%,#e4eaf8 75%); background-size:1600px 100%; animation:jc-shimmer 1.5s ease-in-out infinite; }
+          `}</style>
+          <div className="space-y-1.5">
+            <div className="h-2.5 w-11/12 rounded-full jc-shimmer" />
+            <div className="h-2.5 w-3/4 rounded-full jc-shimmer" />
+          </div>
+          <div className="flex gap-1.5 mt-1">
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5 flex-1">
+                <div className="w-12 h-12 rounded-full jc-shimmer" />
+                <div className="h-2 w-9 rounded-full jc-shimmer" />
+                <div className="h-1.5 w-6 rounded-full jc-shimmer" />
+              </div>
             ))}
           </div>
-        )}
+        </>
+      );
+    }
 
-        {/* Missing skills section */}
-        {missingChips.length > 0 && (
-          <div style={{ marginTop: 6 }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <AlertTriangle size={11} className="text-orange-400 shrink-0" />
-              <span className="text-[10.5px] font-bold text-orange-600 shrink-0 leading-none">
-                Missing Skills
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {missingChips.map(({ skill }) => (
-                <span
-                  key={skill}
-                  className="px-2.5 py-0.5 text-[10.5px] font-medium rounded-full bg-orange-50 text-orange-700 border border-orange-200/70 hover:bg-orange-100 hover:border-orange-300/60 transition-colors duration-150 cursor-default"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
+    if (explanation) {
+      return (
+        <>
+          {/* Description — improved contrast and weight */}
+          {props.description && (() => {
+            const raw = props.description.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+            const sentences = raw.match(/[^.!?]+[.!?]+/g) || [raw];
+            const structuredRe = /(?:location|shift|pay rate|per hour|per month|£|₹|\d+:\d{2}|monday|sunday|saturday|lpa|salary|holiday pay|weekends?:|nights?:)/i;
+            const clean = sentences.filter(s => s.trim().length > 25 && !structuredRe.test(s));
+            const text = (clean.length > 0 ? clean.join(" ") : raw).trim() + "...";
+            return text ? (
+              <p className="text-[11.5px] font-medium text-gray-600 leading-[1.55] line-clamp-2 shrink-0">
+                {text}
+              </p>
+            ) : null;
+          })()}
+
+          {/* Hero metrics — larger circles, score-colored, two-line labels */}
+          <div className="flex items-start gap-1 mt-0.5">
+            {(
+              [
+                { label: "Experience", score: explanation.explanation.experience.score },
+                { label: "Skills",     score: explanation.explanation.skills.score     },
+                { label: "Role",       score: explanation.explanation.title.score      },
+                { label: "Education",  score: explanation.explanation.education.score  },
+                { label: "Location",   score: explanation.explanation.location.score   },
+              ] as { label: string; score: number }[]
+            ).map(({ label, score }) => {
+              const r = 22;
+              const circ = 2 * Math.PI * r;
+              const offset = circ - (score / 100) * circ;
+              const { color, track: trackColor } = getScoreColors(score);
+              return (
+                <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
+                  <svg width="54" height="54" viewBox="0 0 54 54">
+                    <circle cx="27" cy="27" r={r} stroke={trackColor} strokeWidth="3.5" fill="none" />
+                    <circle cx="27" cy="27" r={r} stroke={color} strokeWidth="3.5" fill="none"
+                      strokeDasharray={circ} strokeDashoffset={offset}
+                      strokeLinecap="round" transform="rotate(-90 27 27)"
+                      style={{ filter: `drop-shadow(0 0 5px ${color}66)` }}
+                    />
+                    <text textAnchor="middle" x="27" y="27" dominantBaseline="middle"
+                      fontSize="11" fontWeight="900" fill={color}>{Math.round(score)}</text>
+                  </svg>
+                  <span className="text-[9.5px] font-bold text-gray-600 text-center leading-tight mt-0.5">{label}</span>
+                  <span className="text-[8.5px] font-semibold leading-none" style={{ color }}>{score >= 50 ? "Match" : "Gap"}</span>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
-    );
+        </>
+      );
+    }
+
+    return <p className="text-[11.5px] text-gray-400 text-center">Match breakdown unavailable</p>;
   })();
 
   const menuNode = showMenu && menuPos ? createPortal(
@@ -614,7 +494,7 @@ export default function JobCard(props: JobCardProps) {
               document.body.appendChild(el);
               el.select();
               document.execCommand("copy");
-              document.body.removeChild(el);
+              el.remove();
               toast.success("Link copied to clipboard!");
             }
             setShowMenu(false);
@@ -640,6 +520,24 @@ export default function JobCard(props: JobCardProps) {
   ) : null;
 
   if (!hasMatchScore) {
+    const applicantCountLabel =
+      props.applicant_count !== undefined && props.applicant_count !== null
+        ? (Number(props.applicant_count) < 25 ? "Less than 25 applicants" : `${props.applicant_count} applicants`)
+        : "";
+
+    let applyBtnClass: string;
+    let applyBtnLabel: string;
+    if (isSubmitting) {
+      applyBtnClass = "bg-emerald-400 text-white cursor-wait opacity-70";
+      applyBtnLabel = "Applying...";
+    } else if (isApplied) {
+      applyBtnClass = "bg-slate-100 text-slate-500 cursor-default";
+      applyBtnLabel = "Applied";
+    } else {
+      applyBtnClass = "bg-[#4F46E5] text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] hover:bg-[#4338CA]";
+      applyBtnLabel = "Apply Now";
+    }
+
     return (
       <>
         <motion.div
@@ -652,7 +550,7 @@ export default function JobCard(props: JobCardProps) {
         >
           <div className="flex min-w-0 items-start gap-4">
             <div className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full ${logoColor.bg} ring-1 ring-black/5 shadow-sm`}>
-              {props.logo && props.logo.trim() && !logoError ? (
+              {props.logo?.trim() && !logoError ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={props.logo}
@@ -683,7 +581,15 @@ export default function JobCard(props: JobCardProps) {
                 )}
               </div>
               <h3
-                onClick={() => setShowPreview(true)}
+                onClick={handleTitleClick}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleTitleClick();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className="line-clamp-1 cursor-pointer text-[19px] font-extrabold leading-snug text-slate-950 transition-colors group-hover:text-[#4F46E5]"
               >
                 {props.title || "Job Title"}
@@ -762,11 +668,7 @@ export default function JobCard(props: JobCardProps) {
 
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
             <span className="text-[12px] text-slate-400">
-              {props.applicant_count !== undefined && props.applicant_count !== null
-                ? Number(props.applicant_count) < 25
-                  ? "Less than 25 applicants"
-                  : `${props.applicant_count} applicants`
-                : ""}
+              {applicantCountLabel}
             </span>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -825,15 +727,9 @@ export default function JobCard(props: JobCardProps) {
                   disabled={isSubmitting || isApplied}
                   whileHover={!isApplied && !isSubmitting ? { scale: 1.02 } : undefined}
                   whileTap={!isApplied && !isSubmitting ? { scale: 0.97 } : undefined}
-                  className={`inline-flex h-10 items-center whitespace-nowrap rounded-2xl px-5 text-[13px] font-bold transition-all ${
-                    isSubmitting
-                      ? "bg-emerald-400 text-white cursor-wait opacity-70"
-                      : isApplied
-                      ? "bg-slate-100 text-slate-500 cursor-default"
-                      : "bg-[#4F46E5] text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] hover:bg-[#4338CA]"
-                  }`}
+                  className={`inline-flex h-10 items-center whitespace-nowrap rounded-2xl px-5 text-[13px] font-bold transition-all ${applyBtnClass}`}
                 >
-                  {isSubmitting ? "Applying..." : isApplied ? "Applied" : "Apply Now"}
+                  {applyBtnLabel}
                 </motion.button>
               )}
             </div>
@@ -917,13 +813,13 @@ export default function JobCard(props: JobCardProps) {
               >
                 <div className="flex items-start gap-3 px-5 pt-3.5 pb-0">
                   {/* Logo */}
-                  <div className={`flex h-11.5 w-11.5 shrink-0 items-center justify-center overflow-hidden rounded-[14px] ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
-                    {props.logo && props.logo.trim() && !logoError ? (
+                  <div className={`flex h-[70px] w-[70px] shrink-0 items-center justify-center overflow-hidden rounded-xl ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
+                    {props.logo?.trim() && !logoError ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={props.logo} alt={props.company} width={48} height={48}
+                      <img src={props.logo} alt={props.company} width={70} height={70}
                         onError={() => setLogoError(true)} className="max-w-full max-h-full object-contain" />
                     ) : (
-                      <span className={`text-[15px] font-extrabold select-none ${logoColor.text}`}>
+                      <span className={`text-[25px] font-extrabold select-none ${logoColor.text}`}>
                         {(props.company || "J").charAt(0).toUpperCase()}
                       </span>
                     )}
@@ -934,26 +830,34 @@ export default function JobCard(props: JobCardProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">
                           {(props.created_at || props.posted_date) && (
-                            <span className="text-[11.5px] font-semibold text-slate-400">
+                            <span className="inline-flex items-center px-2 py-0.5 bg-[#E7F9FD] text-black text-[10px] font-bold rounded-xl border border-sky-200/60">
                               {formatPostedTime(props.created_at || props.posted_date)}
                             </span>
                           )}
                           {isNew && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full border border-emerald-200/70">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#E7F9FD] text-black text-[10px] font-bold rounded-full border border-sky-200/60">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{' '}
                               Early Applicant
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3
-                            onClick={() => setShowPreview(true)}
-                            className="line-clamp-1 cursor-pointer text-[18px] font-extrabold leading-snug text-slate-950 transition-colors duration-150 hover:text-[#4F46E5]"
+                            onClick={handleTitleClick}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleTitleClick();
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            className="line-clamp-1 cursor-pointer text-[20px] font-extrabold leading-snug text-black"
                           >
                             {props.title || "Job Title"}
                           </h3>
                         </div>
-                        <p className="mt-0.5 truncate text-[13px] text-slate-500">
+                        <p className="mt-0.5 truncate text-[13.5px] text-slate-500">
                           <span className="font-bold text-slate-700">{props.company || "Company"}</span>
                           {sourceLabel && <span className="text-gray-400"> · {sourceLabel}</span>}
                         </p>
@@ -966,55 +870,49 @@ export default function JobCard(props: JobCardProps) {
                     </div>
                   </div>
                 </div>
-                <div className="px-5 pt-2.5 pb-2">
-                  <div className="flex flex-wrap gap-1.5">
+
+                {/* Divider — splits the card into header / meta / actions bands */}
+                <div className="mx-5 my-3 border-t border-slate-200/80" />
+
+                <div className="px-5 pb-3">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                     {props.location && (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600"
-                        title={props.location}
-                      >
-                        <MapPin size={11} className="text-gray-400 shrink-0" />
-                        <span className="truncate max-w-[110px]">{props.location.split(",")[0].trim()}</span>
+                      <span className="inline-flex items-center gap-2 text-[13.5px] font-bold text-slate-700" title={props.location}>
+                        <MapPin size={16} strokeWidth={2.3} className="text-slate-500 shrink-0" />
+                        <span className="truncate">{props.location.split(",")[0].trim()}</span>
                       </span>
                     )}
                     {props.type && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
-                        <Briefcase size={11} className="text-gray-400 shrink-0" />
+                      <span className="inline-flex items-center gap-2 text-[13.5px] font-bold text-slate-700">
+                        <Briefcase size={16} strokeWidth={2.3} className="text-slate-500 shrink-0" />
                         {props.type}
                       </span>
                     )}
                     {props.mode && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
-                        <Home size={11} className="text-gray-400 shrink-0" />
+                      <span className="inline-flex items-center gap-2 text-[13.5px] font-bold text-slate-700">
+                        <Home size={16} strokeWidth={2.3} className="text-slate-500 shrink-0" />
                         {props.mode}
                       </span>
                     )}
                     {level && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
-                        <Layers size={11} className="text-gray-400 shrink-0" />
+                      <span className="inline-flex items-center gap-2 text-[13.5px] font-bold text-slate-700">
+                        <Layers size={16} strokeWidth={2.3} className="text-slate-500 shrink-0" />
                         {level}
                       </span>
                     )}
                     {props.experience && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
-                        <Calendar size={11} className="text-gray-400 shrink-0" />
+                      <span className="inline-flex items-center gap-2 text-[13.5px] font-bold text-slate-700">
+                        <Calendar size={16} strokeWidth={2.3} className="text-slate-500 shrink-0" />
                         {props.experience}
                       </span>
                     )}
                     {props.salary && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-bold text-emerald-700">
-                        <CircleDollarSign size={11} className="text-emerald-500 shrink-0" />
+                      <span className="inline-flex items-center gap-2 text-[13.5px] font-bold text-emerald-600">
+                        <CircleDollarSign size={16} strokeWidth={2.3} className="text-emerald-500 shrink-0" />
                         {props.salary}
                       </span>
                     )}
                   </div>
-                  {whyYouMatch && (
-                    <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: bandCfg.color }}>
-                      <CheckCircle size={12} className="shrink-0" />
-                      {whyYouMatch}
-                    </p>
-                  )}
-                  {skillsNode}
                 </div>
               </motion.div>
             )}
@@ -1051,80 +949,7 @@ export default function JobCard(props: JobCardProps) {
 
                 {/* Body — tight vertical rhythm */}
                 <div className="flex-1 overflow-hidden flex flex-col justify-center gap-2 px-5 pt-2.5 pb-3">
-                  {explanationLoading ? (
-                    <>
-                      <style>{`
-                        @keyframes jc-shimmer { 0%{background-position:-800px 0} 100%{background-position:800px 0} }
-                        .jc-shimmer { background:linear-gradient(90deg,#e4eaf8 25%,#d8e2f6 50%,#e4eaf8 75%); background-size:1600px 100%; animation:jc-shimmer 1.5s ease-in-out infinite; }
-                      `}</style>
-                      <div className="space-y-1.5">
-                        <div className="h-2.5 w-11/12 rounded-full jc-shimmer" />
-                        <div className="h-2.5 w-3/4 rounded-full jc-shimmer" />
-                      </div>
-                      <div className="flex gap-1.5 mt-1">
-                        {[1,2,3,4,5].map((i) => (
-                          <div key={i} className="flex flex-col items-center gap-1.5 flex-1">
-                            <div className="w-12 h-12 rounded-full jc-shimmer" />
-                            <div className="h-2 w-9 rounded-full jc-shimmer" />
-                            <div className="h-1.5 w-6 rounded-full jc-shimmer" />
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : explanation ? (
-                    <>
-                      {/* Description — improved contrast and weight */}
-                      {props.description && (() => {
-                        const raw = props.description.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-                        const sentences = raw.match(/[^.!?]+[.!?]+/g) || [raw];
-                        const structuredRe = /(?:location|shift|pay rate|per hour|per month|£|₹|\d+:\d{2}|monday|sunday|saturday|lpa|salary|holiday pay|weekends?:|nights?:)/i;
-                        const clean = sentences.filter(s => s.trim().length > 25 && !structuredRe.test(s));
-                        const text = (clean.length > 0 ? clean.join(" ") : raw).trim() + "...";
-                        return text ? (
-                          <p className="text-[11.5px] font-medium text-gray-600 leading-[1.55] line-clamp-2 shrink-0">
-                            {text}
-                          </p>
-                        ) : null;
-                      })()}
-
-                      {/* Hero metrics — larger circles, score-colored, two-line labels */}
-                      <div className="flex items-start gap-1 mt-0.5">
-                        {(
-                          [
-                            { label: "Experience", score: explanation.explanation.experience.score },
-                            { label: "Skills",     score: explanation.explanation.skills.score     },
-                            { label: "Role",       score: explanation.explanation.title.score      },
-                            { label: "Education",  score: explanation.explanation.education.score  },
-                            { label: "Location",   score: explanation.explanation.location.score   },
-                          ] as { label: string; score: number }[]
-                        ).map(({ label, score }) => {
-                          const r = 22;
-                          const circ = 2 * Math.PI * r;
-                          const offset = circ - (score / 100) * circ;
-                          const color = score >= 75 ? "#10b981" : score >= 50 ? "#3b82f6" : score >= 30 ? "#f59e0b" : "#ef4444";
-                          const trackColor = score >= 75 ? "#d1fae5" : score >= 50 ? "#dbeafe" : score >= 30 ? "#fef3c7" : "#fee2e2";
-                          return (
-                            <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
-                              <svg width="54" height="54" viewBox="0 0 54 54">
-                                <circle cx="27" cy="27" r={r} stroke={trackColor} strokeWidth="3.5" fill="none" />
-                                <circle cx="27" cy="27" r={r} stroke={color} strokeWidth="3.5" fill="none"
-                                  strokeDasharray={circ} strokeDashoffset={offset}
-                                  strokeLinecap="round" transform="rotate(-90 27 27)"
-                                  style={{ filter: `drop-shadow(0 0 5px ${color}66)` }}
-                                />
-                                <text textAnchor="middle" x="27" y="27" dominantBaseline="middle"
-                                  fontSize="11" fontWeight="900" fill={color}>{Math.round(score)}</text>
-                              </svg>
-                              <span className="text-[9.5px] font-bold text-gray-600 text-center leading-tight mt-0.5">{label}</span>
-                              <span className="text-[8.5px] font-semibold leading-none" style={{ color }}>{score >= 50 ? "Match" : "Gap"}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-[11.5px] text-gray-400 text-center">Match breakdown unavailable</p>
-                  )}
+                  {analysisBodyNode}
                 </div>
               </motion.div>
             )}
@@ -1132,8 +957,11 @@ export default function JobCard(props: JobCardProps) {
           </AnimatePresence>
         </div>
 
+        {/* Divider — same inset as the header/meta divider above, so both lines read as equal length */}
+        <div className="mx-5 border-t border-slate-200/80" />
+
         {/* Action row */}
-        <div className="jobs-card-actions flex items-center justify-between gap-3 border-t border-slate-200/70 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-5 py-2.5">
+        <div className="jobs-card-actions flex items-center justify-between gap-3 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-5 py-2.5">
           {/* Left: applicant count + match analysis */}
           <div className="flex items-center gap-2.5 min-w-0">
             {props.applicant_count !== undefined && props.applicant_count !== null && (
@@ -1185,50 +1013,67 @@ export default function JobCard(props: JobCardProps) {
               Ask Nancy
             </button>
 
-            {shouldPromptResumeCustomize && !isApplied ? (
-              <motion.button
-                type="button"
-                onClick={() => setShowResumePrompt(true)}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all duration-150 hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
-              >
-                Apply Now
-              </motion.button>
-            ) : externalUrl && !isApplied ? (
-              <motion.a
-                href={externalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-allow-new-tab
-                onClick={handleExternalApplyClick}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all duration-150 hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
-              >
-                Apply Now
-              </motion.a>
-            ) : (
-              <motion.button
-                type="button"
-                onClick={handleApplyNow}
-                disabled={isSubmitting || isApplied}
-                whileHover={!isApplied && !isSubmitting ? { scale: 1.03 } : undefined}
-                whileTap={!isApplied && !isSubmitting ? { scale: 0.96 } : undefined}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-5 py-2.5 text-[13px] font-bold transition-all duration-150 ${
-                  isSubmitting
-                    ? "bg-emerald-400 text-white cursor-wait opacity-70"
-                    : isApplied
-                    ? "bg-gray-100 text-gray-500 cursor-default"
-                    : "bg-[#4F46E5] text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
-                }`}
-              >
-                {isSubmitting ? "Applying…" : isApplied ? "✓ Applied" : "Apply Now"}
-              </motion.button>
-            )}
+            {(() => {
+              if (shouldPromptResumeCustomize && !isApplied) {
+                return (
+                  <motion.button
+                    type="button"
+                    onClick={() => setShowResumePrompt(true)}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.96 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all duration-150 hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
+                  >
+                    Apply Now
+                  </motion.button>
+                );
+              }
+
+              if (externalUrl && !isApplied) {
+                return (
+                  <motion.a
+                    href={externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-allow-new-tab
+                    onClick={handleExternalApplyClick}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.96 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all duration-150 hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
+                  >
+                    Apply Now
+                  </motion.a>
+                );
+              }
+
+              let panelApplyBtnClass: string;
+              let panelApplyBtnLabel: string;
+              if (isSubmitting) {
+                panelApplyBtnClass = "bg-emerald-400 text-white cursor-wait opacity-70";
+                panelApplyBtnLabel = "Applying…";
+              } else if (isApplied) {
+                panelApplyBtnClass = "bg-gray-100 text-gray-500 cursor-default";
+                panelApplyBtnLabel = "✓ Applied";
+              } else {
+                panelApplyBtnClass = "bg-[#4F46E5] text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]";
+                panelApplyBtnLabel = "Apply Now";
+              }
+
+              return (
+                <motion.button
+                  type="button"
+                  onClick={handleApplyNow}
+                  disabled={isSubmitting || isApplied}
+                  whileHover={!isApplied && !isSubmitting ? { scale: 1.03 } : undefined}
+                  whileTap={!isApplied && !isSubmitting ? { scale: 0.96 } : undefined}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-5 py-2.5 text-[13px] font-bold transition-all duration-150 ${panelApplyBtnClass}`}
+                >
+                  {panelApplyBtnLabel}
+                </motion.button>
+              );
+            })()}
           </div>
         </div>
 
@@ -1237,11 +1082,19 @@ export default function JobCard(props: JobCardProps) {
       {/* ── RIGHT: AI match panel ── */}
       {hasMatchScore && props.match_band && (
         <div
-          className="flex w-[128px] shrink-0 cursor-pointer select-none flex-col"
+          className="flex w-[140px] shrink-0 cursor-pointer select-none flex-col my-[3px] mr-[3px]"
           onClick={handleScoreHover}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleScoreHover();
+            }
+          }}
+          role="button"
+          tabIndex={0}
         >
           <div
-            className="jobs-score-panel group/panel relative flex flex-1 flex-col items-center justify-center gap-2.5 overflow-hidden px-3 py-4 transition-all duration-300"
+            className="jobs-score-panel group/panel relative flex flex-1 flex-col items-center overflow-hidden rounded-[18px] px-4 py-5 shadow-[0_2px_8px_rgba(15,23,42,0.14)] transition-all duration-300"
             style={{ background: "linear-gradient(160deg, #0f1d33 0%, #172b4a 46%, #214b86 100%)" }}
           >
             {/* Ambient glow behind ring */}
@@ -1251,53 +1104,63 @@ export default function JobCard(props: JobCardProps) {
             <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full opacity-60 animate-pulse"
               style={{ background: circleStroke }} />
 
-            {/* Score ring using inline SVG for full control */}
-            <div className="relative z-10">
-              <svg width="72" height="72" viewBox="0 0 72 72" style={{ overflow: "visible" }}>
+            {/* Score ring + band label + signal rows — one group that centers together
+                in the middle of the panel, so the ring lands mid-card regardless of
+                whether the signal rows below it are present. */}
+            <div className="relative z-10 flex flex-1 w-full flex-col items-center justify-center gap-2">
+              <svg width="94" height="94" viewBox="0 0 94 94" style={{ overflow: "visible" }}>
                 <defs>
-                  <linearGradient id={`panel-grad-${props.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor={circleStroke} stopOpacity="0.7" />
-                    <stop offset="100%" stopColor={circleStroke} stopOpacity="1" />
+                  <linearGradient id={`panel-grad-${props.id}`} x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor={circleStroke} stopOpacity="1" />
+                    <stop offset="100%" stopColor="#ffffff" stopOpacity="0.95" />
                   </linearGradient>
                 </defs>
                 {/* Track */}
-                <circle cx="36" cy="36" r={circleR} stroke="rgba(255,255,255,0.07)" strokeWidth="5.5" fill="none" />
+                <circle cx="47" cy="47" r={circleR} stroke="rgba(255,255,255,0.08)" strokeWidth="5.5" fill="none" />
                 {/* Progress */}
                 <circle
-                  cx="36" cy="36" r={circleR}
+                  cx="47" cy="47" r={circleR}
                   stroke={`url(#panel-grad-${props.id})`}
                   strokeWidth="5.5" fill="none"
                   strokeDasharray={circleC} strokeDashoffset={circleOffset}
-                  strokeLinecap="round" transform="rotate(-90 36 36)"
+                  strokeLinecap="round" transform="rotate(-90 47 47)"
                   className="transition-all duration-700"
                   style={{ filter: `drop-shadow(0 0 6px ${circleStroke}80)` }}
                 />
                 {/* Score */}
-                <text x="36" y="33" textAnchor="middle" fontSize="13.5" fontWeight="800" fill="white" dominantBaseline="middle">
+                <text x="47" y="47" textAnchor="middle" fontSize="21" fontWeight="800" fill="white" dominantBaseline="middle">
                   {Math.round(props.matchScore!)}%
                 </text>
-                <text x="36" y="44" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="rgba(255,255,255,0.75)" dominantBaseline="middle" style={{ letterSpacing: "0.8px" }}>
-                  SCORE
-                </text>
               </svg>
-            </div>
 
-            {/* Band label */}
-            <div className="relative z-10 text-center space-y-1.5">
-              <span
-                className="inline-block text-[8.5px] font-bold tracking-wider uppercase leading-none px-2 py-0.5 rounded-full"
-                style={{ color: circleStroke, background: `${circleStroke}30`, border: `1px solid ${circleStroke}60` }}
-              >
+              <span className="text-center text-[12px] font-extrabold uppercase leading-tight tracking-wide text-white">
                 {circleLabel}
               </span>
-              <div className="text-[8px] text-white/70 font-semibold tracking-widest uppercase group-hover/panel:text-white transition-colors">
-                {showExplanation ? "CLOSE ✕" : "QUICK VIEW →"}
-              </div>
+
+              {/* Signal rows — only real, backend-provided attributes; the divider only appears when there's something to show under it */}
+              {(props.h1b_sponsor || props.remote) && (
+                <div className="w-full space-y-1.5 border-t border-white/10 pt-2.5 mt-1">
+                  {props.h1b_sponsor && (
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle size={11} className="shrink-0 text-emerald-400" />
+                      <span className="text-[10.5px] font-semibold leading-tight text-white/80">H1B Sponsor Likely</span>
+                    </div>
+                  )}
+                  {props.remote && (
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle size={11} className="shrink-0 text-emerald-400" />
+                      <span className="text-[10.5px] font-semibold leading-tight text-white/80">Remote Friendly</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {props.h1b_sponsor && (
-              <span className="relative z-10 text-[7.5px] text-blue-300/40 text-center leading-tight">✓ H1B</span>
-            )}
+            {/* Interactive hint — pinned below the centered group */}
+            <span className="relative z-10 mt-1.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-white/45 transition-colors group-hover/panel:text-white/80">
+              {showExplanation ? "Close" : "View Analysis"}
+              <ChevronDown size={11} className={`transition-transform duration-200 ${showExplanation ? "rotate-180" : ""}`} />
+            </span>
           </div>
         </div>
       )}
@@ -1366,7 +1229,15 @@ export default function JobCard(props: JobCardProps) {
         bandLabel={bandCfg.label}
         missingSkills={missingSkillsForPrompt}
         applyUrl={externalUrl || ""}
-        onClose={() => setShowResumePrompt(false)}
+        onClose={() => {
+          // "Do not remind me again" was only persisted by the two action
+          // buttons (Fix My Resume Now / Apply Without Customizing) — a user
+          // who checks the box and just closes the popup (X button or
+          // backdrop click) had the checkbox silently discarded, so the
+          // prompt kept reappearing on later jobs despite having checked it.
+          persistSkipIfChecked();
+          setShowResumePrompt(false);
+        }}
         onFixResume={handleFixResume}
         fixingResume={isPreparingResumeFix}
         onApplyWithoutCustomizing={handleApplyWithoutCustomizing}

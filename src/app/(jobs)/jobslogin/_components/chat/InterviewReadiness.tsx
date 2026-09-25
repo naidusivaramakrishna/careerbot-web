@@ -24,6 +24,12 @@ export default function InterviewReadiness() {
     }
   };
 
+  const STATUS_TEXT_COLOR: Record<ReadinessArea['status'], string> = {
+    strong: 'text-green-700',
+    moderate: 'text-yellow-700',
+    'needs-improvement': 'text-red-700',
+  };
+
   return (
     <div className="mt-4 p-3 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200/50 animate-in fade-in duration-300">
       <p className="text-xs font-bold text-gray-800 mb-3">🎯 Interview Readiness</p>
@@ -35,11 +41,7 @@ export default function InterviewReadiness() {
               <span className="text-lg">{area.icon}</span>
               <span className="text-xs font-medium text-gray-700">{area.name}</span>
             </div>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-              area.status === 'strong' ? 'text-green-700' :
-              area.status === 'moderate' ? 'text-yellow-700' :
-              'text-red-700'
-            }`}>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${STATUS_TEXT_COLOR[area.status]}`}>
               {getStatusLabel(area.status)}
             </span>
           </div>

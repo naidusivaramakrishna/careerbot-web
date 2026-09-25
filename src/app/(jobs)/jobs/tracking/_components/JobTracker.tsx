@@ -36,7 +36,7 @@ const GRAD_POOL = [
   "linear-gradient(135deg,#0369a1,#38bdf8)",
   "linear-gradient(135deg,#be185d,#f472b6)",
 ];
-const avatarGrad = (name: string) => GRAD_POOL[name.charCodeAt(0) % GRAD_POOL.length];
+const avatarGrad = (name: string) => GRAD_POOL[name.codePointAt(0)! % GRAD_POOL.length];
 
 function fmtDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -55,7 +55,7 @@ function timeSince(dateStr: string) {
 function StatusDropdown({
   current, onChange,
 }: {
-  current: TabType; onChange: (s: TabType) => void;
+  readonly current: TabType; readonly onChange: (s: TabType) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -118,7 +118,7 @@ function StatusDropdown({
 /* ══════════════════════════════════════════
    Empty State
 ══════════════════════════════════════════ */
-function EmptyState({ tab }: { tab: TabType }) {
+function EmptyState({ tab }: { readonly tab: TabType }) {
   const cfg = TAB_CFG[tab];
   const Icon = cfg.icon;
   return (
@@ -139,13 +139,13 @@ function EmptyState({ tab }: { tab: TabType }) {
    Job Card
 ══════════════════════════════════════════ */
 interface JobCardProps {
-  job: JobApplicationRecord;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-  onStatusChange: (jobId: string, status: TabType) => void;
-  onNotesChange: (jobId: string, notes: string) => void;
-  onDelete: (jobId: string) => void;
-  editingNotes?: string;
+  readonly job: JobApplicationRecord;
+  readonly isExpanded: boolean;
+  readonly onToggleExpand: () => void;
+  readonly onStatusChange: (jobId: string, status: TabType) => void;
+  readonly onNotesChange: (jobId: string, notes: string) => void;
+  readonly onDelete: (jobId: string) => void;
+  readonly editingNotes?: string;
 }
 
 function JobCard({
@@ -354,17 +354,22 @@ export default function JobTracker() {
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto px-5 py-4" style={{ scrollbarWidth: 'thin' }}>
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-40 gap-3">
-            <div className="relative w-10 h-10">
-              <div className="absolute inset-0 rounded-full border-[3px] border-gray-100" />
-              <div className="absolute inset-0 rounded-full border-[3px] border-t-[#2557a7] animate-spin" />
-            </div>
-            <p className="text-[13px] text-gray-500 font-medium">Loading…</p>
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          <EmptyState tab={activeTab} />
-        ) : (
+        {(() => {
+          if (isLoading) {
+            return (
+              <div className="flex flex-col items-center justify-center h-40 gap-3">
+                <div className="relative w-10 h-10">
+                  <div className="absolute inset-0 rounded-full border-[3px] border-gray-100" />
+                  <div className="absolute inset-0 rounded-full border-[3px] border-t-[#2557a7] animate-spin" />
+                </div>
+                <p className="text-[13px] text-gray-500 font-medium">Loading…</p>
+              </div>
+            );
+          }
+          if (filteredJobs.length === 0) {
+            return <EmptyState tab={activeTab} />;
+          }
+          return (
           <div className="space-y-2.5 max-w-2xl">
             {/* Section header */}
             <div className="flex items-center justify-between mb-1">
@@ -395,7 +400,8 @@ export default function JobTracker() {
               />
             ))}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

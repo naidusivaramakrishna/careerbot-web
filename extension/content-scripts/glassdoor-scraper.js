@@ -84,11 +84,15 @@
     const companyEl = document.querySelector(
       '[class*="EmployerProfile_employerName"], [data-test="employer-name"], [class*="employer-name"]'
     );
+    const locationEl = document.querySelector(
+      '[data-test="location"], [class*="JobDetails_location"], [class*="location" i]'
+    );
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'glassdoor',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'glassdoor',
     };
   }
 

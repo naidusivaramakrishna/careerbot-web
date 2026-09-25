@@ -18,6 +18,9 @@ vi.mock("@/api/userApi", () => ({
 vi.mock("@/api/mockInterviewApi", () => ({
   recoverSession: mocks.recoverSession,
   getUserProgress: mocks.getUserProgress,
+}));
+
+vi.mock("@/api/interviewPrepApi", () => ({
   getNotes: mocks.getNotes,
 }));
 
@@ -85,6 +88,7 @@ async function renderProvider() {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  localStorage.clear();
   mocks.getProfile.mockResolvedValue({ id: "user-123" });
   mocks.recoverSession.mockResolvedValue({ active_session: null });
   mocks.getUserProgress.mockResolvedValue(progress());
@@ -113,6 +117,9 @@ describe("MockInterviewContext", () => {
       updated_at: "2026-07-17T09:00:00Z",
       source: "ai",
     });
+    // getNotes is gated on a resume id in localStorage, not the user id —
+    // the bootstrap effect skips the call entirely without one.
+    localStorage.setItem("current_resume_id", "resume-1");
 
     await renderProvider();
 
@@ -122,7 +129,7 @@ describe("MockInterviewContext", () => {
     expect(screen.getByText("Practice: 6/10")).toBeInTheDocument();
     expect(screen.getByText("History: 7")).toBeInTheDocument();
     expect(screen.getByText("Loading: false")).toBeInTheDocument();
-    expect(mocks.getNotes).toHaveBeenCalledWith("user-123");
+    expect(mocks.getNotes).toHaveBeenCalledWith("resume-1");
 
     fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(screen.getByText("Active: none")).toBeInTheDocument();

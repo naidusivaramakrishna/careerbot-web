@@ -107,7 +107,7 @@ function SkillGapCard() {
                     style={{ background: isAdded ? "#f0fdf4" : tier.bg, borderColor: isAdded ? "#86efac" : tier.border }}>
                     <div className="flex items-center gap-2.5">
                       <span className="w-2 h-2 rounded-full shrink-0"
-                        style={{ background: isAdded ? "#22c55e" : tier.dot }} />
+                        style={{ background: isAdded ? "#22c55e" : skill.dot }} />
                       <span className="text-[12.5px] font-semibold text-slate-700">{skill.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export default function SkillGapSection() {
                 <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
                   <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              </span>
+              </span>{" "}
               Click any skill in the card to see your score update live
             </p>
           </motion.div>

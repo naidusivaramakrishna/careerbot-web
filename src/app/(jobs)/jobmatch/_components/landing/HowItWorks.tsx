@@ -176,8 +176,8 @@ function JDPreview() {
 
               {/* Buttons */}
               <div className="flex justify-end gap-2">
-                <button className="px-4 py-1.5 rounded-lg border border-slate-200 text-[12px] font-semibold text-slate-600">Cancel</button>
-                <button className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold shadow-sm">Continue</button>
+                <button type="button" className="px-4 py-1.5 rounded-lg border border-slate-200 text-[12px] font-semibold text-slate-600">Cancel</button>
+                <button type="button" className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold shadow-sm">Continue</button>
               </div>
         </motion.div>
       </div>
@@ -186,7 +186,7 @@ function JDPreview() {
 }
 
 // ── Step 03: Analyze ─────────────────────────────────────────────────────────
-function CountUp({ to, duration = 1.4 }: { to: number; duration?: number }) {
+function CountUp({ to, duration = 1.4 }: { readonly to: number; readonly duration?: number }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
     setVal(0);
@@ -203,7 +203,7 @@ function CountUp({ to, duration = 1.4 }: { to: number; duration?: number }) {
   return <>{val}</>;
 }
 
-function CircleScore({ score, color, label }: { score: number; color: string; label: string }) {
+function CircleScore({ score, color, label }: { readonly score: number; readonly color: string; readonly label: string }) {
   const size = 88;
   const strokeWidth = 7;
   const r = (size - strokeWidth) / 2;
@@ -291,7 +291,6 @@ function AnalyzePreview() {
 function OptimizePreview() {
   const [phase, setPhase] = useState(0);
   const keywords = ["+ React", "+ TypeScript", "+ GraphQL"];
-  const improvements = ["Added Python", "Added Docker", "Added ATS Summary", "Added Missing Sections"];
 
   useEffect(() => {
     setPhase(0);
@@ -543,8 +542,8 @@ export default function HowItWorks() {
 
             {/* Progress dots */}
             <div className="flex items-center gap-1.5 px-1 mt-1">
-              {STEPS.map((_, i) => (
-                <button key={i} onClick={() => handleSelect(i)}
+              {STEPS.map((step, i) => (
+                <button type="button" key={step.number} onClick={() => handleSelect(i)}
                   className={`transition-all duration-300 rounded-full ${i === active ? "w-6 h-1.5 bg-blue-600" : "w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400"}`}
                 />
               ))}

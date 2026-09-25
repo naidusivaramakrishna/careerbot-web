@@ -185,6 +185,7 @@ export default function SectionsPage() {
               </div>
 
               <button
+                type="button"
                 onClick={handleStartAssessment}
                 disabled={isRequesting}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-black text-white shadow-lg shadow-[#2557a7]/15 transition-colors hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:bg-slate-300"

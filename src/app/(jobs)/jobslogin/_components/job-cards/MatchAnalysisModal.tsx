@@ -45,9 +45,9 @@ type View = "pick" | "basic" | "premium";
 
 /* ── Picker view ─────────────────────────────────────────────────────────── */
 function PickerView({ jobId, jobTitle, company, onSelect, onClose }: {
-  jobId: string; jobTitle: string; company: string;
-  onSelect: (v: "basic" | "premium") => void;
-  onClose: () => void;
+  readonly jobId: string; readonly jobTitle: string; readonly company: string;
+  readonly onSelect: (v: "basic" | "premium") => void;
+  readonly onClose: () => void;
 }) {
   const premiumDisabled = !isValidBackendJobId(jobId);
   return (
@@ -55,6 +55,11 @@ function PickerView({ jobId, jobTitle, company, onSelect, onClose }: {
       className="relative w-full max-w-2xl rounded-3xl bg-white overflow-hidden"
       style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}
       onClick={(e) => e.stopPropagation()}
+      // Keyboard mirror of the click guard above — this wrapper only exists
+      // to stop clicks/keypresses on the modal content from bubbling up to
+      // the backdrop's close handler (see MatchAnalysisModal below), not to
+      // perform an action of its own, so it doesn't get a role/tabIndex.
+      onKeyDown={(e) => e.stopPropagation()}
     >
       {/* Header */}
       <div
@@ -75,6 +80,7 @@ function PickerView({ jobId, jobTitle, company, onSelect, onClose }: {
             <p className="text-[12.5px] mt-1 truncate" style={{ color: "rgba(255,255,255,0.8)" }}>{jobTitle} · {company}</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors mt-0.5 shrink-0"
             style={{ color: "rgba(255,255,255,0.8)" }}
@@ -206,10 +212,245 @@ function dimPalette(score: number) {
   return              { color: "#e11d48", bg: "#fff5f5", border: "#fecdd3" };
 }
 
+const CHIP_PREVIEW = 8;
+
+interface MatchDimension {
+  label: string;
+  score: number;
+  detail: string;
+  matched: string[];
+  missing: string[];
+  meta: string | null;
+}
+
+// Extracted from BasicView: builds the 5 fixed score dimensions straight from
+// the match-explanation response. Pure data mapping, no rendering — pulled
+// out (along with buildAiRecs and DimensionCard below) to cut BasicView's
+// cognitive complexity. Same fields/fallbacks as the original inline array.
+function buildDimensions(data: MatchExplanationResponse | null): MatchDimension[] {
+  if (!data) return [];
+  return [
+    {
+      label: "Skills", score: data.explanation.skills.score,
+      detail: data.explanation.skills.detail,
+      matched: data.explanation.skills.matched ?? [],
+      missing: data.explanation.skills.missing ?? [],
+      meta: null,
+    },
+    {
+      label: "Job Title", score: data.explanation.title.score,
+      detail: data.explanation.title.detail,
+      matched: [], missing: [],
+      meta: data.explanation.title.job_title ? `Required: ${data.explanation.title.job_title}` : null,
+    },
+    {
+      label: "Experience", score: data.explanation.experience.score,
+      detail: data.explanation.experience.detail,
+      matched: [], missing: [],
+      meta: data.explanation.experience.job_range ? `Required: ${data.explanation.experience.job_range}` : null,
+    },
+    {
+      label: "Education", score: data.explanation.education.score,
+      detail: data.explanation.education.detail,
+      matched: [], missing: [],
+      meta: data.explanation.education.job_level ? `Required: ${data.explanation.education.job_level}` : null,
+    },
+    {
+      label: "Location", score: data.explanation.location.score,
+      detail: data.explanation.location.detail,
+      matched: [], missing: [],
+      meta: data.explanation.location.job_location ? `Location: ${data.explanation.location.job_location}` : null,
+    },
+  ];
+}
+
+// Extracted from BasicView: AI recommendation copy derived from the weakest
+// dimensions. Pure data mapping — same three checks/messages as before.
+function buildAiRecs(data: MatchExplanationResponse | null, allMissing: string[]): string[] {
+  if (!data) return [];
+  return [
+    allMissing.length > 0
+      ? `Add ${allMissing.slice(0, 2).join(" and ")} to your resume skills section`
+      : null,
+    data.explanation.title.score < 60
+      ? `Update your job title to better align with "${data.explanation.title.job_title ?? "the required role"}"`
+      : null,
+    data.explanation.experience.score < 60
+      ? "Highlight specific achievements and metrics in your experience section"
+      : null,
+  ].filter(Boolean) as string[];
+}
+
+// Extracted from BasicView's dims.map render below — one score-dimension
+// card, including its skill chips / expand-collapse controls for the Skills
+// dimension. Identical JSX and conditions to the original inline block.
+function DimensionCard({
+  dim,
+  idx,
+  mounted,
+  showAllSkills,
+  allMissing,
+  totalHidden,
+  onShowAllSkills,
+  onHideExtraSkills,
+}: {
+  readonly dim: MatchDimension;
+  readonly idx: number;
+  readonly mounted: boolean;
+  readonly showAllSkills: boolean;
+  readonly allMissing: string[];
+  readonly totalHidden: number;
+  readonly onShowAllSkills: () => void;
+  readonly onHideExtraSkills: () => void;
+}) {
+  const pal = dimPalette(dim.score);
+  const isSkills = dim.label === "Skills";
+  const visibleMissing = isSkills && !showAllSkills
+    ? dim.missing.slice(0, CHIP_PREVIEW)
+    : dim.missing;
+  const halfIdx = Math.ceil(visibleMissing.length / 2);
+  const criticalGaps = visibleMissing.slice(0, halfIdx);
+  const additionalSkills = visibleMissing.slice(halfIdx);
+
+  return (
+    <div
+      className="rounded-2xl border p-3.5"
+      style={{
+        borderColor: pal.border,
+        background: pal.bg,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? "translateY(0)" : "translateY(8px)",
+        transition: `opacity 0.45s ease ${idx * 65}ms, transform 0.45s ease ${idx * 65}ms`,
+      }}
+    >
+      {/* Row: icon + label | score */}
+      <div className="flex items-center gap-2.5 mb-2">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: `${pal.color}18`, color: pal.color }}
+        >
+          {DIM_ICONS[dim.label]}
+        </div>
+        <span className="text-[12px] font-bold text-gray-700 flex-1">{dim.label}</span>
+        <span className="text-[13.5px] font-black tabular-nums shrink-0" style={{ color: pal.color }}>
+          {Math.round(dim.score)}
+        </span>
+        <span className="text-[10px] text-gray-400 font-medium shrink-0">/100</span>
+      </div>
+
+      {/* Progress bar — thinner */}
+      <div className="h-[3px] rounded-full bg-white/70 overflow-hidden mb-2.5" style={{ boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)" }}>
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: mounted ? `${Math.min(dim.score, 100)}%` : "0%",
+            background: `linear-gradient(90deg, ${pal.color}99, ${pal.color})`,
+            transition: `width 0.75s cubic-bezier(0.4,0,0.2,1) ${idx * 80}ms`,
+            boxShadow: `0 0 4px ${pal.color}50`,
+          }}
+        />
+      </div>
+
+      {/* Detail text */}
+      <p className="text-[11.5px] text-gray-600 leading-relaxed">{dim.detail}</p>
+
+      {/* Meta */}
+      {dim.meta && (
+        <p className="text-[10.5px] font-medium text-gray-400 mt-1">{dim.meta}</p>
+      )}
+
+      {/* Skill chips — only for Skills dim */}
+      {isSkills && (dim.matched.length > 0 || dim.missing.length > 0) && (
+        <div className="mt-2.5 space-y-2">
+          {/* Matched skills */}
+          {dim.matched.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {dim.matched.map((s) => (
+                <span
+                  key={s}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
+                  style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}
+                >
+                  <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Critical gaps */}
+          {criticalGaps.length > 0 && (
+            <div>
+              <p className="text-[9.5px] font-bold uppercase tracking-wider text-amber-600 mb-1">Critical gaps</p>
+              <div className="flex flex-wrap gap-1">
+                {criticalGaps.map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
+                    style={{ background: "#fef9ec", color: "#92400e", border: "1px solid #fde68a" }}
+                  >
+                    <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Additional skills */}
+          {additionalSkills.length > 0 && (
+            <div>
+              <p className="text-[9.5px] font-bold uppercase tracking-wider text-gray-400 mb-1">Additional skills</p>
+              <div className="flex flex-wrap gap-1">
+                {additionalSkills.map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
+                    style={{ background: "#f9fafb", color: "#6b7280", border: "1px solid #e5e7eb" }}
+                  >
+                    <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Expand / collapse */}
+          {totalHidden > 0 && (
+            <button
+              type="button"
+              onClick={onShowAllSkills}
+              className="text-[10.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors"
+            >
+              +{totalHidden} more skills to add →
+            </button>
+          )}
+          {showAllSkills && allMissing.length > CHIP_PREVIEW && (
+            <button
+              type="button"
+              onClick={onHideExtraSkills}
+              className="text-[10.5px] font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Show less ↑
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Basic analysis view ─────────────────────────────────────────────────── */
 function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
-  jobId: string; jobTitle: string; company: string;
-  onBack: () => void; onClose: () => void;
+  readonly jobId: string; readonly jobTitle: string; readonly company: string;
+  readonly onBack: () => void; readonly onClose: () => void;
 }) {
   const [data, setData]         = useState<MatchExplanationResponse | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -237,68 +478,26 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
   const band    = data?.band ?? "low";
   const bandCfg = BAND_CONFIG[band] ?? BAND_CONFIG.low;
 
-  const dims = data ? [
-    {
-      label: "Skills", score: data.explanation.skills.score,
-      detail: data.explanation.skills.detail,
-      matched: data.explanation.skills.matched ?? [] as string[],
-      missing: data.explanation.skills.missing ?? [] as string[],
-      meta: null,
-    },
-    {
-      label: "Job Title", score: data.explanation.title.score,
-      detail: data.explanation.title.detail,
-      matched: [] as string[], missing: [] as string[],
-      meta: data.explanation.title.job_title ? `Required: ${data.explanation.title.job_title}` : null,
-    },
-    {
-      label: "Experience", score: data.explanation.experience.score,
-      detail: data.explanation.experience.detail,
-      matched: [] as string[], missing: [] as string[],
-      meta: data.explanation.experience.job_range ? `Required: ${data.explanation.experience.job_range}` : null,
-    },
-    {
-      label: "Education", score: data.explanation.education.score,
-      detail: data.explanation.education.detail,
-      matched: [] as string[], missing: [] as string[],
-      meta: data.explanation.education.job_level ? `Required: ${data.explanation.education.job_level}` : null,
-    },
-    {
-      label: "Location", score: data.explanation.location.score,
-      detail: data.explanation.location.detail,
-      matched: [] as string[], missing: [] as string[],
-      meta: data.explanation.location.job_location ? `Location: ${data.explanation.location.job_location}` : null,
-    },
-  ] : [];
+  const dims = buildDimensions(data);
 
   const allMatched = data?.explanation.skills.matched ?? [];
   const allMissing = data?.explanation.skills.missing ?? [];
   const totalMatched = allMatched.length;
   const totalMissing = allMissing.length;
 
-  const CHIP_PREVIEW = 8;
   const totalHidden = allMissing.length > CHIP_PREVIEW && !showAllSkills
     ? allMissing.length - CHIP_PREVIEW
     : 0;
 
   // AI recommendations derived from weakest dims
-  const aiRecs: string[] = data ? [
-    allMissing.length > 0
-      ? `Add ${allMissing.slice(0, 2).join(" and ")} to your resume skills section`
-      : null,
-    data.explanation.title.score < 60
-      ? `Update your job title to better align with "${data.explanation.title.job_title ?? "the required role"}"`
-      : null,
-    data.explanation.experience.score < 60
-      ? "Highlight specific achievements and metrics in your experience section"
-      : null,
-  ].filter(Boolean) as string[] : [];
+  const aiRecs: string[] = buildAiRecs(data, allMissing);
 
   return (
     <div
       className="relative w-full max-w-xl rounded-3xl bg-white overflow-hidden flex flex-col"
       style={{ boxShadow: "0 32px 80px rgba(0,0,0,0.22)", maxHeight: "92vh" }}
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
     >
       {/* ── Header ── */}
       <div
@@ -310,7 +509,7 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
 
         <div className="relative flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <button onClick={onBack} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.85)" }} aria-label="Back">
+            <button type="button" onClick={onBack} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.85)" }} aria-label="Back">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
@@ -366,7 +565,7 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
                 </div>
               );
             })()}
-            <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors" style={{ color: "rgba(255,255,255,0.70)" }} aria-label="Close">
+            <button type="button" onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors" style={{ color: "rgba(255,255,255,0.70)" }} aria-label="Close">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -423,151 +622,19 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
 
         {!loading && data && (
           <div className="space-y-2">
-            {dims.map((dim, idx) => {
-              const pal = dimPalette(dim.score);
-              const isSkills = dim.label === "Skills";
-              const visibleMissing = isSkills && !showAllSkills
-                ? dim.missing.slice(0, CHIP_PREVIEW)
-                : dim.missing;
-              const halfIdx = Math.ceil(visibleMissing.length / 2);
-              const criticalGaps = visibleMissing.slice(0, halfIdx);
-              const additionalSkills = visibleMissing.slice(halfIdx);
-
-              return (
-                <div
-                  key={dim.label}
-                  className="rounded-2xl border p-3.5"
-                  style={{
-                    borderColor: pal.border,
-                    background: pal.bg,
-                    opacity: mounted ? 1 : 0,
-                    transform: mounted ? "translateY(0)" : "translateY(8px)",
-                    transition: `opacity 0.45s ease ${idx * 65}ms, transform 0.45s ease ${idx * 65}ms`,
-                  }}
-                >
-                  {/* Row: icon + label | score */}
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: `${pal.color}18`, color: pal.color }}
-                    >
-                      {DIM_ICONS[dim.label]}
-                    </div>
-                    <span className="text-[12px] font-bold text-gray-700 flex-1">{dim.label}</span>
-                    <span className="text-[13.5px] font-black tabular-nums shrink-0" style={{ color: pal.color }}>
-                      {Math.round(dim.score)}
-                    </span>
-                    <span className="text-[10px] text-gray-400 font-medium shrink-0">/100</span>
-                  </div>
-
-                  {/* Progress bar — thinner */}
-                  <div className="h-[3px] rounded-full bg-white/70 overflow-hidden mb-2.5" style={{ boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)" }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: mounted ? `${Math.min(dim.score, 100)}%` : "0%",
-                        background: `linear-gradient(90deg, ${pal.color}99, ${pal.color})`,
-                        transition: `width 0.75s cubic-bezier(0.4,0,0.2,1) ${idx * 80}ms`,
-                        boxShadow: `0 0 4px ${pal.color}50`,
-                      }}
-                    />
-                  </div>
-
-                  {/* Detail text */}
-                  <p className="text-[11.5px] text-gray-600 leading-relaxed">{dim.detail}</p>
-
-                  {/* Meta */}
-                  {dim.meta && (
-                    <p className="text-[10.5px] font-medium text-gray-400 mt-1">{dim.meta}</p>
-                  )}
-
-                  {/* Skill chips — only for Skills dim */}
-                  {isSkills && (dim.matched.length > 0 || dim.missing.length > 0) && (
-                    <div className="mt-2.5 space-y-2">
-                      {/* Matched skills */}
-                      {dim.matched.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {dim.matched.map((s) => (
-                            <span
-                              key={s}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
-                              style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}
-                            >
-                              <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Critical gaps */}
-                      {criticalGaps.length > 0 && (
-                        <div>
-                          <p className="text-[9.5px] font-bold uppercase tracking-wider text-amber-600 mb-1">Critical gaps</p>
-                          <div className="flex flex-wrap gap-1">
-                            {criticalGaps.map((s) => (
-                              <span
-                                key={s}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
-                                style={{ background: "#fef9ec", color: "#92400e", border: "1px solid #fde68a" }}
-                              >
-                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                </svg>
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Additional skills */}
-                      {additionalSkills.length > 0 && (
-                        <div>
-                          <p className="text-[9.5px] font-bold uppercase tracking-wider text-gray-400 mb-1">Additional skills</p>
-                          <div className="flex flex-wrap gap-1">
-                            {additionalSkills.map((s) => (
-                              <span
-                                key={s}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
-                                style={{ background: "#f9fafb", color: "#6b7280", border: "1px solid #e5e7eb" }}
-                              >
-                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                </svg>
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Expand / collapse */}
-                      {totalHidden > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllSkills(true)}
-                          className="text-[10.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors"
-                        >
-                          +{totalHidden} more skills to add →
-                        </button>
-                      )}
-                      {showAllSkills && allMissing.length > CHIP_PREVIEW && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllSkills(false)}
-                          className="text-[10.5px] font-semibold text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                          Show less ↑
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {dims.map((dim, idx) => (
+              <DimensionCard
+                key={dim.label}
+                dim={dim}
+                idx={idx}
+                mounted={mounted}
+                showAllSkills={showAllSkills}
+                allMissing={allMissing}
+                totalHidden={totalHidden}
+                onShowAllSkills={() => setShowAllSkills(true)}
+                onHideExtraSkills={() => setShowAllSkills(false)}
+              />
+            ))}
 
             {/* AI Recommendations */}
             {aiRecs.length > 0 && (
@@ -591,7 +658,7 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
                 </div>
                 <div className="space-y-2">
                   {aiRecs.map((rec, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
+                    <div key={rec} className="flex items-start gap-2.5">
                       <span
                         className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[8px] font-black"
                         style={{ background: "#4F46E5", color: "white" }}
@@ -611,12 +678,14 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
       {/* ── Footer ── */}
       <div className="shrink-0 flex items-center gap-3 px-5 py-4 border-t border-gray-100 bg-white">
         <button
+          type="button"
           onClick={onBack}
           className="flex-1 py-2.5 rounded-full border border-gray-200 text-[12.5px] font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
         >
           ← Back
         </button>
         <button
+          type="button"
           onClick={onClose}
           className="flex-1 py-2.5 rounded-full text-[12.5px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#5896d7,#4338CA)" }}
@@ -632,7 +701,7 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
 type PremiumPhase = "preparing" | "confirming" | "executing" | "success" | "error" | "consent";
 
 function PremiumHeader({ jobTitle, company, onBack, onClose }: {
-  jobTitle: string; company: string; onBack: () => void; onClose: () => void;
+  readonly jobTitle: string; readonly company: string; readonly onBack: () => void; readonly onClose: () => void;
 }) {
   return (
     <div className="relative overflow-hidden px-6 pt-5 pb-5 shrink-0"
@@ -640,7 +709,7 @@ function PremiumHeader({ jobTitle, company, onBack, onClose }: {
       <div className="pointer-events-none absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-10 blur-2xl bg-amber-300" />
       <div className="relative flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <button onClick={onBack} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.6)" }} aria-label="Back">
+          <button type="button" onClick={onBack} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.6)" }} aria-label="Back">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -651,7 +720,7 @@ function PremiumHeader({ jobTitle, company, onBack, onClose }: {
             <p className="text-[11px] text-white/45 truncate">{company}</p>
           </div>
         </div>
-        <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.5)" }} aria-label="Close">
+        <button type="button" onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.5)" }} aria-label="Close">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -661,8 +730,32 @@ function PremiumHeader({ jobTitle, company, onBack, onClose }: {
   );
 }
 
+// Extracted from prepare()'s catch block below — decides what a failed
+// prepare() call should show, without performing the state updates itself.
+// Same checks, in the same order, with the same messages as the original
+// inline if/else-if chain; only pulled out to cut prepare()'s cognitive
+// complexity.
+function classifyPrepareError(err: unknown): { kind: "consent" } | { kind: "message"; message: string } {
+  if (isConsentRequiredError(err)) return { kind: "consent" };
+
+  // 409 from parse-from-profile means resume must be parsed first
+  const status = (err as { response?: { status?: number; data?: { must_parse?: boolean; detail?: string } } })?.response?.status;
+  const body   = (err as { response?: { data?: { must_parse?: boolean; detail?: string } } })?.response?.data;
+
+  if (status === 409 && body?.must_parse) {
+    return { kind: "message", message: "Your resume hasn't been parsed yet. Please run an ATS scan first, then try again." };
+  }
+  if (status === 402) {
+    return { kind: "message", message: "Insufficient credits. Please upgrade your plan to use premium analysis." };
+  }
+  if (status === 404) {
+    return { kind: "message", message: "No resume found on your profile. Please upload a resume first." };
+  }
+  return { kind: "message", message: err instanceof Error ? err.message : "Something went wrong. Please try again." };
+}
+
 function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
-  jobId: string; jobTitle: string; company: string; onBack: () => void; onClose: () => void;
+  readonly jobId: string; readonly jobTitle: string; readonly company: string; readonly onBack: () => void; readonly onClose: () => void;
 }) {
   const [phase, setPhase]   = useState<PremiumPhase>("preparing");
   const [pending, setPending] = useState<PendingActionResponse | null>(null);
@@ -727,26 +820,14 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
     } catch (err: unknown) {
       if (!mountedRef.current || runRef.current !== run) return;
 
-      if (isConsentRequiredError(err)) {
+      const outcome = classifyPrepareError(err);
+      if (outcome.kind === "consent") {
         setConsentRetry("prepare");
         reenteredConsentRef.current = true;
         setPhase("consent");
         return;
       }
-
-      // 409 from parse-from-profile means resume must be parsed first
-      const status = (err as { response?: { status?: number; data?: { must_parse?: boolean; detail?: string } } })?.response?.status;
-      const body   = (err as { response?: { data?: { must_parse?: boolean; detail?: string } } })?.response?.data;
-
-      if (status === 409 && body?.must_parse) {
-        setErrorMsg("Your resume hasn't been parsed yet. Please run an ATS scan first, then try again.");
-      } else if (status === 402) {
-        setErrorMsg("Insufficient credits. Please upgrade your plan to use premium analysis.");
-      } else if (status === 404) {
-        setErrorMsg("No resume found on your profile. Please upload a resume first.");
-      } else {
-        setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      }
+      setErrorMsg(outcome.message);
       setPhase("error");
     }
   }, [jobId]);
@@ -809,6 +890,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
       className={`relative w-full rounded-3xl bg-white overflow-hidden flex flex-col ${phase === "success" ? "max-w-2xl" : "max-w-md"}`}
       style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.18)", maxHeight: phase === "success" ? "88vh" : undefined }}
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
     >
       <PremiumHeader jobTitle={jobTitle} company={company} onBack={onBack} onClose={onClose} />
 
@@ -864,10 +946,11 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
 
             {/* Actions */}
             <div className="flex gap-3 pt-1">
-              <button onClick={onBack} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              <button type="button" onClick={onBack} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConfirm}
                 className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold transition-all hover:opacity-90 active:scale-[0.98]"
                 style={{ background: "linear-gradient(135deg,#78350f,#b45309)", boxShadow: "0 4px 14px rgba(120,53,15,0.3)" }}
@@ -913,7 +996,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
               </>
             )}
 
-            <button onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[13px] font-bold"
+            <button type="button" onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[13px] font-bold"
               style={{ background: "linear-gradient(135deg,#78350f,#b45309)" }}>
               Done
             </button>
@@ -945,6 +1028,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
 
             <div className="flex gap-3 pt-1">
               <button
+                type="button"
                 onClick={onBack}
                 disabled={consentSubmitting}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-60"
@@ -952,6 +1036,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleGrantConsent}
                 disabled={consentSubmitting}
                 className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
@@ -974,10 +1059,10 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
             <p className="text-[13px] font-bold text-gray-800 mb-1">Could not proceed</p>
             <p className="text-[12px] text-gray-500 max-w-xs leading-relaxed">{errorMsg}</p>
             <div className="flex gap-3 mt-5 w-full">
-              <button onClick={onBack} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              <button type="button" onClick={onBack} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
                 Back
               </button>
-              <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors">
                 Close
               </button>
             </div>
@@ -1000,9 +1085,18 @@ export default function MatchAnalysisModal({ jobId, jobTitle, company, onClose }
 
   const modal = (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label="Close"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
       onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
     >
       {view === "pick" && (
         <PickerView

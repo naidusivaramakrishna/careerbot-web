@@ -319,6 +319,7 @@ export default function AssessmentMain() {
             </p>
 
             <button
+              type="button"
               onClick={handleNext}
               disabled={!hasRecording || loading}
               className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${

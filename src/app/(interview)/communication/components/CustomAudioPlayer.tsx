@@ -89,6 +89,7 @@ export default function CustomAudioPlayer({ src }: { src: string }) {
       {/* Top Row */}
       <div className="flex items-center gap-4 mb-3">
         <button
+          type="button"
           onClick={playAudio}
           disabled={hasPlayed}
           className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors ${

@@ -112,6 +112,7 @@ export default function TextToSpeechPlayer({
         {/* Control Buttons */}
         <div className="flex items-center justify-center gap-4">
           <button
+            type="button"
             onClick={handlePlay}
             disabled={!text || hasPlayedOnce || isPlaying}
             className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${

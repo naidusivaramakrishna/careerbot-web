@@ -139,13 +139,15 @@
   }
 
   function extractMeta() {
-    const titleEl   = document.querySelector('.jobsearch-JobInfoHeader-title, h1[class*="jobTitle"]');
-    const companyEl = document.querySelector('[data-testid="inlineHeader-companyName"], .jobsearch-InlineCompanyRating-companyHeader');
+    const titleEl    = document.querySelector('.jobsearch-JobInfoHeader-title, h1[class*="jobTitle"]');
+    const companyEl  = document.querySelector('[data-testid="inlineHeader-companyName"], .jobsearch-InlineCompanyRating-companyHeader');
+    const locationEl = document.querySelector('[data-testid="job-location"], [data-testid="inlineHeader-companyLocation"], .jobsearch-JobInfoHeader-subtitle [class*="location"]');
     return {
-      title:   titleEl?.innerText?.trim()   || document.title,
-      company: companyEl?.innerText?.trim() || '',
-      url:     window.location.href,
-      source:  'indeed',
+      title:    titleEl?.innerText?.trim()   || document.title,
+      company:  companyEl?.innerText?.trim() || '',
+      location: locationEl?.innerText?.trim() || '',
+      url:      window.location.href,
+      source:   'indeed',
     };
   }
 
@@ -154,6 +156,13 @@
   let detectionAttempts = 0;
   const MAX_ATTEMPTS = 15;
   const ATTEMPT_INTERVAL = 500;
+  // Separate, shorter budget for the "stale" wait below — Indeed sometimes
+  // rewrites the URL (tracking/query normalization, or auto-selecting the
+  // first result) without the job actually changing, so waiting the full
+  // MAX_ATTEMPTS budget left the banner removed (see pollUrl) and unable to
+  // come back for seconds even though nothing about the job ever changed.
+  let staleAttempts = 0;
+  const MAX_STALE_ATTEMPTS = 4;
   let retryTimer = null;
   let mutationTimer = null;
 
@@ -172,10 +181,22 @@
     // unreliable since it doesn't start watching until 1s after load and
     // misses pages that finish rendering before that or never mutate again.
     const jd = isJobPage() ? extractJobDescription() : null;
+
     // Indeed changes the URL before replacing the job details pane. Do not
     // publish the previous job under the newly selected job's URL while that
-    // asynchronous replacement is still in progress.
-    if (!jd || (staleJdAfterNavigation && jd === staleJdAfterNavigation)) {
+    // asynchronous replacement is still in progress — but give up waiting
+    // after MAX_STALE_ATTEMPTS if the content never actually changes, since
+    // that means the URL change wasn't a real job switch in the first place.
+    if (staleJdAfterNavigation && jd === staleJdAfterNavigation) {
+      staleAttempts++;
+      if (staleAttempts < MAX_STALE_ATTEMPTS) {
+        scheduleRetry();
+        return;
+      }
+      staleJdAfterNavigation = null;
+    }
+
+    if (!jd) {
       detectionAttempts++;
       if (detectionAttempts < MAX_ATTEMPTS) {
         scheduleRetry();
@@ -183,9 +204,15 @@
       return;
     }
 
-    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    // Checking only the JD text (not banner presence) means a closed banner
+    // stays closed for this job — Indeed's page mutates constantly (ads, lazy
+    // content), and re-checking document.getElementById('cb-shadow-host')
+    // here treated the user's own close click as "not shown yet" and
+    // reopened the banner on the next mutation.
+    if (jd === lastDetectedJd) return;
     lastDetectedJd = jd;
     staleJdAfterNavigation = null;
+    staleAttempts = 0;
     detectionAttempts = 0;
     clearTimeout(retryTimer);
 
@@ -430,9 +457,16 @@
       // notice the URL after Indeed has already rendered the new description;
       // treating the current DOM text as stale would suppress that valid JD.
       staleJdAfterNavigation = lastDetectedJd;
-      lastDetectedJd = null;
+      staleAttempts = 0;
       detectionAttempts = 0;
-      document.getElementById('cb-shadow-host')?.remove();
+      // Leave the current banner showing and lastDetectedJd intact — Indeed
+      // frequently rewrites the URL (tracking params, auto-selecting a
+      // result) without the job actually changing. Removing the banner and
+      // clearing lastDetectedJd here unconditionally meant every one of
+      // those cosmetic URL changes blanked a perfectly valid banner, which
+      // then only came back once genuinely different content showed up (or
+      // never, if it didn't). tryDetect() below still swaps to the new job
+      // the moment different content actually appears.
       tryDetect();
     }
   };

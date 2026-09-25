@@ -10,7 +10,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() =>
 
 // Hostnames our content scripts are declared against in manifest.json —
 // JD_DETECTED/JD_TAILOR_NOW are only trusted from these origins.
-const ALLOWED_JD_HOSTS = [
+const ALLOWED_JD_HOSTS = new Set([
   'www.linkedin.com', 'linkedin.com',
   'www.naukri.com',
   'www.indeed.co.in', 'in.indeed.com', 'www.indeed.com',
@@ -23,7 +23,10 @@ const ALLOWED_JD_HOSTS = [
   'wellfound.com', 'angel.co',
   'boards.greenhouse.io', 'job-boards.greenhouse.io',
   'jobs.lever.co',
-];
+  'www.dice.com',
+  'www.jobleads.com',
+  'www.zippia.com',
+]);
 
 function isFromAllowedHost(tab) {
   if (!tab?.url) return false;
@@ -33,7 +36,7 @@ function isFromAllowedHost(tab) {
     // Strict allowlist only — a check against data.meta.url would compare
     // two attacker-controlled values (both come from the message sender),
     // making the check self-satisfying and equivalent to "any http(s) tab".
-    return ALLOWED_JD_HOSTS.includes(tabUrl.hostname);
+    return ALLOWED_JD_HOSTS.has(tabUrl.hostname);
   } catch {
     return false;
   }
@@ -49,10 +52,11 @@ function sanitizeJDPayload(data) {
   return {
     jd: data.jd.slice(0, MAX_JD_LENGTH),
     meta: {
-      title:   str(meta.title),
-      company: str(meta.company),
-      url:     str(meta.url),
-      source:  str(meta.source),
+      title:    str(meta.title),
+      company:  str(meta.company),
+      location: str(meta.location),
+      url:      str(meta.url),
+      source:   str(meta.source),
     },
   };
 }

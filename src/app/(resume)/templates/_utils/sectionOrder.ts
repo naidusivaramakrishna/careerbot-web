@@ -40,20 +40,8 @@ export const getSectionOrder = (careerLevel?: string): string[] => {
     ];
   }
 
-  if (level.includes('senior')) {
-    return [
-      'Personal Info',
-      'Professional Summary',
-      'Skills',
-      'Work Experience',
-      'Projects',
-      'Certifications',
-      'Internships',
-      'Education',
-    ];
-  }
-
-  if (level.includes('manager')) {
+  // Higher-level roles: Senior-Level, Lead, Architect, Manager, Director, Vice President
+  if (level.includes('senior') || level.includes('lead') || level.includes('architect') || level.includes('manager') || level.includes('director') || level.includes('vice')) {
     return [
       'Personal Info',
       'Professional Summary',

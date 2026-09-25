@@ -15,6 +15,7 @@ export interface SavedJob {
   jobId: string;
   title: string;
   company: string;
+  url?: string;
   location: string;
   type: string;
   savedAt: string;
@@ -235,7 +236,8 @@ export function toggleJobSaved(
   company: string,
   location: string,
   type: string,
-  userId?: string | null
+  userId?: string | null,
+  url?: string | null
 ): boolean {
   if (typeof window === "undefined") return false;
 
@@ -256,6 +258,7 @@ export function toggleJobSaved(
         jobId,
         title,
         company,
+        ...(url ? { url } : {}),
         location,
         type,
         savedAt: new Date().toISOString(),
