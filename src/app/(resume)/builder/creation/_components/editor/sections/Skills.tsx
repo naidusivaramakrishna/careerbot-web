@@ -9,7 +9,8 @@ import TechnologyChipsInput, { type TechnologyChipsInputHandle } from "../Techno
 import { addSkillToCategory, deleteSkillCategory, deleteSkillById } from "@/api/resumeApi";
 import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCategoryFromEnhancedResume } from "@/api/enhancerApi";
 import { toast } from "sonner";
-import { getSkillsForDomain, skillCategoryApiName, type SkillDomain } from "@/config/domainSkills";
+import { findSkillCategory, getSkillsForDomain, skillCategoryApiName, type SkillCategory, type SkillDomain } from "@/config/domainSkills";
+import { printedSkillKeysForDomain, templateSkillCategoryLabel } from "@/app/(resume)/templates/skillsFilterByDomain";
 import { getSkillsEditorDomain, getStoredUserEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 import logger from "@/lib/logger";
 
@@ -35,6 +36,26 @@ const Skills: React.FC = () => {
   const resumeId = resumeData.resume_id;
   const rawDomain = getSkillsEditorDomain(getStoredUserEmail());
   const SKILL_CATEGORIES = getSkillsForDomain(rawDomain as SkillDomain);
+
+  // The templates also print categories outside the domain's own list (the
+  // general categories for software engineering, cybersecurity and research;
+  // see filterSkillsByDomain). Offer those that hold skills, labelled as the
+  // resume prints them, so nothing on the resume is left uneditable.
+  const ownCategoryKeys = new Set(SKILL_CATEGORIES.map((c) => c.key));
+  const storedCategories = (resumeData.categorizedSkills || {}) as unknown as Record<string, unknown>;
+  const printedExtraCategories: SkillCategory[] = Array.from(printedSkillKeysForDomain(rawDomain) ?? [])
+    .filter((key) => {
+      const stored = storedCategories[key];
+      return !ownCategoryKeys.has(key) && Array.isArray(stored) && stored.length > 0;
+    })
+    .map((key) => ({
+      placeholder: "Add skills...",
+      suggestions: [],
+      ...findSkillCategory(key),
+      key,
+      label: templateSkillCategoryLabel(key),
+    }));
+  const EDITOR_CATEGORIES = [...SKILL_CATEGORIES, ...printedExtraCategories];
 
   logger.debug('Skills component state:', { resumeId, rawDomain });
 
@@ -181,7 +202,7 @@ const Skills: React.FC = () => {
     // "existing" from the user's perspective and should not block custom category names.
     const predefinedLabels = isEnhancedResume
       ? []
-      : SKILL_CATEGORIES.map((c) => c.label.toLowerCase());
+      : EDITOR_CATEGORIES.map((c) => c.label.toLowerCase());
     const otherCustomNames = customCategories
       .filter((c) => c.id !== id)
       .map((c) => c.name.toLowerCase());
@@ -236,7 +257,7 @@ const Skills: React.FC = () => {
           <div className="flex flex-col gap-6">
             {/* Standard categories — hidden for enhanced resumes */}
             {!isEnhancedResume && (() => {
-              const visibleCategories = SKILL_CATEGORIES.filter((cat) => !hiddenPredefined.includes(cat.key));
+              const visibleCategories = EDITOR_CATEGORIES.filter((cat) => !hiddenPredefined.includes(cat.key));
               logger.debug('Rendering visible categories:', {
                 count: visibleCategories.length,
                 keys: visibleCategories.map((c) => c.key),

@@ -1602,6 +1602,14 @@ export function getSkillsForDomain(domain: SkillDomain): SkillCategory[] {
   return DOMAIN_SKILLS[domain] ?? GENERAL_SKILLS;
 }
 
+/** Category definition for an editor key, preferring the general list. */
+export function findSkillCategory(key: string): SkillCategory | undefined {
+  return (
+    GENERAL_SKILLS.find((c) => c.key === key) ??
+    Object.values(DOMAIN_SKILLS).flat().find((c) => c.key === key)
+  );
+}
+
 // ── Category key ↔ backend category name ─────────────────────────────────────
 // The skills API (careerbot-api app/shared/skills_taxonomy.py) stores the five
 // fixed categories under their own fields and every other category under

@@ -38,6 +38,23 @@ function allowedKeysForDomain(domain: string): Set<string> | null {
   return keys;
 }
 
+/**
+ * Predefined category keys the resume templates print for `domain` (null for
+ * an unknown domain, which prints everything). The Skills editor uses this to
+ * also offer the printed categories that are not in the domain's own list.
+ */
+export function printedSkillKeysForDomain(domain: string): Set<string> | null {
+  return allowedKeysForDomain(domain);
+}
+
+/** Category label as the resume templates print it (`project_management` → "Project Management"). */
+export function templateSkillCategoryLabel(key: string): string {
+  return key
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export function filterSkillsByDomain(
   categorizedSkills: ResumeData['categorizedSkills'] | undefined,
   domainFamily?: string
