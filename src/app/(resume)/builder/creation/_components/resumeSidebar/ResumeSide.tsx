@@ -115,21 +115,12 @@ interface ResumeSideProps {
   defaultOpen?: boolean;
   /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
   openSection?: string;
-<<<<<<< HEAD
-  /**
-   * Opens the sidebar on `tab` whenever a new request object arrives (for
-   * example a toolbar Score click). Pass a fresh `id` for every click so a
-   * repeated request for the same tab still switches back to it.
-   */
-  tabRequest?: { tab: string; id: number } | null;
-=======
   /** Changes whenever an ATS recommendation is selected, including the same section twice. */
   openSectionRequestId?: number;
   /** Use the entire parent panel instead of the builder page's percentage width. */
   embedded?: boolean;
   /** ATS Scan exposes score health only; issue cards open the relevant form directly. */
   atsFixMode?: boolean;
->>>>>>> 9a42f5e1 (fix(resume-builder): section editor, scoring, and template UI updates)
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -146,13 +137,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   initialTab,
   defaultOpen = true,
   openSection,
-<<<<<<< HEAD
-  tabRequest,
-=======
   openSectionRequestId = 0,
   embedded = false,
   atsFixMode = false,
->>>>>>> 9a42f5e1 (fix(resume-builder): section editor, scoring, and template UI updates)
 }) => {
   // ✅ Get context first
   const {
