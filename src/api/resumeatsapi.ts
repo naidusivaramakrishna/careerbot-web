@@ -39,7 +39,7 @@ export function withoutEmbeddedImages(value: unknown, key = ""): unknown {
   return cleaned;
 }
 
-function storeAtsAnalysis(key: string, payload: unknown): void {
+export function storeAtsAnalysis(key: string, payload: unknown): void {
   const serialized = JSON.stringify(withoutEmbeddedImages(payload));
   try {
     localStorage.setItem(key, serialized);

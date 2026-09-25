@@ -13,8 +13,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { FaFileUpload } from "react-icons/fa";
-import { formatFileSize, clearAtsUploadStorage, validateResumeFile } from "../../utils/helpers";
-import { processResumeComplete } from "@/api/resumeatsapi";
+import { formatFileSize, clearAtsUploadStorage, validateResumeFile, safeSetItem, readCachedAtsAnalysis } from "../../utils/helpers";
+import { processResumeComplete, storeAtsAnalysis } from "@/api/resumeatsapi";
 import { buildAtsReportRoute, normalizeResumeScanError } from "../../utils/scanFlow";
 import { useAuth } from "@/hooks/useAuth";
 import SignUpModal from "@/components/SignUpModal";
@@ -150,8 +150,8 @@ const ResumeUpload: React.FC = () => {
         setCurrentScore(0);
         setProgress(100);
         setStep(3);
-        localStorage.setItem("isImageBased", "false");
-        localStorage.setItem("currentScore", "0");
+        safeSetItem("isImageBased", "false");
+        safeSetItem("currentScore", "0");
         return;
       }
 
@@ -160,26 +160,25 @@ const ResumeUpload: React.FC = () => {
         setCurrentScore(0);
         setProgress(100);
         setStep(3);
-        localStorage.setItem("isImageBased", "true");
-        localStorage.setItem("currentScore", "0");
+        safeSetItem("isImageBased", "true");
+        safeSetItem("currentScore", "0");
         return;
       }
 
       setCurrentScore(result.finalWeightedScore ?? 0);
 
-      localStorage.setItem(
-        "atsAnalysisData",
-        JSON.stringify({
-          ...result,
-          file_name: f.name,
-          file_size: f.size,
-          file_type: f.type,
-          upload_time: new Date().toISOString(),
-          missingFields: result.missingFields ?? [],
-        })
-      );
-      localStorage.setItem("currentScore", String(result.finalWeightedScore ?? 0));
-      localStorage.setItem("isImageBased", "false");
+      // Shared writer: strips embedded images and falls back to sessionStorage,
+      // so a full localStorage can never turn a successful scan into an error.
+      storeAtsAnalysis("atsAnalysisData", {
+        ...result,
+        file_name: f.name,
+        file_size: f.size,
+        file_type: f.type,
+        upload_time: new Date().toISOString(),
+        missingFields: result.missingFields ?? [],
+      });
+      safeSetItem("currentScore", String(result.finalWeightedScore ?? 0));
+      safeSetItem("isImageBased", "false");
       setProgress(100);
       setTimeout(() => setStep(3), 500);
     } catch (err: unknown) {
@@ -209,8 +208,7 @@ const ResumeUpload: React.FC = () => {
   const viewReport = () => {
     if (step !== 3) return;
 
-    const cached = localStorage.getItem("atsAnalysisData");
-    const resumeId = cached ? JSON.parse(cached)?.resume_id : undefined;
+    const resumeId = readCachedAtsAnalysis()?.resume_id as string | undefined;
     const reportRoute = buildAtsReportRoute(resumeId);
 
     if (isAuthenticated) {
