@@ -19,7 +19,6 @@ export const RESUME_FONTS = [
 interface ResumeHeaderProps {
   onDownload?: (format: "pdf" | "docx") => void;
   isDownloading?: boolean;
-  pdfBlobUrl?: string | null;
   currentFont?: string;
   onFontChange?: (font: string) => void;
 }
@@ -49,6 +48,7 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
           {onFontChange && (
             <div className="relative">
               <button
+                type="button"
                 onClick={() => { setShowFontMenu(v => !v); setShowMenu(false); }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all shadow-sm"
                 title="Change font"
@@ -60,11 +60,24 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
 
               {showFontMenu && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowFontMenu(false)} />
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowFontMenu(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setShowFontMenu(false);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Close font menu"
+                  />
                   <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden py-1">
                     {RESUME_FONTS.map(font => (
                       <button
                         key={font.value}
+                        type="button"
                         onClick={() => { onFontChange(font.value); setShowFontMenu(false); }}
                         style={{ fontFamily: font.value }}
                         className={`w-full text-left px-4 py-2 text-[13px] transition-colors ${
@@ -86,6 +99,7 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
           {onDownload && (
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowMenu(!showMenu)}
                 disabled={isDownloading}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2557a7] hover:bg-[#1a4a8f] text-white border border-[#2557a7] rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
@@ -103,12 +117,14 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
               {showMenu && !isDownloading && (
                 <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-xl z-20 overflow-hidden">
                   <button
+                    type="button"
                     onClick={() => { onDownload("pdf"); setShowMenu(false); }}
                     className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors"
                   >
                     Download as PDF
                   </button>
                   <button
+                    type="button"
                     onClick={() => { onDownload("docx"); setShowMenu(false); }}
                     className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   >

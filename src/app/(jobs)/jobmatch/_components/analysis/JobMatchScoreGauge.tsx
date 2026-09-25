@@ -39,18 +39,19 @@ function arcPath(from: number, to: number) {
 // "Excellent match · 80–100%" arc while the caption read "Strong match".
 function getScoreLabel(score: number) {
   const segment = SEGMENTS.find((s) => score >= s.from && score < s.to);
-  return (segment ?? SEGMENTS[SEGMENTS.length - 1]).label;
+  return (segment ?? SEGMENTS.at(-1)!).label;
 }
 
-export default function JobMatchScoreGauge({ value, targetRole }: { value: number; targetRole?: string }) {
+export default function JobMatchScoreGauge({ value, targetRole }: { readonly value: number; readonly targetRole?: string }) {
   const score = Math.min(100, Math.max(0, Math.round(value)));
   const needleAngle = 270 + score * 1.8;
   const label = getScoreLabel(score);
-  const scoreColor =
-    score < 20 ? "#ef4444" :
-    score < 40 ? "#f97316" :
-    score < 60 ? "#ca8a04" :
-    score < 80 ? "#65a30d" : "#16a34a";
+  let scoreColor: string;
+  if (score < 20) scoreColor = "#ef4444";
+  else if (score < 40) scoreColor = "#f97316";
+  else if (score < 60) scoreColor = "#ca8a04";
+  else if (score < 80) scoreColor = "#65a30d";
+  else scoreColor = "#16a34a";
 
   return (
     <div className="w-full">
@@ -78,8 +79,18 @@ export default function JobMatchScoreGauge({ value, targetRole }: { value: numbe
             const inner = pointForScore(tick, 128);
             const outer = pointForScore(tick, 136);
             const labelPt = pointForScore(tick, 148);
-            const endpointOffset = tick === 0 ? -2 : tick === 100 ? 2 : 0;
-            const textAnchor = tick === 0 ? "end" : tick === 100 ? "start" : "middle";
+            let endpointOffset: number;
+            let textAnchor: "end" | "start" | "middle";
+            if (tick === 0) {
+              endpointOffset = -2;
+              textAnchor = "end";
+            } else if (tick === 100) {
+              endpointOffset = 2;
+              textAnchor = "start";
+            } else {
+              endpointOffset = 0;
+              textAnchor = "middle";
+            }
             return (
               <g key={tick}>
                 <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="#64748b" strokeWidth="1.5" />

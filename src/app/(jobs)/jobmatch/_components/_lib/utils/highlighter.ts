@@ -35,7 +35,7 @@ export function highlightJD(
   const sources = allExpanded.map((t) => {
     const esc = escapeRegex(t);
     const isSingleWord = !/\s/.test(t);
-    return isSingleWord ? `\\b${esc}\\b` : esc;
+    return isSingleWord ? String.raw`\b${esc}\b` : esc;
   });
 
   const re = new RegExp(`(${sources.join("|")})`, "gi");
@@ -77,7 +77,7 @@ export function highlightText(text: string, tokens: string[]): HighlightSpan[] {
   const sources = uniqueTokens.map((t) => {
     const esc = escapeRegex(t);
     const isSingleWord = !/\s/.test(t);
-    return isSingleWord ? `\\b${esc}\\b` : esc;
+    return isSingleWord ? String.raw`\b${esc}\b` : esc;
   });
   
   const re = new RegExp(`(${sources.join("|")})`, "gi");

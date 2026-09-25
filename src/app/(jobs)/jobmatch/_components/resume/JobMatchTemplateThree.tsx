@@ -2,7 +2,9 @@
 
 import React from "react";
 import { Edit3, Trash2 } from "lucide-react";
+import AnimatedSkillChip from "./AnimatedSkillChip";
 import SafeHTML from "@/components/common/SafeHTML";
+import { highlightResumeKeywords, ResumeKeywordHtml, matchedKeywordStyle, missingKeywordStyle, missingKeywordBorderColor } from "./resumeKeywordHighlights";
 import AutoPaginator from "@/components/common/AutoPaginator";
 import { getSafeExternalUrl } from "@/utils/validators";
 
@@ -15,6 +17,7 @@ interface JobMatchTemplateTHREEProps {
   addedFields?: Record<string, string[]>;
   /** Missing-skill suggestions not yet added — rendered as red "ghost" chips until added. */
   pendingSkills?: string[];
+  matchedKeywords?: string[];
   pendingSoftSkills?: string[];
   /** Same shape as addedFields, for suggestions (title/summary/bullets) not yet applied — red instead of green. */
   pendingFields?: Record<string, string[]>;
@@ -63,7 +66,8 @@ function categorizeTechnicalSkills(items: string[]): { label: string; skills: st
     const lower = skill.toLowerCase();
     const match = SKILL_CATEGORY_KEYWORDS.find(({ keywords }) => keywords.some((kw) => keywordMatches(lower, kw)));
     const label = match ? match.label : "Technologies";
-    (buckets[label] ??= []).push(skill);
+    buckets[label] ??= [];
+    buckets[label].push(skill);
   }
   return SKILL_CATEGORY_ORDER.filter((label) => buckets[label]?.length).map((label) => ({ label, skills: buckets[label] }));
 }
@@ -84,12 +88,81 @@ function deepSanitize(val: any): any {
   return result;
 }
 
+/** Shared border-left treatment for a modified (green, solid) vs. pending (red, dashed) list item. */
+function sectionItemBorderLeft(isModified: boolean, isPending: boolean): string {
+  if (isModified) return "3px solid rgba(34,197,94,0.5)";
+  if (isPending) return "3px dashed rgba(180,83,9,0.55)";
+  return "none";
+}
+
+/** Shared inline rendering for a skill chip: red "pending" style, green "newly added" style, or plain text. */
+function renderSkillNode(
+  skill: string,
+  isPending: boolean,
+  isNew: boolean,
+  missingStyle: React.CSSProperties,
+  hlStyle: React.CSSProperties
+): React.ReactNode {
+  if (isPending) return <span style={missingStyle}>{skill}</span>;
+  if (isNew) return <span style={hlStyle}>{skill}</span>;
+  return skill;
+}
+
+function SectionActions({
+  sectionKey,
+  onEditSection,
+  onDeleteSection,
+}: {
+  sectionKey: string;
+  onEditSection?: (key: string) => void;
+  onDeleteSection?: (key: string) => void;
+}) {
+  return onEditSection || onDeleteSection ? (
+    <div className="absolute top-0 right-0 flex flex-col gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-20">
+      {onEditSection && (
+        <button type="button" onClick={() => onEditSection(sectionKey)} title="Edit section"
+          className="bg-blue-500 rounded-full p-1.5 shadow hover:bg-blue-600 transition-colors">
+          <Edit3 className="w-3 h-3 text-white" />
+        </button>
+      )}
+      {onDeleteSection && (
+        <button type="button" onClick={() => onDeleteSection(sectionKey)} title="Remove section"
+          className="bg-red-500 rounded-full p-1.5 shadow hover:bg-red-600 transition-colors">
+          <Trash2 className="w-3 h-3 text-white" />
+        </button>
+      )}
+    </div>
+  ) : null;
+}
+
+/* ── ATS-safe section divider ── */
+function SectionDivider({ label, baseFont }: { label: string; baseFont: string }) {
+  return (
+    <div style={{ marginBottom: "9px", marginTop: "2px" }}>
+      <h2 style={{
+        fontSize: "13px",
+        fontWeight: 700,
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        color: "#111827",
+        margin: 0,
+        paddingBottom: "5px",
+        borderBottom: "2px solid #111827",
+        fontFamily: baseFont,
+      }}>
+        {label}
+      </h2>
+    </div>
+  );
+}
+
 const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   data: rawData,
   activeSection,
   editOverrides,
   addedFields,
   pendingSkills,
+  matchedKeywords,
   pendingSoftSkills,
   pendingFields,
   onEditSection,
@@ -103,30 +176,41 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const af = addedFields ?? {};
   const pf = pendingFields ?? {};
   const ov = editOverrides ?? {};
+  const keywordMode = matchedKeywords !== undefined;
+  const matchedTerms = [...(matchedKeywords ?? []), ...(af.skills ?? []), ...(af.softSkills ?? [])];
+  const missingTerms = [...(pendingSkills ?? []), ...(pendingSoftSkills ?? [])];
+  const highlightText = (value: string) => keywordMode ? highlightResumeKeywords(value, matchedTerms, missingTerms) : value;
+  const renderMatchChip = (skill: string) => {
+    const lower = skill.toLowerCase();
+    const status = matchedTerms.some(term => term.toLowerCase() === lower) ? "matched" : missingTerms.some(term => term.toLowerCase() === lower) ? "missing" : "neutral";
+    return <AnimatedSkillChip key={lower} skill={skill} added={[...(af.skills ?? []), ...(af.softSkills ?? [])].some(term => term.toLowerCase() === lower)} status={status} title={status === "missing" ? "Missing skill suggested by the job description; not added to your resume" : undefined} style={{...(status === "matched" ? matchedKeywordStyle : status === "missing" ? missingKeywordStyle : {backgroundColor: "#f0f4fc", color: "#263761"}), display: "inline-block", padding: "3px 8px", borderRadius: 4, fontSize: 12, lineHeight: 1.4}}/>;
+  };
 
   const hlStyle: React.CSSProperties = {
     backgroundColor: "rgba(34,197,94,0.25)",
     borderRadius: "3px",
     padding: "0 2px",
   };
-  // Red counterpart of hlStyle — a suggestion targeting this text hasn't been
-  // applied yet. Dashed underline keeps it distinguishable from hlStyle at a
-  // glance even for readers who can't rely on color alone.
+  // Rose counterpart of hlStyle — a suggestion targeting this text hasn't
+  // been applied yet. Reuses missingKeywordStyle so this reads as the exact
+  // same light rose as the missing-skill chips above, not its own shade.
+  // Dashed underline keeps it distinguishable from hlStyle at a glance even
+  // for readers who can't rely on color alone.
   const missingStyle: React.CSSProperties = {
-    backgroundColor: "rgba(239,68,68,0.13)",
-    borderRadius: "3px",
+    ...missingKeywordStyle,
     padding: "0 2px",
-    borderBottom: "1.5px dashed rgba(220,38,38,0.55)",
+    borderBottom: `1px dashed ${missingKeywordBorderColor}`,
   };
   const hl = (section: string, field: string, value: React.ReactNode): React.ReactNode => {
-    if ((af[section] || []).includes(field)) return <span style={hlStyle}>{value}</span>;
-    if ((pf[section] || []).includes(field)) return <span style={missingStyle}>{value}</span>;
+    if ((af[section] || []).includes(field)) return <span data-resume-edit="applied" style={hlStyle}>{value}</span>;
+    if ((pf[section] || []).includes(field)) return <span data-resume-edit="pending" style={missingStyle}>{value}</span>;
+    if (keywordMode && typeof value === "string") return highlightText(value);
     return <>{value}</>;
   };
   const hlIdx = (section: string, idx: number): boolean =>
     (af[section] || []).includes(String(idx));
   const pendingIdx = (section: string, idx: number): boolean =>
-    (pf[section] || []).includes(String(idx));
+    !keywordMode && (pf[section] || []).includes(String(idx));
 
   const parsedData = data?.parsed_data || data || {};
   const llmData = parsedData?.llm_data || {};
@@ -310,23 +394,35 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     return toStr(v);
   };
   const personalDetailsRaw = parsedData.personal_details ?? parsedData.personalDetails ?? llmData.personal_details ?? llmData.personalDetails;
-  const personalDetailsEntries: [string, string][] = Array.isArray(personalDetailsRaw)
-    ? personalDetailsRaw.map((line): [string, string] => {
-        const s = pdValueToStr(line);
-        const idx = s.indexOf(":");
-        return idx > -1 ? [s.slice(0, idx).trim(), s.slice(idx + 1).trim()] : ["", s];
-      }).filter(([, v]) => v)
-    : (personalDetailsRaw && typeof personalDetailsRaw === "object")
-    ? Object.entries(personalDetailsRaw as Record<string, unknown>)
-        .map(([k, v]): [string, string] => [k, pdValueToStr(v)])
-        .filter(([, v]) => v)
-    : [];
+  let personalDetailsEntries: [string, string][] = [];
+  if (Array.isArray(personalDetailsRaw)) {
+    personalDetailsEntries = personalDetailsRaw.map((line): [string, string] => {
+      const s = pdValueToStr(line);
+      const idx = s.indexOf(":");
+      return idx > -1 ? [s.slice(0, idx).trim(), s.slice(idx + 1).trim()] : ["", s];
+    }).filter(([, v]) => v);
+  } else if (personalDetailsRaw && typeof personalDetailsRaw === "object") {
+    personalDetailsEntries = Object.entries(personalDetailsRaw as Record<string, unknown>)
+      .map(([k, v]): [string, string] => [k, pdValueToStr(v)])
+      .filter(([, v]) => v);
+  }
 
+  // Parser telemetry fields (e.g. a bare {"confidence": 0} for a section the
+  // parser looked for but never found, like "work_authorization") land as
+  // ordinary object values right alongside real content. Matches META_KEY_PATTERN
+  // below, used here too so an object made up entirely of diagnostic keys
+  // reads as empty instead of "has a key, so it has content" — otherwise a
+  // resume with no work-authorization statement at all shows a "WORK
+  // AUTHORIZATION / Confidence: 0" section that isn't in the resume.
+  const DIAGNOSTIC_KEY_PATTERN = /(^|_)(analysis|diagnostics?|confidence|warnings?|signals?|tokens?|embedding|schema|strategy|fingerprint|telemetry)(_|$)/i;
   const hasContent = (v: unknown): boolean => {
     if (v === null || v === undefined) return false;
     if (Array.isArray(v)) return v.length > 0;
     if (typeof v === "string") return v.trim().length > 0;
-    if (typeof v === "object") return Object.keys(v as object).length > 0;
+    if (typeof v === "object") {
+      return Object.entries(v as Record<string, unknown>)
+        .some(([k, vv]) => !DIAGNOSTIC_KEY_PATTERN.test(k) && hasContent(vv));
+    }
     return true;
   };
   const prettifyLabel = (key: string): string =>
@@ -365,7 +461,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   // Defensive fallback for diagnostic-shaped keys the explicit list above
   // hasn't caught yet (the backend adds these fairly often) — matches
   // "…_analysis", "…_diagnostics", "…_confidence", etc. anywhere in the key.
-  const META_KEY_PATTERN = /(^|_)(analysis|diagnostics?|confidence|warnings?|signals?|tokens?|embedding|schema|strategy|fingerprint|telemetry)(_|$)/i;
+  // Same pattern hasContent uses above, for the same reason one level deeper.
+  const META_KEY_PATTERN = DIAGNOSTIC_KEY_PATTERN;
   const KNOWN_SECTION_KEYS = new Set([
     "contact", "personal_info", "personalInfo", "name", "full_name", "fullName",
     "headline", "title", "role", "designation", "email", "phone", "phone_number",
@@ -439,13 +536,40 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     return [];
   };
 
+  // A description stays the entry's main text, but bullets that only live in
+  // responsibilities/achievements/details (where the backend appends a fix's
+  // bullet) still have to show, or the preview omits what the stored resume
+  // and the exported PDF contain. Returns the extras not already in `base`.
+  // An HTML description is compared by its text content.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const novelBullets = (base: any, extras: string[]): string[] => {
+    if (typeof base === "string" && base.includes("<")) {
+      const norm = (v: string) => v.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim().toLowerCase();
+      const text = norm(base.replace(/<[^>]*>/g, " "));
+      return extras.filter((b) => norm(b) && !text.includes(norm(b)));
+    }
+    const seen = new Set(parseDescription(base).map((v) => v.trim()));
+    return extras.filter((b) => !seen.has(b.trim()));
+  };
+
+  // Returns `base` untouched when there is nothing new to add. An HTML
+  // description is never merged into; it is rendered as-is with the extra
+  // bullets listed after it (see renderBullets).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const withExtraBullets = (base: any, extras: string[]): any => {
+    const novel = novelBullets(base, extras);
+    if (!novel.length) return base;
+    if (typeof base === "string" && base.includes("<")) return { html: base, extra: novel };
+    return [...parseDescription(base), ...novel];
+  };
+
   const formatDate = (dateString?: string): string => {
     if (!dateString) return "";
     if (/^[A-Za-z]{3}\s\d{2,4}$/.test(dateString)) return dateString;
     if (/^\d{4}-\d{2}$/.test(dateString)) {
       const [year, month] = dateString.split("-");
       const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      return `${months[parseInt(month, 10) - 1]} ${year}`;
+      return `${months[Number.parseInt(month, 10) - 1]} ${year}`;
     }
     return dateString;
   };
@@ -455,57 +579,23 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const sc = (key: string) =>
     `relative group/section${activeSection === key ? " bg-blue-50 rounded px-1 -mx-1" : ""}`;
 
-  const SectionActions = ({ sectionKey }: { sectionKey: string }) =>
-    onEditSection || onDeleteSection ? (
-      <div className="absolute top-0 right-0 flex flex-col gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-20">
-        {onEditSection && (
-          <button onClick={() => onEditSection(sectionKey)} title="Edit section"
-            className="bg-blue-500 rounded-full p-1.5 shadow hover:bg-blue-600 transition-colors">
-            <Edit3 className="w-3 h-3 text-white" />
-          </button>
-        )}
-        {onDeleteSection && (
-          <button onClick={() => onDeleteSection(sectionKey)} title="Remove section"
-            className="bg-red-500 rounded-full p-1.5 shadow hover:bg-red-600 transition-colors">
-            <Trash2 className="w-3 h-3 text-white" />
-          </button>
-        )}
-      </div>
-    ) : null;
-
-  /* ── ATS-safe section divider ── */
-  const SectionDivider = ({ label }: { label: string }) => (
-    <div style={{ marginBottom: "9px", marginTop: "2px" }}>
-      <h2 style={{
-        fontSize: "13px",
-        fontWeight: 700,
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        color: "#111827",
-        margin: 0,
-        paddingBottom: "5px",
-        borderBottom: "2px solid #111827",
-        fontFamily: baseFont,
-      }}>
-        {label}
-      </h2>
-    </div>
-  );
-
-  const renderBullets = (desc: string | string[] | null | undefined) => {
+  const renderBullets = (desc: string | string[] | { html: string; extra: string[] } | null | undefined): React.ReactNode => {
     if (!desc) return null;
+    if (!Array.isArray(desc) && typeof desc === "object") {
+      return <>{renderBullets(desc.html)}{renderBullets(desc.extra)}</>;
+    }
     if (typeof desc === "string" && desc.includes("<")) {
-      return <SafeHTML content={desc} className="ats-desc" />;
+      return keywordMode ? <ResumeKeywordHtml content={desc} matched={matchedTerms} missing={missingTerms}/> : <SafeHTML content={desc} className="ats-desc" />;
     }
     const items = parseDescription(desc);
     if (!items.length) return null;
     if (items.length === 1) return (
-      <p style={{ margin: "3px 0 0", fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65 }}>{items[0]}</p>
+      <p style={{ margin: "3px 0 0", fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65 }}>{highlightText(items[0])}</p>
     );
     return (
       <ul style={{ margin: "4px 0 0", paddingLeft: "18px", listStyleType: "disc" }}>
         {items.map((item, i) => (
-          <li key={i} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, marginBottom: "2px" }}>{item}</li>
+          <li key={`${item}-${i}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, marginBottom: "2px" }}>{highlightText(item)}</li>
         ))}
       </ul>
     );
@@ -524,7 +614,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
       {items.map((raw, idx) => {
         if (typeof raw === "string") {
           return raw ? (
-            <p key={idx} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, margin: "0 0 4px" }}>{raw}</p>
+            <p key={`${raw}-${idx}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, margin: "0 0 4px" }}>{raw}</p>
           ) : null;
         }
         const item: Record<string, unknown> = (raw && typeof raw === "object") ? raw : {};
@@ -532,17 +622,20 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         const subtitle = toStr(item.subtitle || item.organization || item.company || item.issuer || "");
         const startDate = toStr(item.startDate || item.start_date || "");
         const endDate = toStr(item.endDate || item.end_date || item.date || "");
-        const dateStr = startDate || endDate ? `${formatDate(startDate)}${startDate && endDate ? " – " : ""}${formatDate(endDate)}` : "";
+        let dateStr = "";
+        if (startDate || endDate) {
+          dateStr = `${formatDate(startDate)}${startDate && endDate ? " – " : ""}${formatDate(endDate)}`;
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const description = (item.description || item.details || null) as any;
         const url = toStr(item.url || item.link || "");
         const tags: string[] = Array.isArray(item.tags) ? (item.tags as unknown[]).map((t) => toStr(t)).filter(Boolean) : [];
-        const extraEntries = Object.entries(item).filter(([k, v]) => !GENERIC_ITEM_KNOWN_KEYS.has(k) && hasContent(v));
+        const extraEntries = Object.entries(item).filter(([k, v]) => !GENERIC_ITEM_KNOWN_KEYS.has(k) && !DIAGNOSTIC_KEY_PATTERN.test(k) && hasContent(v));
 
         if (!itemTitle && !subtitle && !description && !extraEntries.length) return null;
 
         return (
-          <div key={idx} className="page-break-inside-avoid" style={{ marginBottom: "10px" }}>
+          <div key={`${itemTitle}-${idx}`} className="page-break-inside-avoid" style={{ marginBottom: "10px" }}>
             {(itemTitle || dateStr) && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{itemTitle}</span>
@@ -563,7 +656,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {extraEntries.map(([k, v]) => (
               <p key={k} style={{ fontSize: "13px", color: "#4b5563", margin: "2px 0 0" }}>
                 <strong>{prettifyLabel(k)}:</strong>{" "}
-                {typeof v === "string" ? v : Array.isArray(v) ? (v as unknown[]).map((x) => toStr(x)).filter(Boolean).join(", ") : toStr(v)}
+                {(() => {
+                  if (typeof v === "string") return v;
+                  if (Array.isArray(v)) return (v as unknown[]).map((x) => toStr(x)).filter(Boolean).join(", ");
+                  return toStr(v);
+                })()}
               </p>
             ))}
           </div>
@@ -583,14 +680,15 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     }
     if (value && typeof value === "object") {
       const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([k]) => !DIAGNOSTIC_KEY_PATTERN.test(k))
         .map(([k, v]): [string, string] => [k, pdValueToStr(v)])
         .filter(([, v]) => v);
       if (!entries.length) return null;
       return (
         <table style={{ fontSize: "13.5px", color: "#1f2937", borderCollapse: "collapse" }}>
           <tbody>
-            {entries.map(([k, v], i) => (
-              <tr key={i}>
+            {entries.map(([k, v]) => (
+              <tr key={k}>
                 <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap", verticalAlign: "top" }}>{prettifyLabel(k)}</td>
                 <td style={{ paddingBottom: "3px" }}>: {v}</td>
               </tr>
@@ -640,7 +738,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         .ats-desc li { font-size: 13.5px; line-height: 1.65; margin-bottom: 2px; color: #1f2937; }
       `}</style>
 
-      <div style={{
+      <div data-resume-document="true" style={{
           maxWidth: "100%",
           width: "100%",
           margin: "0 auto",
@@ -659,7 +757,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             className={`${sc("contact")} mb-4 text-center`}
             style={{ marginBottom: "16px" }}
           >
-            <SectionActions sectionKey="contact" />
+            <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="contact" />
 
             <h1 style={{
               fontSize: "30px",
@@ -682,14 +780,19 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* Contact row — pipe-separated, single line, ATS safe */}
             {contactParts.length > 0 && (
               <div style={{ fontSize: "13px", color: "#374151", display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0 4px", lineHeight: 1.6 }}>
-                {contactParts.map((part, i) => (
-                  <React.Fragment key={i}>
-                    {part}
-                    {i < contactParts.length - 1 && (
-                      <span style={{ color: "#9ca3af", userSelect: "none" }}> • </span>
-                    )}
-                  </React.Fragment>
-                ))}
+                {[false, true].map((links) => {
+                  const parts = contactParts.filter(part => React.isValidElement(part) && (part.type === "a") === links);
+                  return parts.length > 0 && (
+                    <div key={String(links)} style={{ display: "flex", flexWrap: "wrap", justifyContent: "inherit", gap: "0 8px", width: "100%" }}>
+                      {parts.map((part, i) => (
+                        <span key={(part as React.ReactElement).key ?? i} style={{ display: "inline-flex", alignItems: "baseline", gap: "8px", maxWidth: "100%", overflowWrap: "anywhere" }}>
+                          {i > 0 && <span aria-hidden="true" style={{ color: "#9ca3af", userSelect: "none" }}>•</span>}
+                          {part}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -700,9 +803,9 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
 
             {/* ══ SUMMARY ══ */}
             {!deleted.includes("summary") && professionalSummary && (
-              <div id="resume-section-summary" className={sc("summary")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="summary" />
-                <SectionDivider label="Summary" />
+              <div id="resume-section-summary" data-summary-updated={(af.summary ?? []).includes("text") || undefined} className={sc("summary")} style={{ marginBottom: "14px" }}>
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="summary" />
+                <SectionDivider baseFont={baseFont} label="Summary" />
                 <p style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, textAlign: "justify", margin: 0 }}>
                   {hl("summary", "text", professionalSummary)}
                 </p>
@@ -712,8 +815,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ WORK EXPERIENCE ══ */}
             {!deleted.includes("experience") && workExperience.length > 0 && (
               <div id="resume-section-experience" className={sc("experience")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="experience" />
-                <SectionDivider label="Work Experience" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="experience" />
+                <SectionDivider baseFont={baseFont} label="Work Experience" />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {workExperience.map((exp: any, idx: number) => {
                   const company = toStr(exp.company || exp.organization || exp.employer || "");
@@ -722,28 +825,43 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const loc = toStr(exp.location || "");
                   const startDate = toStr(exp.startDate || exp.start_date || exp.from || exp.start || "");
                   const endDate = exp.currentlyWorking ? "Present" : toStr(exp.endDate || exp.end_date || exp.to || exp.end || "");
-                  const dateStr = duration || (startDate ? `${formatDate(startDate)}${endDate ? ` – ${formatDate(endDate)}` : ""}` : "");
+                  const formattedEndDate = endDate ? ` – ${formatDate(endDate)}` : "";
+                  let dateStr = duration;
+                  if (!dateStr) {
+                    dateStr = startDate ? `${formatDate(startDate)}${formattedEndDate}` : "";
+                  }
                   // Bullets can live in any of these raw arrays — the backend PDF
                   // export merges responsibilities/description with achievements and
                   // key_contributions into one list, so the preview must too or jobs
                   // whose bullets only live under achievements render with no bullets.
+                  // A description hides responsibilities/details in the chain
+                  // below, yet a fix's generated bullet is appended to the
+                  // first of those arrays (fixMirror.addBullet, like the API's
+                  // append_resume_bullet), so list any they add.
+                  const expExtras = [exp.responsibilities, exp.details]
+                    .filter(Array.isArray)
+                    .flatMap((list) => parseDescription(list));
                   const descItems = [
                     ...parseDescription(exp.description || exp.responsibilities || exp.details || null),
+                    ...(exp.description ? novelBullets(exp.description, expExtras) : []),
                     ...parseDescription(exp.achievements || null),
                     ...parseDescription(exp.key_contributions || exp.keyContributions || null),
                   ];
                   const desc = descItems.length ? descItems : null;
                   const rawTechStack = exp.tech_stack || exp.technologies || exp.techStack || exp.tools;
-                  const techStack: string[] = Array.isArray(rawTechStack)
-                    ? rawTechStack.map((t: unknown) => toStr(t)).filter(Boolean)
-                    : rawTechStack ? [toStr(rawTechStack)].filter(Boolean) : [];
+                  let techStack: string[] = [];
+                  if (Array.isArray(rawTechStack)) {
+                    techStack = rawTechStack.map((t: unknown) => toStr(t)).filter(Boolean);
+                  } else if (rawTechStack) {
+                    techStack = [toStr(rawTechStack)].filter(Boolean);
+                  }
                   const isModified = hlIdx("experience", idx);
                   const isPending = !isModified && pendingIdx("experience", idx);
                   return (
-                    <div key={idx} className="page-break-inside-avoid" style={{
+                    <div key={`${company}-${idx}`} className="page-break-inside-avoid" style={{
                       marginBottom: "10px",
                       paddingLeft: isModified || isPending ? "8px" : 0,
-                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : isPending ? "3px dashed rgba(220,38,38,0.5)" : "none",
+                      borderLeft: sectionItemBorderLeft(isModified, isPending),
                     }}>
                       {/* Row 1: Company | Date */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -772,8 +890,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ EDUCATION ══ */}
             {!deleted.includes("education") && education.length > 0 && (
               <div id="resume-section-education" className={sc("education")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="education" />
-                <SectionDivider label="Education" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="education" />
+                <SectionDivider baseFont={baseFont} label="Education" />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {education.map((edu: any, idx: number) => {
                   const degree = toStr(edu.degree || edu.qualification || edu.course || "");
@@ -787,14 +905,14 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const gradeType = toStr(edu.gradeType || edu.grade_type || "Grade");
                   const itemChanged = hlIdx("education", idx);
                   return (
-                    <div key={idx} className="page-break-inside-avoid" style={{
+                    <div key={`${degree || college}-${idx}`} className="page-break-inside-avoid" style={{
                       marginBottom: "8px",
                       paddingLeft: itemChanged ? "8px" : 0,
                       borderLeft: itemChanged ? "3px solid rgba(34,197,94,0.5)" : "none",
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>
-                          {degree}{branch ? `, ${branch}` : ""}
+                          {[degree, branch].filter(Boolean).join(", ")}
                         </span>
                         {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
                       </div>
@@ -809,34 +927,44 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ PROJECTS ══ */}
             {!deleted.includes("projects") && projects.length > 0 && (
               <div id="resume-section-projects" className={sc("projects")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="projects" />
-                <SectionDivider label="Projects" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="projects" />
+                <SectionDivider baseFont={baseFont} label="Projects" />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {projects.map((proj: any, idx: number) => {
                   const projTitle = toStr(proj.title || proj.name || proj.project_name || "");
                   const link = toStr(proj.link || proj.url || proj.github_link || "");
                   const startDate = toStr(proj.startDate || proj.start_date || "");
                   const endDate = toStr(proj.endDate || proj.end_date || proj.date || proj.period || "");
-                  const dateStr = startDate || endDate ? `${formatDate(startDate)}${startDate && endDate ? " – " : ""}${formatDate(endDate)}` : "";
+                  let dateStr = "";
+                  if (startDate || endDate) {
+                    dateStr = `${formatDate(startDate)}${startDate && endDate ? " – " : ""}${formatDate(endDate)}`;
+                  }
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const unwrapProjItems = (arr: any[]) => arr.map((r: any) => typeof r === "object" ? toStr(r.text || r.description || r.value || "") : toStr(r)).filter(Boolean);
                   const desc = (() => {
-                    if (proj.description) return proj.description;
-                    if (proj.details) return proj.details;
                     const resps = Array.isArray(proj.responsibilities) ? unwrapProjItems(proj.responsibilities) : [];
                     const achvs = Array.isArray(proj.achievements) ? unwrapProjItems(proj.achievements) : [];
-                    const combined = [...resps, ...achvs];
-                    return combined.length ? combined : null;
+                    const base = proj.description || proj.details;
+                    if (!base) {
+                      const combined = [...resps, ...achvs];
+                      return combined.length ? combined : null;
+                    }
+                    return withExtraBullets(base, [...resps, ...achvs]);
                   })();
                   const rawTech = proj.tech_stack || proj.technologies || proj.techStack || proj.tools;
-                  const tech: string[] = Array.isArray(rawTech) ? rawTech.map((t: unknown) => toStr(t)).filter(Boolean) : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
+                  let tech: string[] = [];
+                  if (Array.isArray(rawTech)) {
+                    tech = rawTech.map((t: unknown) => toStr(t)).filter(Boolean);
+                  } else if (rawTech) {
+                    tech = [toStr(rawTech)].filter(Boolean);
+                  }
                   const isModified = hlIdx("projects", idx);
                   const isPending = !isModified && pendingIdx("projects", idx);
                   return (
-                    <div key={idx} className="page-break-inside-avoid" style={{
+                    <div key={`${projTitle}-${idx}`} className="page-break-inside-avoid" style={{
                       marginBottom: "10px",
                       paddingLeft: isModified || isPending ? "8px" : 0,
-                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : isPending ? "3px dashed rgba(220,38,38,0.5)" : "none",
+                      borderLeft: sectionItemBorderLeft(isModified, isPending),
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -866,8 +994,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ SKILLS ══ */}
             {!deleted.includes("skills") && (skills.length > 0 || (pendingSkills && pendingSkills.length > 0)) && (
               <div id="resume-section-skills" className={sc("skills")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="skills" />
-                <SectionDivider label="Skills" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="skills" />
+                <SectionDivider baseFont={baseFont} label="Skills" />
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                   {(() => {
                     const realSkills = skills as string[];
@@ -880,6 +1008,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     );
                     const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.skills || []).map((s: string) => s.toLowerCase()));
+                    if (keywordMode) return <div style={{display: "flex", flexWrap: "wrap", gap: 6}}>{[...new Map([...realSkills, ...pendingList].map(skill => [skill.toLowerCase(), skill])).values()].map(renderMatchChip)}</div>;
                     return categorizeTechnicalSkills([...realSkills, ...pendingList]).map(({ label, skills: groupSkills }) => (
                       <p key={label} style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
                         <strong>{label}:</strong>{" "}
@@ -888,8 +1017,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                           const isPending = pendingSet.has(lower);
                           const isNew = !isPending && (newlyAddedSkillsSet.has(lower) || editorAdded.has(lower));
                           return (
-                            <React.Fragment key={idx}>
-                              {isPending ? <span style={missingStyle}>{skill}</span> : isNew ? <span style={hlStyle}>{skill}</span> : skill}
+                            <React.Fragment key={`${skill}-${idx}`}>
+                              {renderSkillNode(skill, isPending, isNew, missingStyle, hlStyle)}
                               {idx < groupSkills.length - 1 ? ", " : ""}
                             </React.Fragment>
                           );
@@ -904,8 +1033,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ SOFT SKILLS ══ */}
             {!deleted.includes("softSkills") && (softSkills.length > 0 || (pendingSoftSkills && pendingSoftSkills.length > 0)) && (
               <div id="resume-section-softSkills" className={sc("softSkills")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="softSkills" />
-                {skills.length === 0 && <SectionDivider label="Skills" />}
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="softSkills" />
+                {skills.length === 0 && <SectionDivider baseFont={baseFont} label="Skills" />}
                 <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
                   <strong>Soft Skills:</strong>{" "}
                   {(() => {
@@ -917,13 +1046,14 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
                     const combined = [...realSoft, ...pendingList];
+                    if (keywordMode) return <span style={{display: "inline-flex", flexWrap: "wrap", gap: 6}}>{combined.map(renderMatchChip)}</span>;
                     return combined.map((skill: string, idx: number) => {
                       const lower = skill.toLowerCase();
                       const isPending = pendingSet.has(lower);
                       const isNew = !isPending && (newlyAddedSoftSkillsSet.has(lower) || editorAdded.has(lower));
                       return (
-                        <React.Fragment key={idx}>
-                          {isPending ? <span style={missingStyle}>{skill}</span> : isNew ? <span style={hlStyle}>{skill}</span> : skill}
+                        <React.Fragment key={`${skill}-${idx}`}>
+                          {renderSkillNode(skill, isPending, isNew, missingStyle, hlStyle)}
                           {idx < combined.length - 1 ? ", " : ""}
                         </React.Fragment>
                       );
@@ -936,8 +1066,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ INTERNSHIPS ══ */}
             {!deleted.includes("internships") && internships.length > 0 && (
               <div id="resume-section-internships" className={sc("internships")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="internships" />
-                <SectionDivider label="Internships" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="internships" />
+                <SectionDivider baseFont={baseFont} label="Internships" />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {internships.map((intern: any, idx: number) => {
                   const company = toStr(intern.company || intern.organization || "");
@@ -945,23 +1075,27 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const duration = toStr(intern.duration || intern.period || "");
                   const startDate = toStr(intern.startDate || intern.start_date || intern.from || "");
                   const endDate = intern.currentlyWorking ? "Present" : toStr(intern.endDate || intern.end_date || intern.to || "");
-                  const dateStr = duration || (startDate ? `${formatDate(startDate)}${endDate ? ` – ${formatDate(endDate)}` : ""}` : "");
+                  const formattedEndDate = endDate ? ` – ${formatDate(endDate)}` : "";
+                  let dateStr = duration;
+                  if (!dateStr) {
+                    dateStr = startDate ? `${formatDate(startDate)}${formattedEndDate}` : "";
+                  }
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const unwrapItems = (arr: any[]) => arr.map((r: any) => typeof r === "object" ? toStr(r.text || r.description || r.value || "") : toStr(r)).filter(Boolean);
                   const desc = (() => {
-                    if (intern.description) return intern.description;
                     const resps = Array.isArray(intern.responsibilities) ? unwrapItems(intern.responsibilities) : [];
                     const achvs = Array.isArray(intern.achievements) ? unwrapItems(intern.achievements) : [];
+                    if (intern.description) return withExtraBullets(intern.description, [...resps, ...achvs]);
                     const combined = [...resps, ...achvs];
                     return combined.length ? combined : null;
                   })();
                   const isModified = hlIdx("internships", idx);
                   const isPending = !isModified && pendingIdx("internships", idx);
                   return (
-                    <div key={idx} className="page-break-inside-avoid" style={{
+                    <div key={`${company}-${idx}`} className="page-break-inside-avoid" style={{
                       marginBottom: "10px",
                       paddingLeft: isModified || isPending ? "8px" : 0,
-                      borderLeft: isModified ? "3px solid rgba(34,197,94,0.5)" : isPending ? "3px dashed rgba(220,38,38,0.5)" : "none",
+                      borderLeft: sectionItemBorderLeft(isModified, isPending),
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{company}</span>
@@ -983,8 +1117,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ CERTIFICATIONS ══ */}
             {!deleted.includes("certifications") && certifications.length > 0 && (
               <div id="resume-section-certifications" className={sc("certifications")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="certifications" />
-                <SectionDivider label="Certifications" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="certifications" />
+                <SectionDivider baseFont={baseFont} label="Certifications" />
                 <ul style={{ margin: 0, paddingLeft: "16px", listStyleType: "disc" }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {certifications.map((cert: any, idx: number) => {
@@ -996,7 +1130,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     if (!certName) return null;
                     const isModified = hlIdx("certifications", idx);
                     return (
-                      <li key={idx} style={{
+                      <li key={`${certName}-${idx}`} style={{
                         fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px",
                         backgroundColor: isModified ? "rgba(34,197,94,0.1)" : undefined,
                       }}>
@@ -1013,8 +1147,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ ACHIEVEMENTS ══ */}
             {!deleted.includes("achievements") && achievements.length > 0 && (
               <div id="resume-section-achievements" className={sc("achievements")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="achievements" />
-                <SectionDivider label="Achievements" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="achievements" />
+                <SectionDivider baseFont={baseFont} label="Achievements" />
                 <ul style={{ margin: 0, paddingLeft: "16px", listStyleType: "disc" }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {achievements.map((achievement: any, idx: number) => {
@@ -1025,7 +1159,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const date = typeof achievement === "object" ? toStr(achievement.date || achievement.year || "") : "";
                     if (!achieveTitle) return null;
                     return (
-                      <li key={idx} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px" }}>
+                      <li key={`${achieveTitle}-${idx}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px" }}>
                         <span style={{ fontWeight: 600 }}>{achieveTitle}</span>
                         {date && <span style={{ color: "#6b7280" }}>{" ("}{formatDate(date)}{")"}</span>}
                         {desc && <span style={{ color: "#374151" }}>{" — "}{desc}</span>}
@@ -1039,8 +1173,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ AWARDS ══ */}
             {!deleted.includes("awards") && awards.length > 0 && (
               <div id="resume-section-awards" className={sc("awards")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="awards" />
-                <SectionDivider label="Awards" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="awards" />
+                <SectionDivider baseFont={baseFont} label="Awards" />
                 <ul style={{ margin: 0, paddingLeft: "16px", listStyleType: "disc" }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {awards.map((award: any, idx: number) => {
@@ -1049,7 +1183,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const year = toStr(award.year || award.date || "");
                     if (!awardTitle) return null;
                     return (
-                      <li key={idx} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px" }}>
+                      <li key={`${awardTitle}-${idx}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px" }}>
                         <span style={{ fontWeight: 600 }}>{awardTitle}</span>
                         {issuedBy && <span style={{ color: "#4b5563" }}>{" — "}{issuedBy}</span>}
                         {year && <span style={{ color: "#6b7280" }}>{" ("}{year}{")"}</span>}
@@ -1063,8 +1197,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ LANGUAGES ══ */}
             {!deleted.includes("languages") && languages.length > 0 && (
               <div id="resume-section-languages" className={sc("languages")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="languages" />
-                <SectionDivider label="Languages" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="languages" />
+                <SectionDivider baseFont={baseFont} label="Languages" />
                 <ul style={{ margin: 0, paddingLeft: "16px", listStyleType: "disc", columns: 3, columnGap: "20px" }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {languages.map((lang: any, idx: number) => {
@@ -1072,7 +1206,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const proficiency = typeof lang === "string" ? "" : toStr(lang.proficiency || lang.level || "");
                     const itemChanged = hlIdx("languages", idx);
                     return (
-                      <li key={idx} style={{
+                      <li key={`${langName}-${idx}`} style={{
                         fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, breakInside: "avoid",
                         backgroundColor: itemChanged ? "rgba(34,197,94,0.1)" : undefined,
                       }}>
@@ -1088,8 +1222,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ VOLUNTEERING ══ */}
             {!deleted.includes("volunteering") && volunteering.length > 0 && (
               <div id="resume-section-volunteering" className={sc("volunteering")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="volunteering" />
-                <SectionDivider label="Volunteering" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="volunteering" />
+                <SectionDivider baseFont={baseFont} label="Volunteering" />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {volunteering.map((vol: any, idx: number) => {
                   const role = toStr(vol.role || vol.title || vol.position || "");
@@ -1097,7 +1231,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const duration = toStr(vol.duration || vol.period || "");
                   const desc = vol.description || null;
                   return (
-                    <div key={idx} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
+                    <div key={`${role}-${idx}`} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{role}</span>
                         {duration && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{duration}</span>}
@@ -1113,8 +1247,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ PUBLICATIONS ══ */}
             {!deleted.includes("publications") && publications.length > 0 && (
               <div id="resume-section-publications" className={sc("publications")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="publications" />
-                <SectionDivider label="Publications" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="publications" />
+                <SectionDivider baseFont={baseFont} label="Publications" />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {publications.map((pub: any, idx: number) => {
                   const pubTitle = toStr(pub.title || pub.name || "");
@@ -1123,7 +1257,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const pubName = toStr(pub.publicationName || pub.publication_name || pub.journal || "");
                   const date = toStr(pub.date || pub.year || "");
                   return (
-                    <div key={idx} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
+                    <div key={`${pubTitle}-${idx}`} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <span style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{pubTitle}</span>
                         {getSafeExternalUrl(url) && (
@@ -1146,8 +1280,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ HOBBIES ══ */}
             {!deleted.includes("hobbies") && hobbies.length > 0 && (
               <div id="resume-section-hobbies" className={sc("hobbies")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="hobbies" />
-                <SectionDivider label="Hobbies & Interests" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="hobbies" />
+                <SectionDivider baseFont={baseFont} label="Hobbies & Interests" />
                 <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.7 }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {hobbies.map((hobby: any) => {
@@ -1161,8 +1295,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ INTERESTS ══ */}
             {!deleted.includes("interests") && interests.length > 0 && !hobbies.length && (
               <div id="resume-section-interests" className={sc("interests")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="interests" />
-                <SectionDivider label="Interests" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="interests" />
+                <SectionDivider baseFont={baseFont} label="Interests" />
                 <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.7 }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {interests.map((interest: any) => {
@@ -1176,8 +1310,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ REFERENCES ══ */}
             {!deleted.includes("references") && references.length > 0 && (
               <div id="resume-section-references" className={sc("references")} style={{ marginBottom: "14px" }}>
-                <SectionActions sectionKey="references" />
-                <SectionDivider label="References" />
+                <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="references" />
+                <SectionDivider baseFont={baseFont} label="References" />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px" }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {references.map((ref: any, idx: number) => {
@@ -1185,7 +1319,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const relation = toStr(ref.relation || ref.designation || ref.title || "");
                     const refContact = toStr(ref.contact || ref.email || ref.phone || "");
                     return (
-                      <div key={idx}>
+                      <div key={`${refName}-${idx}`}>
                         <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{refName}</div>
                         {relation && <div style={{ fontSize: "13px", color: "#4b5563" }}>{relation}</div>}
                         {refContact && <div style={{ fontSize: "13px", color: "#6b7280" }}>{refContact}</div>}
@@ -1199,11 +1333,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {/* ══ PERSONAL DETAILS ══ */}
             {!deleted.includes("personalDetails") && personalDetailsEntries.length > 0 && (
               <div id="resume-section-personalDetails" className={sc("personalDetails")} style={{ marginBottom: "14px" }}>
-                <SectionDivider label="Personal Details" />
+                <SectionDivider baseFont={baseFont} label="Personal Details" />
                 <table style={{ fontSize: "13.5px", color: "#1f2937", borderCollapse: "collapse" }}>
                   <tbody>
                     {personalDetailsEntries.map(([label, value], idx) => (
-                      <tr key={idx}>
+                      <tr key={`${label}-${idx}`}>
                         {label && (
                           <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap", verticalAlign: "top" }}>
                             {prettifyLabel(label)}
@@ -1224,7 +1358,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               if (!body) return null;
               return (
                 <div key={`dyn-${key}`} id={`resume-section-${key}`} style={{ marginBottom: "14px" }}>
-                  <SectionDivider label={label} />
+                  <SectionDivider baseFont={baseFont} label={label} />
                   {body}
                 </div>
               );
@@ -1236,8 +1370,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               const items = Array.isArray(section?.items) ? section.items : [];
               if (!items.length) return null;
               return (
-                <div key={`bcs-${idx}`} style={{ marginBottom: "14px" }}>
-                  <SectionDivider label={label} />
+                <div key={`bcs-${label}-${idx}`} style={{ marginBottom: "14px" }}>
+                  <SectionDivider baseFont={baseFont} label={label} />
                   {renderGenericItems(items)}
                 </div>
               );
@@ -1253,8 +1387,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               if (!body) return null;
               return (
                 <div key={`local-${key}`} id={`resume-section-${key}`} className={sc(key)} style={{ marginBottom: "14px" }}>
-                  <SectionActions sectionKey={key} />
-                  <SectionDivider label={label} />
+                  <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey={key} />
+                  <SectionDivider baseFont={baseFont} label={label} />
                   {body}
                 </div>
               );
