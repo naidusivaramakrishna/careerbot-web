@@ -165,6 +165,8 @@ describe('Skills editor — non-technical domain', () => {
     // programming_languages is not shown for healthcare, but must not be erased
     expect(cs.programming_languages).toEqual(['Python', 'Go']);
     expect(cs.soft_skills).toEqual(['Leadership']);
+    // ...nor dropped from the flat skills list (completeness badge, tips panel).
+    expect(latest.data!.skills).toEqual(expect.arrayContaining(['Python', 'Go', 'React', 'Scrum', 'SEO', 'Triage', 'NewSkill']));
   });
 });
 

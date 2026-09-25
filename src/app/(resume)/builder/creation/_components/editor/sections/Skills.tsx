@@ -105,11 +105,13 @@ const Skills: React.FC = () => {
   });
 
   const updateSkills = (updated: Record<string, unknown>) => {
-    // Collect all skills from all predefined categories (regardless of domain)
-    const allSkills = SKILL_CATEGORIES.reduce((acc, cat) => {
-      const categorySkills = (updated)[cat.key] as string[] | undefined;
-      return [...acc, ...(categorySkills || [])];
-    }, [] as string[]);
+    // Collect all skills from every predefined category key — including other
+    // domains' categories kept in state but not displayed — so the flat list
+    // matches what the loader builds.
+    const META_KEYS = new Set(['custom_categories', 'hidden_predefined_categories', 'skill_id_map']);
+    const allSkills = Object.entries(updated)
+      .filter(([key, value]) => !META_KEYS.has(key) && Array.isArray(value) && value.every((v) => typeof v === 'string'))
+      .flatMap(([, value]) => value as string[]);
 
     // Add custom category skills
     const customSkills = ((updated.custom_categories || []) as CustomCategory[]).flatMap((c) => c.skills);
