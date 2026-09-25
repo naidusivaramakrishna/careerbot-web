@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
+import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, LayoutTemplate, Sparkles, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, applyCatalogueToResume, type TemplateResponse } from '@/api/resumeApi';
@@ -141,21 +141,25 @@ function TemplatesPageContent() {
     }
   };
 
-  const handleCatalogueSelect = async (key: string) => {
+  const persistQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  const handleCatalogueSelect = (key: string) => {
     setSelectedCatalogue(key);
     localStorage.setItem('selected_catalogue', key);
     persistColorForBuilder(key, selectedBg[key]);
 
-    // Apply catalogue to current resume if available
-    const resumeId = urlResumeId || localStorage.getItem('current_resume_id');
-    if (resumeId) {
-      try {
-        await applyCatalogueToResume(resumeId, key);
-        logger.info(`Catalogue '${key}' applied to resume ${resumeId}`);
-      } catch (err) {
-        logger.warn(`Failed to apply catalogue via API: ${err}`);
-        // Fail silently - catalogue is still selected locally
-      }
+    // Persist only for the resume this page was opened for (?resumeId=).
+    // Without it the choice stays local and the builder applies
+    // `selected_catalogue` when it opens; falling back to current_resume_id
+    // wrote to whichever resume was opened last. Requests are chained so the
+    // server applies fast clicks in click order (as in CatalogueTab).
+    if (urlResumeId) {
+      const resumeId = urlResumeId;
+      persistQueueRef.current = persistQueueRef.current
+        .catch(() => undefined)
+        .then(() => applyCatalogueToResume(resumeId, key))
+        .then(() => logger.info(`Catalogue '${key}' applied to resume ${resumeId}`))
+        .catch((err) => logger.warn(`Failed to apply catalogue via API: ${err}`));
     }
   };
 
