@@ -26,6 +26,9 @@ const publicRoutes = [
     '/reset-password',
     '/forgot-password',
     '/resend-verification',
+    // Old link-style verification emails land here; the page only redirects
+    // to sign-in (see app/verify-email/page.tsx).
+    '/verify-email',
     "/browse-templates",
     "/blog",
     "/terms-of-service",
