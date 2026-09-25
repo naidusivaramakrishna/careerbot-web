@@ -10,6 +10,60 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// Parser responses can contain an extracted profile picture as a data URL or
+// a large base64 string. The ATS report uses the authenticated preview endpoint
+// for rendering, so binary image data must not be duplicated into browser
+// storage (doing so can exceed the ~5 MB localStorage quota after a successful
+// backend/AI response and incorrectly surface as a parsing failure).
+export function withoutEmbeddedImages(value: unknown, key = ""): unknown {
+  const imageKey = /(?:^|_)(?:profile_?)?(?:picture|photo|image|avatar|thumbnail)(?:_|$)|base64|binary/i.test(key);
+  if (typeof value === "string") {
+    if (
+      value.startsWith("data:image/") ||
+      (imageKey && value.length > 2048) ||
+      value.length > 128 * 1024
+    ) return undefined;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (imageKey && value.length > 256 && value.every(item => typeof item === "number")) return undefined;
+    return value.map(item => withoutEmbeddedImages(item)).filter(item => item !== undefined);
+  }
+  if (!isObject(value)) return value;
+
+  const cleaned: Record<string, unknown> = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    const normalized = withoutEmbeddedImages(childValue, childKey);
+    if (normalized !== undefined) cleaned[childKey] = normalized;
+  }
+  return cleaned;
+}
+
+export function storeAtsAnalysis(key: string, payload: unknown): void {
+  const serialized = JSON.stringify(withoutEmbeddedImages(payload));
+  try {
+    localStorage.setItem(key, serialized);
+  } catch {
+    // Storage availability/quota is a cache concern and must never turn a
+    // successful parse + ATS analysis into a frontend processing failure.
+    // Readers prefer localStorage, so drop the older entry there; otherwise it
+    // would shadow the fresh sessionStorage copy (same rule as writeReportCache).
+    try { localStorage.removeItem(key); } catch { /* non-fatal */ }
+    try { sessionStorage.setItem(key, serialized); } catch { /* non-fatal */ }
+  }
+}
+
+/** Reads an ATS analysis written by storeAtsAnalysis (localStorage first, then the quota fallback). */
+function readAtsAnalysis(key: string): string | null {
+  for (const storage of [() => localStorage, () => sessionStorage]) {
+    try {
+      const value = storage().getItem(key);
+      if (value !== null) return value;
+    } catch { /* storage unavailable -- try the next one */ }
+  }
+  return null;
+}
+
 function hasScoreProjectionContract(value: unknown): boolean {
   if (!isObject(value)) return false;
   const candidates = [value, value.ats_score, value.ats_breakdown, value.ats_display, value.enhancer_state];
@@ -17,6 +71,57 @@ function hasScoreProjectionContract(value: unknown): boolean {
     Object.prototype.hasOwnProperty.call(candidate, "score_status") ||
     Object.prototype.hasOwnProperty.call(candidate, "estimated_score_after_fixes")
   ));
+}
+const SERVER_ERROR_PATTERN = /internal server error|status code 500|http 500/i;
+// careerbot-api returns 5xx failures as a JSON envelope
+// {"success":false,"error":{"message","error_code",...}} (app/core/exception_handler.py).
+// Its catch-all handler uses INTERNAL_SERVER_ERROR and the enhance endpoint's
+// catch-all uses SERVER_ERROR; neither contains the plain-text phrases above.
+const SERVER_ERROR_CODES = new Set(["INTERNAL_SERVER_ERROR", "SERVER_ERROR"]);
+
+function isServerFailure(err: unknown): boolean {
+  const status = isObject(err) ? err.status : undefined;
+  if (typeof status === "number" && status >= 500) return true;
+
+  const message = (err as { message?: string })?.message ?? String(err);
+  if (SERVER_ERROR_PATTERN.test(message)) return true;
+  try {
+    const body: unknown = JSON.parse(message);
+    const code = isObject(body) && isObject(body.error) ? body.error.error_code : undefined;
+    return typeof code === "string" && (SERVER_ERROR_CODES.has(code) || /^HTTP_5\d\d$/.test(code));
+  } catch {
+    return false;
+  }
+}
+const PARSE_SERVER_ERROR_MESSAGE =
+  "We could not read your resume right now. Please try again in a moment. If the problem continues, contact support with the time of this attempt.";
+const ENHANCE_SERVER_ERROR_MESSAGE =
+  "ATS analysis could not be completed after your resume was parsed. Please try again in a moment. If the problem continues, contact support with the time of this attempt.";
+const SCANNED_RESUME_MESSAGE =
+  "This appears to be a scanned or image-based resume. Please upload a PDF or DOCX with selectable text.";
+
+function parserFailureMessage(parsed: unknown): string | null {
+  if (!isObject(parsed)) return "The resume parser returned an invalid response. Please upload the file again.";
+
+  const parsedData = isObject(parsed.parsed_data) ? parsed.parsed_data : null;
+  const needsOcr = parsed.ocr_needed === true || parsedData?.ocr_needed === true;
+  // Only error fields count as details. `message` on a response without an
+  // error is usually a success note ("Resume parsed successfully").
+  const details = [parsedData?.error, parsed.error]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  if (needsOcr) {
+    // The backend text is diagnostic (e.g. raw JSON); users get the friendly copy.
+    if (details) logApiError("POST", "parse_resume", new Error(details));
+    return SCANNED_RESUME_MESSAGE;
+  }
+
+  const resumeId = parsed.resume_id;
+  if (typeof resumeId !== "string" || !resumeId.trim()) {
+    return details ?? "Your resume could not be prepared for ATS analysis because the parser did not return a resume ID. Please upload the file again.";
+  }
+
+  return null;
 }
 
 /* ------------------------------------------------------
@@ -72,7 +177,9 @@ export const parseResume = async (file: File) => {
         // ignore JSON parse errors and fall through to throwing raw text
       }
 
-      throw new Error(text);
+      // Keep the HTTP status so callers can classify 5xx failures even when
+      // the body is careerbot-api's JSON envelope rather than plain text.
+      throw Object.assign(new Error(text), { status: response.status });
     }
     return response.json();
   } catch (error) {
@@ -106,7 +213,16 @@ export const clearCacheForResume = async (resumeId: string) => {
 export const processResumeComplete = async (file: File) => {
   try {
     // Step 1: Parse Resume
-    const parsed = await parseResume(file);
+    let parsed;
+    try {
+      parsed = await parseResume(file);
+    } catch (parseErr) {
+      const parseMessage = (parseErr as { message?: string })?.message ?? String(parseErr);
+      throw new Error(isServerFailure(parseErr) ? PARSE_SERVER_ERROR_MESSAGE : parseMessage);
+    }
+    const parserError = parserFailureMessage(parsed);
+    if (parserError) throw new Error(parserError);
+
     const resumeId = parsed.resume_id;
     const parsedData = parsed?.parsed_data ?? {};
 
@@ -117,14 +233,14 @@ export const processResumeComplete = async (file: File) => {
       const localKey = `atsAnalysis_${resumeId}`;
 
       // Check resume-specific key first
-      const cached = localStorage.getItem(localKey);
+      const cached = readAtsAnalysis(localKey);
       if (cached) {
         try {
           const cachedPayload = JSON.parse(cached);
           // Old local payloads do not contain the backend projection contract.
           // Force one fresh enhancement after the backend rollout.
           if (hasScoreProjectionContract(cachedPayload)) {
-            localStorage.setItem("atsAnalysisData", cached);
+            try { localStorage.setItem("atsAnalysisData", cached); } catch { /* non-fatal: still a valid cache hit */ }
             return { success: true as const, ...cachedPayload };
           }
         } catch { /* corrupted — fall through */ }
@@ -132,12 +248,12 @@ export const processResumeComplete = async (file: File) => {
 
       // Fallback: check the legacy "atsAnalysisData" key — if it belongs to
       // this same resume_id, reuse it and migrate it to the new key.
-      const legacy = localStorage.getItem("atsAnalysisData");
+      const legacy = readAtsAnalysis("atsAnalysisData");
       if (legacy) {
         try {
           const legacyPayload = JSON.parse(legacy);
           if (legacyPayload.resume_id === resumeId && hasScoreProjectionContract(legacyPayload)) {
-            localStorage.setItem(localKey, legacy); // migrate for future hits
+            try { localStorage.setItem(localKey, legacy); } catch { /* non-fatal migration */ }
             return { success: true as const, ...legacyPayload };
           }
         } catch { /* fall through to fresh analysis */ }
@@ -145,7 +261,16 @@ export const processResumeComplete = async (file: File) => {
     }
 
     // Step 2: Enhance — now also returns the ATS breakdown
-    const enhanceResult = await enhanceResume({ resume_id: resumeId });
+    let enhanceResult;
+    try {
+      enhanceResult = await enhanceResume({ resume_id: resumeId });
+    } catch (enhanceErr) {
+      const enhanceMessage = (enhanceErr as { message?: string })?.message ?? String(enhanceErr);
+      throw new Error(isServerFailure(enhanceErr) ? ENHANCE_SERVER_ERROR_MESSAGE : enhanceMessage);
+    }
+    if (!enhanceResult || enhanceResult.success === false) {
+      throw new Error("ATS analysis could not be completed after your resume was parsed. Please try again.");
+    }
     const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
     const atsDisplay = enhanceResult.ats_display;
     const enhancedResumeId = enhanceResult.enhanced_resume_id ?? null;
@@ -219,9 +344,9 @@ export const processResumeComplete = async (file: File) => {
 
     // Store under a resume-specific key so future cache hits can skip enhance
     if (resumeId) {
-      localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(payload));
+      storeAtsAnalysis(`atsAnalysis_${resumeId}`, payload);
     }
-    localStorage.setItem("atsAnalysisData", JSON.stringify(payload));
+    storeAtsAnalysis("atsAnalysisData", payload);
 
     return { success: true as const, ...payload };
   } catch (err: unknown) {
@@ -279,8 +404,8 @@ export const runAtsScan = async (resumeId: string): Promise<number> => {
     scanned_pdf: false,
   };
 
-  localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(payload));
-  localStorage.setItem("atsAnalysisData", JSON.stringify(payload));
+  storeAtsAnalysis(`atsAnalysis_${resumeId}`, payload);
+  storeAtsAnalysis("atsAnalysisData", payload);
 
   return finalScore;
 };

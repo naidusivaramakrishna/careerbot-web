@@ -14,7 +14,26 @@ export const ATS_UPLOAD_KEYS = [
 ] as const;
 
 export function clearAtsUploadStorage() {
-  ATS_UPLOAD_KEYS.forEach((k) => localStorage.removeItem(k));
+  ATS_UPLOAD_KEYS.forEach((k) => {
+    try { localStorage.removeItem(k); } catch { /* storage unavailable */ }
+    try { sessionStorage.removeItem(k); } catch { /* storage unavailable */ }
+  });
+}
+
+/** Best-effort write for small UI hints; a full/blocked storage must never fail a scan. */
+export function safeSetItem(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* non-fatal */ }
+}
+
+/** Reads a cached ATS analysis from localStorage, falling back to sessionStorage. */
+export function readCachedAtsAnalysis(): Record<string, unknown> | null {
+  for (const store of ["localStorage", "sessionStorage"] as const) {
+    try {
+      const raw = window[store].getItem("atsAnalysisData");
+      if (raw) return JSON.parse(raw) as Record<string, unknown>;
+    } catch { /* unavailable or corrupted -- try the next store */ }
+  }
+  return null;
 }
 
 // ─── File validation ──────────────────────────────────────────────────────────
