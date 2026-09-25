@@ -107,6 +107,11 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR runs diff against, and type-check, the merge-base with the PR's
+          # base branch, so they need history. Pushes keep the shallow clone.
+          # ('0' is quoted: a bare 0 is falsy and `&& 0 || 1` would yield 1.)
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -120,11 +125,120 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ---- Pushes (master, develop2): whole-repo lint/type-check, advisory ----
+      # The base branches carry a backlog (~150 ESLint errors, ~550 tsc errors),
+      # so these stay `|| true`: they show the backlog, they cannot gate it. PR
+      # runs skip them - the gates below lint the changed files and run tsc
+      # themselves, and repeating both whole-repo passes would cost ~7 minutes
+      # of the one shared runner for output nobody reads.
       - name: ESLint (advisory)
+        if: github.event_name != 'pull_request'
         run: npx eslint src/ --ext .ts,.tsx --max-warnings 100 || true
 
       - name: TypeScript check (advisory)
+        if: github.event_name != 'pull_request'
         run: npx tsc --noEmit 2>&1 | tail -20 || true
+
+      # ---- Pull requests: fail on NEW errors only ----
+      # `Lint and Build` is a required check. These steps make it fail when a PR
+      # ADDS an ESLint or tsc error, while the existing backlog does not block
+      # (scripts/ci/new-lint-errors.mjs has the rules; its tests run first). On a
+      # draft PR they report the same findings as warnings and do not fail -
+      # drafts get feedback, not a block (see the Build steps below).
+      # Every new error is listed in the job summary: GitHub shows only the
+      # first 10 error annotations per step.
+      # The two gates are continue-on-error so that one failing still runs the
+      # other and the Build: the author gets every finding in one round. The
+      # last step of the job fails it if either gate failed.
+      - name: Test the new-error gate
+        if: github.event_name == 'pull_request'
+        run: node --test scripts/ci/test_new_lint_errors.mjs
+
+      - name: Diff against the PR base
+        id: prdiff
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          # HEAD is GitHub's merge of the PR into the base branch, so this is
+          # the base tip it was merged onto and the diff is exactly the PR.
+          base_sha=$(git merge-base "origin/$BASE_REF" HEAD)
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          git -c core.quotePath=false diff -U0 --no-color --no-ext-diff -M \
+            --diff-filter=ACMR "$base_sha" HEAD -- '*.ts' '*.tsx' > "$RUNNER_TEMP/pr.diff"
+          node scripts/ci/new-lint-errors.mjs files --diff "$RUNNER_TEMP/pr.diff" > "$RUNNER_TEMP/pr-ts-files.txt"
+          node scripts/ci/new-lint-errors.mjs files --diff "$RUNNER_TEMP/pr.diff" --under src/ > "$RUNNER_TEMP/pr-src-files.txt"
+          echo "PR base: $base_sha (origin/$BASE_REF)"
+          echo "Changed .ts/.tsx files: $(wc -l < "$RUNNER_TEMP/pr-ts-files.txt") (under src/: $(wc -l < "$RUNNER_TEMP/pr-src-files.txt"))"
+
+      - name: ESLint (fail on new errors in changed lines)
+        id: eslint_gate
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          ADVISORY: ${{ github.event.pull_request.draft && '1' || '' }}
+        run: |
+          mapfile -t files < "$RUNNER_TEMP/pr-src-files.txt"
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No .ts/.tsx files under src/ changed - nothing to lint."
+            echo "### ESLint: no .ts/.tsx files under src/ changed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # No --max-warnings: warnings never fail this step.
+          rc=0
+          npx eslint --format json --output-file "$RUNNER_TEMP/eslint.json" -- "${files[@]}" || rc=$?
+          if [ "$rc" -gt 1 ]; then  # 2 = config error / crash, not lint findings
+            if [ -n "$ADVISORY" ]; then
+              echo "::warning title=ESLint did not complete::eslint exited with $rc"
+              exit 0
+            fi
+            echo "::error title=ESLint did not complete::eslint exited with $rc"
+            exit "$rc"
+          fi
+          node scripts/ci/new-lint-errors.mjs eslint --diff "$RUNNER_TEMP/pr.diff" \
+            --report "$RUNNER_TEMP/eslint.json" --root "$GITHUB_WORKSPACE" ${ADVISORY:+--advisory}
+
+      - name: TypeScript (fail on new errors in changed files)
+        id: tsc_gate
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          ADVISORY: ${{ github.event.pull_request.draft && '1' || '' }}
+          BASE_SHA: ${{ steps.prdiff.outputs.base_sha }}
+        run: |
+          if [ ! -s "$RUNNER_TEMP/pr-ts-files.txt" ]; then
+            echo "No .ts/.tsx files changed - skipping the type-check comparison."
+            echo "### TypeScript: no .ts/.tsx files changed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Type-check the base (a plain `git archive` export sharing this
+          # checkout's node_modules) and the head in parallel - tsc is
+          # single-threaded - then compare per file by error code + message.
+          # The default shell is `bash -e` without pipefail: a failed `git
+          # archive` must not leave an empty base that makes every error "new".
+          set -o pipefail
+          base_dir="$RUNNER_TEMP/tsc-base"
+          rm -rf "$base_dir" && mkdir -p "$base_dir"
+          git archive "$BASE_SHA" | tar -x -C "$base_dir"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$base_dir/node_modules"
+          tsc="$GITHUB_WORKSPACE/node_modules/.bin/tsc"
+          (
+            cd "$base_dir"
+            rc=0
+            "$tsc" --noEmit --pretty false --incremental false > "$RUNNER_TEMP/tsc-base.txt" 2>&1 || rc=$?
+            echo "$rc" > "$RUNNER_TEMP/tsc-base.exit"
+          ) &
+          base_pid=$!
+          head_exit=0
+          "$tsc" --noEmit --pretty false --incremental false > "$RUNNER_TEMP/tsc-head.txt" 2>&1 || head_exit=$?
+          wait "$base_pid" || true
+          base_exit=$(cat "$RUNNER_TEMP/tsc-base.exit" 2>/dev/null || echo missing)
+          rm -rf "$base_dir"
+          node scripts/ci/new-lint-errors.mjs tsc --diff "$RUNNER_TEMP/pr.diff" \
+            --head "$RUNNER_TEMP/tsc-head.txt" --base "$RUNNER_TEMP/tsc-base.txt" \
+            --head-root "$GITHUB_WORKSPACE" --base-root "$base_dir" \
+            --head-exit "$head_exit" --base-exit "$base_exit" ${ADVISORY:+--advisory}
 
       - name: Build
         # Draft PRs get dependency, lint and type-check feedback without using
@@ -136,9 +250,9 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_PUBLIC_BASE_URL: http://localhost:8000/api/v1
 
-      # ESLint and tsc above are advisory (`|| true`), so on a draft PR nothing in
-      # this job can fail on code. Say so, rather than let a green `Lint and
-      # Build` read as "built clean".
+      # On a draft PR the new-error gates above only warn, so nothing in this
+      # job can fail on code. Say so, rather than let a green `Lint and Build`
+      # read as "built clean".
       - name: Build deferred (draft PR)
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
         run: echo "::notice title=Build deferred::Draft PR - production build skipped. Mark the PR ready for review to run it."
@@ -165,3 +279,22 @@ jobs:
             echo "WARNING: Direct cloud API URLs found in source. Prefer proxying through backend."
           fi
           echo "Cloud URL check complete"
+
+      # Last, so the Build and the checks above still ran and reported. A gate
+      # step's `outcome` is `failure` even though continue-on-error lets the
+      # job carry on.
+      - name: Fail on new ESLint / TypeScript errors
+        if: github.event_name == 'pull_request'
+        env:
+          DRAFT: ${{ github.event.pull_request.draft && '1' || '' }}
+          ESLINT_GATE: ${{ steps.eslint_gate.outcome }}
+          TSC_GATE: ${{ steps.tsc_gate.outcome }}
+        run: |
+          echo "ESLint gate: $ESLINT_GATE - TypeScript gate: $TSC_GATE"
+          if [ "$ESLINT_GATE" != failure ] && [ "$TSC_GATE" != failure ]; then exit 0; fi
+          if [ -n "$DRAFT" ]; then
+            echo "::warning title=Lint gate::A new-error gate step failed on this draft PR (not blocking)."
+            exit 0
+          fi
+          echo "::error title=New lint/type errors::This PR adds ESLint and/or TypeScript errors in the code it changes. The job summary lists every one (file:line, rule)."
+          exit 1
