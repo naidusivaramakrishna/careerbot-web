@@ -1,185 +1,76 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Link2, Sparkles, CheckCircle2, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, X } from "lucide-react";
+import styles from "./WizardUpload.module.css";
 
-const MODAL_TABS = [
-  { num: 1, label: "Upload Resume",    icon: Upload },
-  { num: 2, label: "Job Description",  icon: Link2 },
-  { num: 3, label: "Analyze",          icon: Sparkles },
-];
+const STEP_TITLES = ["", "resume-upload-title", "job-description-title", "review-confirm-title", "analyzing-match-title"];
+const WIZARD_STEP_COUNT = 4;
 
 interface WizardModalShellProps {
-  open: boolean;
-  wizardStep: 0 | 1 | 2 | 3;
-  onClose: () => void;
-  onBack: () => void;
-  onContinueClick: () => void;
-  continueDisabled: boolean;
-  onAnalyzeClick: () => void;
-  children: React.ReactNode;
+  readonly open: boolean;
+  readonly wizardStep: 0 | 1 | 2 | 3 | 4;
+  readonly onClose: () => void;
+  readonly onBack: () => void;
+  readonly onContinueClick: () => void;
+  readonly continueDisabled: boolean;
+  readonly onAnalyzeClick: () => void;
+  readonly children: React.ReactNode;
 }
 
-// Renders unconditionally so AnimatePresence stays mounted across the whole
-// open/close cycle — only then can it play the exit animation; if the parent
-// unmounted this component on close, the exit transition would never run.
 export default function WizardModalShell({
   open, wizardStep, onClose, onBack, onContinueClick, continueDisabled, onAnalyzeClick, children,
 }: WizardModalShellProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => previous?.focus();
+  }, [open]);
+  useEffect(() => { if (open) dialogRef.current?.focus(); }, [open, wizardStep]);
+
   return (
     <AnimatePresence>
       {open && (
-      <motion.div
-        key="wizard-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
-        style={{
-          position: "absolute", inset: 0,
-          background: "rgba(15,23,42,0.30)",
-          zIndex: 1000,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "16px",
-        }}
-        onClick={onClose}
-      >
-        <motion.div
-          key="wizard-card"
-          initial={{ opacity: 0, scale: 0.96, y: 16 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 16 }}
-          transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
-          style={{
-            background: "#F6F8FA",
-            borderRadius: 20,
-            boxShadow: "0 8px 16px rgba(0,0,0,0.10), 0 32px 80px rgba(15,23,42,0.28)",
-            width: "100%", maxWidth: 680,
-            maxHeight: "calc(100vh - 32px)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden",
-          }}
-          onClick={e => e.stopPropagation()}
-        >
-
-          {/* ── Modal header: pill tab breadcrumb ── */}
-          <div style={{
-            padding: "14px 20px",
-            background: "#fff",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.07)",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 28,
-            position: "relative", zIndex: 1,
-            flexShrink: 0,
-          }}>
-            {MODAL_TABS.map((tab, idx) => {
-              const Icon = tab.icon;
-              const isActive = wizardStep === tab.num;
-              const isDone = wizardStep > tab.num;
-              return (
-                <React.Fragment key={tab.num}>
-                  {idx > 0 && (
-                    <span style={{ color: "#CBCBCB", fontSize: 13, fontWeight: 500, flexShrink: 0 }}>›</span>
-                  )}
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: 7,
-                    padding: "6px 16px", borderRadius: 99,
-                    border: isActive ? "1.5px solid #2557a7" : "1.5px solid transparent",
-                    background: "#fff",
-                    boxShadow: isActive
-                      ? "0 2px 8px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08)"
-                      : "0 1px 4px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)",
-                    transition: "all 0.2s",
-                    flexShrink: 0,
-                  }}>
-                    {isDone
-                      ? <CheckCircle2 style={{ width: 14, height: 14, color: "#2557a7" }} />
-                      : <Icon style={{ width: 14, height: 14, color: isActive ? "#2557a7" : "#BBBBBB" }} />
-                    }
-                    <span style={{
-                      fontSize: 13, fontWeight: isActive ? 700 : 500,
-                      color: isActive ? "#2557a7" : isDone ? "#94A3B8" : "#BBBBBB",
-                      whiteSpace: "nowrap",
-                    }}>
-                      {tab.label}
-                    </span>
-                  </div>
-                </React.Fragment>
-              );
-            })}
-
-          </div>
-
-          {/* ── Modal step content — scrolls internally so the card never grows
-              taller than the viewport; header/footer stay put. ── */}
-          <div style={{ padding: "28px 28px 20px", flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {children}
-          </div>
-
-          {/* ── Modal footer: navigation ── */}
-          <div style={{
-            padding: "16px 24px",
-            display: "flex", alignItems: "center",
-            justifyContent: "space-between",
-            background: "#F6F8FA",
-            flexShrink: 0,
-          }}>
-            <button
-              onClick={onBack}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                height: 40, padding: "0 20px", borderRadius: 10,
-                fontSize: 13.5, fontWeight: 600, color: "#64748B",
-                background: "#fff", border: "1.5px solid #E2E8F0",
-                cursor: "pointer", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-              }}
-            >
-              ← Go Back
-            </button>
-
-            {wizardStep < 3 ? (
-              <button
-                onClick={onContinueClick}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  height: 40, padding: "0 24px", borderRadius: 10,
-                  fontSize: 13.5, fontWeight: 700,
-                  cursor: "pointer",
-                  background: continueDisabled
-                    ? "#F1F5F9"
-                    : "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                  color: continueDisabled ? "#94A3B8" : "#fff",
-                  border: "none",
-                  boxShadow: continueDisabled ? "none" : "0 4px 16px rgba(37,87,167,0.28)",
-                  transition: "all 0.2s",
-                }}
-              >
-                Continue →
+        <motion.div key="wizard-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className={`${styles.overlay} ${wizardStep === 1 ? styles.resumeOverlay : ""}`}
+          onClick={wizardStep === 4 ? undefined : onClose}>
+          <motion.div key="wizard-card" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={STEP_TITLES[wizardStep]} tabIndex={-1}
+            onKeyDown={event => {
+              if (event.key === "Escape") { event.stopPropagation(); if (wizardStep !== 4) onClose(); }
+              if (event.key !== "Tab") return;
+              const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not([type="hidden"]), textarea, select, a[href], [tabindex="0"]')).filter(element => element.getClientRects().length > 0);
+              const first = controls[0];
+              const last = controls[controls.length - 1];
+              if (!first) { event.preventDefault(); return; }
+              if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) { event.preventDefault(); last.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }}
+            initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 16 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className={`${styles.dialog} ${wizardStep === 1 ? styles.resumeDialog : ""} ${wizardStep === 4 ? styles.analysisDialog : ""}`}
+            onClick={event => event.stopPropagation()}>
+            <div className={styles.header}>
+              <div>
+                <p className={styles.progressLabel}>Step {wizardStep} of {WIZARD_STEP_COUNT}</p>
+                <div className={styles.progress} aria-hidden="true">{[1, 2, 3, 4].map(step => <span key={step} data-active={step <= wizardStep} />)}</div>
+              </div>
+              {wizardStep !== 4 && <button type="button" className={styles.close} onClick={onClose} aria-label={wizardStep === 1 ? "Close upload dialog" : wizardStep === 2 ? "Close job description dialog" : "Close review dialog"} title="Close"><X aria-hidden="true" /></button>}
+            </div>
+            <div className={styles.body} style={wizardStep === 4
+              ? { flex: "initial", minHeight: 0, maxHeight: "calc(100dvh - 10rem)", overflowY: "auto" }
+              : { flex: 1, minHeight: 0, overflowY: "auto" }}>{children}</div>
+            {wizardStep !== 4 && <div className={styles.footer}>
+              <button type="button" className={styles.cancel} onClick={wizardStep === 1 ? onClose : onBack}>{wizardStep === 1 ? "Cancel" : <><ArrowLeft aria-hidden="true" /> Back</>}</button>
+              <button type="button" className={styles.continue} disabled={continueDisabled} onClick={wizardStep === 3 ? onAnalyzeClick : onContinueClick}>
+                {wizardStep === 3 ? <>Analyze Match <ArrowRight aria-hidden="true" /></> : "Continue"}
               </button>
-            ) : (
-              <button
-                onClick={onAnalyzeClick}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  height: 40, padding: "0 24px", borderRadius: 10,
-                  fontSize: 13.5, fontWeight: 700,
-                  cursor: "pointer",
-                  background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                  color: "#fff",
-                  border: "none",
-                  boxShadow: "0 4px 16px rgba(37,87,167,0.28)",
-                  transition: "all 0.2s",
-                }}
-              >
-                <Sparkles style={{ width: 14, height: 14 }} />
-                Analyze Match Score
-                <ChevronRight style={{ width: 15, height: 15 }} />
-              </button>
-            )}
-          </div>
-
+            </div>}
+          </motion.div>
         </motion.div>
-      </motion.div>
       )}
     </AnimatePresence>
   );

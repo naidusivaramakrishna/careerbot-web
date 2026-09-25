@@ -81,13 +81,15 @@ export default function FAQSection() {
               const isOpen = openIndex === idx;
               return (
                 <div
-                  key={idx}
+                  key={faq.question}
                   className={`border-b border-slate-100 ${idx === 0 ? "border-t" : ""}`}
                 >
                   <button
+                    type="button"
                     onClick={() => setOpenIndex(isOpen ? null : idx)}
                     className="w-full flex items-center justify-between gap-6 py-5 text-left group"
                     aria-expanded={isOpen}
+                    aria-controls={`jobmatch-faq-answer-${idx}`}
                   >
                     <span
                       className={`text-[15px] font-semibold leading-snug transition-colors duration-200 ${
@@ -112,6 +114,8 @@ export default function FAQSection() {
                   </button>
 
                   <div
+                    id={`jobmatch-faq-answer-${idx}`}
+                    aria-hidden={!isOpen}
                     className={`overflow-hidden transition-all duration-300 ease-in-out ${
                       isOpen ? "max-h-60 opacity-100 pb-5" : "max-h-0 opacity-0"
                     }`}
