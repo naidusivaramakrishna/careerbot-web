@@ -26,7 +26,7 @@ same head edits that commit's comment in place instead of posting a duplicate.
 Never merges. Advisory. A human approves.
 """
 from __future__ import annotations
-import argparse, codecs, fnmatch, json, os, re, signal, subprocess, sys, tempfile, time, traceback, urllib.request
+import argparse, codecs, fnmatch, json, os, re, signal, subprocess, sys, tempfile, time, traceback, urllib.parse, urllib.request
 from pathlib import Path, PurePosixPath
 
 MAX_FILES, MAX_ADDED_LINES, MAX_COMMITS, MAX_AUTHORS = 120, 8000, 40, 4
@@ -55,6 +55,13 @@ GENERATED_FILE_PATTERNS = (
 # the waiver ships a PR with findings open or unreviewed; this label gets it
 # reviewed.
 SIZE_OVERRIDE_LABEL = "ai-review-large"
+# Stamped (hidden) into every report reviewed under SIZE_OVERRIDE_LABEL. Removing
+# the label starts a run at the SAME head, which takes the skip path; without
+# this stamp that path could not tell an oversized PR reviewed under the label
+# from any other review, and carried its verdict forward -- the override
+# outlived its label until the next push. With it, the skip path re-runs the
+# scope guard and refuses again when the label is gone.
+SIZE_OVERRIDE_MARKER = "<!-- ai-review-status:size-override -->"
 MARKER = "<!-- ai-review:{sha} -->"
 MARKER_RE = re.compile(r"<!-- ai-review:([0-9a-f]{7,40}) -->")
 HERE = Path(__file__).resolve().parent
@@ -268,6 +275,249 @@ def scope_guard(base, head):
                                             f"{base}..{head}"]).splitlines() if a})
     tripped, _within = tripped_limits(stats)
     return (not tripped), "; ".join(tripped), stats
+
+
+# ── T0 lockfile check ───────────────────────────────────────────────────────
+# The review tiers are told NOT to read lockfiles line by line (generated_note),
+# so a lockfile edited to fetch a package from somewhere else -- a `resolved`
+# URL pointed at an attacker's tarball, or a swapped `integrity` hash -- would
+# pass unread whenever a real package.json change sits beside it. This is a
+# cheap deterministic scan of the ADDED lines of each lockfile diff instead.
+#
+# Policy:
+#   * a package source (npm/yarn `resolved`, yarn-berry `resolution`, pnpm
+#     `tarball:` / `repo:`) that is not https on LOCKFILE_REGISTRY_HOSTS is a
+#     [P1] -- it BLOCKS like any P1 and is waivable with WAIVER_LABEL. A git or
+#     third-party tarball dependency may be deliberate; the waiver records who
+#     accepted it.
+#   * an `integrity`/`checksum` change on a package whose version did NOT change
+#     (same hash algorithm) is a [P2]: advisory. It is read from the unified
+#     diff, so it is a heuristic -- a strong tamper signal, not a proof.
+#   * a lockfile diff that cannot be read is a [P1] too (fail closed).
+#   * everything else (integrity changes that come with a version bump or a
+#     sha1 -> sha512 upgrade, local/workspace paths) is counted, informational.
+# The findings are written into the Claude section of the report as ordinary
+# [Pn] findings, so the existing counting, skip-path carry-forward and waiver
+# apply to them unchanged.
+LOCKFILE_NAMES = ("package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml")
+LOCKFILE_REGISTRY_HOSTS = ("registry.npmjs.org", "registry.yarnpkg.com")
+
+_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+# `"resolved": "x"` / `resolved "x"` / `resolution: "x"` / `tarball: x` / `repo: x`
+# (pnpm writes the last two inside `resolution: {...}`).
+_SOURCE_RE = re.compile(
+    r'(?:"resolved"\s*:\s*"(?P<npm>[^"]*)"'
+    r'|^\s*resolved\s+"?(?P<yarn>[^"\s]+)"?'
+    r'|^\s*resolution:\s*"(?P<berry>[^"]*)"'
+    r'|\b(?:tarball|repo):\s*"?(?P<pnpm>[^"\s,}]+))')
+_VERSION_RE = re.compile(r'^\s*"?version"?\s*[:\s]')
+_INTEGRITY_RE = re.compile(
+    r'(?:"integrity"\s*:\s*"|\bintegrity:?\s+|\bchecksum:\s*)"?(?P<v>[A-Za-z0-9+/=_.:-]+)')
+_GITISH_RE = re.compile(r"^(?:git\+|git:|git@|github:|gitlab:|bitbucket:|gist:)", re.I)
+
+
+def _lockfile_source_problem(value: str):
+    """Why a lockfile package source is not the public registry, or None.
+
+    None also for a local/workspace path (no scheme): that code is in the repo
+    and reviewed as such.
+    """
+    v = (value or "").strip()
+    if not v:
+        return None
+    if v.startswith("@"):
+        v = v[1:]                                   # scoped yarn-berry name
+    if "@" in v and "://" not in v.split("@", 1)[0] and not _GITISH_RE.match(v):
+        # yarn berry `name@<range>`: judge the part after the name.
+        name, rest = v.split("@", 1)
+        if not re.search(r"[:/]", name):
+            v = rest
+            if re.match(r"^(?:npm|workspace|patch|link|portal|file):", v):
+                return None
+    if _GITISH_RE.match(v):
+        return f"git dependency ({v.split('#', 1)[0][:120]})"
+    if "://" in v:
+        u = urllib.parse.urlsplit(v)
+        host = (u.hostname or "").lower()
+        if host not in LOCKFILE_REGISTRY_HOSTS:
+            return f"host {host or '(none)'} is not {' / '.join(LOCKFILE_REGISTRY_HOSTS)}"
+        if u.scheme.lower() != "https":
+            return f"{u.scheme}:// instead of https to {host}"
+        return None
+    return None
+
+
+def scan_lockfile_diff(diff: str) -> dict:
+    """Scan a unified diff restricted to lockfiles (see the policy above).
+
+    Returns {"sources": n added package sources checked,
+             "bad_sources": [(path, new_line, value, why)],
+             "integrity_same_version": [(path, new_line, block)],
+             "integrity_changed": n other integrity changes (informational),
+             "local": n added local/workspace sources}.
+    """
+    res = {"sources": 0, "bad_sources": [], "integrity_same_version": [],
+           "integrity_changed": 0, "local": 0}
+    path, new_ln, in_hunk = None, 0, False
+    blk = None
+
+    def close_block():
+        nonlocal blk
+        b, blk = blk, None
+        if not b or not b["rm"] or not b["add"]:
+            return
+        algo = lambda h: re.split(r"[-/]", h, 1)[0].lower()
+        same_algo = {algo(h) for h in b["rm"]} & {algo(h) for _l, h in b["add"]}
+        if not b["version"] and same_algo and set(b["rm"]) != {h for _l, h in b["add"]}:
+            res["integrity_same_version"].append((path, b["add"][0][0], b["key"]))
+        else:
+            res["integrity_changed"] += 1
+
+    def open_block(key=""):
+        nonlocal blk
+        close_block()
+        blk = {"key": key, "version": False, "rm": [], "add": []}
+
+    for raw in (diff or "").splitlines():
+        if raw.startswith("diff --git "):
+            close_block(); path, in_hunk = None, False
+            continue
+        if not in_hunk and raw.startswith("+++ "):
+            t = raw[4:].strip()
+            path = None if t == "/dev/null" else _numstat_path(t)
+            if path and path.startswith("b/"):
+                path = path[2:]
+            continue
+        m = _HUNK_RE.match(raw)
+        if m:
+            open_block(); new_ln, in_hunk = int(m.group(1)), True
+            continue
+        if not in_hunk or path is None or raw.startswith("\\"):
+            continue
+        tag, line = raw[:1], raw[1:]
+        if tag not in "+- ":
+            in_hunk = False
+            continue
+        st = line.strip()
+        is_json = PurePosixPath(path).name.endswith(".json")
+        if (is_json and (st.endswith("{") or st.startswith("}"))) or \
+                (not is_json and st.endswith(":") and ": " not in st and not st.startswith("#")):
+            open_block(st.rstrip("{: ").strip('"'))
+        elif blk is not None and tag in "+-":
+            if _VERSION_RE.match(line):
+                blk["version"] = True
+            im = _INTEGRITY_RE.search(line)
+            if im:
+                (blk["rm"].append(im.group("v")) if tag == "-"
+                 else blk["add"].append((new_ln, im.group("v"))))
+        if tag == "+":
+            sm = _SOURCE_RE.search(line)
+            if sm:
+                value = next(g for g in sm.groups() if g is not None)
+                why = _lockfile_source_problem(value)
+                if why:
+                    res["bad_sources"].append((path, new_ln, value, why))
+                elif "://" in value or _GITISH_RE.match(value) or "@npm:" in value:
+                    res["sources"] += 1
+                else:
+                    res["local"] += 1
+        if tag != "-":
+            new_ln += 1
+    close_block()
+    return res
+
+
+def lockfile_check(base, head, stats):
+    """Scan the lockfiles this diff changes. None when it changes none.
+
+    A diff that cannot be read returns {"error": ...}: the report says the
+    check did not run rather than implying it passed.
+    """
+    paths = [p for p, _n in (stats or {}).get("excluded") or []
+             if PurePosixPath(p).name in LOCKFILE_NAMES]
+    if not paths:
+        return None
+    res = {"files": paths}
+    try:
+        r = run(["git", "--literal-pathspecs", "diff", "--no-color", "--no-ext-diff",
+                 "--unified=3", f"{base}...{head}", "--", *paths], timeout=300)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        r, err = None, type(e).__name__
+    else:
+        err = None if r is not None and r.returncode == 0 else \
+            f"git diff exit {getattr(r, 'returncode', '?')}"
+    if err:
+        res["error"] = err
+        return res
+    res.update(scan_lockfile_diff(r.stdout or ""))
+    return res
+
+
+def _clean(v, n=160):
+    return str(v).replace("`", "'").replace("\n", " ")[:n]
+
+
+def lockfile_line(lf) -> str:
+    """The visible 'Lockfile check' line of the report, or ""."""
+    if not lf:
+        return ""
+    files = ", ".join(f"`{_clean(p)}`" for p in lf["files"])
+    if lf.get("error"):
+        return (f"**Lockfile check:** ❌ could not read the lockfile diff ({lf['error']}) "
+                f"for {files} -- the registry check did NOT run ([P1] below).")
+    bad, same = lf["bad_sources"], lf["integrity_same_version"]
+    head = "❌" if bad else ("⚠️" if same else "✅")
+    parts = [f"{lf['sources']} added package source(s) on "
+             f"{' / '.join(LOCKFILE_REGISTRY_HOSTS)}"]
+    if bad:
+        parts.append(f"**{len(bad)} from elsewhere ([P1] below)**")
+    if same:
+        parts.append(f"{len(same)} integrity change(s) on an unchanged version ([P2] below)")
+    if lf["integrity_changed"]:
+        parts.append(f"{lf['integrity_changed']} integrity change(s) with a version bump or "
+                     f"hash-algorithm upgrade (informational)")
+    if lf["local"]:
+        parts.append(f"{lf['local']} local/workspace path(s)")
+    return f"**Lockfile check:** {head} {files}: " + "; ".join(parts) + "."
+
+
+def lockfile_findings(lf) -> str:
+    """[Pn] findings for the Claude section of the report, or ""."""
+    if not lf:
+        return ""
+    out_ = []
+    if lf.get("error"):
+        # Fail closed, like every other "could not look" path in this gate: a
+        # lockfile changed and nothing checked where its packages come from.
+        out_.append(f"- [P1] Lockfile check did not run | `{_clean(lf['files'][0])}:1` | "
+                    f"could not read the lockfile diff ({_clean(lf['error'])}), so its "
+                    f"package sources are unchecked. Re-run `/ai-review`; "
+                    f"`{WAIVER_LABEL}` ships it with this open.")
+    by_file = {}
+    for p, ln, v, why in lf.get("bad_sources") or ():
+        by_file.setdefault(p, []).append((ln, v, why))
+    for p, rows in by_file.items():
+        ln0 = rows[0][0]
+        out_.append(f"- [P1] Lockfile installs packages from outside the npm registry | "
+                    f"`{_clean(p)}:{ln0}` | a supply-chain change the model tiers do not read. "
+                    f"Confirm each source is intended; `{WAIVER_LABEL}` ships it with this open.")
+        out_ += [f"  - line {ln}: `{_clean(v)}` -- {_clean(why)}" for ln, v, why in rows[:20]]
+        if len(rows) > 20:
+            out_.append(f"  - ...and {len(rows) - 20} more")
+    by_file = {}
+    for p, ln, key in lf.get("integrity_same_version") or ():
+        by_file.setdefault(p, []).append((ln, key))
+    for p, rows in by_file.items():
+        out_.append(f"- [P2] Lockfile integrity hash changed on an unchanged version | "
+                    f"`{_clean(p)}:{rows[0][0]}` | the same version of a package should "
+                    f"always hash the same; check the new tarball's origin.")
+        out_ += [f"  - line {ln}: `{_clean(k) or '(entry)'}`" for ln, k in rows[:20]]
+        if len(rows) > 20:
+            out_.append(f"  - ...and {len(rows) - 20} more")
+    if not out_:
+        return ""
+    return ("**Deterministic lockfile check** (run by the gate script, not a model):\n\n"
+            + "\n".join(out_) + "\n\n---\n\n")
 
 
 # ── T1 static (Claude + Codex) ──────────────────────────────────────────────
@@ -542,7 +792,7 @@ def override_banner(stats) -> str:
             + (f"Over the limit: {'; '.join(tripped)}. " if tripped else
                "The PR is currently within every limit. ")
             + "A maintainer judged it reviewable as one PR; the review below still covers "
-              "all of it.\n")
+              f"all of it. {SIZE_OVERRIDE_MARKER}\n")
 
 
 def build_report(head, stats, claude, codex, dyn, live):
@@ -568,11 +818,12 @@ def build_report(head, stats, claude, codex, dyn, live):
 {override_banner(stats)}
 **Scope:** {stats['files']} files, +{stats.get('added_total', stats['added'])}/-{stats.get('removed', 0)} lines, {stats['commits']} commits, {stats['authors']} author(s). Advisory — a human still approves/merges. Findings **confirmed by both** models are highest-confidence.
 **Size:** {size_line(stats)}.
+{lockfile_line(stats.get("lockfile"))}
 {del_block}
 
 <details open><summary><b>T1 · Claude static review</b></summary>
 
-{claude}
+{lockfile_findings(stats.get("lockfile"))}{claude}
 
 </details>
 
@@ -969,9 +1220,17 @@ def label_actor(repo, pr, label):
     trail the report repeats. Best effort: an unreadable log yields None and
     the report says the actor is unknown; it never blocks the review.
     """
-    r = run(["gh", "api", f"repos/{repo}/issues/{pr}/events", "--paginate",
-             "-q", f'.[] | select(.event == "labeled" and .label.name == "{label}") '
-                   f'| .actor.login'], timeout=60)
+    try:
+        r = run(["gh", "api", f"repos/{repo}/issues/{pr}/events", "--paginate",
+                 "-q", f'.[] | select(.event == "labeled" and .label.name == "{label}") '
+                       f'| .actor.login'], timeout=60)
+    except (subprocess.TimeoutExpired, OSError):
+        # run() does not catch these (other callers rely on a timeout raising:
+        # existing_review_body must fail closed). Here a slow --paginate over a
+        # long event log, or a missing `gh`, would abort review_one before any
+        # review is posted -- so it is "actor unknown", exactly like a non-zero
+        # exit.
+        return None
     if r is None or r.returncode != 0:
         return None
     logins = [l.strip() for l in (r.stdout or "").splitlines() if l.strip()]
@@ -1069,6 +1328,24 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
                   f"focused PRs; a maintainer can apply `{SIZE_OVERRIDE_LABEL}` to review it "
                   f"anyway, or `{WAIVER_LABEL}` to ship it unreviewed.")
             return 1
+        elif SIZE_OVERRIDE_MARKER in prior and not has_size_override(meta) \
+                and not (regate := scope_guard(base, head))[0]:
+            # The review at this head was done under SIZE_OVERRIDE_LABEL, and the
+            # label has since been removed (the `unlabeled` event started this
+            # run). The caps apply again: carrying the prior verdict forward kept
+            # an oversized PR green without its label. The review comment is left
+            # as it is -- re-applying the label restores it with no new review.
+            stats_now = regate[2]
+            if has_waiver(meta):
+                print(f"::warning::#{pr}: `{SIZE_OVERRIDE_LABEL}` was removed and "
+                      f"{head[:8]} is over the size limits ({limits_line(stats_now)}); "
+                      f"shipping anyway, waived via `{WAIVER_LABEL}`.")
+                return 0
+            print(f"::error::#{pr}: the review at {head[:8]} was done under "
+                  f"`{SIZE_OVERRIDE_LABEL}`, which has been removed, and without it this PR "
+                  f"is over the size limits ({limits_line(stats_now)}). Re-apply "
+                  f"`{SIZE_OVERRIDE_LABEL}`, split the PR, or apply `{WAIVER_LABEL}`.")
+            return 1
         elif TIER_FAILURE_MARKER in prior:
             # A failed tier left no verdict to carry forward either -- but unlike
             # the scope guard, re-reviewing CAN succeed once the tier is healthy.
@@ -1132,6 +1409,8 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
               f"anyway, or `{WAIVER_LABEL}` to ship it unreviewed.")
         return 1
 
+    # Deterministic, so it runs before (and independently of) the model tiers.
+    stats["lockfile"] = lockfile_check(base, head, stats)
     context = pr_context(repo, pr)
     # Generated files are NOT sent for line-by-line review (tokens spent on a
     # lockfile buy nothing) but they ARE named to both tiers, and listed in the

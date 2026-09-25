@@ -281,24 +281,35 @@ class TestReportScopeLine:
 class _Harness:
     """Drive review_one with git/gh/models stubbed out."""
 
-    def __init__(self, monkeypatch, rows, labels=(), prior=None, actor="alice"):
-        self.posted, self.reviewed = [], []
+    def __init__(self, monkeypatch, rows, labels=(), prior=None, actor="alice",
+                 lock_diff="", real_label_actor=False):
+        self.posted, self.reviewed, self.cmds = [], [], []
         monkeypatch.setattr(gate, "pr_meta", lambda *a, **k: {
             "baseRefOid": BASE, "headRefOid": HEAD,
             "labels": [{"name": n} for n in labels]})
-        monkeypatch.setattr(gate, "run", lambda *a, **k: None)
+
+        def fake_run(cmd, **kw):
+            self.cmds.append(cmd)
+            if cmd[:3] == ["git", "--literal-pathspecs", "diff"]:
+                return subprocess.CompletedProcess(cmd, 0, lock_diff, "")
+            if "events" in " ".join(cmd):
+                raise subprocess.TimeoutExpired(cmd, kw.get("timeout") or 60)
+            return None
+        monkeypatch.setattr(gate, "run", fake_run)
         monkeypatch.setattr(gate, "existing_review_sha",
                             lambda *a, **k: (1, HEAD) if prior else (None, None))
         monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: prior)
         _fake_git(monkeypatch, rows)
         monkeypatch.setattr(gate, "upsert_comment",
                             lambda repo, pr, body: self.posted.append(body))
-        monkeypatch.setattr(gate, "label_actor", lambda *a, **k: actor)
+        if not real_label_actor:
+            monkeypatch.setattr(gate, "label_actor", lambda *a, **k: actor)
         monkeypatch.setattr(gate, "pr_context", lambda *a, **k: "")
 
         def claude(base, head, context, generated=""):
             self.reviewed.append(generated)
-            return "No issues found.", True
+            return self.claude_text, True
+        self.claude_text = "No issues found."
         monkeypatch.setattr(gate, "claude_pass", claude)
         monkeypatch.setattr(gate, "codex_pass", lambda *a, **k: "ok")
         monkeypatch.setattr(gate, "run_dynamic", lambda *a, **k: None)
@@ -433,3 +444,283 @@ class TestLabelActor:
     def test_unreadable_log_is_none(self, monkeypatch, proc):
         monkeypatch.setattr(gate, "run", lambda *a, **k: proc)
         assert gate.label_actor("o/r", 5, "ai-review-large") is None
+
+    def test_a_timeout_reading_the_event_log_is_none(self, monkeypatch):
+        """run() lets subprocess.TimeoutExpired escape. A slow `--paginate`
+        over a long event log must degrade to "actor unknown", not abort."""
+        def slow(cmd, **kw):
+            raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+        monkeypatch.setattr(gate, "run", slow)
+        assert gate.label_actor("o/r", 5, "ai-review-large") is None
+
+    def test_an_os_error_is_none(self, monkeypatch):
+        def missing(cmd, **kw):
+            raise FileNotFoundError("gh")
+        monkeypatch.setattr(gate, "run", missing)
+        assert gate.label_actor("o/r", 5, "ai-review-large") is None
+
+    def test_the_review_still_runs_when_the_event_log_times_out(self, monkeypatch):
+        """End to end: the harness's run() raises TimeoutExpired for the events
+        call; the review must be posted, saying the actor is unknown."""
+        h = _Harness(monkeypatch, _rows_117(), labels=("ai-review-large",),
+                     real_label_actor=True)
+        assert h.run() == 0
+        assert len(h.reviewed) == 1, "the review ran"
+        assert any("events" in " ".join(c) for c in h.cmds), "the event log was asked"
+        assert "(added by unknown (label events unreadable))" in h.posted[0]
+
+
+# --------------------------------------------------------------------------
+# Removing ai-review-large re-applies the caps at the same head
+# --------------------------------------------------------------------------
+
+def _prior_review(override, findings="No issues found."):
+    """A posted review at HEAD, as build_report writes it."""
+    stats = {"files": 13, "added": 9204, "added_total": 9204, "removed": 0,
+             "commits": 1, "authors": 1, "excluded": [], "excluded_added": 0}
+    if override:
+        stats["size_override"] = {"actor": "alice"}
+    return gate.build_report(HEAD, stats, findings, "ok", None, None)
+
+
+class TestRemovingTheSizeOverrideLabel:
+    def test_the_override_report_carries_a_hidden_marker(self):
+        assert gate.SIZE_OVERRIDE_MARKER in _prior_review(override=True)
+        assert gate.SIZE_OVERRIDE_MARKER not in _prior_review(override=False)
+        assert gate.SIZE_OVERRIDE_MARKER.startswith("<!--")
+
+    def test_the_marker_is_not_a_finding(self):
+        assert gate.blocking_findings(_prior_review(override=True))[1] == \
+            {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
+
+    def test_label_added_reviews(self, monkeypatch):
+        h = _Harness(monkeypatch, _rows_117(), labels=("ai-review-large",))
+        assert h.run() == 0 and len(h.reviewed) == 1
+        assert gate.SIZE_OVERRIDE_MARKER in h.posted[0]
+
+    def test_label_removed_is_refused_again(self, monkeypatch, capsys):
+        """The `unlabeled` run hits the skip path (same head). Carrying the
+        prior verdict forward kept an oversized PR green without its label."""
+        h = _Harness(monkeypatch, _rows_117(), prior=_prior_review(override=True))
+        assert h.run() == 1
+        assert h.reviewed == [], "no new review is spent on it"
+        assert h.posted == [], "the existing review comment is left intact"
+        err = capsys.readouterr().out
+        assert "::error::" in err and "added lines 9,204 > 8,000" in err
+        assert gate.SIZE_OVERRIDE_LABEL in err
+
+    def test_label_removed_can_still_be_waived(self, monkeypatch, capsys):
+        h = _Harness(monkeypatch, _rows_117(), labels=(gate.WAIVER_LABEL,),
+                     prior=_prior_review(override=True))
+        assert h.run() == 0
+        assert "::warning::" in capsys.readouterr().out
+
+    def test_label_removed_but_now_within_caps_carries_the_verdict(self, monkeypatch):
+        h = _Harness(monkeypatch, [(10, 0, "src/a.ts")], prior=_prior_review(override=True))
+        assert h.run() == 0 and h.reviewed == [] and h.posted == []
+        prior = _prior_review(override=True, findings="### [P1] broken\n`src/a.ts:1` x")
+        h = _Harness(monkeypatch, [(10, 0, "src/a.ts")], prior=prior)
+        assert h.run() == 1, "findings from the prior review still block"
+
+    def test_label_still_present_carries_the_verdict(self, monkeypatch):
+        h = _Harness(monkeypatch, _rows_117(), labels=("ai-review-large",),
+                     prior=_prior_review(override=True))
+        assert h.run() == 0 and h.reviewed == [] and h.posted == []
+
+    def test_unrelated_rerun_without_label_history_is_unchanged(self, monkeypatch):
+        """A prior review never done under the override skips exactly as before
+        -- the scope guard is not re-run (no git calls at all)."""
+        h = _Harness(monkeypatch, [(10, 0, "src/a.ts")], prior=_prior_review(override=False))
+        monkeypatch.setattr(gate, "out", lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("the skip path must not re-run the scope guard")))
+        assert h.run() == 0 and h.reviewed == [] and h.posted == []
+
+
+# --------------------------------------------------------------------------
+# Lockfile check: deterministic registry / integrity scan of lockfile diffs
+# --------------------------------------------------------------------------
+
+def _npm_diff(body, path="package-lock.json", start=10):
+    return (f"diff --git a/{path} b/{path}\nindex 1..2 100644\n--- a/{path}\n+++ b/{path}\n"
+            f"@@ -{start},9 +{start},9 @@\n{body}")
+
+
+NPM_OK = _npm_diff(
+    '     "node_modules/left-pad": {\n'
+    '-      "version": "1.2.0",\n'
+    '-      "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.2.0.tgz",\n'
+    '-      "integrity": "sha512-AAAA",\n'
+    '+      "version": "1.3.0",\n'
+    '+      "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz",\n'
+    '+      "integrity": "sha512-BBBB",\n'
+    '       "license": "MIT"\n'
+    '     },\n')
+
+NPM_OTHER_HOST = _npm_diff(
+    '     "node_modules/left-pad": {\n'
+    '       "version": "1.3.0",\n'
+    '-      "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz",\n'
+    '+      "resolved": "https://evil.example.com/left-pad-1.3.0.tgz",\n'
+    '       "integrity": "sha512-BBBB",\n'
+    '       "license": "MIT"\n'
+    '     },\n')
+
+NPM_GIT = _npm_diff(
+    '+    "node_modules/foo": {\n'
+    '+      "version": "1.0.0",\n'
+    '+      "resolved": "git+https://github.com/someone/foo.git#abc123",\n'
+    '+      "license": "MIT"\n'
+    '+    },\n')
+
+NPM_INTEGRITY_ONLY = _npm_diff(
+    '     "node_modules/left-pad": {\n'
+    '       "version": "1.3.0",\n'
+    '       "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz",\n'
+    '-      "integrity": "sha512-BBBB",\n'
+    '+      "integrity": "sha512-EVIL",\n'
+    '       "license": "MIT"\n'
+    '     },\n', start=40)
+
+NPM_ALGO_UPGRADE = _npm_diff(
+    '     "node_modules/left-pad": {\n'
+    '       "version": "1.3.0",\n'
+    '       "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz",\n'
+    '-      "integrity": "sha1-OLD",\n'
+    '+      "integrity": "sha512-NEW",\n'
+    '       "license": "MIT"\n'
+    '     },\n')
+
+YARN_DIFF = (
+    "diff --git a/yarn.lock b/yarn.lock\n--- a/yarn.lock\n+++ b/yarn.lock\n"
+    "@@ -1,4 +1,8 @@\n"
+    " left-pad@^1.3.0:\n"
+    "   version \"1.3.0\"\n"
+    "+  resolved \"https://registry.yarnpkg.com/left-pad/-/left-pad-1.3.0.tgz#abc\"\n"
+    "+\n"
+    "+foo@^1.0.0:\n"
+    "+  version \"1.0.0\"\n"
+    "+  resolved \"http://registry.yarnpkg.com/foo/-/foo-1.0.0.tgz#def\"\n"
+    "+  integrity sha512-XYZ\n")
+
+PNPM_DIFF = (
+    "diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml\n--- a/pnpm-lock.yaml\n+++ b/pnpm-lock.yaml\n"
+    "@@ -1,2 +1,4 @@\n"
+    " packages:\n"
+    "+  foo@1.0.0:\n"
+    "+    resolution: {tarball: https://files.example.org/foo-1.0.0.tgz}\n"
+    "+  bar@1.0.0:\n"
+    "+    resolution: {integrity: sha512-OK}\n")
+
+
+class TestLockfileScan:
+    def test_npm_registry_is_ok(self):
+        r = gate.scan_lockfile_diff(NPM_OK)
+        assert r["sources"] == 1 and r["bad_sources"] == [] and r["integrity_same_version"] == []
+        assert r["integrity_changed"] == 1, "counted, informational (the version changed)"
+
+    def test_other_host_is_flagged_with_its_new_file_line(self):
+        r = gate.scan_lockfile_diff(NPM_OTHER_HOST)
+        ((path, line, value, why),) = r["bad_sources"]
+        assert path == "package-lock.json" and line == 12
+        assert "evil.example.com" in value and "evil.example.com" in why
+
+    def test_git_dependency_is_flagged(self):
+        ((_p, line, value, why),) = gate.scan_lockfile_diff(NPM_GIT)["bad_sources"]
+        assert line == 12 and "github.com" in why
+
+    def test_integrity_change_on_an_unchanged_version_is_flagged(self):
+        r = gate.scan_lockfile_diff(NPM_INTEGRITY_ONLY)
+        ((path, line, desc),) = r["integrity_same_version"]
+        assert path == "package-lock.json" and line == 43 and "node_modules/left-pad" in desc
+        assert r["bad_sources"] == []
+
+    def test_an_algorithm_upgrade_is_informational(self):
+        r = gate.scan_lockfile_diff(NPM_ALGO_UPGRADE)
+        assert r["integrity_same_version"] == [] and r["integrity_changed"] == 1
+
+    def test_yarn(self):
+        r = gate.scan_lockfile_diff(YARN_DIFF)
+        assert r["sources"] == 1, "the https registry one; the http one is in bad_sources"
+        ((path, line, value, why),) = r["bad_sources"]
+        assert path == "yarn.lock" and line == 7 and "http://" in value and "https" in why
+
+    def test_pnpm_tarball(self):
+        r = gate.scan_lockfile_diff(PNPM_DIFF)
+        ((path, line, _v, why),) = r["bad_sources"]
+        assert path == "pnpm-lock.yaml" and line == 3 and "files.example.org" in why
+
+    def test_removed_lines_are_not_scanned(self):
+        diff = _npm_diff('-      "resolved": "https://evil.example.com/x.tgz",\n')
+        assert gate.scan_lockfile_diff(diff)["bad_sources"] == []
+
+    def test_lookalike_host_is_flagged(self):
+        diff = _npm_diff('+      "resolved": "https://registry.npmjs.org.evil.io/x.tgz",\n')
+        assert len(gate.scan_lockfile_diff(diff)["bad_sources"]) == 1
+
+
+class TestLockfileCheckInTheReview:
+    ROWS = [(3, 3, "package-lock.json"), (1, 1, "package.json")]
+
+    def test_only_lockfiles_are_diffed(self, monkeypatch):
+        h = _Harness(monkeypatch, self.ROWS + [(9, 0, "dist/app.min.js")], lock_diff=NPM_OK)
+        assert h.run() == 0
+        (cmd,) = [c for c in h.cmds if c[:3] == ["git", "--literal-pathspecs", "diff"]]
+        assert cmd[-2:] == ["--", "package-lock.json"]
+
+    def test_registry_only_passes_and_says_so(self, monkeypatch):
+        h = _Harness(monkeypatch, self.ROWS, lock_diff=NPM_OK)
+        assert h.run() == 0
+        assert "**Lockfile check:** ✅" in h.posted[0]
+
+    def test_non_registry_host_blocks_like_a_p1(self, monkeypatch, capsys):
+        h = _Harness(monkeypatch, self.ROWS, lock_diff=NPM_OTHER_HOST)
+        assert h.run() == 1
+        body = h.posted[0]
+        assert "**Lockfile check:** ❌" in body
+        n, counts, _ = gate.blocking_findings(body)
+        assert n == 1 and counts["P1"] == 1
+        assert "package-lock.json:12" in body and "evil.example.com" in body
+        assert "::error::" in capsys.readouterr().out
+
+    def test_non_registry_host_is_waivable(self, monkeypatch):
+        h = _Harness(monkeypatch, self.ROWS, labels=(gate.WAIVER_LABEL,),
+                     lock_diff=NPM_OTHER_HOST)
+        assert h.run() == 0
+
+    def test_the_block_survives_a_rerun_at_the_same_head(self, monkeypatch):
+        h = _Harness(monkeypatch, self.ROWS, lock_diff=NPM_OTHER_HOST)
+        h.run()
+        h2 = _Harness(monkeypatch, self.ROWS, prior=h.posted[0])
+        assert h2.run() == 1 and h2.reviewed == []
+
+    def test_integrity_on_unchanged_version_is_an_advisory_p2(self, monkeypatch):
+        h = _Harness(monkeypatch, self.ROWS, lock_diff=NPM_INTEGRITY_ONLY)
+        assert h.run() == 0
+        n, counts, _ = gate.blocking_findings(h.posted[0])
+        assert n == 0 and counts["P2"] == 1
+        assert "package-lock.json:43" in h.posted[0]
+
+    def test_no_lockfile_no_line_and_no_git_call(self, monkeypatch):
+        h = _Harness(monkeypatch, [(10, 0, "src/a.ts")])
+        assert h.run() == 0
+        assert "Lockfile check" not in h.posted[0]
+        assert not [c for c in h.cmds if c[:3] == ["git", "--literal-pathspecs", "diff"]]
+
+    @pytest.mark.parametrize("fail", [
+        lambda cmd, **kw: None,
+        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 128, "", "fatal"),
+        lambda cmd, **kw: (_ for _ in ()).throw(subprocess.TimeoutExpired(cmd, 300))
+        if cmd[:3] == ["git", "--literal-pathspecs", "diff"] else None,
+    ])
+    def test_unreadable_diff_fails_closed(self, monkeypatch, fail):
+        """A lockfile changed and nothing checked it: blocking, not a green
+        with a warning (codex cross-check). Waivable like any P1."""
+        h = _Harness(monkeypatch, self.ROWS)
+        monkeypatch.setattr(gate, "run", fail)
+        assert h.run() == 1
+        body = h.posted[0]
+        assert "**Lockfile check:** ❌ could not read the lockfile diff" in body
+        assert gate.blocking_findings(body)[1]["P1"] == 1
+        h = _Harness(monkeypatch, self.ROWS, labels=(gate.WAIVER_LABEL,))
+        monkeypatch.setattr(gate, "run", fail)
+        assert h.run() == 0
