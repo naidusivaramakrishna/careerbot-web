@@ -83,6 +83,7 @@ vi.mock('axios', async (importOriginal) => {
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import AuthModal from '@/components/SignUpModal';
+import { VerificationRecovery } from '@/components/VerificationRecovery';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,19 @@ const renderSignup = (props = {}) =>
 
 const renderSignin = (props = {}) =>
   render(<AuthModal open={true} onClose={vi.fn()} initialFormType="signin" {...props} />);
+
+// Everything written to web storage during the test. vitest.setup.ts replaces
+// localStorage with a plain object of vi.fn methods (values live in a closure),
+// so spreading it (`{ ...localStorage }`) yields only functions -> "{}".
+// Read the setItem calls instead; sessionStorage is jsdom's real Storage.
+const storageWrites = (): string => {
+  const local = JSON.stringify(vi.mocked(localStorage.setItem).mock.calls);
+  const session = Array.from({ length: sessionStorage.length }, (_, i) => {
+    const key = sessionStorage.key(i) as string;
+    return [key, sessionStorage.getItem(key)];
+  });
+  return local + JSON.stringify(session);
+};
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -212,12 +226,109 @@ describe('AuthModal — sign up happy path', () => {
     });
   });
 
+  it('stores the pending-verification record (without the password) after signup', async () => {
+    localStorage.clear();
+    mockSignUp.mockResolvedValue({ id: 'user-123' });
+    renderSignup();
+
+    fireEvent.change(screen.getByTestId('signup-username-input'), { target: { value: 'jdoe' } });
+    fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: 'j@example.com' } });
+    fireEvent.change(screen.getByTestId('signup-password-input'), { target: { value: 'Secret1!' } });
+    fireEvent.click(screen.getByTestId('auth-submit-btn'));
+
+    await screen.findByTestId('otp-input-0');
+    const record = JSON.parse(localStorage.getItem('pendingEmailVerification') as string);
+    expect(record).toEqual({
+      userId: 'user-123',
+      email: 'j@example.com',
+      pendingVerification: true,
+      timestamp: expect.any(Number),
+    });
+    expect(record).not.toHaveProperty('password');
+    expect(storageWrites()).not.toContain('Secret1!');
+    // Signup no longer signs the user in; the OTP step comes first.
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  it('reports a failure and stores nothing when the signup response has no id', async () => {
+    localStorage.clear();
+    mockSignUp.mockResolvedValue({});
+    renderSignup();
+
+    fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: 'j@example.com' } });
+    fireEvent.change(screen.getByTestId('signup-password-input'), { target: { value: 'Secret1!' } });
+    fireEvent.click(screen.getByTestId('auth-submit-btn'));
+
+    await waitFor(() =>
+      expect(mockToast.error).toHaveBeenCalledWith('Account creation failed. Please try again.')
+    );
+    expect(localStorage.getItem('pendingEmailVerification')).toBeNull();
+    expect(screen.queryByTestId('otp-input-0')).not.toBeInTheDocument();
+  });
+
   it('shows "Creating account..." while the request is in flight', async () => {
     mockSignUp.mockReturnValue(new Promise(() => {}));
     renderSignup();
 
     fireEvent.click(screen.getByTestId('auth-submit-btn'));
     expect(await screen.findByText('Creating account...')).toBeInTheDocument();
+  });
+});
+
+// ClientLayout mounts VerificationRecovery once and keeps it mounted across
+// client-side navigation, next to whatever page opened the modal.
+describe('AuthModal — recovery banner after closing the modal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  const Layout = () => {
+    const [open, setOpen] = React.useState(true);
+    return (
+      <>
+        <VerificationRecovery />
+        <AuthModal open={open} onClose={() => setOpen(false)} initialFormType="signup" />
+      </>
+    );
+  };
+
+  it('shows the banner, without a remount, once the user closes the modal mid-verification', async () => {
+    mockSignUp.mockResolvedValue({ id: 'user-123' });
+    render(<Layout />);
+    expect(screen.queryByText('Resume Email Verification')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('signup-username-input'), { target: { value: 'jdoe' } });
+    fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: 'j@example.com' } });
+    fireEvent.change(screen.getByTestId('signup-password-input'), { target: { value: 'Secret1!' } });
+    fireEvent.click(screen.getByTestId('auth-submit-btn'));
+    await screen.findByTestId('otp-input-0');
+
+    fireEvent.click(screen.getByTestId('auth-modal-close-btn'));
+    expect(screen.queryByTestId('auth-modal-close-btn')).not.toBeInTheDocument();
+
+    expect(await screen.findByText('Resume Email Verification')).toBeInTheDocument();
+    expect(screen.getByText('j@example.com')).toBeInTheDocument();
+  });
+
+  it('shows the banner again for a new signup after an earlier one was dismissed', async () => {
+    localStorage.setItem(
+      'pendingEmailVerification',
+      JSON.stringify({ userId: 'old', email: 'old@example.com', pendingVerification: true, timestamp: Date.now() }),
+    );
+    mockSignUp.mockResolvedValue({ id: 'user-123' });
+    render(<Layout />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText('Resume Email Verification')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('signup-email-input'), { target: { value: 'j@example.com' } });
+    fireEvent.change(screen.getByTestId('signup-password-input'), { target: { value: 'Secret1!' } });
+    fireEvent.click(screen.getByTestId('auth-submit-btn'));
+    await screen.findByTestId('otp-input-0');
+    fireEvent.click(screen.getByTestId('auth-modal-close-btn'));
+
+    expect(await screen.findByText('Resume Email Verification')).toBeInTheDocument();
+    expect(screen.getByText('j@example.com')).toBeInTheDocument();
   });
 });
 
@@ -412,8 +523,7 @@ describe('AuthModal — sign in with an unverified email', () => {
     signInAs('late@example.com', 'Secret123!');
     await screen.findByTestId('otp-input-0');
 
-    const dump = JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage });
-    expect(dump).not.toContain('Secret123!');
+    expect(storageWrites()).not.toContain('Secret123!');
   });
 
   it('keeps the plain error for a 403 that is not EMAIL_NOT_VERIFIED', async () => {

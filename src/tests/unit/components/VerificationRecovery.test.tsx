@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { VerificationRecovery } from '@/components/VerificationRecovery';
 
 const PENDING_KEY = 'pendingEmailVerification';
@@ -37,5 +37,23 @@ describe('VerificationRecovery', () => {
     const { container } = render(<VerificationRecovery />);
     expect(container).toBeEmptyDOMElement();
     expect(localStorage.getItem(PENDING_KEY)).toBeNull();
+  });
+
+  it('appears when another tab writes a record, and hides when it is removed there', async () => {
+    render(<VerificationRecovery />);
+    expect(screen.queryByText('Resume Email Verification')).not.toBeInTheDocument();
+
+    const value = JSON.stringify({ userId: 'u1', email: 'a@b.co', pendingVerification: true, timestamp: Date.now() });
+    localStorage.setItem(PENDING_KEY, value);
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: PENDING_KEY, newValue: value }));
+    });
+    expect(await screen.findByText('Resume Email Verification')).toBeInTheDocument();
+
+    localStorage.removeItem(PENDING_KEY);
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: PENDING_KEY, newValue: null }));
+    });
+    expect(screen.queryByText('Resume Email Verification')).not.toBeInTheDocument();
   });
 });

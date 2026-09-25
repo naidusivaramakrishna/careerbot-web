@@ -4,7 +4,11 @@ import React, { useEffect, useState } from "react";
 import { X, Mail } from "lucide-react";
 import OTPVerificationInput from "./OTPVerificationInput";
 import { toast } from "sonner";
-import { PENDING_VERIFICATION_CLEARED_EVENT } from "@/lib/pendingVerification";
+import {
+  PENDING_VERIFICATION_CLEARED_EVENT,
+  PENDING_VERIFICATION_STORAGE_KEY,
+  PENDING_VERIFICATION_UPDATED_EVENT,
+} from "@/lib/pendingVerification";
 
 interface PendingVerification {
   userId: string;
@@ -13,29 +17,33 @@ interface PendingVerification {
   timestamp: number;
 }
 
+/** The stored record if it is under 24 hours old; clears an expired or corrupt one. */
+const readPendingRecord = (): PendingVerification | null => {
+  const stored = localStorage.getItem(PENDING_VERIFICATION_STORAGE_KEY);
+  if (!stored) return null;
+  try {
+    const data: PendingVerification = JSON.parse(stored);
+    // Check if verification is not older than 24 hours
+    const ageMs = Date.now() - data.timestamp;
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (ageMs < oneDayMs) return data;
+    // Clear expired verification
+    localStorage.removeItem(PENDING_VERIFICATION_STORAGE_KEY);
+  } catch {
+    localStorage.removeItem(PENDING_VERIFICATION_STORAGE_KEY);
+  }
+  return null;
+};
+
 export const VerificationRecovery: React.FC = () => {
   const [pending, setPending] = useState<PendingVerification | null>(null);
   const [showOTP, setShowOTP] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("pendingEmailVerification");
-    if (stored && !dismissed) {
-      try {
-        const data: PendingVerification = JSON.parse(stored);
-        // Check if verification is not older than 24 hours
-        const ageMs = Date.now() - data.timestamp;
-        const oneDayMs = 24 * 60 * 60 * 1000;
-        if (ageMs < oneDayMs) {
-          setPending(data);
-        } else {
-          // Clear expired verification
-          localStorage.removeItem("pendingEmailVerification");
-        }
-      } catch {
-        localStorage.removeItem("pendingEmailVerification");
-      }
-    }
+    if (dismissed) return;
+    const data = readPendingRecord();
+    if (data) setPending(data);
   }, [dismissed]);
 
   // ClientLayout keeps this banner mounted across client-side navigation, so
@@ -47,6 +55,34 @@ export const VerificationRecovery: React.FC = () => {
     };
     window.addEventListener(PENDING_VERIFICATION_CLEARED_EVENT, onCleared);
     return () => window.removeEventListener(PENDING_VERIFICATION_CLEARED_EVENT, onCleared);
+  }, []);
+
+  // ...and show it when a signup writes a new record (SignUpModal), in this
+  // tab (custom event) or another one (storage event). A new signup is new
+  // information, so it un-dismisses the banner; the effect above re-reads
+  // storage when `dismissed` flips; reading here covers the case where it was
+  // not dismissed.
+  useEffect(() => {
+    const onUpdated = () => {
+      setDismissed(false);
+      const data = readPendingRecord();
+      if (data) setPending(data);
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== PENDING_VERIFICATION_STORAGE_KEY) return;
+      if (e.newValue === null) {
+        setPending(null);
+        setShowOTP(false);
+      } else {
+        onUpdated();
+      }
+    };
+    window.addEventListener(PENDING_VERIFICATION_UPDATED_EVENT, onUpdated);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(PENDING_VERIFICATION_UPDATED_EVENT, onUpdated);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   if (!pending || dismissed) {

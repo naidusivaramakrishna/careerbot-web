@@ -10,6 +10,7 @@ import SocialLoginButtons from "./SocialLoginButtons"
 import { mapAuthError, AUTH_ERROR_MESSAGES } from "@/lib/authMessages"
 import { sanitizeAuthRedirect, DEFAULT_AUTH_REDIRECT } from "@/lib/authRedirect"
 import OTPVerificationInput from "./OTPVerificationInput"
+import { savePendingVerification } from "@/lib/pendingVerification"
 
 interface Props {
     open: boolean
@@ -92,13 +93,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
             if (response.id) {
                 toast.success("Account created! Verification email sent.")
-                // Store pending verification in localStorage for recovery if user closes modal
-                localStorage.setItem('pendingEmailVerification', JSON.stringify({
-                    userId: response.id,
-                    email: signUpForm.email,
-                    pendingVerification: true,
-                    timestamp: Date.now(),
-                }))
+                // Store pending verification for the recovery banner if the user closes the modal
+                savePendingVerification({ userId: response.id, email: signUpForm.email })
                 setVerificationData({
                     userId: response.id,
                     email: signUpForm.email,
