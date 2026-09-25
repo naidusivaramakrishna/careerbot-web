@@ -3,7 +3,7 @@ import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
-import { filterSkillsByDomain } from "./skillsFilterByDomain";
+import { filterSkillsByDomain, hasPrintableSkills } from "./skillsFilterByDomain";
 
 interface Props {
   data: ResumeData;
@@ -222,10 +222,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         ) : null;
 
       case "Skills":
-        return (filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).some(key => {
-          const skillArray = filteredCategorizedSkills![key as keyof typeof filteredCategorizedSkills];
-          return Array.isArray(skillArray) && skillArray.length > 0;
-        })) || (skills && skills.length > 0) ? (
+        return hasPrintableSkills(filteredCategorizedSkills, skills) ? (
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />

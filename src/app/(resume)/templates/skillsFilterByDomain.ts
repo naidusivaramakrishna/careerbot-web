@@ -59,3 +59,29 @@ export function filterSkillsByDomain(
   });
   return filtered as ResumeData['categorizedSkills'];
 }
+
+/**
+ * Whether the Skills section has anything to print. The templates render the
+ * filtered categories whenever `filteredCategorizedSkills` is present, and the
+ * flat `skills` list only for legacy resumes without categorized skills, so the
+ * heading must follow the same data (a flat list full of skills the domain
+ * filters out would otherwise print a SKILLS heading with no body).
+ */
+export function hasPrintableSkills(
+  filteredCategorizedSkills: ResumeData['categorizedSkills'] | undefined,
+  skills: string[] | undefined,
+): boolean {
+  if (filteredCategorizedSkills && Object.keys(filteredCategorizedSkills).length > 0) {
+    const predefined = Object.entries(filteredCategorizedSkills).some(
+      ([key, value]) =>
+        !(META_KEYS as readonly string[]).includes(key) &&
+        Array.isArray(value) &&
+        value.some((s) => typeof s === 'string'),
+    );
+    const custom = (filteredCategorizedSkills.custom_categories || []).some(
+      (c) => !!c?.name && Array.isArray(c.skills) && c.skills.length > 0,
+    );
+    return predefined || custom;
+  }
+  return !!skills && skills.length > 0;
+}
