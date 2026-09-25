@@ -268,7 +268,8 @@ export default function DomainTemplatesModal({
                           <TemplatePreviewRenderer
                           previewHtml={((template as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
                           previewCss={((template as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
-                          fallbackImage={domainFallback}
+                          fallbackImage={resolveTemplateImageUrl(template.preview_url) || domainFallback}
+                          errorFallbackImage={domainFallback}
                           title={careerLevel}
                           height="200px"
                           width="100%"
