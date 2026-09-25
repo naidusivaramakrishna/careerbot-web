@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
@@ -189,6 +190,7 @@ const BarAdmissionsAndLicenses: React.FC = () => {
     try {
       setDeletingIndex(index);
 
+      await waitForSectionAutosaveBeforeDelete("Bar Admissions and Licenses", itemId);
       if (isEnhancedResume) {
         await deleteSectionItemFromEnhancedResume(resumeId, "bar_admissions_and_licenses", itemId);
       } else {

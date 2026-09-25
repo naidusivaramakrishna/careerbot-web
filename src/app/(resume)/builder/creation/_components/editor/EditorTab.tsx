@@ -65,6 +65,7 @@ import { sectionIcons } from "../../_utils/sectionsConfig";
 import { buildBuilderSectionPayload, SECTION_STATE_KEYS } from "../../_utils/sectionPayloadKeys";
 import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
 import { useResume, CustomSection } from "../../_context/ResumeContext";
+import { useModalMountVersion } from "../../_hooks/useModalMountVersion";
 import { updateResume, getAllResumes, autoSaveResume } from "@/api/resumeApi";
 import { autoSaveEnhancedResume, updateEnhancedResume } from "@/api/enhancerApi";
 import { SUGGESTION_SECTION_MAP, getSectionValue, isStructuralSuggestionSatisfied, toSuggestionSectionKey } from "../../_utils/suggestionSection";
@@ -254,22 +255,9 @@ const EditorTab: React.FC<Props> = ({
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
 
-  // The section-editor modal's Component is keyed on this value (see the
-  // `key={`${openModalSection}-${modalMountVersion}`}` below) so it remounts
-  // with fresh data every time a *different* section is opened. It must NOT
-  // track the live `enhancedDataVersion`, though: that counter also bumps
-  // whenever this same section's own debounced auto-save round-trips
-  // (autoSaveEnhancedResume -> "enhanced-resume-score-sync" ->
-  // syncEnhancedResumeData), which happens seconds after any edit. Keying on
-  // the live version made the modal remount mid-edit -- e.g. clicking the
-  // pencil icon on a saved Projects entry opens the edit form, the resulting
-  // resumeData change arms the autosave debounce, and when it fires the
-  // remount reset the section's local "which entry is being edited" state,
-  // snapping the just-opened form back to the read-only list. Snapshotting
-  // the version only when the modal is opened (or switched to a different
-  // section) keeps the "fresh data on open" behavior without remounting
-  // while the same section stays open.
-  const modalMountVersionRef = useRef(enhancedDataVersion);
+  // Keys the open section editor below; stable while the same section stays
+  // open, fresh on every open. See useModalMountVersion.
+  const modalMountVersion = useModalMountVersion(openModalSection, enhancedDataVersion);
 
   // Tracks the last enhancedDataVersion the autosave-triggering effect below
   // has already accounted for, so a resumeData change caused by a server
@@ -437,16 +425,6 @@ const EditorTab: React.FC<Props> = ({
   const closeModal = () => {
     setOpenModalSection(null);
   };
-
-  // Snapshot the version only on the transition into a (possibly different)
-  // open section, not on every bump while it stays open — see
-  // modalMountVersionRef's declaration for why.
-  useEffect(() => {
-    if (openModalSection) {
-      modalMountVersionRef.current = enhancedDataVersion;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openModalSection]);
 
 
   const handleToggleSection = (sectionName: string) => {
@@ -1856,7 +1834,7 @@ const EditorTab: React.FC<Props> = ({
                 if (!Component) return null;
                 return (
                   <Component
-                    key={`${openModalSection}-${modalMountVersionRef.current}`}
+                    key={`${openModalSection}-${modalMountVersion}`}
                     formData={formData}
                     errors={errors}
                     onChange={handleChange}

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
@@ -189,6 +190,8 @@ const Awards: React.FC = () => {
     try {
       setDeletingIndex(index);
       // // console.log("🗑️ Deleting award item:", { resumeId, itemId, index });
+
+      await waitForSectionAutosaveBeforeDelete("Awards", itemId);
 
       // ✅ Call the API to delete the item from backend
       if (isEnhancedResume) {

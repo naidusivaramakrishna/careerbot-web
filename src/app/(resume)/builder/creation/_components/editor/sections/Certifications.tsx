@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { suppressNextSectionAutosave, waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 import MonthYearPicker from "../MonthYearPicker";
@@ -212,13 +213,7 @@ const Certifications: React.FC = () => {
       // snapshot and can resurrect this exact item there. awaitInFlight is
       // populated by EditorTab's listener when that's the case; awaiting it
       // here guarantees DELETE is always the request that lands last.
-      const awaitInFlight: { promise?: Promise<void> } = {};
-      window.dispatchEvent(new CustomEvent("resume-item-deleted", {
-        detail: { section: "Certifications", itemId, awaitInFlight },
-      }));
-      if (awaitInFlight.promise) {
-        await awaitInFlight.promise;
-      }
+      await waitForSectionAutosaveBeforeDelete("Certifications", itemId);
       // // console.log("🗑️ Deleting certification item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
@@ -233,9 +228,7 @@ const Certifications: React.FC = () => {
       // The delete endpoint is authoritative. Cancel any queued full-section
       // autosave before changing local state; otherwise its pre-delete snapshot
       // can finish after DELETE and restore this exact certification.
-      window.dispatchEvent(new CustomEvent("resume-item-deleted", {
-        detail: { section: "Certifications", itemId, suppressNext: true },
-      }));
+      suppressNextSectionAutosave("Certifications", itemId);
       setResumeData(prev => ({
         ...prev,
         certifications: (prev.certifications || []).filter(cert => cert.id !== itemId),

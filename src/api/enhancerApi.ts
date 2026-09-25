@@ -280,11 +280,16 @@ export async function getEnhancedResume(enhanced_id: string): Promise<EnhancedRe
 function publishEnhancedResumeSync(
   enhancedId: string,
   payload: unknown,
-  options?: { origin?: "autosave" },
+  options?: { origin?: "autosave"; savedSections?: string[] },
 ): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("enhanced-resume-score-sync", {
-    detail: { enhancedId, payload, origin: options?.origin },
+    detail: {
+      enhancedId,
+      payload,
+      origin: options?.origin,
+      ...(options?.savedSections ? { savedSections: options.savedSections } : {}),
+    },
   }));
 }
 
@@ -305,7 +310,12 @@ export async function updateEnhancedResume(
   request: UpdateEnhancedResumeRequest
 ): Promise<EnhanceResumeResponse> {
   const response = await safePatch<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
-  publishEnhancedResumeSync(enhanced_id, response);
+  // The request sent each of these sections in full, so the response is
+  // authoritative for them: ResumeProvider must not re-append its local
+  // id-less copies of their items (they are in the response, now with ids).
+  publishEnhancedResumeSync(enhanced_id, response, {
+    savedSections: Object.keys(request?.enhanced_sections ?? {}),
+  });
   return response;
 }
 

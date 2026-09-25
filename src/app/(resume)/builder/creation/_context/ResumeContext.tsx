@@ -2263,7 +2263,17 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   };
 
   /** Refresh the builder from the canonical resume returned by the backend. */
-  const syncEnhancedResumeData = React.useCallback((payload: unknown): boolean => {
+  const syncEnhancedResumeData = React.useCallback((
+    payload: unknown,
+    options?: {
+      // Sections the originating request sent in full (an explicit Save --
+      // see updateEnhancedResume). The response already holds their new
+      // items, now carrying server ids, so re-appending the local id-less
+      // copies (mergeSectionPreservingLocalIdLess) would show each new entry
+      // twice and the next Save would persist the copy as a duplicate.
+      savedSections?: readonly string[];
+    },
+  ): boolean => {
     if (!payload || typeof payload !== "object") return false;
     const response = payload as Record<string, unknown>;
     const state = response.enhancer_state && typeof response.enhancer_state === "object"
@@ -2342,8 +2352,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       const previousRecord = previous as unknown as Record<string, unknown>;
       const mappedRecord = mapped as unknown as Record<string, unknown>;
       const mergedArraySections: Record<string, unknown> = {};
+      const savedSections = new Set(options?.savedSections ?? []);
       for (const key of ID_KEYED_ARRAY_SECTIONS) {
-        if (key in mapped) {
+        if (key in mapped && !savedSections.has(key)) {
           mergedArraySections[key] = mergeSectionPreservingLocalIdLess(
             mappedRecord[key],
             previousRecord[key],
@@ -2499,7 +2510,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   useEffect(() => {
     const onEnhancedResumeSync = (event: Event) => {
       const refreshVersion = ++latestEnhancedRefreshRef.current;
-      const detail = (event as CustomEvent<{ enhancedId?: string; payload?: unknown; origin?: string }>).detail;
+      const detail = (event as CustomEvent<{
+        enhancedId?: string;
+        payload?: unknown;
+        origin?: string;
+        savedSections?: unknown;
+      }>).detail;
       // Enhanced resumes are identified by the URL prop. The internal resumeId
       // state is only set after creating a normal builder resume, so it is null
       // on the ATS route and previously discarded every apply/undo broadcast.
@@ -2521,7 +2537,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       // with the pre-edit server snapshot. Score/suggestions still sync from
       // autosave responses (separate state, not an autosave-effect dependency).
       const isAutosaveOrigin = detail?.origin === "autosave";
-      const hasResumeSnapshot = isAutosaveOrigin ? false : syncEnhancedResumeData(payload);
+      const savedSections = Array.isArray(detail.savedSections)
+        ? detail.savedSections.filter((key): key is string => typeof key === "string")
+        : undefined;
+      const hasResumeSnapshot = isAutosaveOrigin ? false : syncEnhancedResumeData(payload, { savedSections });
 
       if (hasScoreSnapshot) {
         syncEnhancedScore(payload);

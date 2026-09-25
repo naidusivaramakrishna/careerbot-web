@@ -12,6 +12,7 @@ import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 
 interface ServiceRecordEntry {
@@ -252,6 +253,7 @@ const ServiceRecord: React.FC = () => {
     try {
       setDeletingIndex(index);
 
+      await waitForSectionAutosaveBeforeDelete("Service Record", itemId);
       if (isEnhancedResume) {
         await deleteSectionItemFromEnhancedResume(resumeId, "service_record", itemId);
       } else {

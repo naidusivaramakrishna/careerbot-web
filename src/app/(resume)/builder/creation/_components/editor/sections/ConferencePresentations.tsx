@@ -7,6 +7,7 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 
 interface PresentationEntry {
@@ -141,6 +142,7 @@ const ConferencePresentations: React.FC = () => {
     try {
       setDeletingIndex(index);
 
+      await waitForSectionAutosaveBeforeDelete("Conference Presentations", itemId);
       if (isEnhancedResume) {
         await deleteSectionItemFromEnhancedResume(resumeId, "conference_presentations", itemId);
       } else {

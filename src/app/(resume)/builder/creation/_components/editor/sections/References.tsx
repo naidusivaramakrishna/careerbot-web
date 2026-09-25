@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
@@ -187,6 +188,8 @@ const References: React.FC = () => {
     try {
       setDeletingIndex(index);
       // // console.log("🗑️ Deleting reference item:", { resumeId, itemId, index });
+
+      await waitForSectionAutosaveBeforeDelete("References", itemId);
 
       // ✅ Call the API to delete the item from backend
       if (isEnhancedResume) {

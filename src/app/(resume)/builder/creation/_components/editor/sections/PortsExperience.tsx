@@ -7,6 +7,7 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 
 interface PortEntry {
@@ -140,6 +141,7 @@ const PortsExperience: React.FC = () => {
     try {
       setDeletingIndex(index);
 
+      await waitForSectionAutosaveBeforeDelete("Ports Experience", itemId);
       if (isEnhancedResume) {
         await deleteSectionItemFromEnhancedResume(resumeId, "ports_experience", itemId);
       } else {

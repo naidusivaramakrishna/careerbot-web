@@ -9,6 +9,7 @@ import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 
 type ScoreType = "CGPA" | "Marks" | "GPA" | "Percentage";
@@ -307,6 +308,8 @@ const Education: React.FC = () => {
     try {
       setDeletingIndex(index);
       // // console.log("🗑️ Deleting education item:", { resumeId, itemId, index });
+
+      await waitForSectionAutosaveBeforeDelete("Education", itemId);
 
       // ✅ Call the API to delete the item from backend
       if (isEnhancedResume) {

@@ -22,6 +22,7 @@ import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
@@ -233,6 +234,8 @@ const Interests: React.FC = () => {
     try {
       setDeletingIndex(index);
       // // console.log("🗑️ Deleting interest item:", { resumeId, itemId, index });
+
+      await waitForSectionAutosaveBeforeDelete("Interests", itemId);
 
       // ✅ Call the API to delete the item from backend
       if (isEnhancedResume) {

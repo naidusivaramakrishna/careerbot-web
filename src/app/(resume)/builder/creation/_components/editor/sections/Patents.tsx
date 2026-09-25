@@ -9,6 +9,7 @@ import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { toast } from "sonner";
@@ -316,6 +317,7 @@ const Patents: React.FC = () => {
     try {
       setDeletingIndex(index);
       if (resumeId && entry.id) {
+        await waitForSectionAutosaveBeforeDelete("Patents", entry.id);
         if (isEnhancedResume) {
           await deleteSectionItemFromEnhancedResume(resumeId, 'patents', entry.id);
         } else {

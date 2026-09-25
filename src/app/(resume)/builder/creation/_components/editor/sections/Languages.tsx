@@ -8,6 +8,7 @@ import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
@@ -193,6 +194,8 @@ const Languages: React.FC = () => {
     try {
       setDeletingIndex(index);
       // // console.log("🗑️ Deleting language item:", { resumeId, itemId, index });
+
+      await waitForSectionAutosaveBeforeDelete("Languages", itemIdentifier);
 
       // ✅ Call the API to delete the item from backend
       if (isEnhancedResume) {
