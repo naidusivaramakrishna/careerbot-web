@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X, Mail } from "lucide-react";
 import OTPVerificationInput from "./OTPVerificationInput";
 import { toast } from "sonner";
+import { PENDING_VERIFICATION_CLEARED_EVENT } from "@/lib/pendingVerification";
 
 interface PendingVerification {
   userId: string;
@@ -36,6 +37,17 @@ export const VerificationRecovery: React.FC = () => {
       }
     }
   }, [dismissed]);
+
+  // ClientLayout keeps this banner mounted across client-side navigation, so
+  // hide it when sign-in / sign-out clears the record (authApi).
+  useEffect(() => {
+    const onCleared = () => {
+      setPending(null);
+      setShowOTP(false);
+    };
+    window.addEventListener(PENDING_VERIFICATION_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(PENDING_VERIFICATION_CLEARED_EVENT, onCleared);
+  }, []);
 
   if (!pending || dismissed) {
     return null;

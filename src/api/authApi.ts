@@ -1,6 +1,7 @@
 import { httpClient } from "@/lib/http";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
+import { clearPendingVerification } from '@/lib/pendingVerification';
 
 export interface LoginRequest {
   email: string;
@@ -109,6 +110,11 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
   // Clear user-scoped session data from previous login
   sessionStorage.removeItem('uploaded_resume_filename');
 
+  // A session is only issued to a verified account (signin 403s
+  // EMAIL_NOT_VERIFIED otherwise), so any pending-verification banner record
+  // left in this browser is stale or someone else's.
+  clearPendingVerification();
+
   return response.data;
 };
 
@@ -141,6 +147,7 @@ export const signOut = async () => {
   localStorage.removeItem('token_last_refreshed_at');
   localStorage.removeItem('token_expires_in_seconds');
   localStorage.removeItem('uploaded_resume_filename');
+  clearPendingVerification();
 
   // Job tracking's unscoped savedJobs/appliedJobs buckets are shared across
   // every account on this browser (see jobTracking.ts's scopedKey) — must be
