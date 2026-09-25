@@ -84,6 +84,8 @@ export const FAILED_REASON_MESSAGES: Record<CoverLetterReason, string> = {
     "The draft requires review before use.",
   unsupported_required_jd_skill:
     "The role requires a skill that your resume does not currently support. Review the requirement before applying.",
+  late_grounding_disagreement:
+    "Some content was removed during a final accuracy check. Review the draft to make sure it still reads well.",
 };
 
 // ── api / network error reasons (raised by coverLetterApi.ts) ──

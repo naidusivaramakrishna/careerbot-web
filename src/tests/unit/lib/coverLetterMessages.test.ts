@@ -133,6 +133,7 @@ describe("FAILED_REASON_MESSAGES", () => {
     "unbacked_claim_removed",
     "low_confidence_fact_used",
     "thin_claim_catalog",
+    "late_grounding_disagreement",
   ];
 
   it.each(ALL_REASONS)("has a message for reason '%s'", (reason) => {

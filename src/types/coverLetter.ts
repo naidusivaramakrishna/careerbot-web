@@ -56,7 +56,8 @@ export type CoverLetterReason =
   | "short_letter_warning"
   | "long_letter_warning"
   | "review_required"
-  | "unsupported_required_jd_skill";
+  | "unsupported_required_jd_skill"
+  | "late_grounding_disagreement";
 
 // Supported resume-parser schema versions on the request — must
 // match `_SUPPORTED_RESUME_SCHEMA_VERSIONS` in the api-side schema.
