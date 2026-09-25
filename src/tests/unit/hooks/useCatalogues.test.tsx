@@ -65,3 +65,51 @@ describe('useCatalogues', () => {
     expect(result.current.getCataloguesMap().eclipse?.template_id).toBe('classic_formal');
   });
 });
+
+/**
+ * The 24h cache in localStorage is not trusted input: earlier builds of this
+ * hook (74f73bd, 44ddab0) wrote whatever the response body was to the same
+ * 'catalogues_cache' key without checking it, and storage can hold anything.
+ * A cached value that is not an array of catalogue objects must be ignored
+ * (and the list fetched fresh), not handed to getCataloguesMap(), whose
+ * `catalogues.forEach` runs during PreviewPanel's render.
+ */
+describe('useCatalogues cache validation', () => {
+  beforeEach(() => {
+    requested.length = 0;
+    localStorage.clear();
+    httpClient.defaults.adapter = fakeAdapter;
+  });
+  afterEach(() => {
+    httpClient.defaults.adapter = originalAdapter;
+  });
+
+  const plant = (data: unknown) =>
+    localStorage.setItem('catalogues_cache', JSON.stringify({ data, timestamp: Date.now() }));
+
+  it.each([
+    ['a wrapper object', { catalogues: [eclipse] }],
+    ['null', null],
+    ['an array holding a non-object', [null]],
+    ['an array holding an object without a key', [{ label: 'x' }]],
+  ])('ignores a fresh cache holding %s and fetches instead', async (_label, data) => {
+    plant(data);
+    const { result } = renderHook(() => useCatalogues());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(() => result.current.getCataloguesMap()).not.toThrow();
+    expect(requested).toHaveLength(1);
+    expect(result.current.getCataloguesMap().eclipse?.template_id).toBe('classic_formal');
+    // The bad entry is replaced by the fetched list.
+    expect(JSON.parse(localStorage.getItem('catalogues_cache') as string).data).toEqual([eclipse]);
+  });
+
+  it('still serves a valid fresh cache without a request', async () => {
+    plant([eclipse]);
+    const { result } = renderHook(() => useCatalogues());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(requested).toHaveLength(0);
+    expect(result.current.getCataloguesMap().eclipse?.template_id).toBe('classic_formal');
+  });
+});
