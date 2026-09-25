@@ -4,6 +4,8 @@ import { useResume } from "../../_context/ResumeContext";
 import { STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from "@/app/browse-templates/_components/CatalogueThumbnail";
 import { useCatalogues } from "@/hooks/useCatalogues";
+import { applyCatalogueToResume } from "@/api/resumeApi";
+import logger from "@/lib/logger";
 
 const NATURAL_W = 300;
 const NATURAL_H = 400;
@@ -149,15 +151,17 @@ export default function CatalogueTab() {
   };
 
   const cataloguesMap = catalogues.length > 0 ? getCataloguesMap() : STYLE_CATALOGUES;
+  const persistQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const applyCatalogue = (key: string, color?: string) => {
     _applyStyleForKey(key, color, true);
-    // Persist catalogue selection to resume via API
+    // Persist catalogue selection to resume via API. Requests are chained so
+    // the server applies fast clicks in click order (last click wins).
     if (resumeId) {
-      fetch(`/api/v1/templates/catalogues/${resumeId}/apply?catalogue_key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      }).catch(err => console.warn('[CatalogueTab] Failed to persist catalogue:', err));
+      persistQueueRef.current = persistQueueRef.current
+        .catch(() => undefined)
+        .then(() => applyCatalogueToResume(resumeId, key))
+        .catch(err => logger.warn('[CatalogueTab] Failed to persist catalogue:', err));
     }
   };
 
@@ -282,7 +286,7 @@ export default function CatalogueTab() {
                 }}
                 onClick={() => applyCatalogue(key)}
                 onMouseEnter={() => { setPreviewCatalogueKey(key); previewCatalogue(key); }}
-                onMouseLeave={() => { setPreviewCatalogueKey(null); applyCatalogue(selectedKey); }}
+                onMouseLeave={() => { setPreviewCatalogueKey(null); previewCatalogue(selectedKey); }}
               >
                 <div className="relative">
                   <ScaledThumbnail catalogueKey={key} customColor={colorForThumbnail} />

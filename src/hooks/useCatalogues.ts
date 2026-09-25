@@ -32,7 +32,8 @@ export interface CataloguesResponse {
   catalogues: CatalogueConfig[];
 }
 
-const CATALOGUES_API_URL = '/api/v1/templates/catalogues/all';
+// Relative to httpClient's baseURL ('/api/v1' or NEXT_PUBLIC_BASE_URL).
+const CATALOGUES_API_URL = '/templates/catalogues/all';
 const CACHE_KEY = 'catalogues_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 

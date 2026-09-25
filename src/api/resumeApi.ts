@@ -1147,6 +1147,16 @@ export const applyTemplateToResume = async (
 };
 
 /**
+ * Persist the chosen style catalogue on the resume
+ * (POST /templates/catalogues/{resume_id}/apply?catalogue_key=...).
+ */
+export const applyCatalogueToResume = async (resumeId: string, catalogueKey: string): Promise<void> => {
+  await httpClient.post(`/templates/catalogues/${encodeURIComponent(resumeId)}/apply`, undefined, {
+    params: { catalogue_key: catalogueKey },
+  });
+};
+
+/**
  * Get one template by id, including preview_html / preview_css for iframe
  * rendering. Backend: GET /api/v1/templates/{template_id} (TemplateOut).
  * Errors propagate so callers can fall back to the list data.

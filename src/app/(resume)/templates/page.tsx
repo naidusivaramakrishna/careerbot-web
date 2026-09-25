@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, LayoutTemplate, Sparkles, User, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
+import { getTemplatesByCategory, getTemplateCategories, applyCatalogueToResume, type TemplateResponse } from '@/api/resumeApi';
 import logger from '@/lib/logger';
 import CategorySidebar from './_components/CategorySidebar';
 import DomainTemplatesModal from './_components/DomainTemplatesModal';
@@ -150,15 +150,8 @@ function TemplatesPageContent() {
     const resumeId = urlResumeId || localStorage.getItem('current_resume_id');
     if (resumeId) {
       try {
-        const response = await fetch(`/api/v1/templates/catalogues/${resumeId}/apply?catalogue_key=${key}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (response.ok) {
-          logger.info(`Catalogue '${key}' applied to resume ${resumeId}`);
-        } else {
-          logger.warn(`Failed to apply catalogue to resume: ${response.statusText}`);
-        }
+        await applyCatalogueToResume(resumeId, key);
+        logger.info(`Catalogue '${key}' applied to resume ${resumeId}`);
       } catch (err) {
         logger.warn(`Failed to apply catalogue via API: ${err}`);
         // Fail silently - catalogue is still selected locally
