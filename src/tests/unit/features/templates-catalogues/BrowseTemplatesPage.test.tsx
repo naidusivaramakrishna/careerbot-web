@@ -14,7 +14,7 @@
  *   - Back button navigates to /
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 // ─── Router capture ────────────────────────────────────────────────────────────
@@ -50,7 +50,8 @@ describe('BrowseTemplatesPage — hero section', () => {
 
   it('renders the hero subtitle with industry count', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.getByText(/18\+ industries/i)).toBeInTheDocument();
+    // The subtitle paragraph, not the "Trusted by 18+ Industries" heading further down.
+    expect(screen.getByText(/Each crafted for 18\+ industries/i)).toBeInTheDocument();
   });
 
   it('renders hero stats', () => {
@@ -102,8 +103,13 @@ describe('BrowseTemplatesPage — catalogues carousel', () => {
 
   it('allows selecting different catalogues via buttons', () => {
     render(<BrowseTemplatesPage />);
+    // The carousel card's <h3> shows the selected catalogue (the selector
+    // buttons always show every name, so assert on the heading).
+    expect(screen.getByRole('heading', { level: 3, name: 'Eclipse' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Galaxy' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Galaxy' }));
-    expect(screen.getByText('Galaxy')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Galaxy' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Eclipse' })).not.toBeInTheDocument();
   });
 
   it('renders carousel navigation arrows', () => {
@@ -159,7 +165,8 @@ describe('BrowseTemplatesPage — navigation and CTAs', () => {
 
   it('"Start Exploring Now" navigates to /templates', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByText(/Start Exploring Now/i));
+    // The CTA button, not the "Start exploring now — completely free." copy.
+    fireEvent.click(screen.getByRole('button', { name: /Start Exploring Now/i }));
     expect(mockPush).toHaveBeenCalledWith('/templates');
   });
 
@@ -183,7 +190,9 @@ describe('BrowseTemplatesPage — footer', () => {
 
   it('renders footer with CareerBot branding', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.getByText('CareerBot')).toBeInTheDocument();
-    expect(screen.getByText(/ATS-optimized resumes/i)).toBeInTheDocument();
+    // Scoped to <footer>: the nav bar also shows "CareerBot".
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByText('CareerBot')).toBeInTheDocument();
+    expect(within(footer).getByText(/ATS-optimized resumes/i)).toBeInTheDocument();
   });
 });
