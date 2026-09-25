@@ -35,8 +35,17 @@ const Languages: React.FC = () => {
 
   const formScrollRef = useRef<HTMLDivElement>(null);
 
+  // Only the name is required for an entry to be real, displayable data.
+  // The AI parser frequently extracts a language without an explicit
+  // proficiency level (e.g. {"language": "English"}, no proficiency/level
+  // field at all) -- requiring BOTH meant every parser-extracted language
+  // without a stated level was silently dropped from savedEntries on load,
+  // and once the user saved even one entry that DID have a proficiency,
+  // that partial save became the new "enhanced_sections" source of truth
+  // (see ResumeContext's enhanced_sections-wins merge), permanently masking
+  // the rest of the originally-parsed languages behind the one that survived.
   const hasValidData = (entry: LanguageEntry): boolean => {
-    return !!(entry.name && entry.proficiency);
+    return !!entry.name;
   };
 
   const [savedEntries, setSavedEntries] = useState<LanguageEntry[]>(() => {
@@ -89,16 +98,12 @@ const Languages: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
+    // See Internships.tsx's sibling effect: an id-less entry is genuinely
+    // new and must stay id-less — backfilling by array POSITION is unsound.
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
-      const prevItems = (prev.languages ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.languages) === JSON.stringify(merged)) return prev;
-      return { ...prev, languages: merged };
+      if (JSON.stringify(prev.languages) === JSON.stringify(allEntries)) return prev;
+      return { ...prev, languages: allEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -106,9 +111,14 @@ const Languages: React.FC = () => {
   useEffect(() => {
     if (!resumeData.languages?.length) return;
     setSavedEntries(prev => {
+      // See WorkExperience.tsx's sibling effect: don't clear editingEntries
+      // when re-filtering still yields nothing valid, or both it and
+      // savedEntries end up empty and the modal renders no fields at all.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.languages!.filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.languages!.filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.languages!.length) return prev;
@@ -166,8 +176,11 @@ const Languages: React.FC = () => {
     const languageToDelete = savedEntries[index];
     const itemId = languageToDelete.id;
 
-    // If no resumeId or itemId, just do local deletion
-    if (!resumeId || !itemId) {
+    // Parsed legacy languages may be plain strings/objects without IDs. The
+    // enhanced endpoint accepts the language name as a fallback; builder
+    // resumes still require a real item ID.
+    const itemIdentifier = itemId || (isEnhancedResume ? languageToDelete.name : "");
+    if (!resumeId || !itemIdentifier) {
       // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
@@ -183,9 +196,9 @@ const Languages: React.FC = () => {
 
       // ✅ Call the API to delete the item from backend
       if (isEnhancedResume) {
-        await deleteSectionItemFromEnhancedResume(resumeId, "languages", itemId);
+        await deleteSectionItemFromEnhancedResume(resumeId, "languages", itemIdentifier);
       } else {
-        await deleteResumeSectionItem(resumeId, "languages", itemId);
+        await deleteResumeSectionItem(resumeId, "languages", itemIdentifier);
       }
 
       // // console.log("✅ Language item deleted from backend successfully");
@@ -248,7 +261,7 @@ const Languages: React.FC = () => {
                   <div className="text-base font-bold text-gray-900">
                     {language.name || "No language"}
                   </div>
-                  
+
                   <div className="text-xs font-semibold text-[#2557a7] bg-blue-50 px-3 py-1 rounded-full">
                     {language.proficiency || "No level"}
                   </div>
@@ -271,8 +284,8 @@ const Languages: React.FC = () => {
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -298,7 +311,7 @@ const Languages: React.FC = () => {
       {/* Editing Form */}
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >

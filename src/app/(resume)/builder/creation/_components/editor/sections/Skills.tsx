@@ -19,7 +19,7 @@ function uid(): string {
 }
 
 const Skills: React.FC = () => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resolveSkillRemovedSuggestions } = useResume();
   const { errors } = useValidation();
   const searchParams = useSearchParams();
   const isEnhancedResume = searchParams.get("source") === "enhanced";
@@ -127,28 +127,27 @@ const Skills: React.FC = () => {
   });
 
   const updateSkills = (updated: Record<string, unknown>) => {
-    // Collect all skills from every predefined category key — including other
-    // domains' categories kept in state but not displayed — so the flat list
-    // matches what the loader builds.
-    const META_KEYS = new Set(['custom_categories', 'hidden_predefined_categories', 'skill_id_map']);
-    const allSkills = Object.entries(updated)
-      .filter(([key, value]) => !META_KEYS.has(key) && Array.isArray(value) && value.every((v) => typeof v === 'string'))
-      .flatMap(([, value]) => value as string[]);
-
-    // Add custom category skills
-    const customSkills = ((updated.custom_categories || []) as CustomCategory[]).flatMap((c) => c.skills);
-
-    // Ensure all base properties are present as arrays when updating state
-    const normalizedUpdated = {
-      programming_languages: (updated as any).programming_languages || [],
-      frameworks: (updated as any).frameworks || [],
-      soft_skills: (updated as any).soft_skills || [],
-      project_management: (updated as any).project_management || [],
-      marketing_sales: (updated as any).marketing_sales || [],
-      ...(updated as Record<string, unknown>),
-    };
-
-    setResumeData({ ...resumeData, categorizedSkills: normalizedUpdated as typeof resumeData.categorizedSkills, skills: [...allSkills, ...customSkills] });
+    // Functional update merged onto the LATEST categorizedSkills. Callers must
+    // pass ONLY the field(s) they change -- never `{...categorizedSkills, ...}`:
+    // that closure snapshot predates the skill_id_map entry onAddSkill just
+    // wrote, and its stale skill_id_map would win the merge and break every
+    // add-then-delete.
+    setResumeData(prev => {
+      const merged = { ...prev.categorizedSkills, ...updated } as Record<string, unknown>;
+      // Collect skills from every predefined category key -- including other
+      // domains' categories kept in state but not displayed -- so the flat list
+      // matches what the loader builds.
+      const META_KEYS = new Set(['custom_categories', 'hidden_predefined_categories', 'skill_id_map']);
+      const allSkills = Object.entries(merged)
+        .filter(([key, value]) => !META_KEYS.has(key) && Array.isArray(value) && value.every((v) => typeof v === 'string'))
+        .flatMap(([, value]) => value as string[]);
+      const customSkills = ((merged.custom_categories || []) as CustomCategory[]).flatMap((c) => c.skills);
+      return {
+        ...prev,
+        categorizedSkills: merged as unknown as typeof prev.categorizedSkills,
+        skills: [...allSkills, ...customSkills],
+      };
+    });
   };
 
   const handleDeletePredefinedCategory = async (categoryKey: string) => {
@@ -167,7 +166,6 @@ const Skills: React.FC = () => {
       }
     }
     updateSkills({
-      ...categorizedSkills,
       [categoryKey]: [],
       hidden_predefined_categories: [...hiddenPredefined, categoryKey],
     });
@@ -175,8 +173,7 @@ const Skills: React.FC = () => {
   };
 
   const handleCategorySkillsChange = (categoryKey: string, updatedSkills: string[]) => {
-    const updated = { ...categorizedSkills, [categoryKey]: updatedSkills };
-    updateSkills(updated);
+    updateSkills({ [categoryKey]: updatedSkills });
   };
 
   // ── Custom categories ──
@@ -184,14 +181,12 @@ const Skills: React.FC = () => {
     const newEntry: CustomCategory = { id: uid(), name: "", skills: [] };
     latestCustomIdRef.current = newEntry.id;
     updateSkills({
-      ...categorizedSkills,
       custom_categories: [...allCustomCategories, newEntry],
     });
   };
 
   const handleCustomCategoryNameChange = (id: string, name: string) => {
     updateSkills({
-      ...categorizedSkills,
       custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, name } : c)),
     });
   };
@@ -211,7 +206,6 @@ const Skills: React.FC = () => {
     if (allExisting.includes(trimmed.toLowerCase())) {
       toast.error(`"${trimmed}" category already exists`);
       updateSkills({
-        ...categorizedSkills,
         custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, name: "" } : c)),
       });
       nameInputRefs.current[id]?.focus();
@@ -220,7 +214,6 @@ const Skills: React.FC = () => {
 
   const handleCustomCategorySkillsChange = (id: string, skills: string[]) => {
     updateSkills({
-      ...categorizedSkills,
       custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, skills } : c)),
     });
   };
@@ -241,7 +234,6 @@ const Skills: React.FC = () => {
       }
     }
     updateSkills({
-      ...categorizedSkills,
       custom_categories: allCustomCategories.filter((c) => c.id !== id),
     });
     toast.success("Category deleted successfully.");
@@ -308,13 +300,26 @@ const Skills: React.FC = () => {
                           }
                         } : undefined}
                         onRemoveSkill={resumeData.resume_id ? async (skill) => {
+                          const storedSkillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`];
+                          if (!storedSkillId && !isEnhancedResume) return;
+                          // Both the enhanced and builder delete-by-id endpoints
+                          // (delete_skill_from_enhanced_category / delete_skill_from_resume)
+                          // require the skill's real backend id and reject a plain
+                          // name with "Skill with ID '<name>' not found in <category>" --
+                          // this previously sent the name for enhanced resumes based on
+                          // a stale comment describing a *different* backend function.
+                          const skillIdentifier = storedSkillId ?? skill;
                           try {
                             const apiCategory = skillCategoryApiName(cat.key);
-                            const skillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`] ?? skill;
                             if (isEnhancedResume) {
-                              await deleteSkillFromEnhancedResume(resumeData.resume_id!, apiCategory, skillId);
+                              await deleteSkillFromEnhancedResume(resumeData.resume_id!, apiCategory, skillIdentifier);
+                              // The delete endpoint only returns the technical_skills
+                              // array, not a rescored ats_display -- resolve any "not
+                              // demonstrated" suggestion for this exact skill locally
+                              // instead of waiting on a rescore that never happens.
+                              resolveSkillRemovedSuggestions(skill, apiCategory);
                             } else {
-                              await deleteSkillById(resumeData.resume_id!, apiCategory, skillId);
+                              await deleteSkillById(resumeData.resume_id!, apiCategory, skillIdentifier);
                             }
                             setResumeData(prev => {
                               const newMap = { ...(prev.categorizedSkills?.skill_id_map ?? {}) };
@@ -413,12 +418,17 @@ const Skills: React.FC = () => {
                         }
                       } : undefined}
                       onRemoveSkill={resumeData.resume_id && custom.name ? async (skill) => {
+                        const storedSkillId = categorizedSkills.skill_id_map?.[`${custom.name}:${skill}`];
+                        if (!storedSkillId && !isEnhancedResume) return;
+                        // See the predefined-category handler above: the delete-by-id
+                        // endpoints require the real backend id, not the skill name.
+                        const skillIdentifier = storedSkillId ?? skill;
                         try {
-                          const skillId = categorizedSkills.skill_id_map?.[`${custom.name}:${skill}`] ?? skill;
                           if (isEnhancedResume) {
-                            await deleteSkillFromEnhancedResume(resumeData.resume_id!, custom.name, skillId);
+                            await deleteSkillFromEnhancedResume(resumeData.resume_id!, custom.name, skillIdentifier);
+                            resolveSkillRemovedSuggestions(skill, custom.name);
                           } else {
-                            await deleteSkillById(resumeData.resume_id!, custom.name, skillId);
+                            await deleteSkillById(resumeData.resume_id!, custom.name, skillIdentifier);
                           }
                           setResumeData(prev => {
                             const newMap = { ...(prev.categorizedSkills?.skill_id_map ?? {}) };

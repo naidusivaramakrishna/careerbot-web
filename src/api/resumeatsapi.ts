@@ -46,10 +46,20 @@ export function storeAtsAnalysis(key: string, payload: unknown): void {
   } catch {
     // Storage availability/quota is a cache concern and must never turn a
     // successful parse + ATS analysis into a frontend processing failure.
-    // Readers prefer localStorage, so drop the older entry there; otherwise it
-    // would shadow the fresh sessionStorage copy (same rule as writeReportCache).
-    try { localStorage.removeItem(key); } catch { /* non-fatal */ }
-    try { sessionStorage.setItem(key, serialized); } catch { /* non-fatal */ }
+    // First, write to sessionStorage. Then aggressively clear localStorage so
+    // stale data doesn't shadow the fresh sessionStorage copy when readers
+    // check localStorage first.
+    let sessionStorageOk = false;
+    try {
+      sessionStorage.setItem(key, serialized);
+      sessionStorageOk = true;
+    } catch { /* non-fatal — reader still has localStorage as stale fallback */ }
+
+    // Only clear localStorage after confirming sessionStorage worked, so we
+    // don't lose all copies if both storages are unavailable.
+    if (sessionStorageOk) {
+      try { localStorage.removeItem(key); } catch { /* non-fatal */ }
+    }
   }
 }
 

@@ -60,7 +60,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
   {
     id: "minimalist_classic",
     mongoId: "69bcda650380c25aee737346",
-    template_id: "classic_horizontal_dividers",
+    template_id: "minimalist_classic",
     name: "Classic Horizontal Dividers",
     subtitle: "Modern",
     preview_url: "/assets/templates/template-3.png",
@@ -71,7 +71,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
   {
     id: "professional_classic",
     mongoId: "697ca4b084d83306028ce5b0",
-    template_id: "classic_professional",
+    template_id: "professional_classic",
     name: "Classic Professional",
     subtitle: "Professional",
     preview_url: "/assets/templates/template-4.png",
@@ -82,7 +82,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
   {
     id: "classic_professional",
     mongoId: "698b4219fb7a5d9a92ce520a",
-    template_id: "classic_professional_variant",
+    template_id: "classic_professional",
     name: "Classic Professional",
     subtitle: "Professional",
     preview_url: "/assets/templates/template-4.png",
@@ -95,6 +95,8 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
 interface TemplatesTabProps {
   onTemplateSelect?: () => void;
   resumeId?: string;
+  /** ATS Scan uses an enhanced-resume ID; its export receives the chosen template directly. */
+  isEnhancedResume?: boolean;
 }
 
 /**
@@ -119,7 +121,7 @@ function persistEnrichedCareerLevels(
   }
 }
 
-const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId }) => {
+const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId, isEnhancedResume = false }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
@@ -214,6 +216,17 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
     if (typeof window === 'undefined' || !userEmail) return; // Wait for userEmail to be set
 
     let ignore = false; // guard: skip state writes if unmounted / userEmail changed mid-fetch
+
+    // ATS selections belong to the enhanced resume, not to the user's normal
+    // builder/domain-template state. Restoring the display ID keeps the native
+    // preview on the applied layout whenever the ATS template drawer reopens.
+    if (isEnhancedResume && resumeId) {
+      const appliedDisplayId = localStorage.getItem(`enhancedTemplateDisplayId_${resumeId}`);
+      if (appliedDisplayId) setSelectedTemplate(appliedDisplayId);
+      setAppliedTemplateId(null);
+      setCareerLevelData(null);
+      return () => { ignore = true; };
+    }
 
     // Create user-scoped localStorage keys
     const selectedTemplateKey = `selectedTemplateId_${userEmail}`;
@@ -357,7 +370,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       }
     }
     return () => { ignore = true; };
-  }, [userEmail, setSelectedTemplate, enrichCareerLevelData, setSectionOrder]);
+  }, [userEmail, setSelectedTemplate, enrichCareerLevelData, isEnhancedResume, resumeId, setSectionOrder]);
 
   // Fetch templates from API
   useEffect(() => {
@@ -376,8 +389,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             'compact_professional': '/assets/templates/template-1.png',
             'clean_simple': '/assets/templates/template-2.png',
             'minimalist_classic': '/assets/templates/template-3.png',
+            // Legacy IDs previously emitted by the picker. Keep these until
+            // every persisted selection has migrated to the canonical IDs.
+            'classic_horizontal_dividers': '/assets/templates/template-3.png',
             'professional_classic': '/assets/templates/template-4.png',
             'classic_professional': '/assets/templates/template-4.png',
+            'classic_professional_variant': '/assets/templates/template-4.png',
           };
 
           // ✅ Only show templates that have valid image mappings (filter out unknown templates)
@@ -416,7 +433,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         }
       } catch (error) {
         logger.error("Error fetching templates:", error);
-        toast.error("Failed to load templates from API. Using default templates.");
+        // The four built-in templates are intentionally available offline.
+        // A catalogue/network failure must not make the Templates drawer look
+        // broken or block the user from changing the resume layout.
         setTemplates(DEFAULT_TEMPLATES);
       } finally {
         setLoading(false);
@@ -496,8 +515,13 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           }
         }
 
-        // ✅ CORRECTED: Pass 'id' from templates list API response as template_id
-        await applyTemplateToResume(resumeId, templateId);
+        // Enhanced resumes use the dedicated export pipeline. Applying them to
+        // the normal-resume endpoint changes a different record, leaving the
+        // ATS preview and enhanced export out of sync. The selected backend
+        // ID is persisted below and is supplied directly to enhanced export.
+        if (!isEnhancedResume) {
+          await applyTemplateToResume(resumeId, templateId);
+        }
 
         // Only set selectedTemplate for regular templates (not career level)
         if (previewTemplate.category !== 'career-level') {
@@ -512,12 +536,23 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           localStorage.removeItem('selected_catalogue');
           setCareerLevelData(null);
 
-          // Mark that user explicitly applied a catalogue/style template
-          const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
-          localStorage.setItem(styleKey, 'true');
-          // Persist the chosen style id so the migration can detect it on future mounts
-          // (selectedTemplateId is removed above, so a separate key is needed)
-          if (userEmail) localStorage.setItem(`styleTemplateApplied_${userEmail}`, previewTemplate.template_id);
+          if (isEnhancedResume) {
+            // An ATS workspace may be opened for several enhanced resumes in the
+            // same browser. This value must be scoped to the enhanced-resume ID;
+            // a user-scoped key made one resume's export use another resume's
+            // previously selected backend template.
+            localStorage.setItem(`enhancedTemplateBackendId_${resumeId}`, templateId);
+            localStorage.setItem(`enhancedTemplateDisplayId_${resumeId}`, previewTemplate.template_id);
+          } else {
+            // Mark that the user explicitly applied a catalogue/style template.
+            const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
+            localStorage.setItem(styleKey, 'true');
+            const styleBackendKey = userEmail ? `styleTemplateBackendId_${userEmail}` : 'styleTemplateBackendId';
+            localStorage.setItem(styleBackendKey, templateId);
+            // Persist the chosen style id so the migration can detect it on future mounts
+            // (selectedTemplateId is removed above, so a separate key is needed)
+            if (userEmail) localStorage.setItem(`styleTemplateApplied_${userEmail}`, previewTemplate.template_id);
+          }
 
           // Sync resumeStyle with the backend's template config so preview matches download
           const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
@@ -542,6 +577,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           // Clear style-template flags — domain templates take over
           const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
           localStorage.removeItem(styleKey);
+          const styleBackendKey = userEmail ? `styleTemplateBackendId_${userEmail}` : 'styleTemplateBackendId';
+          localStorage.removeItem(styleBackendKey);
           if (userEmail) localStorage.removeItem(`styleTemplateApplied_${userEmail}`);
         }
 
@@ -611,6 +648,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         // Clear style-template flags — domain template now active
                         const _styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
                         localStorage.removeItem(_styleKey);
+                        const _styleBackendKey = userEmail ? `styleTemplateBackendId_${userEmail}` : 'styleTemplateBackendId';
+                        localStorage.removeItem(_styleBackendKey);
                         if (userEmail) localStorage.removeItem(`styleTemplateApplied_${userEmail}`);
 
                         // ✅ Update sectionOrder in localStorage AND context when career level changes

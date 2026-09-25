@@ -276,6 +276,8 @@ export interface ATSSectionDeduction {
   message?: string;
   after_example?: string;
   before_example?: string;
+  /** The ATS service may expose this on deduction fallbacks when no top-level suggestions array is present. */
+  fix_type?: "manual" | "auto";
 }
 
 export interface ATSSectionScore {
@@ -459,6 +461,10 @@ export interface EnhanceResumeResponse {
   cached_at?: number;
   enhancer_state?: EnhancerState;
   suggestions?: EnhancedSuggestion[];
+  /** Canonical AI score payload; suggestions may be nested here. */
+  ats_breakdown?: ATSScore;
+  /** Backward-compatible score alias returned by apply/delete-fix. */
+  ats_score?: ATSScore;
   suggested_summary?: string[];
   ats_display?: AtsDisplay;
   ats_tokens_used?: ATSTokensUsed;
@@ -481,6 +487,25 @@ export interface EnhanceResumeResponse {
   sections_with_issues?: number | null;
   score_status?: "complete" | "unavailable" | string | null;
   score_source?: string | null;
+  /** Present after a successful POST /resume/enhance/delete-fix. */
+  deleted_suggestion_id?: string;
+  was_applied?: boolean;
+  already_applied?: boolean;
+  enhanced_data?: ResumeData;
+  /** Version of the one persisted resume/score/suggestion snapshot. */
+  revision?: number;
+  /** Applied suggestions that the server can safely undo. */
+  applied_fixes?: Array<{
+    suggestion_id: string;
+    status: "applied";
+    undo_available: boolean;
+    applied_at?: string;
+    fix_type?: "manual" | "auto" | string;
+  }>;
+  operation?: {
+    type: "apply_fix" | "delete_fix" | "autosave" | "bulk_update" | string;
+    suggestion_id?: string | null;
+  };
 }
 
 // New-format ATS display block returned alongside the enhance result.
@@ -498,7 +523,21 @@ export interface EnhancedSuggestion {
   id: string;
   section: string;
   message: string;
-  fix_type: "manual" | "auto";
+  /**
+   * `info` is deliberately non-actionable. It is used where the enhancer can
+   * explain a source-file observation but no resume field can safely change.
+   */
+  fix_type: "manual" | "auto" | "info";
+  /** Backend-owned capability for a non-editable suggestion. */
+  ui_action?: "template_applied" | "review_content" | "review_formatting" | string;
+  /** UI-only state set only after the backend confirms the apply request. */
+  status?: "pending" | "fixed";
+  /**
+   * A completed card can only offer Undo while the API has a matching applied
+   * history record. This is set to false after a definitive 404 rather than
+   * repeatedly offering an action the server cannot perform.
+   */
+  undoAvailable?: boolean;
 }
 
 export interface EnhancedResumeHistoryItem {
@@ -520,6 +559,11 @@ export interface EnhancedResumeHistoryItem {
   updated_at?: string;
   display_name?: string;
   source?: string;
+  success?: boolean;
+  enhanced_resume_id?: string;
+  revision?: number;
+  applied_fixes?: EnhanceResumeResponse["applied_fixes"];
+  operation?: EnhanceResumeResponse["operation"];
 }
 
 // ============ UNIFIED RESUME LIST TYPES ============

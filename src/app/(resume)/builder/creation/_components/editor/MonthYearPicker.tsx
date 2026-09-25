@@ -18,7 +18,9 @@ const monthNames = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-function toYearMonth(date: string): number | null {
+// Exported so callers (e.g. Education's start/end-date ordering check) can compare
+// two "MMM YY" / "YYYY-MM" values without duplicating this parsing.
+export function toYearMonth(date: string): number | null {
   if (!date) return null;
   if (/^[A-Za-z]{3}\s\d{2}$/.test(date)) {
     const [mon, yr] = date.split(" ");

@@ -24,9 +24,9 @@ const emptyAward = (): AwardEntry => ({
 });
 
 const Awards: React.FC = () => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resumeSource } = useResume();
   const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -97,16 +97,12 @@ const Awards: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
+    // See Internships.tsx's sibling effect: an id-less entry is genuinely
+    // new and must stay id-less — backfilling by array POSITION is unsound.
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
-      const prevItems = (prev.awards ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.awards) === JSON.stringify(merged)) return prev;
-      return { ...prev, awards: merged };
+      if (JSON.stringify(prev.awards) === JSON.stringify(allEntries)) return prev;
+      return { ...prev, awards: allEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -114,9 +110,14 @@ const Awards: React.FC = () => {
   useEffect(() => {
     if (!resumeData.awards?.length) return;
     setSavedEntries(prev => {
+      // See WorkExperience.tsx's sibling effect: don't clear editingEntries
+      // when re-filtering still yields nothing valid, or both it and
+      // savedEntries end up empty and the modal renders no fields at all.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.awards!.filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.awards!.filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.awards!.length) return prev;
@@ -249,14 +250,14 @@ const Awards: React.FC = () => {
                   <div className="text-base font-bold text-gray-900">
                     {award.title || "No award title"}
                   </div>
-                  
+
                   {/* Issued By */}
                   {award.issuedBy && (
                     <div className="text-sm text-gray-700">
                       {award.issuedBy}
                     </div>
                   )}
-                  
+
                   {/* Year */}
                   {award.year && (
                     <div className="text-xs text-gray-600">
@@ -282,8 +283,8 @@ const Awards: React.FC = () => {
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -311,7 +312,7 @@ const Awards: React.FC = () => {
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
           {/* Left Side: Scrollable Form Fields Section */}
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >

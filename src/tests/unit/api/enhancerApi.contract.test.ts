@@ -46,11 +46,22 @@ describe("enhancer API mutation contract", () => {
   });
 
   it("autosaves sections to the autosave endpoint with the sections as the body", async () => {
-    mockHttpClient.patch.mockResolvedValueOnce(axiosResponse({}));
+    const snapshot = { revision: 3 };
+    mockHttpClient.patch.mockResolvedValueOnce(axiosResponse(snapshot));
+    const onSync = vi.fn();
+    window.addEventListener("enhanced-resume-score-sync", onSync);
 
-    await expect(autoSaveEnhancedResume("enhanced-test-1", { education })).resolves.toBeUndefined();
+    // The server snapshot is returned to the caller and broadcast tagged as an
+    // autosave so ResumeContext syncs score/suggestions without replacing resumeData.
+    await expect(autoSaveEnhancedResume("enhanced-test-1", { education })).resolves.toEqual(snapshot);
+    window.removeEventListener("enhanced-resume-score-sync", onSync);
 
-    expect(mockHttpClient.patch).toHaveBeenCalledWith("/resume/enhance/enhanced-test-1/autosave", { education });
+    expect(mockHttpClient.patch).toHaveBeenCalledWith("/resume/enhance/enhanced-test-1/autosave", { education }, undefined);
+    expect(onSync).toHaveBeenCalledTimes(1);
+    expect((onSync.mock.calls[0][0] as CustomEvent).detail).toMatchObject({
+      enhancedId: "enhanced-test-1",
+      origin: "autosave",
+    });
   });
 
   it("propagates an autosave failure to the caller", async () => {

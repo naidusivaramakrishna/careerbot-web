@@ -177,19 +177,16 @@ const WorkExperience: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
+    // See the sibling effect in Internships.tsx: an id-less entry is
+    // genuinely new and must stay id-less — backfilling by array POSITION
+    // is unsound.
     const validEntries = [
       ...savedEntries,
       ...editingEntries.filter(hasValidData)
     ];
     setResumeData(prev => {
-      const prevItems = (prev.workExperience ?? []) as Array<Record<string, unknown>>;
-      const merged = validEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.workExperience) === JSON.stringify(merged)) return prev;
-      return { ...prev, workExperience: merged };
+      if (JSON.stringify(prev.workExperience) === JSON.stringify(validEntries)) return prev;
+      return { ...prev, workExperience: validEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -197,10 +194,21 @@ const WorkExperience: React.FC = () => {
   useEffect(() => {
     if (!resumeData.workExperience?.length) return;
     setSavedEntries(prev => {
-      // If savedEntries is empty but API data has arrived, populate from API
+      // If savedEntries is empty but API data has arrived, populate from API.
+      // Only when that data is actually valid, though: the parsed resume can
+      // have a placeholder entry (company/role/dates all null -- exactly
+      // what a freeform-text "Experience" section with no structured data
+      // produces), which never satisfies hasValidData no matter how many
+      // times this re-filters. Clearing editingEntries to [] in that case
+      // left BOTH savedEntries and editingEntries empty -- the read-only
+      // list needs savedEntries.length > 0 and the edit form needs
+      // editingEntries.length > 0, so neither rendered anything at all: a
+      // Work Experience modal with no visible fields and no way to add one.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.workExperience!.filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.workExperience!.filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.workExperience!.length) return prev;
@@ -385,7 +393,7 @@ const WorkExperience: React.FC = () => {
 
     const descBox = descriptionRefs.current[editIndex];
     const formContainer = formScrollRef.current;
-    
+
     if (descBox && formContainer) {
       const descBoxTop = descBox.offsetTop;
       formContainer.scrollTo({
@@ -480,23 +488,23 @@ Spearheaded migration of legacy monolithic application to microservices architec
                   <div className="text-base font-bold text-gray-900">
                     {work.role || "No role"}
                   </div>
-                  
+
                   <div className="text-sm text-gray-700">
                     {work.company || "No company"}
                   </div>
-                  
+
                   <div className="text-xs text-gray-600">
-                    {work.startDate ? startToLabel(work.startDate) : ""} 
+                    {work.startDate ? startToLabel(work.startDate) : ""}
                     {work.startDate && " - "}
                     {work.currentlyWorking ? "Present" : (work.endDate ? startToLabel(work.endDate) : "")}
                   </div>
-                  
+
                   {work.location && (
                     <div className="text-xs text-gray-600">
                       {work.location}
                     </div>
                   )}
-                  
+
                   {work.technologies && work.technologies.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-1">
                       {work.technologies.map((tech, techIndex) => (
@@ -535,8 +543,8 @@ Spearheaded migration of legacy monolithic application to microservices architec
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -562,7 +570,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
       {/* Editing Form */}
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >
@@ -650,10 +658,22 @@ Spearheaded migration of legacy monolithic application to microservices architec
                         checked={work.currentlyWorking}
                         onChange={(e) => {
                           const checked = e.target.checked;
-                          handleChange(editIndex, "currentlyWorking", checked);
-                          if (checked) {
-                            handleChange(editIndex, "endDate", "");
-                          }
+                          // Single atomic update -- two separate handleChange() calls here
+                          // both read editingEntries from the same stale closure (React
+                          // batches the setEditingEntries between them), so the second
+                          // call's endDate write silently discarded the first call's
+                          // currentlyWorking write, and the checkbox never visibly toggled.
+                          setEditingEntries((prev) => {
+                            const updated = [...prev];
+                            updated[editIndex] = {
+                              ...updated[editIndex],
+                              currentlyWorking: checked,
+                              endDate: checked ? "" : updated[editIndex].endDate,
+                            };
+                            return updated;
+                          });
+                          clearError("work", savedEntries.length + editIndex, "currentlyWorking");
+                          if (checked) clearError("work", savedEntries.length + editIndex, "endDate");
                         }}
                         className="w-4 h-4"
                       />

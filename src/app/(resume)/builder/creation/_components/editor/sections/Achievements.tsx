@@ -59,9 +59,9 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 );
 
 const Achievements: React.FC = () => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resumeSource } = useResume();
   const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -143,16 +143,14 @@ const Achievements: React.FC = () => {
   }, [savedEntries]);
 
   useEffect(() => {
+    // An entry without its own id is genuinely new and stays id-less — see
+    // Internships.tsx's sibling effect for why backfilling an id by array
+    // POSITION is unsound (it can hand a new entry an existing entry's id,
+    // and the next save then overwrites that existing entry).
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
-      const prevItems = (prev.achievements ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.achievements) === JSON.stringify(merged)) return prev;
-      return { ...prev, achievements: merged };
+      if (JSON.stringify(prev.achievements) === JSON.stringify(allEntries)) return prev;
+      return { ...prev, achievements: allEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -160,9 +158,16 @@ const Achievements: React.FC = () => {
   useEffect(() => {
     if (!resumeData.achievements?.length) return;
     setSavedEntries(prev => {
+      // See WorkExperience.tsx's sibling effect for why this checks the
+      // filtered result before clearing editingEntries: an entirely
+      // null/empty placeholder entry never becomes valid no matter how many
+      // times this re-filters, and clearing editingEntries to [] left both
+      // it and savedEntries empty -- the modal rendered no fields at all.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.achievements!.filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.achievements!.filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.achievements!.length) return prev;
@@ -329,7 +334,7 @@ const Achievements: React.FC = () => {
 
     const descBox = descriptionRefs.current[editIndex];
     const formContainer = formScrollRef.current;
-    
+
     if (descBox && formContainer) {
       const descBoxTop = descBox.offsetTop;
       formContainer.scrollTo({
@@ -423,17 +428,17 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
                   <div className="text-base font-bold text-gray-900">
                     {achievement.title || "No title"}
                   </div>
-                  
+
                   {achievement.date && (
                     <div className="text-xs text-gray-600">
                       {achievement.date}
                     </div>
                   )}
-                  
+
                   {achievement.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: achievement.description }} 
+                    <div
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      dangerouslySetInnerHTML={{ __html: achievement.description }}
                     />
                   )}
                 </div>
@@ -455,8 +460,8 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
                       deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                   >
-                    <Trash2 
-                      size={20} 
+                    <Trash2
+                      size={20}
                       className={`text-[#595959] hover:text-red-500 ${
                         deletingIndex === index ? "animate-pulse" : ""
                       }`}
@@ -482,7 +487,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
       {/* Editing Form */}
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 mt-6 pr-2"
           >

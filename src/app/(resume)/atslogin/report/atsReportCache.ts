@@ -51,16 +51,28 @@ export function readEnhancedResumeIds(): string[] {
 /**
  * Best-effort write of an ATS report to both storages. Readers prefer
  * localStorage, so when the localStorage write fails (quota) the old entry is
- * removed; otherwise a stale copy would shadow the fresh sessionStorage one.
+ * removed after sessionStorage succeeds; otherwise a stale copy would shadow
+ * the fresh sessionStorage one.
  */
 export function writeReportCache(key: string, payload: unknown) {
   const serialized = JSON.stringify(withoutEmbeddedImages(payload));
+  let localStorageOk = false;
   try {
     localStorage.setItem(key, serialized);
+    localStorageOk = true;
   } catch {
-    try { localStorage.removeItem(key); } catch { /* non-fatal */ }
+    // localStorage quota exceeded or unavailable; fall back to sessionStorage
   }
-  try { sessionStorage.setItem(key, serialized); } catch { /* non-fatal cache write */ }
+
+  // If localStorage write succeeded, we're done. If it failed, write to
+  // sessionStorage as a fallback, then clear the stale localStorage entry.
+  if (!localStorageOk) {
+    try {
+      sessionStorage.setItem(key, serialized);
+      // Only clear after confirming sessionStorage worked, so we don't lose all copies.
+      try { localStorage.removeItem(key); } catch { /* non-fatal */ }
+    } catch { /* non-fatal cache write — reader still has stale localStorage */ }
+  }
 }
 
 export function rememberEnhancedResumeId(enhancedResumeId: string) {

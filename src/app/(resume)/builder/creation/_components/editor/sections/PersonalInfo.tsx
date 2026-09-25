@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import { useResume } from "../../../_context/ResumeContext";
 import { countryCodes } from "../../../_utils/sectionsConfig";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -25,8 +24,6 @@ interface PersonalInfoProps {
 
 const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange, onBlur }) => {
   const { resumeData, setResumeData } = useResume();
-  const searchParams = useSearchParams();
-  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
   const [isGovernmentTemplate, setIsGovernmentTemplate] = useState(false);
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
@@ -67,8 +64,13 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
 
   const fields: Field[] = [
     { field: "Full Name", key: "fullname", required: true, maxLength: 100 },
-    { field: "Email", key: "email", required: true, type: "email", maxLength: 254, readOnly: !isEnhancedResume },
-    { field: "Location", key: "location", required: true, maxLength: 100 },
+    // The API owns this account email. It remains visible on the resume but
+    // cannot be changed through a resume-section save.
+    { field: "Email", key: "email", required: true, type: "email", maxLength: 254, readOnly: true },
+    // Location improves ATS context but is not required to save a resume. It
+    // must remain removable so a user can undo an ATS-driven addition and let
+    // the server reopen the related recommendation.
+    { field: "Location", key: "location", required: false, maxLength: 100 },
     { field: "LinkedIn URL", key: "linkedinUrl", required: false, type: "url" },
     { field: "GitHub URL", key: "githubUrl", required: false, type: "url" },
     { field: "Portfolio URL", key: "portfolioUrl", required: false, type: "url" },

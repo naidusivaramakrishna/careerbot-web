@@ -141,9 +141,14 @@ const Patents: React.FC = () => {
   React.useEffect(() => {
     if (!resumeData.patents?.length) return;
     setSavedEntries(prev => {
+      // See WorkExperience.tsx's sibling effect: don't clear editingEntries
+      // when re-filtering still yields nothing valid, or both it and
+      // savedEntries end up empty and the modal renders no fields at all.
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        const validFromApi = resumeData.patents!.map(toPatentEntry).filter(hasValidData);
+        if (validFromApi.length === 0) return prev;
         setEditingEntries([]);
-        return resumeData.patents!.map(toPatentEntry).filter(hasValidData);
+        return validFromApi;
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.patents!.length) return prev;
@@ -171,15 +176,12 @@ const Patents: React.FC = () => {
       // When adding new entries, just append them
       allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     }
+    // An id-less entry is genuinely new and must stay id-less — see
+    // Internships.tsx's sibling effect for why backfilling an id by array
+    // POSITION is unsound.
     setResumeData(prev => {
-      const prevItems = (prev.patents ?? []) as Array<Record<string, unknown>>;
-      const merged = allEntries.map((entry, idx) => {
-        if ((entry as unknown as Record<string, unknown>).id) return entry;
-        const prevId = prevItems[idx]?.id as string | undefined;
-        return prevId ? { ...entry, id: prevId } : entry;
-      });
-      if (JSON.stringify(prev.patents) === JSON.stringify(merged)) return prev;
-      return { ...prev, patents: merged };
+      if (JSON.stringify(prev.patents) === JSON.stringify(allEntries)) return prev;
+      return { ...prev, patents: allEntries };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries, editingOriginalIndex]);
