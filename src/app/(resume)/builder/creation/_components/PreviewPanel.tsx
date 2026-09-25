@@ -27,6 +27,7 @@ import { getProfile } from "@/api/userApi";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
+import { getAppliedCareerTemplate } from "../../../templates/_utils/activeTemplateDomain";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
@@ -304,10 +305,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   // ✅ UPDATED: renderTemplate to support all 4 templates with both string and number IDs
   const renderTemplate = () => {
-    // Create user-scoped localStorage keys
-    const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
-    const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
-
     const careerLevel = getCareerLevel();
 
     // Compute layoutVariant — use hovered catalogue key during preview, else the persisted selection
@@ -367,27 +364,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const isFreshStart = typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true';
     if (isFreshStart) sessionStorage.removeItem('builder_fresh_start');
 
-    // Check if this is a career level template and render appropriate template based on domain
-    const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
-    const careerLevelStorage = localStorage.getItem(careerLevelKey);
-    logger.info('Career level render check:', { appliedTemplateId, hasCareerLevelStorage: !!careerLevelStorage });
-    if (!isFreshStart && appliedTemplateId && careerLevelStorage) {
-      try {
-        const careerLevels = JSON.parse(careerLevelStorage) as Array<{
-          id: string;
-          name: string;
-          domain_family?: string;
-        }>;
-        logger.info('Parsed careerLevels:', careerLevels);
-        const appliedTemplate = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
-        logger.info('Applied template found:', appliedTemplate);
-        if (appliedTemplate) {
-          logger.info('Rendering career level template with domain:', appliedTemplate.domain_family);
-          return getTemplateByDomain(appliedTemplate.domain_family);
-        }
-      } catch (err) {
-        logger.warn('Error checking career level template:', err);
-      }
+    // Career-level template → domain template. The Skills editor resolves its
+    // domain through the same helper, so both always agree.
+    const appliedTemplate = isFreshStart ? null : getAppliedCareerTemplate(userEmail);
+    if (appliedTemplate) {
+      logger.info('Rendering career level template with domain:', appliedTemplate.domain_family);
+      return getTemplateByDomain(appliedTemplate.domain_family);
     }
     logger.info('Career level logic not triggered, checking templateMap');
 

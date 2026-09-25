@@ -8,6 +8,8 @@ import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
+import { getSkillsEditorDomain, getStoredUserEmail } from "../../../templates/_utils/activeTemplateDomain";
+import { domainSkillKeyForSlug } from "@/config/domainSkills";
 import logger from "@/lib/logger";
 
 // Extract country code from a combined phone string like "+911234567890"
@@ -46,6 +48,12 @@ export interface CategorizedSkills {
 type BackendSkillItem = { id?: string; name?: string };
 type BackendSkills = Record<string, BackendSkillItem[]>;
 
+// Keys the loader's flat `skills` list already covers (or that are not skills).
+const FLAT_SKILLS_EXCLUDED_KEYS = new Set([
+  'programming_languages', 'frameworks', 'soft_skills', 'project_management', 'marketing_sales',
+  'custom_categories', 'hidden_predefined_categories', 'skill_id_map',
+]);
+
 const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   programming_languages: [],
   frameworks: [],
@@ -54,7 +62,13 @@ const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   marketing_sales: [],
 };
 
-export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
+/**
+ * @param domain Active skills domain (getSkillsEditorDomain). Its predefined
+ *   categories are stored by the API under custom_skills[slug(label)]; they are
+ *   mapped back to their editor key here so they round-trip. Slugs that are not
+ *   a category of this domain stay custom categories, so nothing gets hidden.
+ */
+export function mapBackendSkillsToCategorized(backendSkills: unknown, domain?: string | null): CategorizedSkills {
   if (!backendSkills || typeof backendSkills !== 'object' || Array.isArray(backendSkills)) {
     return { ...EMPTY_CATEGORIZED_SKILLS };
   }
@@ -90,7 +104,15 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
       .replace(/^./, c => c.toUpperCase())
       .trim();
 
+  const domainCategories: Record<string, string[]> = {};
+
   const addCustomCategory = (key: string, items: BackendSkillItem[]) => {
+    const domainKey = domainSkillKeyForSlug(key, domain);
+    if (domainKey) {
+      buildIdMap(domainKey, items);
+      domainCategories[domainKey] = [...(domainCategories[domainKey] || []), ...extractNames(items)];
+      return;
+    }
     const displayName = toDisplayName(key);
     buildIdMap(key, items);
     buildIdMap(displayName, items);
@@ -120,6 +142,7 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
     soft_skills: extractNames(s.softSkills),
     project_management: extractNames(s.projectManagement),
     marketing_sales: extractNames(s.marketingSales),
+    ...domainCategories,
     ...(customCategories.length > 0 && { custom_categories: customCategories }),
     skill_id_map: idMap,
   };
@@ -1041,7 +1064,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             let categorizedSkills: CategorizedSkills;
             if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
               // New backend format: skills is an object with camelCase keys and {id,name} arrays
-              categorizedSkills = mapBackendSkillsToCategorized(data.skills);
+              categorizedSkills = mapBackendSkillsToCategorized(data.skills, getSkillsEditorDomain(getStoredUserEmail()));
             } else {
               // Legacy format: categorizedSkills with snake_case string arrays
               categorizedSkills = (data.categorizedSkills as CategorizedSkills) || { ...EMPTY_CATEGORIZED_SKILLS };
@@ -1052,6 +1075,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               ...categorizedSkills.soft_skills,
               ...(categorizedSkills.project_management || []),
               ...(categorizedSkills.marketing_sales || []),
+              // Domain categories mapped back from custom_skills (see mapBackendSkillsToCategorized)
+              ...Object.entries(categorizedSkills)
+                .filter(([k, v]) => !FLAT_SKILLS_EXCLUDED_KEYS.has(k) && Array.isArray(v) && v.every(x => typeof x === 'string'))
+                .flatMap(([, v]) => v as string[]),
               ...(categorizedSkills.custom_categories || []).flatMap(c => c.skills),
             ];
             return { skills, categorizedSkills };

@@ -2,7 +2,7 @@
  * PR #96 — domain-aware Skills editor regressions.
  *
  * Each test here failed on the PR head (cc916e25) and passes after the fix:
- *   - 'general' domain (no templateDomain_<id> in localStorage) hid every
+ *   - 'general' domain (no applied career-level template) hid every
  *     existing skill, and one edit rebuilt categorizedSkills with the other
  *     general categories set to [] — which EditorTab then saves.
  *   - Soft Skills were listed for every domain but never displayed.
@@ -113,6 +113,18 @@ const baseSkills = () => ({
   skill_id_map: {} as Record<string, string>,
 });
 
+// The editor resolves its domain from the applied career-level template, the
+// same storage PreviewPanel reads (see DomainSkillsConsistency.test.tsx).
+function applyCareerTemplate(domain: string) {
+  const email = 'user@example.com';
+  window.localStorage.setItem('userEmail', email);
+  window.localStorage.setItem(`selectedTemplateId_${email}`, 't1');
+  window.localStorage.setItem(
+    `careerLevelTemplates_${email}`,
+    JSON.stringify([{ id: 't1', name: `${domain} - Mid-Level`, domain_family: domain }]),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
@@ -141,7 +153,7 @@ describe('Skills editor — general domain (no stored domain)', () => {
 
 describe('Skills editor — non-technical domain', () => {
   it('shows Soft Skills for healthcare and keeps hidden categories on edit', () => {
-    window.localStorage.setItem('templateDomain_r1', 'healthcare');
+    applyCareerTemplate('healthcare');
     const skills = { ...baseSkills(), clinical_skills: ['Triage'] };
     render(<Harness initial={{ resume_id: 'r1', categorizedSkills: skills }} />);
     expect(screen.getByTestId('chips-Soft Skills').textContent).toBe('Leadership');
@@ -175,13 +187,13 @@ describe('Skills editor — domain change', () => {
     render(<Harness initial={{ resume_id: 'r1', categorizedSkills: baseSkills() }} />);
     expect(screen.getByTestId('chips-Programming Languages').textContent).toBe('Python,Go');
 
-    // Domain applied elsewhere (DomainTemplatesModal writes this key), then state updates.
-    window.localStorage.setItem('templateDomain_r1', 'software_engineering');
+    // Domain applied elsewhere (a career-level template), then state updates.
+    applyCareerTemplate('software_engineering');
     act(() => {
-      setExternal!({ ...latest.data!, templateDomain: 'software_engineering' });
+      setExternal!({ ...latest.data! });
     });
 
-    await waitFor(() => expect(latest.data!.templateDomain).toBe('software_engineering'));
+    await waitFor(() => expect(screen.getByTestId('chips-Databases & Data Storage')).toBeTruthy());
     const cs = latest.data!.categorizedSkills as Record<string, string[]>;
     expect(cs.programming_languages).toEqual(['Python', 'Go']);
     expect(cs.soft_skills).toEqual(['Leadership']);

@@ -9,87 +9,9 @@ import TechnologyChipsInput, { type TechnologyChipsInputHandle } from "../Techno
 import { addSkillToCategory, deleteSkillCategory, deleteSkillById } from "@/api/resumeApi";
 import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCategoryFromEnhancedResume } from "@/api/enhancerApi";
 import { toast } from "sonner";
-import { getSkillsForDomain, DOMAIN_SKILLS, type SkillCategory } from "@/config/domainSkills";
+import { getSkillsForDomain, DOMAIN_SKILLS, skillCategoryApiName, type SkillCategory, type SkillDomain } from "@/config/domainSkills";
+import { getSkillsEditorDomain, getStoredUserEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 import logger from "@/lib/logger";
-
-const CATEGORY_KEY_MAP: Record<string, string> = {
-  programming_languages: "programmingLanguages",
-  frameworks: "frameworks",
-  soft_skills: "softSkills",
-  project_management: "projectManagement",
-  marketing_sales: "marketingSales",
-  clinical_skills: "Clinical Skills & Diagnostics",
-  healthcare_compliance: "Healthcare Operations & Compliance",
-  healthcare_systems: "Disease Management & Pharmacology",
-  legal_practice: "Legal Practice Areas",
-  legal_research: "Legal Research & Writing",
-  legal_compliance: "Legal Compliance & Regulations",
-  government_operations: "Government Operations",
-  government_compliance: "Government Compliance & Security",
-  maritime_operations: "Maritime Operations",
-  maritime_regulations: "Maritime Regulations & Compliance",
-  maritime_crew_management: "Crew Management",
-  penetration_testing: "Penetration Testing & Assessment",
-  security_defense: "Defensive Security & Incident Response",
-  security_compliance: "Compliance, GRC & Risk Management",
-  cloud_security: "Cloud & Infrastructure Security",
-  programming_ml: "Programming & Machine Learning",
-  research_methodologies: "Research Methodologies & Analysis",
-  research_infrastructure: "Research Infrastructure & Tools",
-  research_leadership: "Research Leadership & Grant Management",
-  // Software Engineering
-  frameworks_libraries: "Frameworks & Libraries",
-  databases_data_storage: "Databases & Data Storage",
-  cloud_devops: "Cloud & DevOps",
-  // Finance
-  financial_analysis: "Financial Analysis & Modeling",
-  accounting_auditing: "Accounting & Auditing",
-  risk_compliance: "Risk Management & Compliance",
-  // Education
-  pedagogical_expertise: "Pedagogical Expertise",
-  research_publication: "Research & Publication",
-  academic_leadership: "Academic Leadership & Administration",
-  // Core Engineering
-  design_analysis: "Design & Analysis",
-  manufacturing_operations: "Manufacturing & Operations",
-  project_management_skills: "Project Management",
-  // Government Standard
-  governance_administration: "Governance & Administration",
-  financial_management: "Financial Management & Budget Administration",
-  digital_governance: "Digital Governance & Smart Systems",
-  // Electronics & VLSI
-  digital_vlsi_design: "Digital & VLSI Design",
-  embedded_systems: "Embedded Systems & Firmware",
-  analog_design: "Analog & Mixed Signal Design",
-  // Logistics & Warehouse Operations
-  warehouse_operations: "Warehouse Operations & Management",
-  supply_chain_logistics: "Supply Chain & Logistics Management",
-  systems_tools: "Systems & Tools",
-  // Sales & Business Development
-  sales_competencies: "Sales Competencies",
-  business_development: "Business Development & Growth",
-  tools_platforms: "Tools & Platforms",
-  // Customer Support & Account Management
-  customer_success: "Customer Success & Experience",
-  account_management: "Account & Relationship Management",
-  tools_systems: "Tools & Systems",
-  // Product & Engineering Leadership
-  product_strategy: "Product Strategy & Management",
-  engineering_leadership: "Engineering Leadership & Architecture",
-  cross_functional: "Cross-Functional Leadership",
-  // Marketing & Creative
-  marketing_strategy: "Marketing Strategy & Planning",
-  creative_design: "Creative & Design",
-  marketing_tools: "Marketing Tools & Platforms",
-  // Operations & Management
-  operations_strategy: "Operations Strategy & Management",
-  project_delivery: "Project & Program Management",
-  business_analysis: "Business Analysis & Analytics",
-  // Human Resources
-  talent_management: "Talent Management & Acquisition",
-  employee_relations: "Employee Relations & Engagement",
-  hr_operations: "HR Operations & Administration",
-};
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -107,31 +29,14 @@ const Skills: React.FC = () => {
   const skillsInputRefs = useRef<Record<string, TechnologyChipsInputHandle | null>>({});
   const latestCustomIdRef = useRef<string | null>(null);
 
-  // Load domain-specific skill categories based on selected template domain
-  // templateDomain is set when template is applied, defaults to 'general'
+  // Resolve the domain exactly as PreviewPanel does (applied career-level
+  // template), so the editor never offers categories the preview, PDF and DOCX
+  // filter out.
   const resumeId = resumeData.resume_id;
-  const storedDomain = typeof window !== 'undefined' && resumeId ? localStorage.getItem(`templateDomain_${resumeId}`) : null;
-  const rawDomain = (storedDomain || resumeData.templateDomain || 'general').toLowerCase();
-  const SKILL_CATEGORIES = getSkillsForDomain(rawDomain as any);
+  const rawDomain = getSkillsEditorDomain(getStoredUserEmail());
+  const SKILL_CATEGORIES = getSkillsForDomain(rawDomain as SkillDomain);
 
-  logger.debug('Skills component state:', { resumeId, storedDomain, resumeDataDomain: resumeData.templateDomain, rawDomain });
-
-  // Sync templateDomain from localStorage when it changes
-  useEffect(() => {
-    if (!resumeId || typeof window === 'undefined') return;
-
-    const storedDomain = localStorage.getItem(`templateDomain_${resumeId}`);
-    const currentDomain = (resumeData.templateDomain || '').toLowerCase();
-    const storedDomainLower = (storedDomain || '').toLowerCase();
-
-    if (storedDomain && storedDomainLower !== currentDomain) {
-      logger.info('Detected domain change in localStorage:', { stored: storedDomainLower, current: currentDomain });
-      setResumeData(prev => ({
-        ...prev,
-        templateDomain: storedDomain,
-      }));
-    }
-  }, [resumeId, resumeData.templateDomain, setResumeData]);
+  logger.debug('Skills component state:', { resumeId, rawDomain });
 
   useEffect(() => {
     const id = latestCustomIdRef.current;
@@ -281,9 +186,10 @@ const Skills: React.FC = () => {
     if (resumeId) {
       try {
         if (isEnhancedResume) {
-          await deleteSkillCategoryFromEnhancedResume(resumeId, categoryKey);
+          await deleteSkillCategoryFromEnhancedResume(resumeId, skillCategoryApiName(categoryKey));
         } else {
-          await deleteSkillCategory(resumeId, categoryKey);
+          // Same name the add path sends — the API slugifies it to find the bucket.
+          await deleteSkillCategory(resumeId, skillCategoryApiName(categoryKey));
         }
       } catch {
         toast.error("Failed to delete category. Please try again.");
@@ -406,7 +312,7 @@ const Skills: React.FC = () => {
                         error={errors[`Skills-0-${cat.key}`]}
                         onAddSkill={resumeData.resume_id ? async (skill) => {
                           try {
-                            const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
+                            const apiCategory = skillCategoryApiName(cat.key);
                             const { id } = isEnhancedResume
                               ? await addSkillToEnhancedResume(resumeData.resume_id!, apiCategory, skill)
                               : await addSkillToCategory(resumeData.resume_id!, apiCategory, skill);
@@ -433,7 +339,7 @@ const Skills: React.FC = () => {
                         } : undefined}
                         onRemoveSkill={resumeData.resume_id ? async (skill) => {
                           try {
-                            const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
+                            const apiCategory = skillCategoryApiName(cat.key);
                             const skillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`] ?? skill;
                             if (isEnhancedResume) {
                               await deleteSkillFromEnhancedResume(resumeData.resume_id!, apiCategory, skillId);

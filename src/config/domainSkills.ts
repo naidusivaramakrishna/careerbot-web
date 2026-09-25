@@ -891,7 +891,9 @@ const CORE_ENGINEERING_SKILLS: SkillCategory[] = [
     ],
   },
   {
-    key: 'project_management_skills',
+    // Must be the fixed key: the API resolves "Project Management" to its fixed
+    // projectManagement field, so a separate key would vanish after a reload.
+    key: 'project_management',
     label: 'Project Management',
     placeholder: 'e.g., Project Planning, Execution, Delivery...',
     suggestions: [
@@ -1598,6 +1600,57 @@ export const DOMAIN_SKILLS: Record<SkillDomain, SkillCategory[]> = {
 
 export function getSkillsForDomain(domain: SkillDomain): SkillCategory[] {
   return DOMAIN_SKILLS[domain] ?? GENERAL_SKILLS;
+}
+
+// ── Category key ↔ backend category name ─────────────────────────────────────
+// The skills API (careerbot-api app/shared/skills_taxonomy.py) stores the five
+// fixed categories under their own fields and every other category under
+// custom_skills[slugify_category(<name sent in the URL>)]. Add, delete and
+// reload must therefore all go through the same name, and reload must map the
+// slug back to the editor key.
+
+const FIXED_API_CATEGORY_NAMES: Record<string, string> = {
+  programming_languages: 'programmingLanguages',
+  frameworks: 'frameworks',
+  soft_skills: 'softSkills',
+  project_management: 'projectManagement',
+  marketing_sales: 'marketingSales',
+};
+
+const LABEL_BY_KEY: Record<string, string> = {};
+Object.values(DOMAIN_SKILLS).forEach((categories) => {
+  categories.forEach((c) => {
+    if (!(c.key in LABEL_BY_KEY)) LABEL_BY_KEY[c.key] = c.label;
+  });
+});
+
+/** Category name to send to the skills API for an editor category key. */
+export function skillCategoryApiName(key: string): string {
+  return FIXED_API_CATEGORY_NAMES[key] ?? LABEL_BY_KEY[key] ?? key;
+}
+
+/** Mirror of the backend's slugify_category (camel_to_snake + non-alnum → "_"). */
+export function slugifySkillCategory(name: string): string {
+  const snake = name
+    .replace(/(.)([A-Z][a-z]+)/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+  return snake.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'custom';
+}
+
+/**
+ * Editor key of `domain`'s category stored under custom_skills[slug], or
+ * undefined when the slug is not one of that domain's categories (then it is
+ * a user-created category and stays in custom_categories).
+ */
+export function domainSkillKeyForSlug(slug: string, domain?: string | null): string | undefined {
+  if (!domain) return undefined;
+  const categories = DOMAIN_SKILLS[domain as SkillDomain];
+  if (!categories) return undefined;
+  const match = categories.find(
+    (c) => !(c.key in FIXED_API_CATEGORY_NAMES) && slugifySkillCategory(skillCategoryApiName(c.key)) === slug,
+  );
+  return match?.key;
 }
 
 export function getDomainFromTemplate(templateName: string | undefined): SkillDomain {
