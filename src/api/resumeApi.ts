@@ -64,6 +64,14 @@ export interface ResumeResponse {
     expiryDate?: string;
     credentialId?: string;
   }>;
+  licenses?: Array<{
+    id?: string;
+    name: string;
+    issuedBy: string;
+    year: string;
+    expiryDate?: string;
+    credentialId?: string;
+  }>;
   achievements?: Array<{
     id?: string;
     title: string;
@@ -1061,7 +1069,7 @@ export const downloadResume = async (
   }
 };
 
-// Keep your existing getTemplatesByCategory function
+// getTemplatesByCategory function
 export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
   
   try {

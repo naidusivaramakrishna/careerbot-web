@@ -50,9 +50,23 @@ const DashboardContent = () => {
   const [period, setPeriod] = useState<DashboardPeriod>('monthly');
   const [dashboardData, setDashboardData] = useState<DashboardOverviewResponse | null>(null);
   const [realtimeStats, setRealtimeStats] = useState<RealtimeStats | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefreshState] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('admin_dashboard_auto_refresh') === 'true';
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // Persist auto-refresh preference to localStorage
+  const setAutoRefresh = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setAutoRefreshState(prev => {
+      const newValue = typeof value === 'function' ? value(prev) : value;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('admin_dashboard_auto_refresh', String(newValue));
+      }
+      return newValue;
+    });
+  }, []);
 
   // Optimized fetch with useCallback
   const fetchDashboardData = useCallback(async () => {

@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import Dropdown from '@/components/common/CustomDropdown'
 import { LoadingSpinner } from '../_components/LoadingSpinner'
-import { useSystemMonitoring } from './hooks/useSystemMonitoring'
+import { useSystemMonitoring, type LogsFilters } from './hooks/useSystemMonitoring'
 import { ApiRequestsSection } from './_components/ApiRequestsSection'
 import { HealthCards } from './_components/HealthCards'
 import { CpuUsageSection } from './_components/CpuUsageSection'
@@ -20,6 +20,13 @@ const SystemMonitoring = () => {
     const [activeTabs, setActiveTabs] = useState({ api: "Today", cpu: "Today", memory: "Today" })
     const [showComparisons, setShowComparisons] = useState({ api: false, cpu: false, memory: false })
     const [autoRefresh, setAutoRefresh] = useState<string>("Off")
+    const [logsFilters, setLogsFilters] = useState<LogsFilters>({
+        level: '',
+        source: '',
+        search: '',
+        startDate: '',
+        endDate: '',
+    })
 
     // Load auto-refresh preference from localStorage on mount
     useEffect(() => {
@@ -36,10 +43,12 @@ const SystemMonitoring = () => {
         cpuMetrics,
         memoryMetrics,
         systemLogs,
+        logsError,
         loading,
         isRefreshing,
         lastRefreshed,
-        fetchAllData
+        fetchAllData,
+        fetchLogs
     } = useSystemMonitoring({
         activeTab: activeTabs.api,
         cpuActiveTab: activeTabs.cpu,
@@ -47,13 +56,15 @@ const SystemMonitoring = () => {
         apiShowComparison: showComparisons.api,
         cpuShowComparison: showComparisons.cpu,
         memoryShowComparison: showComparisons.memory,
-        autoRefresh
+        autoRefresh,
+        logsFilters
     })
 
     const handleRefresh = useCallback(() => {
         logger.info('Refreshing system monitoring data')
         fetchAllData()
-    }, [fetchAllData])
+        fetchLogs()
+    }, [fetchAllData, fetchLogs])
 
     const handleAutoRefreshChange = useCallback((value: string) => {
         logger.debug(`Auto-refresh changed to: ${value}`)
@@ -144,7 +155,13 @@ const SystemMonitoring = () => {
 
             {/* System Logs */}
             {systemLogs && (
-                <SystemLogsSection logs={systemLogs.logs} />
+                <SystemLogsSection
+                    logs={systemLogs.logs}
+                    loading={isRefreshing}
+                    error={logsError}
+                    filters={logsFilters}
+                    onFiltersChange={setLogsFilters}
+                />
             )}
 
             {/* Performance Metrics */}

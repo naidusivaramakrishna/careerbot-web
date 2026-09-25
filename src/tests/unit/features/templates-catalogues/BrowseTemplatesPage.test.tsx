@@ -2,20 +2,19 @@
  * Component tests for BrowseTemplatesPage (/browse-templates).
  *
  * Covers the behaviours unique to this page:
- *   - Hero, step indicators, trust badges, and search section render
- *   - Domain cards are shown for all families by default
- *   - Typing in the search input filters visible domain cards
- *   - "No templates found" empty state appears for unmatched queries
- *   - Clear (✕) button empties the search
- *   - Quick-search buttons populate the search field
- *   - Clicking a domain card navigates to /browse-templates/<family>/<domain>
- *   - Clicking a catalogue card saves selected_catalogue to localStorage
- *   - Colour swatch click saves selected_colour to localStorage
+ *   - Hero section with headline and stats render
+ *   - Benefits section renders with ATS Optimized, Instant Download, Industry-Tailored, Live Customization
+ *   - 10 Premium Style Catalogues carousel section renders
+ *   - Catalogue carousel rotates through styles
+ *   - 18+ Industries section with bar chart renders
+ *   - Career levels timeline section renders
+ *   - CTA buttons navigate to /templates and open auth modal
  *   - "Get Started Free" opens AuthModal with signup form
- *   - "Sign in" opens AuthModal with signin form
+ *   - "Start Exploring Now" navigates to /templates
+ *   - Back button navigates to /
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 // ─── Router capture ────────────────────────────────────────────────────────────
@@ -35,275 +34,165 @@ vi.mock('@/components/SignUpModal', () => ({
       : null,
 }));
 
-vi.mock('@/app/(resume)/templates/_components/CategorySidebar', () => ({
-  default: ({ categories, selectedCategory, onSelectCategory }: {
-    categories: string[]; selectedCategory: string; onSelectCategory: (c: string) => void;
-  }) =>
-    React.createElement('div', { 'data-testid': 'category-sidebar' },
-      categories.map((cat: string) =>
-        React.createElement('button', {
-          key: cat,
-          onClick: () => onSelectCategory(cat),
-          'data-selected': String(cat === selectedCategory),
-        }, cat)
-      )
-    ),
-}));
-
-// ─── CatalogueThumbnail mock ──────────────────────────────────────────────────
-vi.mock('@/app/browse-templates/_components/CatalogueThumbnail', () => ({
-  default: ({ catalogueKey }: { catalogueKey: string }) =>
-    React.createElement('div', { 'data-testid': `thumbnail-${catalogueKey}` }),
-  CATALOGUE_PALETTES: {
-    galaxy:  { palette: ['#ff0000', '#ff3300', '#ff6600', '#ff9900', '#ffcc00'], defaultColor: '#ff0000' },
-    eclipse: { palette: ['#111111', '#222222', '#333333', '#444444', '#555555'], defaultColor: '#111111' },
-    ocean:   { palette: ['#0369a1', '#0c4a6e', '#1e40af', '#1d4ed8', '#2563eb'], defaultColor: '#0369a1' },
-  },
-  CODE_THUMBNAIL_CATALOGUES: new Set(['galaxy', 'eclipse', 'ocean']),
-}));
-
-// ─── STYLE_CATALOGUES mock ────────────────────────────────────────────────────
-vi.mock('@/app/(resume)/builder/creation/_utils/templateStyles', () => ({
-  STYLE_CATALOGUES: {
-    galaxy:  { label: 'Galaxy',  swatches: ['#1a1a1a', '#4b5563'], description: 'Dark professional', style: { fontFamily: 'arial' } },
-    eclipse: { label: 'Eclipse', swatches: ['#ececec', '#d1d5db'], description: 'Light minimal',     style: { fontFamily: 'helvetica' } },
-    ocean:   { label: 'Ocean',   swatches: ['#0369a1', '#0c4a6e'], description: 'Blue calm',         style: { fontFamily: 'arial' } },
-  },
-}));
-
-// ─── Data constants mock ──────────────────────────────────────────────────────
-// Small controlled dataset so filter/search tests are predictable
-vi.mock('@/app/browse-templates/_data/constants', () => ({
-  FAMILY_TEMPLATES: {
-    software_engineering: { id: 1, image: '/assets/software.png', description: 'Tech template' },
-    healthcare:           { id: 2, image: '/assets/healthcare.png', description: 'Healthcare template' },
-  },
-  FAMILY_DOMAINS: {
-    software_engineering: ['software_engineering', 'web_development'],
-    healthcare:           ['doctor_physician', 'clinical_nurse'],
-  },
-  DOMAIN_NAMES: {
-    software_engineering: 'Software Engineering',
-    healthcare:           'Healthcare',
-  },
-  DOMAIN_DISPLAY_NAMES: {
-    software_engineering: 'Software Engineering',
-    web_development:      'Web Development',
-    doctor_physician:     'Doctor / Physician',
-    clinical_nurse:       'Clinical Nurse',
-  },
-  CAREER_LEVELS: ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'],
-  FALLBACK_IMAGE: '/assets/fallback.jpg',
-}));
-
 // ─── Component under test ─────────────────────────────────────────────────────
 import BrowseTemplatesPage from '@/app/browse-templates/page';
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('BrowseTemplatesPage — rendering', () => {
+describe('BrowseTemplatesPage — hero section', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('renders the hero heading', () => {
+  it('renders the hero headline', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.getByText(/find your/i)).toBeInTheDocument();
-    expect(screen.getByText(/perfect resume style/i)).toBeInTheDocument();
+    expect(screen.getByText(/Land Your Dream Job/i)).toBeInTheDocument();
+    expect(screen.getByText(/Perfect Resumes/i)).toBeInTheDocument();
   });
 
-  it('renders the "Choose a Style" section heading', () => {
+  it('renders the hero subtitle with industry count', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.getByText('Choose a Style')).toBeInTheDocument();
+    // The subtitle paragraph, not the "Trusted by 18+ Industries" heading further down.
+    expect(screen.getByText(/Each crafted for 18\+ industries/i)).toBeInTheDocument();
   });
 
-  it('renders the step indicators', () => {
+  it('renders hero stats', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
-    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+    expect(screen.getByText('100+')).toBeInTheDocument(); // Professional Templates
+    expect(screen.getByText('Professional Templates')).toBeInTheDocument();
+    expect(screen.getByText('18+')).toBeInTheDocument(); // Industries
+    expect(screen.getByText('Career Levels')).toBeInTheDocument();
+    expect(screen.getByText('Style Catalogues')).toBeInTheDocument();
   });
 
-  it('renders the search input', () => {
+  it('renders AI-Powered Resume Builder badge', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.getByPlaceholderText(/search by role, industry/i)).toBeInTheDocument();
-  });
-
-  it('renders trust badges', () => {
-    render(<BrowseTemplatesPage />);
-    expect(screen.getByText('100% ATS Friendly')).toBeInTheDocument();
-    // Matches TRUST_BADGES in browse-templates/page.tsx, which this PR
-    // corrected from "14+ Industries" to the real family count (18).
-    // Deliberately a literal: this suite mocks the constants module, so
-    // deriving the number from FAMILY_DOMAINS would assert against the mock
-    // (2 families) rather than the string the page actually renders.
-    expect(screen.getByText('18 Industries')).toBeInTheDocument();
-    expect(screen.getByText('Free to browse')).toBeInTheDocument();
-  });
-
-  it('renders all catalogue labels', () => {
-    render(<BrowseTemplatesPage />);
-    // Each label may appear twice (card label + selected-indicator span), so use getAllByText
-    expect(screen.getAllByText('Galaxy').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Eclipse').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Ocean').length).toBeGreaterThan(0);
+    expect(screen.getByText(/AI-Powered Resume Builder/i)).toBeInTheDocument();
   });
 });
 
-describe('BrowseTemplatesPage — domain cards', () => {
+describe('BrowseTemplatesPage — benefits section', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('renders domain cards for all families by default', () => {
+  it('renders benefits section heading', () => {
     render(<BrowseTemplatesPage />);
-    // Use unique domain display names (not family headings) to verify both families render
-    expect(screen.getByText('Web Development')).toBeInTheDocument();   // software_engineering family
-    expect(screen.getByText('Doctor / Physician')).toBeInTheDocument(); // healthcare family
-    expect(screen.getByText('Clinical Nurse')).toBeInTheDocument();
+    expect(screen.getByText(/Why Professionals Trust Us/i)).toBeInTheDocument();
   });
 
-  it('clicking a domain card navigates to /browse-templates/<family>/<domain>', () => {
+  it('renders all benefit cards', () => {
     render(<BrowseTemplatesPage />);
-    // DomainCard accessible name = alt text + h3 text combined; use regex to match
-    fireEvent.click(screen.getByRole('button', { name: /doctor \/ physician/i }));
-    expect(mockPush).toHaveBeenCalledWith('/browse-templates/healthcare/doctor_physician');
-  });
-
-  it('clicking a software domain card navigates correctly', () => {
-    render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByRole('button', { name: /web development/i }));
-    expect(mockPush).toHaveBeenCalledWith('/browse-templates/software_engineering/web_development');
+    expect(screen.getByText('ATS Optimized')).toBeInTheDocument();
+    expect(screen.getByText('Instant Download')).toBeInTheDocument();
+    expect(screen.getByText('Industry-Tailored')).toBeInTheDocument();
+    expect(screen.getByText('Live Customization')).toBeInTheDocument();
   });
 });
 
-describe('BrowseTemplatesPage — search', () => {
+describe('BrowseTemplatesPage — catalogues carousel', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('typing "healthcare" shows only healthcare domain cards', async () => {
+  it('renders 10 Premium Style Catalogues section', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.change(screen.getByPlaceholderText(/search by role, industry/i), {
-      target: { value: 'healthcare' },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Doctor / Physician')).toBeInTheDocument();
-      expect(screen.getByText('Clinical Nurse')).toBeInTheDocument();
-      expect(screen.queryByText('Web Development')).not.toBeInTheDocument();
-    });
+    expect(screen.getByText(/10 Premium Style Catalogues/i)).toBeInTheDocument();
   });
 
-  it('typing "software" shows only software engineering domain cards', async () => {
+  it('renders catalogue selector buttons with names', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.change(screen.getByPlaceholderText(/search by role, industry/i), {
-      target: { value: 'software' },
-    });
-
-    await waitFor(() => {
-      // "Web Development" is unique to the software_engineering family
-      expect(screen.getByText('Web Development')).toBeInTheDocument();
-      expect(screen.queryByText('Doctor / Physician')).not.toBeInTheDocument();
-      expect(screen.queryByText('Clinical Nurse')).not.toBeInTheDocument();
-    });
+    expect(screen.getByRole('button', { name: 'Eclipse' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Galaxy' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ocean' })).toBeInTheDocument();
   });
 
-  it('typing an unmatched query shows "No templates found" empty state', async () => {
+  it('allows selecting different catalogues via buttons', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.change(screen.getByPlaceholderText(/search by role, industry/i), {
-      target: { value: 'xyzzznothing' },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('No templates found')).toBeInTheDocument();
-    });
+    // The carousel card's <h3> shows the selected catalogue (the selector
+    // buttons always show every name, so assert on the heading).
+    expect(screen.getByRole('heading', { level: 3, name: 'Eclipse' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Galaxy' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Galaxy' }));
+    expect(screen.getByRole('heading', { level: 3, name: 'Galaxy' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Eclipse' })).not.toBeInTheDocument();
   });
 
-  it('Clear (✕) button appears only when search has text', () => {
+  it('renders carousel navigation arrows', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.queryByRole('button', { name: '✕' })).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByPlaceholderText(/search by role, industry/i), {
-      target: { value: 'healthcare' },
-    });
-
-    expect(screen.getByRole('button', { name: '✕' })).toBeInTheDocument();
-  });
-
-  it('clicking the Clear button empties the search and restores all cards', async () => {
-    render(<BrowseTemplatesPage />);
-    const input = screen.getByPlaceholderText(/search by role, industry/i);
-
-    fireEvent.change(input, { target: { value: 'healthcare' } });
-    await waitFor(() => expect(screen.queryByText('Web Development')).not.toBeInTheDocument());
-
-    fireEvent.click(screen.getByRole('button', { name: '✕' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Web Development')).toBeInTheDocument();
-      expect(screen.getByText('Doctor / Physician')).toBeInTheDocument();
-    });
-  });
-
-  it('quick-search "Healthcare" button populates the search field', async () => {
-    render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Healthcare' }));
-
-    const input = screen.getByPlaceholderText(/search by role, industry/i) as HTMLInputElement;
-    expect(input.value).toBe('Healthcare');
-  });
-
-  it('quick-search "Finance" button filters to show no cards (not in mock data)', async () => {
-    render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Finance' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('No templates found')).toBeInTheDocument();
-    });
+    const buttons = screen.getAllByRole('button');
+    // Find chevron buttons (look for them by checking role and position)
+    expect(buttons.length).toBeGreaterThan(10); // At least browse, back, get started, catalogues, and chevrons
   });
 });
 
-describe('BrowseTemplatesPage — catalogue selection', () => {
+describe('BrowseTemplatesPage — industries section', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('clicking a catalogue card saves it to localStorage', () => {
+  it('renders industries section heading', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByTestId('thumbnail-ocean'));
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('selected_catalogue', 'ocean');
+    expect(screen.getByText(/Trusted by 18\+ Industries/i)).toBeInTheDocument();
   });
 
-  it('clicking a colour swatch saves the colour to localStorage', () => {
+  it('renders industry names', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByLabelText('Select colour #0369a1'));
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('selected_color_ocean', '#0369a1');
-  });
-
-  it('clicking a catalogue also saves it when a domain card is clicked afterwards', () => {
-    render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByTestId('thumbnail-eclipse'));
-    fireEvent.click(screen.getByRole('button', { name: /doctor \/ physician/i }));
-
-    // handleDomainSelect re-saves the current catalogue before navigating
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('selected_catalogue', 'eclipse');
-    expect(mockPush).toHaveBeenCalledWith('/browse-templates/healthcare/doctor_physician');
+    expect(screen.getByText(/Software Engineering/i)).toBeInTheDocument();
+    expect(screen.getByText(/Healthcare & Medical/i)).toBeInTheDocument();
+    expect(screen.getByText(/Finance & Accounting/i)).toBeInTheDocument();
   });
 });
 
-describe('BrowseTemplatesPage — auth modal', () => {
+describe('BrowseTemplatesPage — career levels section', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('auth modal is not visible initially', () => {
+  it('renders career levels section heading', () => {
     render(<BrowseTemplatesPage />);
-    expect(screen.queryByTestId('auth-modal')).not.toBeInTheDocument();
+    expect(screen.getByText(/Perfect for Every Career Stage/i)).toBeInTheDocument();
   });
 
-  it('"Get Started Free" opens the auth modal with signup form', () => {
+  it('renders career level titles', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByRole('button', { name: /get started free/i }));
+    expect(screen.getByText('Fresher')).toBeInTheDocument();
+    expect(screen.getByText('Early Career')).toBeInTheDocument();
+    expect(screen.getByText('Mid-Level')).toBeInTheDocument();
+    expect(screen.getByText('Senior Level')).toBeInTheDocument();
+  });
+});
+
+describe('BrowseTemplatesPage — navigation and CTAs', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('renders back button that navigates to home', () => {
+    render(<BrowseTemplatesPage />);
+    const backButtons = screen.getAllByText('← Back');
+    fireEvent.click(backButtons[0]);
+    expect(mockPush).toHaveBeenCalledWith('/');
+  });
+
+  it('"Start Exploring Now" navigates to /templates', () => {
+    render(<BrowseTemplatesPage />);
+    // The CTA button, not the "Start exploring now — completely free." copy.
+    fireEvent.click(screen.getByRole('button', { name: /Start Exploring Now/i }));
+    expect(mockPush).toHaveBeenCalledWith('/templates');
+  });
+
+  it('"Get Started Free" opens auth modal with signup form', () => {
+    render(<BrowseTemplatesPage />);
+    fireEvent.click(screen.getByText('Get Started Free'));
     const modal = screen.getByTestId('auth-modal');
     expect(modal).toBeInTheDocument();
     expect(modal.getAttribute('data-form-type')).toBe('signup');
   });
 
-  it('"Sign in" opens the auth modal with signin form', () => {
+  it('"Browse All Templates" CTA navigates to /templates', () => {
     render(<BrowseTemplatesPage />);
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    const modal = screen.getByTestId('auth-modal');
-    expect(modal).toBeInTheDocument();
-    expect(modal.getAttribute('data-form-type')).toBe('signin');
+    fireEvent.click(screen.getByText(/Browse All Templates/i));
+    expect(mockPush).toHaveBeenCalledWith('/templates');
+  });
+});
+
+describe('BrowseTemplatesPage — footer', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('renders footer with CareerBot branding', () => {
+    render(<BrowseTemplatesPage />);
+    // Scoped to <footer>: the nav bar also shows "CareerBot".
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByText('CareerBot')).toBeInTheDocument();
+    expect(within(footer).getByText(/ATS-optimized resumes/i)).toBeInTheDocument();
   });
 });

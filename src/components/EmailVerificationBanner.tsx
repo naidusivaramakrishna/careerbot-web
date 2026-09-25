@@ -27,7 +27,7 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
     try {
       setLoading(true);
       await resendVerificationEmail({ email: userEmail });
-      toast.success("Verification email sent! Check your inbox.");
+      toast.success("Verification code sent! Check your inbox.");
       logger.info("Verification email resent for:", userEmail);
     } catch (error: unknown) {
       logger.error("Error resending verification email:", error);
@@ -47,8 +47,8 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
           <div className="flex-1">
             <h3 className="font-semibold text-blue-900 mb-1">Verify Your Email</h3>
             <p className="text-sm text-blue-800 mb-3">
-              We sent a verification link to <strong>{userEmail}</strong>.
-              Click the link in your email to activate your account and unlock all features.
+              Your email <strong>{userEmail}</strong> is not verified yet. We can send a 6-digit
+              verification code to it; enter the code when you next sign in to verify your account.
             </p>
             <button
               onClick={handleResendEmail}
@@ -61,7 +61,7 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
                   Sending...
                 </>
               ) : (
-                "Resend verification email"
+                "Send verification code"
               )}
             </button>
           </div>

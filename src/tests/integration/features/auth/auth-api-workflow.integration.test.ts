@@ -269,35 +269,35 @@ describe('Auth API — resendVerificationEmail', () => {
 describe('Auth API — verifyEmail', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('POSTs to /auth/email/verify with token', async () => {
+  it('POSTs to /auth/email/verify with user_id and otp', async () => {
     const spy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(
       makeResponse({ success: true, message: 'Email verified' })
     );
 
-    await verifyEmail({ token: 'verify-token-abc' });
+    await verifyEmail({ user_id: 'user-123', otp: '123456' });
 
     expect(spy).toHaveBeenCalledWith(
       '/auth/email/verify',
-      { token: 'verify-token-abc' },
+      { user_id: 'user-123', otp: '123456' },
       expect.any(Object)
     );
   });
 
-  it('returns success:true and message on valid token', async () => {
+  it('returns success:true and message on valid otp', async () => {
     vi.spyOn(httpClient, 'post').mockResolvedValueOnce(
       makeResponse({ success: true, message: 'Email verified successfully' })
     );
 
-    const result = await verifyEmail({ token: 'valid-token' });
+    const result = await verifyEmail({ user_id: 'user-123', otp: '123456' });
 
     expect(result.success).toBe(true);
     expect(result.message).toBe('Email verified successfully');
   });
 
-  it('rethrows on expired/invalid token (400)', async () => {
+  it('rethrows on invalid/expired otp (400)', async () => {
     vi.spyOn(httpClient, 'post').mockRejectedValueOnce({ response: { status: 400 } });
 
-    await expect(verifyEmail({ token: 'expired-token' }))
+    await expect(verifyEmail({ user_id: 'user-123', otp: 'wrong' }))
       .rejects.toMatchObject({ response: { status: 400 } });
   });
 });

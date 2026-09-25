@@ -290,6 +290,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                             // the load-time normalization above and the .toLowerCase() on submit.
                             setRoleForm({ role: admin.role.toUpperCase(), reason: "" });
                         }}
+                        currentRole={admin.role.toUpperCase()}
                     />
                 )}
 
@@ -304,6 +305,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                             setShowStatusDialog(false);
                             setStatusForm({ status: admin.status, reason: "" });
                         }}
+                        currentStatus={admin.status}
                     />
                 )}
 

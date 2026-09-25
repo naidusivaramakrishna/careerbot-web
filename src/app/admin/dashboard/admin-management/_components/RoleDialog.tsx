@@ -9,6 +9,7 @@ interface RoleDialogProps {
     actionLoading: boolean;
     onUpdate: () => void;
     onClose: () => void;
+    currentRole: string;
 }
 
 // THE ROLES A SUPER ADMIN CAN ASSIGN. Must stay in step with AdminRole in
@@ -20,9 +21,10 @@ const VALID_ROLES = new Set([
     'SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT',
 ]);
 
-const RoleDialog = memo(({ roleForm, setRoleForm, actionLoading, onUpdate, onClose }: RoleDialogProps) => {
+const RoleDialog = memo(({ roleForm, setRoleForm, actionLoading, onUpdate, onClose, currentRole }: RoleDialogProps) => {
     const [confirmed, setConfirmed] = useState(false);
     const isValidRole = VALID_ROLES.has(roleForm.role);
+    const isRoleChanged = roleForm.role !== currentRole;
 
     const handleClick = () => {
         if (!confirmed) { setConfirmed(true); return; }
@@ -43,6 +45,7 @@ const RoleDialog = memo(({ roleForm, setRoleForm, actionLoading, onUpdate, onClo
                             bgColor="bg-gray-100"
                             bgOptions="bg-white"
                             className="w-full"
+                            disabledOptions={[currentRole]}
                         />
                     </div>
                     <div>
@@ -69,8 +72,9 @@ const RoleDialog = memo(({ roleForm, setRoleForm, actionLoading, onUpdate, onClo
                 <div className="flex gap-2 mt-4">
                     <button
                         onClick={handleClick}
-                        disabled={actionLoading || !isValidRole}
+                        disabled={actionLoading || !isValidRole || !isRoleChanged}
                         className="flex-1 bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                        title={!isRoleChanged ? "Select a different role to proceed" : ""}
                     >
                         {actionLoading ? "Updating..." : confirmed ? "Confirm" : "Update Role"}
                     </button>

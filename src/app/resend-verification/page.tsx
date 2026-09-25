@@ -25,7 +25,7 @@ const ResendVerificationPage = () => {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Resend Verification Email</h1>
             <p className="text-gray-600 text-center mb-6">
-              Enter your email address and we&apos;ll send you a new verification link.
+              Enter your email address and we&apos;ll send you a new verification code.
             </p>
           </>
         )}
@@ -39,7 +39,10 @@ const ResendVerificationPage = () => {
             </div>
             <h1 className="text-2xl font-bold text-green-600 mb-2 text-center">Email Sent!</h1>
             <p className="text-gray-600 text-center mb-6">
-              A verification email has been sent to <strong>{email}</strong>. Check your inbox and click the verification link.
+              If <strong>{email}</strong> is registered and not yet verified, we&apos;ve sent it a new 6-digit code.
+            </p>
+            <p className="text-gray-600 text-center mb-6">
+              To enter the code, sign in with your email and password. You&apos;ll be asked for it before your account opens.
             </p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-700">Redirecting to Sign In in 5 seconds...</p>
@@ -108,7 +111,7 @@ const ResendVerificationPage = () => {
           </p>
           <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
             <li>Check your spam/junk folder</li>
-            <li>Verification links expire in 48 hours</li>
+            <li>Verification codes expire after 10 minutes. Request a new one if yours has expired</li>
             <li>Make sure you entered the correct email</li>
           </ul>
         </div>

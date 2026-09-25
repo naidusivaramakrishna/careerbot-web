@@ -23,10 +23,12 @@ const publicRoutes = [
     '/auth/google/success',
     '/auth/linkedin/success',
     '/auth/error',
-    '/verify-email',
     '/reset-password',
     '/forgot-password',
     '/resend-verification',
+    // Old link-style verification emails land here; the page only redirects
+    // to sign-in (see app/verify-email/page.tsx).
+    '/verify-email',
     "/browse-templates",
     "/blog",
     "/terms-of-service",
@@ -90,7 +92,17 @@ function redirectToLogin(request: NextRequest): NextResponse {
         : pathname.startsWith(RECRUITER_PREFIX)
         ? new URL('/recruiter/auth', request.url)
         : buildUserLoginUrl(request);
-    return NextResponse.redirect(target);
+
+    const response = NextResponse.redirect(target);
+
+    // Add no-cache headers when redirecting from protected admin/recruiter pages
+    if (pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX)) {
+        response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        response.headers.set('Pragma', 'no-cache');
+        response.headers.set('Expires', '0');
+    }
+
+    return response;
 }
 
 // `platform_admin` is here deliberately. The claim is that `actor` is always the
@@ -124,7 +136,17 @@ function roleAllows(pathname: string, actor: string | undefined): boolean {
 function nextWithPathname(request: NextRequest, pathname: string) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-pathname', pathname);
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+
+    // Add no-cache headers for admin/recruiter routes to prevent browser caching
+    // This ensures that after logout, cached pages cannot be accessed
+    if (pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX)) {
+        response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        response.headers.set('Pragma', 'no-cache');
+        response.headers.set('Expires', '0');
+    }
+
+    return response;
 }
 
 /**
@@ -214,21 +236,18 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified token. Non-protected pages: either auth cookie is enough —
-    //    let the request through; the client HTTP interceptor refreshes on the
-    //    first 401 and the backend re-validates the token on every API call.
+    // 2) No verified token.
+    // For Admin/Recruiter paths: require valid token or proceed to refresh attempt
+    // For User paths: either auth cookie is enough — let the request through;
+    //    the client HTTP interceptor refreshes on the first 401 and the backend
+    //    re-validates the token on every API call.
     //
-    //    `token` must be accepted here, not just `refreshToken`. The refresh
-    //    cookie is scoped to Path=/api/v1/auth/refresh, so the browser never
-    //    sends it on a page navigation — gating on it alone bounced freshly
-    //    signed-in users straight back to login whenever the access token
-    //    could not be verified here (JWT_SECRET unset, or token simply expired).
-    // Condition from THIS branch: the duplicate `isProtectedArea` declaration
-    // was removed (identical predicate to isAdminOrRecruiter, declared earlier
-    // for maintenance mode), so referencing it here would be undefined.
-    // Body from the base: the pass-through must go through nextWithPathname so
-    // x-pathname rides on the REQUEST headers -- which is what
-    // (user)/layout.tsx actually reads.
+    // For user paths, `token` must be accepted here, not just `refreshToken`.
+    // The refresh cookie is scoped to Path=/api/v1/auth/refresh, so the browser
+    // never sends it on a page navigation — gating on it alone bounced freshly
+    // signed-in users straight back to login whenever the access token
+    // could not be verified here (JWT_SECRET unset, or token simply expired).
+
     if (!isAdminOrRecruiter) {
         if (token || refreshToken) {
             return nextWithPathname(request, pathname);

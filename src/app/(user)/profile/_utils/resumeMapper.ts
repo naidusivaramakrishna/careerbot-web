@@ -8,6 +8,9 @@ type AnyRecord = Record<string, unknown>;
 const asStr = (v: unknown): string => (v !== null && v !== undefined ? String(v) : '');
 const asArr = <T = AnyRecord>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
+// End-date wording that explicitly says a job is ongoing.
+const CURRENT_JOB_MARKER = /\b(present|current(ly)?|ongoing|till date|to date|now)\b/i;
+
 type BulletItem = string | { text: string; tier?: string; tier_confidence?: number };
 
 const extractBulletText = (item: BulletItem): string =>
@@ -202,12 +205,23 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                     .filter((exp) => exp.company || exp.role)
                     .map((exp) => {
                         let start = '', end = '';
+                        // Only an explicit marker ("Present", "Current", ...) makes a job
+                        // current. A missing or unparseable end date is missing data, not
+                        // evidence of employment: this flag drives the employment_status
+                        // write in useResumeProfileFill/RightSection, and `!end` turned
+                        // every undated entry into 'employed'.
+                        const endDateRaw = asStr(exp.end_date || exp.duration);
+                        const isCurrentExplicit = CURRENT_JOB_MARKER.test(endDateRaw);
+
                         if (exp.start_date) {
                             start = parseResumeDate(asStr(exp.start_date));
                             end = parseResumeDate(asStr(exp.end_date));
                         } else {
                             ({ start, end } = splitResumeDateRange(asStr(exp.duration)));
                         }
+                        // parseResumeDate turns a lone word like "Current" into
+                        // "current-01-01"; a current job has no end date.
+                        if (isCurrentExplicit) end = '';
                         return {
                             company: asStr(exp.company),
                             job_title: asStr(exp.role),
@@ -218,7 +232,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                                 exp.achievements as Array<{ text: string }> | undefined,
                                 exp.responsibilities as Array<{ text: string }> | undefined
                             ),
-                            currently_working: !end,
+                            currently_working: isCurrentExplicit,
                         };
                     });
                 allWorkExperience.push(...mapped);
