@@ -86,6 +86,10 @@ vi.mock('@/api/enhancerApi', () => ({
   deleteSkillFromEnhancedResume: vi.fn(),
   deleteSkillCategoryFromEnhancedResume: vi.fn(),
 }));
+// Template storage is scoped by the logged-in account's email (getProfile).
+vi.mock('@/api/userApi', () => ({
+  getProfile: vi.fn().mockResolvedValue({ email: 'user@example.com' }),
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock('@/lib/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

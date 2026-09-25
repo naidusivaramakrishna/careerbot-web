@@ -6,7 +6,15 @@
  * user in `careerLevelTemplates_<email>` + `selectedTemplateId_<email>`. The
  * Skills editor must resolve the domain the same way, otherwise it offers
  * categories the preview/PDF/DOCX then filter out (PR #96 review).
+ *
+ * The storage is scoped by the logged-in account's email as PreviewPanel and
+ * TemplatesTab get it (getProfile), so every consumer must use that email too
+ * (resolveAccountEmail / useAccountEmail), not localStorage.userEmail, which
+ * is only written by a few pages and never cleared on logout.
  */
+
+import { useEffect, useSyncExternalStore } from 'react';
+import { getProfile } from '@/api/userApi';
 
 export interface AppliedCareerTemplate {
   id: string | number;
@@ -52,7 +60,7 @@ export function getSkillsEditorDomain(userEmail?: string | null): string {
   return (getActiveTemplateDomain(userEmail) || 'general').toLowerCase();
 }
 
-/** The account email the builder scopes template storage by. */
+/** localStorage.userEmail — may belong to a previous account; prefer getAccountEmail(). */
 export function getStoredUserEmail(): string | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -60,4 +68,53 @@ export function getStoredUserEmail(): string | null {
   } catch {
     return null;
   }
+}
+
+// ── Logged-in account email ────────────────────────────────────────────────
+// undefined = not resolved yet on this page load.
+let accountEmail: string | null | undefined;
+let inflight: Promise<string | null> | null = null;
+const listeners = new Set<() => void>();
+
+/**
+ * Fetch the logged-in account's email (getProfile), exactly as PreviewPanel
+ * does: null when the profile has no email or the request fails (PreviewPanel
+ * then uses the unscoped keys). Concurrent callers share one request.
+ */
+export function resolveAccountEmail(): Promise<string | null> {
+  if (!inflight) {
+    inflight = getProfile()
+      .then((profile) => profile?.email || null)
+      .catch(() => null)
+      .then((email) => {
+        inflight = null;
+        if (email !== accountEmail) {
+          accountEmail = email;
+          listeners.forEach((listener) => listener());
+        }
+        return email;
+      });
+  }
+  return inflight;
+}
+
+/** Last resolved account email; localStorage.userEmail until it resolves. */
+export function getAccountEmail(): string | null {
+  return accountEmail !== undefined ? accountEmail : getStoredUserEmail();
+}
+
+function subscribeAccountEmail(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** getAccountEmail() for components; re-renders once the profile resolves. */
+export function useAccountEmail(): string | null {
+  const email = useSyncExternalStore(subscribeAccountEmail, getAccountEmail, () => null);
+  useEffect(() => {
+    if (accountEmail === undefined) void resolveAccountEmail();
+  }, []);
+  return email;
 }

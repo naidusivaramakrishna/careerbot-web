@@ -8,7 +8,7 @@ import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
-import { getSkillsEditorDomain, getStoredUserEmail } from "../../../templates/_utils/activeTemplateDomain";
+import { getSkillsEditorDomain, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
 import { domainSkillKeyForSlug } from "@/config/domainSkills";
 import logger from "@/lib/logger";
 
@@ -871,7 +871,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         }
 
         // ✅ Parallelize API calls: fetch template and resume data simultaneously
-        const [defaultTemplateData, resumeData] = await Promise.all([
+        // The account email scopes the applied career-level template, i.e. the
+        // domain the skills are mapped for (same source as PreviewPanel).
+        const [defaultTemplateData, resumeData, accountEmail] = await Promise.all([
           (async () => {
             try {
               const { getDefaultTemplate } = await import("@/api/resumeApi");
@@ -891,6 +893,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               return await getResumeById(resumeId);
             }
           })(),
+          resolveAccountEmail(),
         ]);
 
         // Process resume data
@@ -1064,7 +1067,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             let categorizedSkills: CategorizedSkills;
             if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
               // New backend format: skills is an object with camelCase keys and {id,name} arrays
-              categorizedSkills = mapBackendSkillsToCategorized(data.skills, getSkillsEditorDomain(getStoredUserEmail()));
+              categorizedSkills = mapBackendSkillsToCategorized(data.skills, getSkillsEditorDomain(accountEmail));
             } else {
               // Legacy format: categorizedSkills with snake_case string arrays
               categorizedSkills = (data.categorizedSkills as CategorizedSkills) || { ...EMPTY_CATEGORIZED_SKILLS };

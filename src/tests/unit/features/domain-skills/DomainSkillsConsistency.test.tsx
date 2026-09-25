@@ -187,6 +187,37 @@ describe('editor and preview resolve the domain from the same stored state', () 
   });
 });
 
+describe('editor and preview scope template storage by the same account (ai-review 1a8259c1 P2)', () => {
+  it('ignores a stale localStorage userEmail from a previous account', async () => {
+    // Previous account in this browser applied legal; nothing clears userEmail on logout.
+    window.localStorage.setItem('userEmail', 'old@example.com');
+    window.localStorage.setItem('selectedTemplateId_old@example.com', 'old1');
+    window.localStorage.setItem(
+      'careerLevelTemplates_old@example.com',
+      JSON.stringify([{ id: 'old1', name: 'legal - Mid-Level', domain_family: 'legal' }]),
+    );
+    // Logged-in account (getProfile → user@example.com) applied healthcare.
+    window.localStorage.setItem(`selectedTemplateId_${EMAIL}`, 't1');
+    window.localStorage.setItem(
+      `careerLevelTemplates_${EMAIL}`,
+      JSON.stringify([{ id: 't1', name: 'healthcare - Mid-Level', domain_family: 'healthcare' }]),
+    );
+    const data = { resume_id: 'r1', categorizedSkills: skills() };
+
+    renderPreview(data);
+    await waitFor(() =>
+      expect(screen.getByTestId('preview-template').textContent).toBe('Template2:healthcare'),
+    );
+    cleanup();
+
+    render(<Harness initial={data} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('chips-Clinical Skills & Diagnostics').textContent).toBe('Triage'),
+    );
+    expect(screen.queryByTestId('chips-Legal Practice Areas')).toBeNull();
+  });
+});
+
 describe('deleting a domain category', () => {
   it('sends the same category name that adding a skill sends', async () => {
     applyCareerTemplate('healthcare');

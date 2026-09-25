@@ -5,6 +5,7 @@ import { countryCodes } from "../../../_utils/sectionsConfig";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { ChevronDown } from "lucide-react";
 import logger from "@/lib/logger";
+import { getActiveTemplateDomain, useAccountEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 
 interface Field {
   field: string;
@@ -34,26 +35,13 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   const [isMarineTemplate, setIsMarineTemplate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get domain from localStorage to check if it's government_standard or healthcare
+  // Domain of the applied career-level template, read under the logged-in
+  // account's email like the preview (not the resume's contact email, which
+  // differs for uploaded/enhanced resumes).
+  const accountEmail = useAccountEmail();
   useEffect(() => {
     try {
-      const userEmail = resumeData.personalInfo?.email || localStorage.getItem('userEmail') || '';
-      const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
-      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
-
-      const careerLevelStorage = localStorage.getItem(careerLevelKey);
-      const selectedTemplateId = localStorage.getItem(selectedTemplateKey);
-
-      let domainFamily = '';
-
-      if (careerLevelStorage && selectedTemplateId) {
-        const careerLevels = JSON.parse(careerLevelStorage) as Array<{
-          id?: string | number;
-          domain_family?: string;
-        }>;
-        const activeTemplate = careerLevels.find(t => String(t.id) === String(selectedTemplateId));
-        domainFamily = activeTemplate?.domain_family || '';
-      }
+      const domainFamily = getActiveTemplateDomain(accountEmail) || '';
 
       setIsGovernmentTemplate(domainFamily === 'government_standard');
       setIsHealthcareTemplate(domainFamily === 'healthcare');
@@ -64,7 +52,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     } catch (err) {
       logger.warn('Error checking template domain:', err);
     }
-  }, [resumeData.personalInfo?.email]);
+  }, [accountEmail]);
 
   // Close dropdown on outside click
   useEffect(() => {

@@ -23,11 +23,10 @@ import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 import { downloadResume } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
-import { getProfile } from "@/api/userApi";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
-import { getAppliedCareerTemplate } from "../../../templates/_utils/activeTemplateDomain";
+import { getAppliedCareerTemplate, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
@@ -84,13 +83,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   useEffect(() => {
     const fetchUserEmail = async () => {
       try {
-        const profile = await getProfile();
-        if (profile.email) {
-          setUserEmail(profile.email);
-          logger.info('User email set for scoped storage:', profile.email);
+        // Shared with the Skills editor, PersonalInfo and the resume loader so
+        // all of them read the same account's template storage.
+        const email = await resolveAccountEmail();
+        if (email) {
+          setUserEmail(email);
+          logger.info('User email set for scoped storage:', email);
+        } else {
+          logger.warn('No account email for scoped storage; using unscoped keys');
         }
-      } catch (err) {
-        logger.warn('Failed to get user email for scoped storage', err);
       } finally {
         setIsEmailReady(true);
       }

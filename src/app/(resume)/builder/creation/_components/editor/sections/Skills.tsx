@@ -11,7 +11,7 @@ import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCat
 import { toast } from "sonner";
 import { findSkillCategory, getSkillsForDomain, skillCategoryApiName, type SkillCategory, type SkillDomain } from "@/config/domainSkills";
 import { printedSkillKeysForDomain, templateSkillCategoryLabel } from "@/app/(resume)/templates/skillsFilterByDomain";
-import { getSkillsEditorDomain, getStoredUserEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
+import { getSkillsEditorDomain, useAccountEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 import logger from "@/lib/logger";
 
 function uid(): string {
@@ -34,7 +34,8 @@ const Skills: React.FC = () => {
   // template), so the editor never offers categories the preview, PDF and DOCX
   // filter out.
   const resumeId = resumeData.resume_id;
-  const rawDomain = getSkillsEditorDomain(getStoredUserEmail());
+  const accountEmail = useAccountEmail();
+  const rawDomain = getSkillsEditorDomain(accountEmail);
   const SKILL_CATEGORIES = getSkillsForDomain(rawDomain as SkillDomain);
 
   // The templates also print categories outside the domain's own list (the
