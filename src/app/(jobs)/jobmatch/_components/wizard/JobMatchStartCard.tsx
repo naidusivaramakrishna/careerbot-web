@@ -1,218 +1,128 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
-import { Sparkles, CheckCircle2, ArrowRight, Upload, FileText, Target } from "lucide-react";
+import { ArrowRight, ClipboardCheck, ChartNoAxesColumnIncreasing, Clock3, FileText, FileUp, Layers, Upload, Zap } from "lucide-react";
+import styles from "./JobMatchStartCard.module.css";
 
-const WIZARD_STEPS = [
-  { title: "Upload Resume",    desc: "Upload your resume in PDF, DOC, or DOCX format.",  badge: "Start here", icon: Upload },
-  { title: "Job Description",  desc: "Paste or upload the target job posting.",    badge: "Next",       icon: FileText },
-  { title: "Get Match Score",  desc: "AI analyzes fit and highlights skill gaps.", badge: "Final",      icon: Target },
-];
+const STEPS = [
+  { title: "Upload Resume", description: "Upload your resume to get started.", icon: FileUp },
+  { title: "Add Job Description", description: "Add the job description you're targeting.", icon: FileText },
+  { title: "Review & Confirm", description: "Review your resume and job details before analysis.", icon: ClipboardCheck },
+  { title: "Analyze Match", description: "AI analyzes your resume against the job requirements.", icon: ChartNoAxesColumnIncreasing },
+] as const;
 
-interface JobMatchStartCardProps {
-  mounted: boolean;
-  onStart: () => void;
+function MatchIllustration() {
+  const id = React.useId();
+  return (
+    <svg className={styles.illustration} viewBox="0 0 600 342" role="img" aria-label="Your resume and job description are compared by AI to produce a match analysis." xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id={id + "-halo"} x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#eaf5ff" /><stop offset="1" stopColor="#dcecff" />
+        </linearGradient>
+        <linearGradient id={id + "-ai"} x1="0" y1="0" x2=".8" y2="1">
+          <stop stopColor="#2aafff" /><stop offset="1" stopColor="#005bea" />
+        </linearGradient>
+        <linearGradient id={id + "-ring"} x1="0" y1="0" x2="1" y2=".5">
+          <stop stopColor="#2ec6ff" /><stop offset="1" stopColor="#0755ff" />
+        </linearGradient>
+        <filter id={id + "-shadow"} x="-30%" y="-30%" width="160%" height="180%">
+          <feDropShadow dx="0" dy="5" stdDeviation="10" floodColor="#6aa9ff" floodOpacity=".12" />
+        </filter>
+      </defs>
+      <ellipse cx="183" cy="174" rx="178" ry="143" fill={"url(#" + id + "-halo)"} opacity=".78" />
+      <ellipse cx="407" cy="166" rx="180" ry="156" fill={"url(#" + id + "-halo)"} opacity=".47" />
+      <g transform="rotate(-9 134 150)" filter={"url(#" + id + "-shadow)"}>
+        <rect x="54" y="65" width="160" height="168" rx="12" fill="#fff" stroke="#dceaff" strokeWidth="1.5" />
+        <text x="74" y="94" fill="#101637" fontFamily="Arial, sans-serif" fontSize="13" fontWeight="700">Your Resume</text>
+        <rect x="74" y="109" width="35" height="35" rx="4" fill="#e1edff" />
+        <circle cx="91.5" cy="121" r="7" fill="#8ab0e8" />
+        <path d="M79 143v-3c0-12 25-12 25 0v3" fill="#8ab0e8" />
+        <g fill="#d3e1f5">
+          <rect x="120" y="111" width="72" height="8" rx="4" />
+          <rect x="120" y="127" width="72" height="8" rx="4" />
+          <rect x="74" y="156" width="118" height="8" rx="4" />
+          <rect x="74" y="172" width="118" height="8" rx="4" />
+          <rect x="74" y="188" width="118" height="8" rx="4" />
+          <rect x="74" y="204" width="80" height="8" rx="4" />
+        </g>
+      </g>
+      <g transform="rotate(7 476 153)" filter={"url(#" + id + "-shadow)"}>
+        <rect x="398" y="78" width="157" height="151" rx="12" fill="#fff" stroke="#dceaff" strokeWidth="1.5" />
+        <text x="419" y="108" fill="#101637" fontFamily="Arial, sans-serif" fontSize="12" fontWeight="700">Job Description</text>
+        <g fill="#d3e1f5">
+          <rect x="419" y="123" width="113" height="8" rx="4" />
+          <rect x="419" y="141" width="113" height="8" rx="4" />
+          <rect x="419" y="159" width="113" height="8" rx="4" />
+          <rect x="419" y="177" width="113" height="8" rx="4" />
+          <rect x="419" y="195" width="79" height="8" rx="4" />
+        </g>
+      </g>
+      <g stroke="#0966ff" strokeWidth="2.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M224 151h28m-10-6 10 6-10 6" />
+        <path d="M355 151h28m-10-6 10 6-10 6" />
+        <path d="M305 200v32m-6-10 6 10 6-10" />
+      </g>
+      <rect x="263" y="112" width="83" height="80" rx="14" fill={"url(#" + id + "-ai)"} stroke="#78c5ff" strokeOpacity=".6" filter={"url(#" + id + "-shadow)"} />
+      <text x="286" y="165" fill="white" fontFamily="Arial, sans-serif" fontSize="33">AI</text>
+      <path d="m324 126 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z" fill="white" />
+      <path d="m282 170 1.3 3 3 1.3-3 1.3-1.3 3-1.3-3-3-1.3 3-1.3Z" fill="#85c7ff" opacity=".8" />
+      <g filter={"url(#" + id + "-shadow)"}>
+        <rect x="169" y="244" width="274" height="70" rx="28" fill="#fff" fillOpacity=".96" stroke="#d5e7ff" strokeWidth="1.5" />
+        <circle cx="215" cy="279" r="20" fill="none" stroke={"url(#" + id + "-ring)"} strokeWidth="6" />
+        <text x="253" y="271" fill="#101637" fontFamily="Arial, sans-serif" fontSize="14" fontWeight="700">Match Analysis</text>
+        <rect x="253" y="282" width="162" height="10" rx="5" fill="#d3e1f5" />
+        <rect x="253" y="282" width="68" height="10" rx="5" fill={"url(#" + id + "-ai)"} />
+      </g>
+    </svg>
+  );
 }
 
-export default function JobMatchStartCard({ mounted, onStart }: JobMatchStartCardProps) {
+interface JobMatchStartCardProps {
+  readonly mounted: boolean;
+  readonly onStart: () => void;
+}
+
+export default function JobMatchStartCard({ onStart }: JobMatchStartCardProps) {
   return (
-    <>
-      {/* ── HERO ── */}
-      <motion.div
-        style={{ maxWidth: "min(720px, 100%)", marginBottom: 26 }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={mounted ? { opacity: 1, y: 0 } : {}}
-        transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "rgba(255,255,255,0.84)", border: "1px solid rgba(37,87,167,0.20)",
-            borderRadius: 999, padding: "6px 15px 6px 6px",
-            fontSize: 11, fontWeight: 800, letterSpacing: "0.1em",
-            color: "#2557a7", textTransform: "uppercase",
-            boxShadow: "0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 22px rgba(37,87,167,0.10)",
-          }}>
-            <span style={{
-              width: 22, height: 22, borderRadius: "50%", background: "#FFC85E",
-              display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}>
-              <Sparkles style={{ width: 11, height: 11, color: "#2557a7" }} />
-            </span>
-            AI-Powered
-          </span>
+    <div className={styles.page}>
+      <header className={styles.hero}>
+        <div className={styles.intro}>
+          <span className={styles.badge}>AI-POWERED</span>
+          <h1>Job <span>Match</span></h1>
+          <p>Get a detailed analysis of how well your resume matches<br className={styles.copyBreak} />{" "}a job description and discover ways to improve.</p>
         </div>
-
-        <h1 style={{
-          fontSize: "clamp(38px, 4.2vw, 54px)",
-          fontWeight: 850, lineHeight: 1.02,
-          letterSpacing: "-0.035em", margin: "0 0 12px",
-        }}>
-          <span style={{ color: "#0f172a" }}>Job </span>
-          <span style={{ color: "#2557a7" }}>Match</span>
-        </h1>
-
-        <p style={{ fontSize: 15.5, color: "#475569", lineHeight: 1.58, maxWidth: 620, margin: 0 }}>
-          Upload a resume, add the target job description, and generate a focused fit report with gaps and next edits.
-        </p>
-
-      </motion.div>
-
-      {/* ── LANDING CARD (always visible) ── */}
-      <motion.div
-        style={{ maxWidth: "100%" }}
-        initial={{ opacity: 0, y: 28 }}
-        animate={mounted ? { opacity: 1, y: 0 } : {}}
-        transition={{ duration: 0.6, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
-        <div className="jm-landing-card" style={{
-          background: "#fff",
-          borderRadius: 12,
-          boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 12px 28px rgba(15,23,42,0.07)",
-          border: "1px solid #DDE7F4",
-          padding: "18px",
-        }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, marginBottom: 16 }}>
-            <div>
-              <p style={{ margin: 0, fontSize: 14, color: "#0f172a", fontWeight: 850, letterSpacing: "-0.01em" }}>
-                Create match analysis
-              </p>
-              <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748B", lineHeight: 1.45 }}>
-                Complete the inputs below to generate your report.
-              </p>
-            </div>
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              height: 28, padding: "0 10px", borderRadius: 999,
-              background: "#F8FAFC", border: "1px solid #E2E8F0",
-              color: "#64748B", fontSize: 11.5, fontWeight: 750,
-              whiteSpace: "nowrap",
-            }}>
-              <CheckCircle2 style={{ width: 13, height: 13, color: "#16a34a" }} />
-              Private
-            </span>
-          </div>
-
-          {/* Steps row */}
-          <div className="jm-steps-row">
-            {WIZARD_STEPS.map((step, idx) => (
-              <React.Fragment key={idx}>
-                {idx > 0 && (
-                  <div className="jm-steps-arrow" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: 28, alignSelf: "center" }}>
-                    <ArrowRight style={{ width: 15, height: 15, color: "#94A3B8" }} />
-                  </div>
-                )}
-                <div
-                  className="jm-workflow-card"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                    flex: 1,
-                    minWidth: 180,
-                    minHeight: 108,
-                    padding: 14,
-                    borderRadius: 10,
-                    border: idx === 0 ? "1px solid rgba(37,87,167,0.28)" : "1px solid #E2E8F0",
-                    background: idx === 0 ? "linear-gradient(180deg,#FFFFFF 0%,#F4F8FF 100%)" : "#F8FAFC",
-                    transition: "all 0.18s ease",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{
-                      width: 32, height: 32, borderRadius: 9,
-                      background: idx === 0 ? "#2557a7" : "#fff",
-                      color: idx === 0 ? "#fff" : "#64748B",
-                      border: idx === 0 ? "1px solid #2557a7" : "1px solid #DDE7F4",
-                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 12.5, fontWeight: 900, flexShrink: 0,
-                    }}>
-                      {idx + 1}
-                    </span>
-                    <span style={{
-                      display: "inline-flex", alignItems: "center",
-                      height: 20, padding: "0 8px", borderRadius: 999,
-                      background: idx === 0 ? "rgba(37,87,167,0.10)" : "#EEF2F7",
-                      color: idx === 0 ? "#2557a7" : "#64748B",
-                      fontSize: 10, fontWeight: 800, letterSpacing: "0.03em",
-                      whiteSpace: "nowrap",
-                    }}>
-                      {step.badge}
-                    </span>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "0 0 5px" }}>
-                      <step.icon style={{ width: 14, height: 14, color: idx === 0 ? "#2557a7" : "#94A3B8", flexShrink: 0 }} />
-                      <p style={{ fontSize: 14, fontWeight: 850, color: "#0f172a", margin: 0, lineHeight: 1.2 }}>{step.title}</p>
-                    </div>
-                    <p style={{ fontSize: 12.5, color: "#64748B", margin: 0, lineHeight: 1.42 }}>{step.desc}</p>
-                  </div>
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-
-          {/* CTA banner */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-            marginTop: 16,
-            padding: "14px 16px",
-            borderRadius: 12,
-            border: "1.5px dashed rgba(37,87,167,0.35)",
-            background: "linear-gradient(180deg,#F7FAFF 0%,#F0F6FF 100%)",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-              <span style={{
-                width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                background: "#fff", border: "1px solid #DDE7F4",
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <Upload style={{ width: 17, height: 17, color: "#2557a7" }} />
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: "#0f172a" }}>
-                  Upload your resume to start matching
-                </p>
-                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B", fontWeight: 600 }}>
-                  Analysis starts after your resume and job description are added.
-                </p>
+        <MatchIllustration />
+      </header>
+      <section className={styles.workflow} aria-labelledby="match-workflow-title">
+        <h2 id="match-workflow-title">How It Works</h2>
+        <p className={styles.subtitle}>A simple 4-step process to find your job match.</p>
+        <ol className={styles.steps}>
+          {STEPS.map((step, index) => (
+            <li key={step.title} className={styles.step}>
+              <span className={styles.icon}><step.icon aria-hidden="true" /></span>
+              <div className={styles.stepText}>
+                <span className={styles.number}>{String(index + 1).padStart(2, "0")}</span>
+                <h3>{step.title}</h3>
+                <p>{step.description}</p>
               </div>
-            </div>
-            <button
-              onClick={onStart}
-              className="jm-start-btn"
-              style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                height: 40, padding: "0 16px", borderRadius: 10,
-                background: "#2557a7",
-                color: "#fff", fontSize: 13, fontWeight: 850,
-                border: "none", cursor: "pointer",
-                boxShadow: "0 8px 20px rgba(37,87,167,0.22)",
-                transition: "all 0.2s ease",
-                letterSpacing: 0,
-                gap: 7,
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 12px 26px rgba(37,87,167,0.28)";
-                (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 20px rgba(37,87,167,0.22)";
-                (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-              }}
-            >
-              Start analysis
-              <ArrowRight style={{ width: 14, height: 14 }} />
-            </button>
+              {index < STEPS.length - 1 && <span className={styles.stepArrow} aria-hidden="true">⟶</span>}
+            </li>
+          ))}
+        </ol>
+      </section>
+      <section className={styles.startBar} aria-label="Start matching your resume">
+          <span className={styles.uploadIcon}><Upload aria-hidden="true" /></span>
+          <div className={styles.startBarText}>
+            <h3>Upload your resume to start matching</h3>
+            <p>Analysis starts after your resume and job description are added.</p>
+            <ul className={styles.meta}>
+              <li><Zap aria-hidden="true" /> Four steps</li>
+              <li><Clock3 aria-hidden="true" /> About a minute</li>
+              <li><Layers aria-hidden="true" /> Uses 1 credit</li>
+            </ul>
           </div>
-
-        </div>
-      </motion.div>
-    </>
+          <button type="button" onClick={onStart}>Upload Resume <ArrowRight aria-hidden="true" /></button>
+      </section>
+    </div>
   );
 }

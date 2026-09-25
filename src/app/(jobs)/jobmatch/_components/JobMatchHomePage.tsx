@@ -12,6 +12,7 @@ import TestimonialsSection from "./landing/TestimonialsSection";
 import ComparisonTable from "./landing/ComparisonTable";
 import CTABand from "./landing/CTABand";
 import FAQSection from "./landing/FAQSection";
+import styles from "./JobMatchHomePage.module.css";
 
 function BackToTop() {
   const [visible, setVisible] = useState(false);
@@ -26,7 +27,8 @@ function BackToTop() {
 
   return (
     <button
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}
       title="Back to top"
       className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-1 px-3 py-2 rounded-xl bg-[#2557a7] text-white shadow-lg hover:bg-[#1e4a94] hover:shadow-xl hover:-translate-y-1 transition-all duration-200"
     >
@@ -55,7 +57,7 @@ export default function JobMatchHomePage() {
   };
 
   return (
-    <>
+    <div className={styles.page}>
       <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
       <HeroSection onAnalyzeClick={handleAnalyzeClick} />
       <FeaturesSection />
@@ -79,6 +81,6 @@ export default function JobMatchHomePage() {
         onClose={() => setShowAuthModal(false)}
         initialFormType={authFormType}
       />
-    </>
+    </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import AnalysisContent from "./analysis/AnalysisContent";
+import MatchResultsOverview from "./analysis/MatchResultsOverview";
 import LoadingAnimation from "./ui/LoadingAnimation";
 import ErrorPopupModal from "@/components/ErrorPopupModal";
 import JobMatchStartCard from "./wizard/JobMatchStartCard";
@@ -32,6 +33,162 @@ async function getMatchByIds(resume_id: string, jd_id: string) {
   const response = await fetch(`/api/v1/matcher/match?${params.toString()}`);
   if (!response.ok) throw new Error("Failed to fetch match");
   return response.json();
+}
+
+type ProcessingStage = "parsing" | "extracting" | "matching" | "scoring" | "generating";
+
+/** Resolves (or parses) the resume that will be matched, and its full parsed data. */
+async function resolveResumeForMatch(
+  uploadedFile: File | null,
+  sessionResumeId: string | null,
+  setProcessingStage: (stage: ProcessingStage) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<{ resume_id: string; fullResumeData: any }> {
+  let resume_id = sessionResumeId;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let fullResumeData: any = null;
+
+  if (!resume_id) {
+    const resumeParsed = await parseResume(uploadedFile!);
+    resume_id =
+      resumeParsed?.resume_id ??
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (resumeParsed as any)?.id ??
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (resumeParsed as any)?._id ??
+      null;
+    if (!resume_id) throw new Error("Resume parsing failed — no resume_id returned.");
+    setProcessingStage("extracting");
+    try { fullResumeData = await getResume(resume_id); } catch { fullResumeData = resumeParsed; }
+  } else {
+    setProcessingStage("extracting");
+    try { fullResumeData = await getResume(resume_id); } catch { fullResumeData = null; }
+  }
+
+  return { resume_id, fullResumeData };
+}
+
+/** Resolves (or parses) the job description that will be matched against. */
+async function resolveJDForMatch(
+  sessionJdId: string | null,
+  jdFile: File | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jdFileParsed: any,
+  jdText: string,
+  setJdText: (value: string) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<{ jd_id: string | null; jdParsed: any; resolvedJdText: string }> {
+  let jd_id: string | null = sessionJdId ?? null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let jdParsed: any = null;
+  let resolvedJdText = jdText;
+
+  if (!jd_id) {
+    if (jdFile) {
+      // Reuse the extraction already triggered on file selection instead of
+      // re-parsing the same file a second time.
+      jdParsed = jdFileParsed?.jd_id ? jdFileParsed : await parseJDFile(jdFile);
+      if (jdParsed?.jd_text) { resolvedJdText = jdParsed.jd_text; setJdText(jdParsed.jd_text); }
+    } else if (jdText.trim()) {
+      const trimmedText = jdText.trim();
+      const isUrl = /^https?:\/\/.+/i.test(trimmedText);
+      jdParsed = isUrl ? await parseJDUrl(trimmedText) : await parseJDText(trimmedText);
+    } else {
+      throw new Error("No job description provided");
+    }
+    jd_id = jdParsed?.jd_id ?? null;
+  }
+
+  return { jd_id, jdParsed, resolvedJdText };
+}
+
+/** Calls matchResumeAndJD with exponential-backoff retries (matches original 2-retry policy). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function matchWithRetry(resume_id: string, jd_id: string): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let matchResp: any;
+  let retryCount = 0;
+  const maxRetries = 2;
+
+  while (retryCount <= maxRetries) {
+    try {
+      matchResp = await matchResumeAndJD(resume_id, jd_id);
+      break;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      retryCount++;
+      if (retryCount <= maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
+      } else { throw err; }
+    }
+  }
+
+  return matchResp;
+}
+
+/** Resolves the final match payload, de-duplicating against an existing match when the backend reports one. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveFinalMatchData(matchResp: any, resume_id: string, jd_id: string): Promise<any> {
+  let finalMatchData = matchResp.data;
+
+  if (matchResp.duplicate) {
+    try {
+      const existing = await getMatchByIds(resume_id, jd_id);
+      if (Array.isArray(existing)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const matched = existing.find((m: any) => m.jd_id === jd_id || m.job_description_id === jd_id);
+        finalMatchData = matched || existing[0];
+      } else { finalMatchData = existing; }
+    } catch { finalMatchData = matchResp.data; }
+  }
+
+  if (!finalMatchData?.match_id && matchResp.match_id) {
+    finalMatchData = { ...finalMatchData, match_id: matchResp.match_id };
+  }
+
+  return finalMatchData;
+}
+
+/** Extracts a user-facing message + credit details from an analyzeMatch failure, regardless of which shape the backend/http-client wrapped it in. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseAnalyzeMatchError(err: any): {
+  errorMessage: string;
+  details: { error_code?: string; credits_required?: number; credits_remaining?: number };
+} {
+  let errorMessage = "Something went wrong.";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const details: any = {};
+
+  if (err?.__raw) {
+    const raw = err.__raw;
+    if (typeof raw === "object") {
+      const msg = raw.message || raw.error?.message || raw.error || raw.detail;
+      errorMessage = typeof msg === "string" ? msg : JSON.stringify(raw);
+      details.error_code = raw.error_code || raw.error?.error_code;
+      if (raw.details) { details.credits_required = raw.details.credits_required; details.credits_remaining = raw.details.credits_remaining; }
+      else if (raw.error?.details) { details.credits_required = raw.error.details.credits_required; details.credits_remaining = raw.error.details.credits_remaining; }
+    } else if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
+        errorMessage = typeof msg === "string" ? msg : raw;
+        details.error_code = parsed.error_code || parsed.error?.error_code;
+        if (parsed.details) { details.credits_required = parsed.details.credits_required; details.credits_remaining = parsed.details.credits_remaining; }
+        else if (parsed.error?.details) { details.credits_required = parsed.error.details.credits_required; details.credits_remaining = parsed.error.details.credits_remaining; }
+      } catch { errorMessage = raw; }
+    }
+  } else if (err?.message) {
+    try {
+      const parsed = JSON.parse(err.message);
+      const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
+      errorMessage = typeof msg === "string" ? msg : err.message;
+      details.error_code = parsed.error_code || parsed.error?.error_code;
+      if (parsed.details) { details.credits_required = parsed.details.credits_required; details.credits_remaining = parsed.details.credits_remaining; }
+      else if (parsed.error?.details) { details.credits_required = parsed.error.details.credits_required; details.credits_remaining = parsed.error.details.credits_remaining; }
+    } catch { errorMessage = err.message; }
+  }
+
+  return { errorMessage, details };
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -78,11 +235,34 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     } catch { return null; }
   });
 
+  // Display-only filenames for the results screen. uploadedFile/jdFile are
+  // File objects — they can't survive sessionStorage (or a refresh), so the
+  // results cards would silently fall back to generic placeholder text
+  // ("Your resume") on reload even though the rest of the snapshot restored
+  // fine. These plain strings are captured once analysis succeeds (see
+  // analyzeMatch) and persisted alongside the rest of the snapshot instead.
+  const [resumeFileName, setResumeFileName] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("jm_resumeName") || null; } catch { return null; }
+  });
+  const [jdFileName, setJdFileName] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("jm_jdName") || null; } catch { return null; }
+  });
+  const [resumeSizeMB, setResumeSizeMB] = useState<number | null>(() => {
+    try { const v = sessionStorage.getItem("jm_resumeSizeMB"); return v ? Number.parseFloat(v) : null; } catch { return null; }
+  });
+  const [jdSizeMB, setJdSizeMB] = useState<number | null>(() => {
+    try { const v = sessionStorage.getItem("jm_jdSizeMB"); return v ? Number.parseFloat(v) : null; } catch { return null; }
+  });
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("jm_analyzedAt") || null; } catch { return null; }
+  });
+
   const [jdText, setJdText] = useState<string>(() => {
     if (sessionId) return "";
     try { return sessionStorage.getItem("jm_jdText") || ""; } catch { return ""; }
   });
 
+  const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
   const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
     // Restore an existing analysis for the lifetime of this browser tab. The
     // previous implementation deleted these values on every route remount,
@@ -98,7 +278,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   // 0 = landing overview, 1 = upload resume, 2 = job description, 3 = confirm & analyze
-  const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
+  const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3 | 4>(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const autoAnalyzedRef = useRef(false);
@@ -141,6 +321,11 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     if (!hasAllowedResumeExtension(file.name)) { setError("Please upload a PDF, DOC, or DOCX file."); return; }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Resume must be under 10MB."); return; }
     setUploadedFile(file);
+    // A freshly chosen file must win over any resume_id restored from an
+    // extension session — otherwise analyzeMatch still finds sessionResumeId
+    // set and skips parsing this file, silently reusing the old resume.
+    setSessionResumeId(null);
+    setSessionResumeName(null);
     setError(null);
   };
 
@@ -149,17 +334,16 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Job description file must be under 10MB."); return; }
     const token = ++jdUploadTokenRef.current;
-    setJdFile(file);
+    setJdFile(file); setSessionJdId(null);
     setJdFileParsed(null);
     setJdText("");
     setError(null);
 
     const isPlainText = /\.txt$/i.test(file.name) || file.type === "text/plain";
     if (isPlainText) {
-      const reader = new FileReader();
-      reader.onload = (e) => { if (jdUploadTokenRef.current === token) setJdText(e.target?.result as string); };
-      reader.onerror = () => { if (jdUploadTokenRef.current === token) setError("Failed to read job description file"); };
-      reader.readAsText(file);
+      file.text()
+        .then((text) => { if (jdUploadTokenRef.current === token) setJdText(text); })
+        .catch(() => { if (jdUploadTokenRef.current === token) setError("Failed to read job description file"); });
       return;
     }
 
@@ -184,14 +368,14 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   };
 
   const handleJdTextChange = (value: string) => {
-    setJdText(value);
+    setJdText(value); setSessionJdId(null);
     setJdFile(null);
     setJdFileParsed(null);
     setIsExtractingJd(false);
     jdUploadTokenRef.current++;
   };
 
-  const handleJdClear = () => {
+  const handleJdClear = () => { setSessionJdId(null);
     setJdText("");
     setJdFile(null);
     setJdFileParsed(null);
@@ -204,91 +388,40 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     if (!uploadedFile && !sessionResumeId) return setError("Please upload a resume.");
     if (!sessionJdId && !jdFile && !jdText.trim()) return setError("Please upload a JD file or paste JD text.");
 
+    setWizardStep(4);
     setIsProcessing(true);
     setProcessingStage("parsing");
 
     try {
-      let resume_id = sessionResumeId;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let fullResumeData: any = null;
-
-      if (!resume_id) {
-        const resumeParsed = await parseResume(uploadedFile!);
-        resume_id =
-          resumeParsed?.resume_id ??
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (resumeParsed as any)?.id ??
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (resumeParsed as any)?._id ??
-          null;
-        if (!resume_id) throw new Error("Resume parsing failed — no resume_id returned.");
-        setProcessingStage("extracting");
-        try { fullResumeData = await getResume(resume_id); } catch { fullResumeData = resumeParsed; }
-      } else {
-        setProcessingStage("extracting");
-        try { fullResumeData = await getResume(resume_id); } catch { fullResumeData = null; }
-      }
+      const { resume_id, fullResumeData } = await resolveResumeForMatch(uploadedFile, sessionResumeId, setProcessingStage);
 
       setProcessingStage("matching");
 
-      let jd_id: string | null = sessionJdId ?? null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let jdParsed: any = null;
-      let resolvedJdText = jdText;
+      const { jd_id, jdParsed, resolvedJdText } = await resolveJDForMatch(sessionJdId, jdFile, jdFileParsed, jdText, setJdText);
 
       if (!jd_id) {
-        if (jdFile) {
-          // Reuse the extraction already triggered on file selection instead of
-          // re-parsing the same file a second time.
-          jdParsed = jdFileParsed?.jd_id ? jdFileParsed : await parseJDFile(jdFile);
-          if (jdParsed?.jd_text) { resolvedJdText = jdParsed.jd_text; setJdText(jdParsed.jd_text); }
-        } else if (jdText.trim()) {
-          const trimmedText = jdText.trim();
-          const isUrl = /^https?:\/\/.+/i.test(trimmedText);
-          jdParsed = isUrl ? await parseJDUrl(trimmedText) : await parseJDText(trimmedText);
-        } else {
-          throw new Error("No job description provided");
-        }
-        jd_id = jdParsed?.jd_id ?? null;
+        setError("JD parsing failed — no JD ID returned.");
+        setIsProcessing(false);
+        setWizardStep(3);
+        return;
       }
-
-      if (!jd_id) return setError("JD parsing failed — no JD ID returned.");
 
       setProcessingStage("scoring");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let matchResp: any;
-      let retryCount = 0;
-      const maxRetries = 2;
+      const matchResp = await matchWithRetry(resume_id, jd_id);
 
-      while (retryCount <= maxRetries) {
-        try {
-          matchResp = await matchResumeAndJD(resume_id, jd_id);
-          break;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-          retryCount++;
-          if (retryCount <= maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
-          } else { throw err; }
-        }
-      }
+      let finalMatchData = await resolveFinalMatchData(matchResp, resume_id, jd_id);
 
-      let finalMatchData = matchResp.data;
-
-      if (matchResp.duplicate) {
-        try {
-          const existing = await getMatchByIds(resume_id, jd_id);
-          if (Array.isArray(existing)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const matched = existing.find((m: any) => m.jd_id === jd_id || m.job_description_id === jd_id);
-            finalMatchData = matched || existing[0];
-          } else { finalMatchData = existing; }
-        } catch { finalMatchData = matchResp.data; }
-      }
-
-      if (!finalMatchData?.match_id && matchResp.match_id) {
-        finalMatchData = { ...finalMatchData, match_id: matchResp.match_id };
+      // Backend returns success:true with a 0% score and eligible:false when
+      // the resume structurally can't qualify (e.g. required years of
+      // experience the candidate doesn't have) — see the "reason" field in
+      // match_result. That's not a request failure, so matchWithRetry won't
+      // catch it, but showing the normal all-zero analysis screen for it reads
+      // as a broken match rather than the explained ineligibility it is.
+      if (finalMatchData?.match_result?.eligible === false) {
+        throw new Error(
+          finalMatchData.match_result.reason || "Your resume doesn't meet this job's requirements."
+        );
       }
 
       setProcessingStage("generating");
@@ -305,9 +438,20 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         duplicate: matchResp.duplicate,
       };
 
+      const resolvedResumeName = uploadedFile?.name || sessionResumeName || fullResumeData?.file_name || null;
+      const resolvedJdName = jdFile?.name || null;
+      const resolvedResumeSizeMB = uploadedFile ? uploadedFile.size / (1024 * 1024) : null;
+      const resolvedJdSizeMB = jdFile ? jdFile.size / (1024 * 1024) : null;
+      const resolvedAnalyzedAt = new Date().toISOString();
+
       setMatchResults(newMatchResults);
       setParsedResumeData(fullResumeData);
       setParsedJDData(jdParsed);
+      setResumeFileName(resolvedResumeName);
+      setJdFileName(resolvedJdName);
+      setResumeSizeMB(resolvedResumeSizeMB);
+      setJdSizeMB(resolvedJdSizeMB);
+      setAnalyzedAt(resolvedAnalyzedAt);
 
       try {
         const snapshotWritten = writeJobmatchSessionSnapshot({
@@ -315,6 +459,11 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           parsedResumeData: fullResumeData,
           parsedJDData: jdParsed,
           jdText: resolvedJdText,
+          resumeName: resolvedResumeName ?? undefined,
+          jobDescriptionName: resolvedJdName ?? undefined,
+          resumeSizeMB: resolvedResumeSizeMB ?? undefined,
+          jdSizeMB: resolvedJdSizeMB ?? undefined,
+          analyzedAt: resolvedAnalyzedAt,
         });
         // The in-memory state set above is still correct for THIS render — a
         // failed write only matters the next time this component mounts
@@ -338,42 +487,11 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      let errorMessage = "Something went wrong.";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const details: any = {};
-
-      if (err?.__raw) {
-        const raw = err.__raw;
-        if (typeof raw === "object") {
-          const msg = raw.message || raw.error?.message || raw.error || raw.detail;
-          errorMessage = typeof msg === "string" ? msg : JSON.stringify(raw);
-          details.error_code = raw.error_code || raw.error?.error_code;
-          if (raw.details) { details.credits_required = raw.details.credits_required; details.credits_remaining = raw.details.credits_remaining; }
-          else if (raw.error?.details) { details.credits_required = raw.error.details.credits_required; details.credits_remaining = raw.error.details.credits_remaining; }
-        } else if (typeof raw === "string") {
-          try {
-            const parsed = JSON.parse(raw);
-            const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
-            errorMessage = typeof msg === "string" ? msg : raw;
-            details.error_code = parsed.error_code || parsed.error?.error_code;
-            if (parsed.details) { details.credits_required = parsed.details.credits_required; details.credits_remaining = parsed.details.credits_remaining; }
-            else if (parsed.error?.details) { details.credits_required = parsed.error.details.credits_required; details.credits_remaining = parsed.error.details.credits_remaining; }
-          } catch { errorMessage = raw; }
-        }
-      } else if (err?.message) {
-        try {
-          const parsed = JSON.parse(err.message);
-          const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
-          errorMessage = typeof msg === "string" ? msg : err.message;
-          details.error_code = parsed.error_code || parsed.error?.error_code;
-          if (parsed.details) { details.credits_required = parsed.details.credits_required; details.credits_remaining = parsed.details.credits_remaining; }
-          else if (parsed.error?.details) { details.credits_required = parsed.error.details.credits_required; details.credits_remaining = parsed.error.details.credits_remaining; }
-        } catch { errorMessage = err.message; }
-      }
-
+      const { errorMessage, details } = parseAnalyzeMatchError(err);
       setError(errorMessage);
       setErrorDetails(details);
       setIsProcessing(false);
+      setWizardStep(3);
     }
   };
 
@@ -381,13 +499,22 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   if (!isProcessing && activeTab === "analysis" && matchResults) {
     return (
       <>
-        <AnalysisContent
+        {showDetailedAnalysis ? <AnalysisContent
           jdText={jdText}
           parsedResumeData={parsedResumeData}
           parsedJDData={parsedJDData}
           matchResults={matchResults}
-          onBackToUpload={() => { setActiveTab("upload"); setWizardStep(0); }}
-        />
+          onBackToUpload={() => setShowDetailedAnalysis(false)}
+        /> : <MatchResultsOverview
+          matchResults={matchResults}
+          resumeName={uploadedFile?.name || sessionResumeName || resumeFileName || "Your resume"}
+          jobDescriptionName={jdFile?.name || jdFileName || "Job description"}
+          resumeSizeMB={(uploadedFile ? uploadedFile.size / (1024 * 1024) : resumeSizeMB) ?? undefined}
+          jdSizeMB={(jdFile ? jdFile.size / (1024 * 1024) : jdSizeMB) ?? undefined}
+          analyzedAt={analyzedAt ?? undefined}
+          onBack={() => { setActiveTab("upload"); setWizardStep(0); setShowDetailedAnalysis(false); }}
+          onDetails={() => setShowDetailedAnalysis(true)}
+        />}
         <ErrorPopupModal
           error={error}
           onRetry={() => { setError(null); setErrorDetails({}); }}
@@ -399,13 +526,15 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   }
 
   // ── Loading mode ───────────────────────────────────────────────────────────
-  if (isProcessing) {
-    return <LoadingAnimation stage={processingStage} />;
-  }
+  const hasValidJdInput = () => {
+    const value = jdText.trim();
+    return Boolean(sessionJdId) || Boolean(jdFile) || /^https?:\/\//i.test(value) || value.length >= 200;
+  };
 
   const stepContinueDisabled = () => {
     if (wizardStep === 1) return !uploadedFile && !sessionResumeId;
-    if (wizardStep === 2) return isExtractingJd || (jdText.trim().length < 20 && !jdFile);
+    if (wizardStep === 2) return isExtractingJd || !hasValidJdInput();
+    if (wizardStep === 3) return (!uploadedFile && !sessionResumeId) || isExtractingJd || !hasValidJdInput();
     return false;
   };
 
@@ -424,19 +553,12 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
       {/* ── Page shell — blurs only this area when modal is open ── */}
       <div ref={containerRef} className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden" style={{
-        background: "#EEF4FF",
+        background: "linear-gradient(115deg, #f5faff, #f8fcff 55%, #f5faff)",
         filter: wizardStep > 0 ? "blur(4px)" : "none",
         transition: "filter 0.25s ease",
         pointerEvents: wizardStep > 0 ? "none" : "auto",
       }}>
 
-        <div className="absolute inset-0 pointer-events-none" style={{
-          backgroundImage: "radial-gradient(circle, rgba(37,87,167,0.07) 1.5px, transparent 1.5px)",
-          backgroundSize: "28px 28px",
-        }} />
-        <div className="absolute top-0 left-1/4 w-150 h-100 pointer-events-none" style={{
-          background: "radial-gradient(ellipse, rgba(37,87,167,0.06) 0%, transparent 70%)",
-        }} />
         <div className="jm-container">
           <JobMatchStartCard mounted={mounted} onStart={() => setWizardStep(1)} />
         </div>
@@ -447,17 +569,17 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         open={wizardStep > 0}
         wizardStep={wizardStep}
         onClose={() => { setError(null); setWizardStep(0); }}
-        onBack={() => { setError(null); setWizardStep(prev => (prev - 1) as 0 | 1 | 2 | 3); }}
+        onBack={() => { setError(null); setWizardStep(prev => (prev - 1) as 0 | 1 | 2 | 3 | 4); }}
         onContinueClick={() => {
           if (stepContinueDisabled()) {
             setError(wizardStep === 1
               ? "Please upload a resume first."
-              : "Please add a job description (at least 20 characters)."
+              : "Please add at least 200 characters, upload a job description file, or enter a valid job URL."
             );
             return;
           }
           setError(null);
-          setWizardStep(prev => (prev + 1) as 1 | 2 | 3);
+          setWizardStep(prev => (prev + 1) as 1 | 2 | 3 | 4);
         }}
         continueDisabled={stepContinueDisabled()}
         onAnalyzeClick={analyzeMatch}
@@ -468,6 +590,12 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             sessionResumeName={sessionResumeName}
             error={error}
             onFileSelected={handleResumeUpload}
+            onClear={() => {
+              setUploadedFile(null);
+              setSessionResumeId(null);
+              setSessionResumeName(null);
+              setError(null);
+            }}
           />
         )}
         {wizardStep === 2 && (
@@ -488,8 +616,11 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             jdFile={jdFile}
             jdText={jdText}
             error={error}
+            onReplaceResume={() => { setError(null); setWizardStep(1); }}
+            onEditJobDescription={() => { setError(null); setWizardStep(2); }}
           />
         )}
+        {wizardStep === 4 && isProcessing && <LoadingAnimation stage={processingStage} />}
       </WizardModalShell>
 
       </div>{/* ── end outer wrapper ── */}
