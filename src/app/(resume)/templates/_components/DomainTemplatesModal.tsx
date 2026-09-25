@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type TemplateResponse, getAllResumes, createResumeWithAuth } from '@/api/resumeApi';
+import { type TemplateResponse, getAllResumes, createResumeWithAuth, applyTemplateToResume } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
@@ -169,6 +169,17 @@ export default function DomainTemplatesModal({
 
       if (!resumeId) {
         throw new Error('Failed to get or create resume ID');
+      }
+
+      // Save the chosen template on the resume (regular or enhanced), as the
+      // builder's TemplatesTab does, so it survives another browser or cleared
+      // storage. Best-effort: the builder still reads the localStorage choice.
+      if (templateId) {
+        try {
+          await applyTemplateToResume(resumeId, String(templateId));
+        } catch (applyError) {
+          logger.warn('Failed to save the template on the resume:', applyError);
+        }
       }
 
       // Catalogue is already saved in localStorage by the /templates page selection
