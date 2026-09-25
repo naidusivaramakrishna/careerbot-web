@@ -39,7 +39,22 @@ permissions:
 # This block is copied verbatim from the master copy of this workflow, which
 # already had the fix. The feature branches were carrying a stale version.
 concurrency:
-  group: ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  # pull_request runs whose ai-review job is SKIPPED (draft PR, or a label other
+  # than ai-review-waive) get their own `-noreview` group. Concurrency applies to
+  # the whole RUN, so inside the review group such a run would either cancel the
+  # in-flight review (cancel-in-progress) or -- whatever cancel-in-progress says --
+  # replace a PENDING requested /ai-review run, because GitHub keeps at most one
+  # pending run per group. In their own group they only supersede each other.
+  # issue_comment runs still resolve to the plain review group, matching the
+  # default-branch copy that actually handles comments.
+  # The condition is the negation of the pull_request clause of the ai-review
+  # job `if` below; keep the two in sync (tests/unit/test_ci_draft_policy.py).
+  group: >-
+    ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}${{
+    (github.event_name == 'pull_request' &&
+    (github.event.pull_request.draft ||
+    ((github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+    github.event.label.name != 'ai-review-waive'))) && '-noreview' || '' }}
   # NOT unconditional -- see the default-branch copy, which is the one that
   # actually cancels. Any comment on a PR fires an issue_comment run whose group
   # resolves to ai-pr-review-<PR#> via github.event.issue.number, landing it in
@@ -49,11 +64,9 @@ concurrency:
   #
   # Kept in sync here so a merge down to the default branch does not silently
   # revert the fix -- this branch is thousands of commits ahead of it.
-  # A draft synchronize run skips the review job. It must not cancel a
-  # manually requested /ai-review already running for the same PR.
-  cancel-in-progress: >-
-    ${{ github.event_name != 'issue_comment' &&
-        (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
+  # Draft runs no longer need an exception here: they are in the `-noreview`
+  # group above, where superseding each other is exactly what we want.
+  cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
 
 jobs:
   ai-review:
@@ -98,11 +111,14 @@ jobs:
             --repo "${{ github.repository }}" \
             ${{ steps.t.outputs.args }}
 
-  # careerbot-web has no Python test runner of its own -- this is the repo's only
-  # .py file. Without this job its copy of the gate would be the one nobody checks,
-  # which is exactly the blind spot this PR exists to close. The suite is the same
-  # one that guards careerbot-ai and careerbot-api.
+  # careerbot-web has no Python test runner of its own. Without this job its copy
+  # of the gate (and the workflow-policy tests next to it) would be the code
+  # nobody checks. test_ai_review_gate.py is the same suite that guards
+  # careerbot-ai and careerbot-api.
   gate-self-test:
+    # issue_comment fires for every comment on every issue/PR, from anyone;
+    # there is nothing for this job to test on those events.
+    if: github.event_name != 'issue_comment'
     runs-on: [self-hosted, ai-review]
     steps:
       - uses: actions/checkout@v4
@@ -110,6 +126,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install pytest
-        run: python3 -m pip install --quiet pytest
-      - name: Run the gate's own test suite
-        run: python3 -m pytest tests/unit/test_ai_review_gate.py -q --override-ini="addopts="
+        run: python3 -m pip install --quiet pytest pyyaml
+      - name: Run the gate's own test suite and the workflow-policy tests
+        run: python3 -m pytest tests/unit -q --override-ini="addopts="

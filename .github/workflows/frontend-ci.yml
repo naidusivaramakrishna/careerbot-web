@@ -136,6 +136,13 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_PUBLIC_BASE_URL: http://localhost:8000/api/v1
 
+      # ESLint and tsc above are advisory (`|| true`), so on a draft PR nothing in
+      # this job can fail on code. Say so, rather than let a green `Lint and
+      # Build` read as "built clean".
+      - name: Build deferred (draft PR)
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+        run: echo "::notice title=Build deferred::Draft PR - production build skipped. Mark the PR ready for review to run it."
+
       - name: Count console.log usages (advisory)
         run: |
           COUNT=$(grep -rn "console\.log" src/ --include="*.ts" --include="*.tsx" | wc -l)
