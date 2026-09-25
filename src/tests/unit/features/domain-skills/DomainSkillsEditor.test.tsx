@@ -206,3 +206,36 @@ describe('Skills editor — domain change', () => {
     expect(cs.frameworks).toEqual(['React']);
   });
 });
+
+// ai-review (2817c0db) P2: a domain switch hides categories the new domain
+// doesn't print. Hidden is display-only: nothing is sent to the server for
+// them, the stored data is untouched, and they come back on switching back.
+describe('Skills editor — switching domain away and back', () => {
+  it('hides other-domain skills without deleting them, and shows them again on switching back', async () => {
+    const { filterSkillsByDomain } = await import('@/app/(resume)/templates/skillsFilterByDomain');
+    const { deleteSkillCategory } = await import('@/api/resumeApi');
+    applyCareerTemplate('software_engineering');
+    render(<Harness initial={{ resume_id: 'r1', categorizedSkills: { ...baseSkills(), clinical_skills: [] } }} />);
+    expect(screen.getByTestId('chips-Programming Languages').textContent).toBe('Python,Go');
+
+    applyCareerTemplate('healthcare');
+    act(() => { setExternal!({ ...latest.data! }); });
+    await waitFor(() => expect(screen.queryByTestId('chips-Programming Languages')).toBeNull());
+    fireEvent.click(screen.getByTestId('add-Clinical Skills & Diagnostics'));
+    const hidden = latest.data!.categorizedSkills as Record<string, string[]>;
+    expect(hidden.programming_languages).toEqual(['Python', 'Go']);
+    expect(hidden.clinical_skills).toEqual(['NewSkill']);
+    // The PDF/preview filter drops the key from its output only.
+    expect(filterSkillsByDomain(hidden as never, 'healthcare')).not.toHaveProperty('programming_languages');
+    expect(deleteSkillCategory).not.toHaveBeenCalled();
+    expect(mockDeleteSkillById).not.toHaveBeenCalled();
+
+    applyCareerTemplate('software_engineering');
+    act(() => { setExternal!({ ...latest.data! }); });
+    await waitFor(() => expect(screen.getByTestId('chips-Programming Languages').textContent).toBe('Python,Go'));
+    expect(
+      (filterSkillsByDomain(latest.data!.categorizedSkills as never, 'software_engineering') as Record<string, unknown>)
+        .programming_languages,
+    ).toEqual(['Python', 'Go']);
+  });
+});
