@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const nav = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
@@ -13,13 +13,25 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/api/enhancerApi", () => ({ enhanceResume: vi.fn(), getEnhancedResume: vi.fn() }));
 vi.mock("@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide", () => ({
-  default: () => <div data-testid="resume-side" />,
+  default: ({ tabRequest }: { tabRequest?: { tab: string; id: number } }) => (
+    <div data-testid="resume-side" data-requested-tab={tabRequest?.tab ?? ""} data-request-id={tabRequest?.id ?? ""} />
+  ),
 }));
+// Mirrors the real toolbar: PreviewPanel.tsx handleResumeScoreClick and the Templates / Job Match buttons.
 vi.mock("@/app/(resume)/builder/creation/_components/PreviewPanel", () => ({
-  default: () => <div data-testid="preview-panel" />,
+  default: ({ onTabClick, onOpenSidebar }: { onTabClick: (tab: string) => void; onOpenSidebar?: (tab: string) => void }) => (
+    <div data-testid="preview-panel">
+      <button onClick={() => { onOpenSidebar?.("Score"); onTabClick("Score"); }}>Toolbar Score</button>
+      <button onClick={() => onTabClick("Templates")}>Toolbar Templates</button>
+      <button onClick={() => onTabClick("Job Match")}>Toolbar Job Match</button>
+    </div>
+  ),
 }));
 vi.mock("@/app/(resume)/builder/creation/_components/templates/TemplatesTab", () => ({
   default: () => <div data-testid="templates-tab" />,
+}));
+vi.mock("@/app/(resume)/builder/creation/_components/job/JobMatchTab", () => ({
+  default: () => <div data-testid="job-match-tab" />,
 }));
 vi.mock("@/app/(resume)/builder/creation/_context/ResumeContext", () => ({
   ResumeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -108,5 +120,44 @@ describe("ATS report workspace setup", () => {
     await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
     const readBack = window.localStorage.getItem("atsAnalysis_src-1") ?? window.sessionStorage.getItem("atsAnalysis_src-1");
     expect(JSON.parse(readBack!).enhanced_resume_id).toBe("enh-2");
+  });
+
+  describe("preview toolbar buttons", () => {
+    const renderWorkspace = async () => {
+      window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-1" })));
+      render(<ATSLoginReportPage />);
+      await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+    };
+
+    it("Score asks the ATS sidebar for its Score tab on every click", async () => {
+      await renderWorkspace();
+
+      fireEvent.click(screen.getByText("Toolbar Score"));
+      const side = screen.getByTestId("resume-side");
+      expect(side.getAttribute("data-requested-tab")).toBe("Score");
+      const firstId = side.getAttribute("data-request-id");
+
+      fireEvent.click(screen.getByText("Toolbar Score"));
+      expect(screen.getByTestId("resume-side").getAttribute("data-request-id")).not.toBe(firstId);
+    });
+
+    it("Job Match opens the job match panel", async () => {
+      await renderWorkspace();
+
+      fireEvent.click(screen.getByText("Toolbar Job Match"));
+
+      expect(screen.getByRole("dialog", { name: "Job Match" })).toBeTruthy();
+      expect(screen.getByTestId("job-match-tab")).toBeTruthy();
+      expect(screen.queryByTestId("templates-tab")).toBeNull();
+    });
+
+    it("Templates still opens the templates panel", async () => {
+      await renderWorkspace();
+
+      fireEvent.click(screen.getByText("Toolbar Templates"));
+
+      expect(screen.getByRole("dialog", { name: "Resume templates" })).toBeTruthy();
+      expect(screen.getByTestId("templates-tab")).toBeTruthy();
+    });
   });
 });

@@ -6,6 +6,7 @@ import { RefreshCw, XCircle, X } from "lucide-react";
 import ResumeSide from "@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide";
 import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/TemplatesTab";
+import JobMatchTab from "@/app/(resume)/builder/creation/_components/job/JobMatchTab";
 
 import { ResumeProvider } from "@/app/(resume)/builder/creation/_context/ResumeContext";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
@@ -208,7 +209,10 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
 function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  // Toolbar panels: Templates and Job Match open in the side drawer (as the
+  // builder's TemplatesSidebar does); Score switches the ATS sidebar's tab.
+  const [drawerTab, setDrawerTab] = useState<"Templates" | "Job Match" | null>(null);
+  const [sidebarTabRequest, setSidebarTabRequest] = useState<{ tab: string; id: number } | null>(null);
 
   // The shared item editors use this source marker to select enhanced-resume
   // update/delete APIs. Keep it in the ATS URL as well; otherwise a project or
@@ -243,12 +247,17 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
           resumeId={resumeId}
           initialTab="Score"
           defaultOpen={true}
+          tabRequest={sidebarTabRequest}
         />
         <main className="min-w-0 flex-1 bg-gray-50">
           <PreviewPanel
             isTemplateSidebarOpen={false}
             onTabClick={(tab) => {
-              if (tab === "Templates") setIsTemplatesOpen(true);
+              if (tab === "Score") {
+                setSidebarTabRequest((prev) => ({ tab: "Score", id: (prev?.id ?? 0) + 1 }));
+              } else if (tab === "Templates" || tab === "Job Match") {
+                setDrawerTab(tab);
+              }
             }}
             resumeId={resumeId}
             isEnhancedResume
@@ -256,33 +265,41 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
         </main>
       </div>
 
-      {isTemplatesOpen && (
+      {drawerTab && (
         <div
           className="fixed inset-0 z-[70] flex justify-end bg-slate-950/35"
           role="dialog"
           aria-modal="true"
-          aria-label="Resume templates"
+          aria-label={drawerTab === "Templates" ? "Resume templates" : "Job Match"}
         >
           <div className="flex h-full w-full max-w-[520px] flex-col border-l border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Templates</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Choose a layout without leaving ATS Scan.</p>
+                <h2 className="text-lg font-bold text-slate-900">{drawerTab}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {drawerTab === "Templates"
+                    ? "Choose a layout without leaving ATS Scan."
+                    : "Jobs that match this resume."}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsTemplatesOpen(false)}
+                onClick={() => setDrawerTab(null)}
                 className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                aria-label="Close templates"
+                aria-label={drawerTab === "Templates" ? "Close templates" : "Close job match"}
               >
                 <X size={20} />
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              <TemplatesTab
-                resumeId={resumeId}
-                onTemplateSelect={() => setIsTemplatesOpen(false)}
-              />
+              {drawerTab === "Templates" ? (
+                <TemplatesTab
+                  resumeId={resumeId}
+                  onTemplateSelect={() => setDrawerTab(null)}
+                />
+              ) : (
+                <JobMatchTab />
+              )}
             </div>
           </div>
         </div>

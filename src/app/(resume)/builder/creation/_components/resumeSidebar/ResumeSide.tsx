@@ -93,6 +93,12 @@ interface ResumeSideProps {
   defaultOpen?: boolean;
   /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
   openSection?: string;
+  /**
+   * Opens the sidebar on `tab` whenever a new request object arrives (for
+   * example a toolbar Score click). Pass a fresh `id` for every click so a
+   * repeated request for the same tab still switches back to it.
+   */
+  tabRequest?: { tab: string; id: number } | null;
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -109,6 +115,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   initialTab,
   defaultOpen = true,
   openSection,
+  tabRequest,
 }) => {
   // ✅ Get context first
   const {
@@ -200,6 +207,12 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
   const [pendingOpenSection, setPendingOpenSection] = useState<string | null>(null);
   const [pendingEditEntryIndex, setPendingEditEntryIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!tabRequest) return;
+    setIsOpen(true);
+    setActiveTab(tabRequest.tab);
+  }, [tabRequest]);
 
   // Auto-open the section specified by the ATS report "Fix Now" button
   const openSectionDone = useRef(false);
