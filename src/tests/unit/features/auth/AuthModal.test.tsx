@@ -142,6 +142,37 @@ describe('AuthModal — rendering', () => {
   });
 });
 
+// develop2 showed this notice under the submit button of both forms
+// (SignUpModal.tsx:434-439 at ae16eaa). It covers every way of continuing from
+// the modal, so it must sit after both the submit button and the Google /
+// LinkedIn buttons.
+describe('AuthModal — Terms / Privacy Policy notice', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const consentNotice = () =>
+    screen.getByText(
+      (_content, el) =>
+        el?.tagName === 'P' &&
+        el.textContent === 'By continuing, you agree to our Terms and Privacy Policy',
+    );
+
+  const follows = (later: Element, earlier: Element) =>
+    (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  it.each([
+    ['signup', renderSignup],
+    ['signin', renderSignin],
+  ])('shows the notice on the %s form, after the submit and social buttons', (_form, renderForm) => {
+    renderForm();
+    const notice = consentNotice();
+    expect(notice).toBeInTheDocument();
+    expect(follows(notice, screen.getByTestId('auth-submit-btn'))).toBe(true);
+    expect(follows(notice, screen.getByTestId('social-login-mock'))).toBe(true);
+  });
+});
+
 describe('AuthModal — form switching', () => {
   beforeEach(() => vi.clearAllMocks());
 

@@ -534,6 +534,15 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 {/* Social Login Buttons */}
                 <SocialLoginButtons redirectTo={authRedirectTo} />
 
+                {/* Consent notice (restored from develop2): kept below both the
+                    submit and the social buttons so it covers every way to continue. */}
+                <div className="text-xs text-center text-[#7B698F] mt-4 space-y-1">
+                    <p>
+                        By continuing, you agree to our <b className="text-[#371A62] font-semibold">Terms</b> and <b className="text-[#371A62] font-semibold">Privacy Policy</b>
+                    </p>
+                    <p>Your data is secure & encrypted</p>
+                </div>
+
                 {/* Switch Form Link */}
                 <p className="text-sm text-center mt-4 text-gray-700">
                     {formType === "signup" ? (
