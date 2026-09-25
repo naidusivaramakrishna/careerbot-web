@@ -1049,6 +1049,25 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             languages: data.personalInfo?.languages || null,
             titlePrefix: data.personalInfo?.titlePrefix || null,
             qualifications: data.personalInfo?.qualifications || null,
+            // Domain-specific fields (government / healthcare / legal / marine /
+            // research). The API returns them in personalInfo; dropping them here
+            // blanked the Personal Info form after every reload.
+            fathersName: data.personalInfo?.fathersName || null,
+            gender: data.personalInfo?.gender || null,
+            maritalStatus: data.personalInfo?.maritalStatus || null,
+            permanentAddress: data.personalInfo?.permanentAddress || null,
+            specialisation: data.personalInfo?.specialisation || null,
+            medicalRegNo: data.personalInfo?.medicalRegNo || null,
+            barEnrollmentNo: data.personalInfo?.barEnrollmentNo || null,
+            yearOfEnrollment: data.personalInfo?.yearOfEnrollment || null,
+            courtsOfPractise: data.personalInfo?.courtsOfPractise || null,
+            rank: data.personalInfo?.rank || null,
+            cocNumber: data.personalInfo?.cocNumber || null,
+            vesselTypes: data.personalInfo?.vesselTypes || null,
+            stcwCertificates: data.personalInfo?.stcwCertificates || null,
+            orcidId: data.personalInfo?.orcidId || null,
+            googleScholarUrl: data.personalInfo?.googleScholarUrl || null,
+            hIndex: data.personalInfo?.hIndex || null,
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
