@@ -12,6 +12,7 @@ import { ResumeProvider } from "@/app/(resume)/builder/creation/_context/ResumeC
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
 import { cacheBuilderResume, readEnhancedResumeIds, rememberEnhancedResumeId, writeReportCache } from "./atsReportCache";
+import { readAtsAnalysis } from "@/api/resumeatsapi";
 import type { EnhancedResumeHistoryItem } from "@/types/api.types";
 
 
@@ -333,7 +334,7 @@ function ATSLoginReport() {
       let data: Record<string, unknown> | null = null;
 
       for (const key of keys) {
-        const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
+        const raw = readAtsAnalysis(key); // guarded: blocked storage reads as a miss, not a crash
         if (!raw) continue;
         try {
           const candidate = JSON.parse(raw) as Record<string, unknown>;
@@ -360,7 +361,7 @@ function ATSLoginReport() {
   }, [requestedResumeId]);
   const getStoredReport = (): Record<string, unknown> | null => {
     const key = requestedResumeId ? `atsAnalysis_${requestedResumeId}` : "atsAnalysisData";
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key) ?? localStorage.getItem("atsAnalysisData");
+    const raw = readAtsAnalysis(key) ?? readAtsAnalysis("atsAnalysisData");
     if (!raw) return null;
     try { return JSON.parse(raw) as Record<string, unknown>; } catch { return null; }
   };
