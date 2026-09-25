@@ -6,6 +6,8 @@ import { X } from 'lucide-react'
 interface SystemLogsSectionProps {
     logs: SystemLog[]
     loading?: boolean
+    /** Set when the latest logs request failed; shown instead of the rows. */
+    error?: string | null
     filters: {
         level: LogLevel | ''
         source: LogSource | ''
@@ -33,7 +35,7 @@ const LogRow = memo(({ log }: { log: SystemLog }) => {
 
 LogRow.displayName = 'LogRow'
 
-export const SystemLogsSection = memo(({ logs, loading, filters, onFiltersChange }: SystemLogsSectionProps) => {
+export const SystemLogsSection = memo(({ logs, loading, error, filters, onFiltersChange }: SystemLogsSectionProps) => {
     const handleFilterChange = useCallback((key: keyof typeof filters, value: string) => {
         onFiltersChange({
             ...filters,
@@ -145,7 +147,13 @@ export const SystemLogsSection = memo(({ logs, loading, filters, onFiltersChange
                         </tr>
                     </thead>
                     <tbody>
-                        {logs && logs.length > 0 ? (
+                        {error ? (
+                            <tr>
+                                <td colSpan={4} className="p-6 text-center text-red-600" role="alert">
+                                    {error}
+                                </td>
+                            </tr>
+                        ) : logs && logs.length > 0 ? (
                             logs.map((log) => (
                                 <LogRow key={log.id} log={log} />
                             ))

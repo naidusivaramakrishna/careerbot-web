@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     getSystemOverview,
     getApiRequestMetrics,
@@ -50,6 +50,11 @@ export const useSystemMonitoring = ({
     const [cpuMetrics, setCpuMetrics] = useState<CpuUsageResponse | null>(null)
     const [memoryMetrics, setMemoryMetrics] = useState<MemoryUsageResponse | null>(null)
     const [systemLogs, setSystemLogs] = useState<SystemLogsResponse | null>(null)
+    const [logsError, setLogsError] = useState<string | null>(null)
+    // Id of the most recently started logs request. The debounced filter
+    // fetch, manual Refresh and auto-refresh can overlap and resolve out of
+    // order; only the latest one may update the table.
+    const latestLogsRequest = useRef(0)
     const [loading, setLoading] = useState(true)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [lastRefreshed, setLastRefreshed] = useState<string>("")
@@ -67,6 +72,7 @@ export const useSystemMonitoring = ({
 
     // Fetch logs with filters (debounced by effect)
     const fetchLogs = useCallback(async () => {
+        const requestId = ++latestLogsRequest.current
         try {
             const logsParams: Record<string, any> = { page: 1, page_size: 10 }
             if (logsFilters?.level) logsParams.level = logsFilters.level
@@ -76,9 +82,23 @@ export const useSystemMonitoring = ({
             if (logsFilters?.endDate) logsParams.end_date = logsFilters.endDate
 
             const logs = await getSystemLogs(logsParams)
+            if (requestId !== latestLogsRequest.current) return
             setSystemLogs(logs)
+            setLogsError(null)
         } catch (error) {
             logger.error('Error fetching logs:', error)
+            if (requestId !== latestLogsRequest.current) return
+            // Don't leave the previous filter's rows on screen under the new
+            // filters. Keep a (empty) response so the filter controls stay
+            // rendered and the user can change them.
+            setSystemLogs((prev) => ({
+                logs: [],
+                total: 0,
+                page: 1,
+                page_size: prev?.page_size ?? 10,
+                total_pages: 0,
+            }))
+            setLogsError('Failed to load logs. Please try again.')
         }
     }, [logsFilters])
 
@@ -147,6 +167,7 @@ export const useSystemMonitoring = ({
         cpuMetrics,
         memoryMetrics,
         systemLogs,
+        logsError,
         loading,
         isRefreshing,
         lastRefreshed,

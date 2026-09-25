@@ -43,6 +43,7 @@ const SystemMonitoring = () => {
         cpuMetrics,
         memoryMetrics,
         systemLogs,
+        logsError,
         loading,
         isRefreshing,
         lastRefreshed,
@@ -157,6 +158,7 @@ const SystemMonitoring = () => {
                 <SystemLogsSection
                     logs={systemLogs.logs}
                     loading={isRefreshing}
+                    error={logsError}
                     filters={logsFilters}
                     onFiltersChange={setLogsFilters}
                 />
