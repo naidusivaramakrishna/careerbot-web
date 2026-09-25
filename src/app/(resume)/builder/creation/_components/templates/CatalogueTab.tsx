@@ -4,7 +4,7 @@ import { useResume } from "../../_context/ResumeContext";
 import { STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from "@/app/browse-templates/_components/CatalogueThumbnail";
 import { useCatalogues } from "@/hooks/useCatalogues";
-import { applyCatalogueToResume, applyCatalogueToEnhancedResume } from "@/api/resumeApi";
+import { createCataloguePersister } from "@/app/(resume)/templates/_utils/cataloguePersister";
 import logger from "@/lib/logger";
 
 const NATURAL_W = 300;
@@ -157,33 +157,15 @@ export default function CatalogueTab() {
     : {};
   const cataloguesMap = Object.keys(renderableApiCatalogues).length > 0 ? renderableApiCatalogues : STYLE_CATALOGUES;
 
-  // One request at a time, so the server applies clicks in click order; clicks
-  // made while one is in flight collapse to the latest (the enhanced-resume
-  // update re-scores the resume on every call).
-  const persistRef = useRef<{ inFlight: boolean; pending: { id: string; enhanced: boolean; key: string } | null }>(
-    { inFlight: false, pending: null }
+  // Regular vs enhanced endpoint, request ordering and coalescing live in the
+  // shared persister (also used by the /templates page).
+  const [persistToResume] = useState(() =>
+    createCataloguePersister((err) => logger.warn('[CatalogueTab] Failed to persist catalogue:', err))
   );
 
   const persistCatalogue = (key: string) => {
     if (!resumeId) return;
-    const state = persistRef.current;
-    // Enhanced resumes live in another collection; the regular catalogue
-    // endpoint would answer 404 for their id.
-    state.pending = { id: resumeId, enhanced: resumeSource === "enhanced", key };
-    if (state.inFlight) return;
-    state.inFlight = true;
-    void (async () => {
-      while (state.pending) {
-        const { id, enhanced, key: nextKey } = state.pending;
-        state.pending = null;
-        try {
-          await (enhanced ? applyCatalogueToEnhancedResume(id, nextKey) : applyCatalogueToResume(id, nextKey));
-        } catch (err) {
-          logger.warn('[CatalogueTab] Failed to persist catalogue:', err);
-        }
-      }
-      state.inFlight = false;
-    })();
+    persistToResume(resumeId, key, resumeSource === "enhanced");
   };
 
   const applyCatalogue = (key: string, color?: string) => {

@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, LayoutTemplate, Sparkles, User, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getTemplatesByCategory, getTemplateCategories, applyCatalogueToResume, type TemplateResponse } from '@/api/resumeApi';
+import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
+import { createCataloguePersister } from './_utils/cataloguePersister';
 import logger from '@/lib/logger';
 import CategorySidebar from './_components/CategorySidebar';
 import DomainTemplatesModal from './_components/DomainTemplatesModal';
@@ -146,7 +147,9 @@ function TemplatesPageContent() {
     }
   };
 
-  const persistQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const [persistToResume] = useState(() =>
+    createCataloguePersister((err) => logger.warn(`Failed to apply catalogue via API: ${err}`))
+  );
 
   const handleCatalogueSelect = (key: string) => {
     setSelectedCatalogue(key);
@@ -156,15 +159,12 @@ function TemplatesPageContent() {
     // Persist only for the resume this page was opened for (?resumeId=).
     // Without it the choice stays local and the builder applies
     // `selected_catalogue` when it opens; falling back to current_resume_id
-    // wrote to whichever resume was opened last. Requests are chained so the
-    // server applies fast clicks in click order (as in CatalogueTab).
+    // wrote to whichever resume was opened last. With ?source=enhanced the id
+    // is an enhanced resume's, which the regular catalogue endpoint answers
+    // 404 for; the shared persister routes it (and orders fast clicks) as
+    // CatalogueTab does.
     if (urlResumeId) {
-      const resumeId = urlResumeId;
-      persistQueueRef.current = persistQueueRef.current
-        .catch(() => undefined)
-        .then(() => applyCatalogueToResume(resumeId, key))
-        .then(() => logger.info(`Catalogue '${key}' applied to resume ${resumeId}`))
-        .catch((err) => logger.warn(`Failed to apply catalogue via API: ${err}`));
+      persistToResume(urlResumeId, key, urlSource === 'enhanced');
     }
   };
 
