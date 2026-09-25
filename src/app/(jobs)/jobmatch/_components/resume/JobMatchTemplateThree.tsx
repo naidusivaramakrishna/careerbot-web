@@ -537,17 +537,30 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   };
 
   // A description stays the entry's main text, but bullets that only live in
-  // responsibilities/achievements (where the backend appends a fix's bullet)
-  // still have to show, or the preview omits what the exported PDF contains.
-  // Returns `base` untouched when there is nothing new to add, and never
-  // merges into an HTML description.
+  // responsibilities/achievements/details (where the backend appends a fix's
+  // bullet) still have to show, or the preview omits what the stored resume
+  // and the exported PDF contain. Returns the extras not already in `base`.
+  // An HTML description is compared by its text content.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const novelBullets = (base: any, extras: string[]): string[] => {
+    if (typeof base === "string" && base.includes("<")) {
+      const norm = (v: string) => v.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim().toLowerCase();
+      const text = norm(base.replace(/<[^>]*>/g, " "));
+      return extras.filter((b) => norm(b) && !text.includes(norm(b)));
+    }
+    const seen = new Set(parseDescription(base).map((v) => v.trim()));
+    return extras.filter((b) => !seen.has(b.trim()));
+  };
+
+  // Returns `base` untouched when there is nothing new to add. An HTML
+  // description is never merged into; it is rendered as-is with the extra
+  // bullets listed after it (see renderBullets).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const withExtraBullets = (base: any, extras: string[]): any => {
-    if (typeof base === "string" && base.includes("<")) return base;
-    const items = parseDescription(base);
-    const seen = new Set(items.map((s) => s.trim()));
-    const novel = extras.filter((b) => !seen.has(b.trim()));
-    return novel.length ? [...items, ...novel] : base;
+    const novel = novelBullets(base, extras);
+    if (!novel.length) return base;
+    if (typeof base === "string" && base.includes("<")) return { html: base, extra: novel };
+    return [...parseDescription(base), ...novel];
   };
 
   const formatDate = (dateString?: string): string => {
@@ -566,8 +579,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const sc = (key: string) =>
     `relative group/section${activeSection === key ? " bg-blue-50 rounded px-1 -mx-1" : ""}`;
 
-  const renderBullets = (desc: string | string[] | null | undefined) => {
+  const renderBullets = (desc: string | string[] | { html: string; extra: string[] } | null | undefined): React.ReactNode => {
     if (!desc) return null;
+    if (!Array.isArray(desc) && typeof desc === "object") {
+      return <>{renderBullets(desc.html)}{renderBullets(desc.extra)}</>;
+    }
     if (typeof desc === "string" && desc.includes("<")) {
       return keywordMode ? <ResumeKeywordHtml content={desc} matched={matchedTerms} missing={missingTerms}/> : <SafeHTML content={desc} className="ats-desc" />;
     }
@@ -818,8 +834,16 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   // export merges responsibilities/description with achievements and
                   // key_contributions into one list, so the preview must too or jobs
                   // whose bullets only live under achievements render with no bullets.
+                  // A description hides responsibilities/details in the chain
+                  // below, yet a fix's generated bullet is appended to the
+                  // first of those arrays (fixMirror.addBullet, like the API's
+                  // append_resume_bullet), so list any they add.
+                  const expExtras = [exp.responsibilities, exp.details]
+                    .filter(Array.isArray)
+                    .flatMap((list) => parseDescription(list));
                   const descItems = [
                     ...parseDescription(exp.description || exp.responsibilities || exp.details || null),
+                    ...(exp.description ? novelBullets(exp.description, expExtras) : []),
                     ...parseDescription(exp.achievements || null),
                     ...parseDescription(exp.key_contributions || exp.keyContributions || null),
                   ];

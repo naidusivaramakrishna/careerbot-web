@@ -200,6 +200,42 @@ describe("resume template renders fix-added content", () => {
     expect(screen.getByText("Wrote reports")).toBeTruthy();
   });
 
+  // fixMirror.addBullet (like the API's append_resume_bullet) appends to the
+  // entry's first existing bullet list, so a role with a description and a
+  // responsibilities/details array gets the generated bullet in that array.
+  it("shows experience bullets from responsibilities and details next to a description", () => {
+    render(
+      <JobMatchTemplateThree
+        data={{ parsed_data: { contact: { name: "T" } } }}
+        editOverrides={{
+          experience: [
+            { company: "Acme", role: "Engineer", description: "Owned the billing platform", responsibilities: ["Built APIs", "Led stakeholder workshops"] },
+            { company: "Beta", role: "Analyst", description: "Reporting", details: ["Automated weekly reports"] },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText("Owned the billing platform")).toBeTruthy();
+    expect(screen.getByText("Led stakeholder workshops")).toBeTruthy();
+    expect(screen.getByText("Automated weekly reports")).toBeTruthy();
+  });
+
+  it("shows project and internship bullets next to an HTML description", () => {
+    render(
+      <JobMatchTemplateThree
+        data={{ parsed_data: { contact: { name: "T" } } }}
+        editOverrides={{
+          projects: [{ title: "Side project", description: "<p>Built the thing</p>", achievements: ["Led stakeholder workshops", "Built the thing"] }],
+          internships: [{ company: "Intern Co", description: "<ul><li>Assisted the team</li></ul>", responsibilities: ["Wrote reports"] }],
+        }}
+      />
+    );
+    expect(screen.getByText("Built the thing")).toBeTruthy();
+    expect(screen.getByText("Led stakeholder workshops")).toBeTruthy();
+    expect(screen.getByText("Assisted the team")).toBeTruthy();
+    expect(screen.getByText("Wrote reports")).toBeTruthy();
+  });
+
   it("does not duplicate a bullet that is already in the description", () => {
     render(
       <JobMatchTemplateThree
