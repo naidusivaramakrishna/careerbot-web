@@ -10,6 +10,14 @@ on:
     # ignores every other label so this does not re-review on unrelated ones.
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   issue_comment:
+    # REQUIRES A MASTER SYNC: GitHub runs issue_comment (and schedule) workflows
+    # from the DEFAULT branch's copy of this file, which is `master`, not the
+    # branch this file is on. Until master carries this file, comments are
+    # handled by master's copy: no OWNER/MEMBER/COLLABORATOR check on
+    # `/ai-review`, the plain concurrency group, and its hourly
+    # `schedule: cron "47 * * * *"` sweep keeps running. Removing `schedule:`
+    # here and the author_association gate below do nothing until then.
+    #
     # Security invariant: this privileged trigger checks out the default branch.
     # The review script may fetch the PR ref for git diff/show, but must never
     # check it out or execute PR-authored code. Dynamic commands run only from
@@ -36,8 +44,8 @@ permissions:
 # cancel-in-progress: a new push supersedes the previous review of that same
 # PR.
 #
-# This block is copied verbatim from the master copy of this workflow, which
-# already had the fix. The feature branches were carrying a stale version.
+# cancel-in-progress came from the master copy of this workflow, which already
+# had the fix. The group below has since diverged from master's (see there).
 concurrency:
   # pull_request runs whose ai-review job is SKIPPED (draft PR, or a label other
   # than ai-review-waive) get their own `-noreview` group. Concurrency applies to
@@ -45,19 +53,30 @@ concurrency:
   # in-flight review (cancel-in-progress) or -- whatever cancel-in-progress says --
   # replace a PENDING requested /ai-review run, because GitHub keeps at most one
   # pending run per group. In their own group they only supersede each other.
-  # issue_comment runs still resolve to the plain review group, matching the
-  # default-branch copy that actually handles comments.
-  # The condition is the negation of the pull_request clause of the ai-review
-  # job `if` below; keep the two in sync (tests/unit/test_ci_draft_policy.py).
+  # issue_comment runs that are NOT a trusted `/ai-review` on a PR (an ordinary
+  # comment, or `/ai-review` from a CONTRIBUTOR/NONE) get `-comment` for the same
+  # reason: every job in them is skipped, yet in the review group they would
+  # replace a pending requested /ai-review; in `-noreview` they would replace a
+  # pending draft run. Only a trusted `/ai-review` comment enters the review group.
+  # (Takes effect for comments only after the master sync noted under `on:`.)
+  # The two conditions are the negations of the pull_request and issue_comment
+  # clauses of the ai-review job `if` below; keep them in sync
+  # (tests/unit/test_ci_draft_policy.py).
   group: >-
     ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}${{
     (github.event_name == 'pull_request' &&
     (github.event.pull_request.draft ||
     ((github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
-    github.event.label.name != 'ai-review-waive'))) && '-noreview' || '' }}
-  # NOT unconditional -- see the default-branch copy, which is the one that
-  # actually cancels. Any comment on a PR fires an issue_comment run whose group
-  # resolves to ai-pr-review-<PR#> via github.event.issue.number, landing it in
+    github.event.label.name != 'ai-review-waive'))) && '-noreview' ||
+    (github.event_name == 'issue_comment' &&
+    !(github.event.issue.pull_request != null &&
+    contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+    github.event.comment.author_association) &&
+    startsWith(github.event.comment.body, '/ai-review'))) && '-comment' || '' }}
+  # NOT unconditional -- see the default-branch (master) copy, which is the one
+  # that handles issue_comment today. Any comment on a PR fires an issue_comment
+  # run whose group resolves to ai-pr-review-<PR#> via github.event.issue.number
+  # (in master's copy; above, only a trusted `/ai-review` does), landing it in
   # the SAME group as a review already running for that PR. The job-level `if`
   # skips the JOB, but the RUN still joins the group and cancel-in-progress kills
   # the real review first (careerbot-web#61: twice, ~5s after each comment).
@@ -66,10 +85,14 @@ concurrency:
   # revert the fix -- this branch is thousands of commits ahead of it.
   # Draft runs no longer need an exception here: they are in the `-noreview`
   # group above, where superseding each other is exactly what we want.
+  # The issue_comment exception is still needed: a trusted `/ai-review` enters
+  # the review group and must queue behind a running review, not kill it.
   cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
 
 jobs:
   ai-review:
+    # The issue_comment clause (incl. the author_association gate) is live only
+    # once master carries this file -- see the note under `on: issue_comment`.
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&

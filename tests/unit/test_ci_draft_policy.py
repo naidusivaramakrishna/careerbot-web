@@ -242,6 +242,58 @@ def test_pull_request_run_joins_review_group_only_if_it_reviews(ai_review, ctx):
     assert (_group(ai_review, ctx) == REVIEW_GROUP) is reviews
 
 
+def plain_issue_comment_event(body="/ai-review", association="OWNER"):
+    ctx = comment_event(body, association)
+    del ctx["event"]["issue"]["pull_request"]
+    return ctx
+
+
+COMMENT_EVENTS = [
+    comment_event("/ai-review", "OWNER"),
+    comment_event("/ai-review-live", "MEMBER"),
+    comment_event("/ai-review", "COLLABORATOR"),
+    comment_event("thanks", "OWNER"),
+    comment_event("LGTM /ai-review", "OWNER"),
+    comment_event("/ai-review", "CONTRIBUTOR"),
+    comment_event("/ai-review", "NONE"),
+    comment_event("thanks", "NONE"),
+    plain_issue_comment_event("/ai-review", "OWNER"),
+]
+
+
+def _comment_ids(events):
+    return [f"{e['event']['comment']['author_association']}:"
+            f"{e['event']['comment']['body']}"
+            f"{'' if 'pull_request' in e['event']['issue'] else '-on-issue'}"
+            for e in events]
+
+
+@pytest.mark.parametrize("ctx", COMMENT_EVENTS, ids=_comment_ids(COMMENT_EVENTS))
+def test_comment_run_joins_review_group_only_if_it_reviews(ai_review, ctx):
+    """Same rule as for pull_request runs. An ordinary comment (or an
+    untrusted `/ai-review`) produces a run whose jobs are all skipped; in the
+    review group it would REPLACE a pending requested /ai-review run (GitHub
+    keeps at most one pending run per group, cancel-in-progress or not)."""
+    reviews = _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
+    assert (_group(ai_review, ctx) == REVIEW_GROUP) is reviews
+
+
+def test_ordinary_comment_cannot_displace_a_pending_review(ai_review):
+    """Scenario from the 137e3a1 review: a review is running, an OWNER's
+    `/ai-review` run X is pending behind it, then someone comments "thanks"
+    (run Y). Y must land in neither the review group (would replace X) nor the
+    draft `-noreview` group (would replace a pending draft run's
+    gate-self-test)."""
+    requested = _group(ai_review, comment_event("/ai-review", "OWNER"))
+    draft = _group(ai_review, pr_event("synchronize", True))
+    for chatter in (comment_event("thanks", "NONE"),
+                    comment_event("/ai-review", "CONTRIBUTOR"),
+                    plain_issue_comment_event("hello", "NONE")):
+        assert _group(ai_review, chatter) not in (requested, draft, REVIEW_GROUP)
+        # and it never cancels anything on the way in
+        assert _cancels(ai_review, chatter) is False
+
+
 def test_requested_review_queues_instead_of_cancelling(ai_review):
     ctx = comment_event()
     assert _cond(ai_review["jobs"]["ai-review"]["if"], ctx)
