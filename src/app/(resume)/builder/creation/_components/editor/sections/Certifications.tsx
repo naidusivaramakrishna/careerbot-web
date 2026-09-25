@@ -66,7 +66,7 @@ const Certifications: React.FC = () => {
       const validEntries = (resumeData.certifications as any[]).map((c) => ({
         ...c,
         issuedBy: c.issuedBy || c.issuer || '',
-        year: c.year || '',
+        year: c.year || c.issueDate || '',
       })).filter(hasValidData);
       return validEntries;
     }
@@ -124,7 +124,7 @@ const Certifications: React.FC = () => {
       const merged = allEntries.map((entry) => ({
         ...entry,
         issuer: entry.issuedBy,
-        issueDate: entry.year,
+        issueDate: entry.year || (entry as { issueDate?: string }).issueDate || '',
         full_name: entry.name,
         issuing_organization: entry.issuedBy,
       }));

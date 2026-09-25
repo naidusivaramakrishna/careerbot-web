@@ -214,9 +214,15 @@ const mockDeleteFix = vi.mocked(deleteFix);
 const mockHttpPost = vi.mocked(httpClient.post);
 const mockToast = vi.mocked(toast);
 
+// vitest.setup.ts installs an in-memory getItem. Some tests below override it
+// with mockImplementation, which vi.clearAllMocks() does not undo, so it would
+// otherwise leak into later tests and hide values written to localStorage.
+const defaultGetItem = vi.mocked(window.localStorage.getItem).getMockImplementation();
+
 describe('ResumeContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    if (defaultGetItem) vi.mocked(window.localStorage.getItem).mockImplementation(defaultGetItem);
     window.localStorage.clear();
     mockGetDefaultTemplate.mockResolvedValue({ template_id: 'modern_blue' } as never);
     mockGetResumeById.mockResolvedValue(builderResume as never);
@@ -793,6 +799,7 @@ describe('ResumeContext', () => {
               fix_type: 'manual',
             }],
             applied_fixes: [],
+            operation: { type: 'delete_fix', suggestion_id: 'suggestion-1' },
           },
         },
       }));

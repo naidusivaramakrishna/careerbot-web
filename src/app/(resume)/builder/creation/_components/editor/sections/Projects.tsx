@@ -37,11 +37,10 @@ interface ProjectEntry {
   id?: string; // ✅ Backend uses "id" field, not "_id"
 }
 
+// No `id` on purpose: only the server assigns one. EditorTab's autosave skips
+// id-less items (new rows are created on an explicit Save) and removeProject
+// deletes id-less entries locally instead of calling the DELETE API.
 const emptyProject = (): ProjectEntry => ({
-  // Stable client id makes repeated autosave/Save calls idempotent. Without
-  // it, the backend correctly treats every id-less item as a new row and the
-  // same project is appended a second time.
-  id: globalThis.crypto?.randomUUID?.() ?? `project-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   title: "",
   description: "",
   technologies: [],

@@ -115,6 +115,8 @@ interface ResumeSideProps {
   defaultOpen?: boolean;
   /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
   openSection?: string;
+  /** Lets a parent switch the sidebar tab (and open it) from outside. */
+  tabRequest?: { tab: string; id: number } | null;
   /** Changes whenever an ATS recommendation is selected, including the same section twice. */
   openSectionRequestId?: number;
   /** Use the entire parent panel instead of the builder page's percentage width. */
@@ -137,6 +139,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   initialTab,
   defaultOpen = true,
   openSection,
+  tabRequest,
   openSectionRequestId = 0,
   embedded = false,
   atsFixMode = false,

@@ -91,6 +91,31 @@ function suggestionsFromAtsDisplay(value: unknown): EnhancedSuggestion[] {
   return normalizeEnhancedSuggestions(candidates);
 }
 
+/**
+ * Legacy fallback: older ATS payloads only expose findings as
+ * `section_breakdown[section].deductions`. Used only when no newer source
+ * (suggestions list or ats_display) produced any card.
+ */
+function suggestionsFromSectionBreakdown(score: unknown): EnhancedSuggestion[] {
+  if (!score || typeof score !== "object" || Array.isArray(score)) return [];
+  const breakdown = (score as { section_breakdown?: unknown }).section_breakdown;
+  if (!breakdown || typeof breakdown !== "object" || Array.isArray(breakdown)) return [];
+  const candidates: unknown[] = [];
+  for (const [section, value] of Object.entries(breakdown as Record<string, unknown>)) {
+    const deductions = (value as { deductions?: unknown } | null)?.deductions;
+    if (!Array.isArray(deductions)) continue;
+    for (const deduction of deductions) {
+      if (!deduction || typeof deduction !== "object" || Array.isArray(deduction)) continue;
+      const raw = deduction as Record<string, unknown>;
+      candidates.push({
+        ...raw,
+        section: typeof raw.section === "string" && raw.section.trim() ? raw.section : section,
+      });
+    }
+  }
+  return normalizeEnhancedSuggestions(candidates);
+}
+
 /** Merge all returned finding sources, retaining each server ID once. */
 function mergeEnhancedSuggestions(...sources: unknown[]): EnhancedSuggestion[] {
   const merged: EnhancedSuggestion[] = [];
@@ -146,6 +171,10 @@ function reconcileServerSuggestions(
   // PARTIAL (dropMissingPending is false) -- so it becomes a green fixed
   // card instead of staying pending or being dropped.
   resolvedSections: Set<string> = new Set(),
+  // The suggestion an explicit delete_fix (Undo) snapshot just reopened. Only
+  // this card may go from fixed back to pending when the server re-lists it;
+  // any other re-listed card is a stale apply response and stays green.
+  reopenedSuggestionId?: string,
 ): EnhancedSuggestion[] {
   // A suggestion the server list itself already marks "fixed" (see
   // resolveRemovedSkillDeductions) must stay fixed here too -- forcing every
@@ -163,6 +192,11 @@ function reconcileServerSuggestions(
     ]),
   );
   const previousIds = new Set(previous.map(suggestion => suggestion.id));
+  // Section names differ in case/punctuation between the editor map, the ATS
+  // breakdown keys and suggestion payloads ("Summary" vs "summary"); compare
+  // the same normalised token ScoreTab uses to group cards.
+  const sectionToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const resolvedSectionTokens = new Set([...resolvedSections].map(sectionToken));
 
   // Preserve the original display order. The previous implementation emitted
   // every pending card first and appended fixed cards last, which made a
@@ -183,7 +217,7 @@ function reconcileServerSuggestions(
       // Applying one recommendation can return an older pending list for
       // unrelated sections. Keep locally server-confirmed cards fixed during
       // that apply reconciliation; only an explicit Undo may reopen them.
-      if (suggestion.status === "fixed" && fresh.status !== "fixed") {
+      if (suggestion.status === "fixed" && fresh.status !== "fixed" && suggestion.id !== reopenedSuggestionId) {
         return [{ ...fresh, status: "fixed" as const, undoAvailable: suggestion.undoAvailable }];
       }
       return [fresh];
@@ -207,7 +241,7 @@ function reconcileServerSuggestions(
       // the response is otherwise partial. Show it fixed rather than
       // dropping it (an unrelated section's still-partial suggestions list
       // must not be treated as authoritative) or leaving it stuck pending.
-      if (resolvedSections.has(suggestion.section)) {
+      if (resolvedSectionTokens.has(sectionToken(suggestion.section))) {
         // Not backed by an applied-fix ledger entry (this is a section save,
         // not an /enhance/apply call), so there is nothing for an Undo
         // button to call -- explicitly false, not left as whatever the
@@ -1578,7 +1612,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           // deductions it carries whether a fix is `auto` or `manual`.
           // Derive cards from deductions only for legacy responses that do
           // not include a suggestions list at all.
-          const serverSuggestions = mergeEnhancedSuggestions(
+          const currentServerSuggestions = mergeEnhancedSuggestions(
             resumeData.suggestions,
             (enhancerState as { suggestions?: EnhancedSuggestion[] } | undefined)?.suggestions,
             normalizedLoadedScore?.suggestions,
@@ -1588,6 +1622,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             (cachedEnhancerState?.ats_breakdown as { suggestions?: EnhancedSuggestion[] } | undefined)?.suggestions,
             loadedAtsDisplay,
           );
+          const serverSuggestions = currentServerSuggestions.length > 0
+            ? currentServerSuggestions
+            : suggestionsFromSectionBreakdown(resolvedAtsScore);
           // The stored score/suggestion snapshot is never rescored after a
           // skill delete (see resolveRemovedSkillDeductions), so a fresh
           // load can still surface a "not demonstrated" card for a skill the
@@ -2287,7 +2324,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       // A delete-fix response is authoritative. In particular `location: null`
       // means the user has undone the location fix; do not use `|| previous`
       // because that silently restores the old value in the browser.
-      const useServer = (value: unknown, aliases: string[], previousValue: string, includeSocial = false): string => {
+      const pickServerValue = (value: unknown, aliases: string[], previousValue: string, includeSocial = false): string => {
         const direct = serverField(aliases, includeSocial);
         return direct.found
           ? serverText(direct.value)
@@ -2322,16 +2359,16 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         personalInfo: {
           ...previous.personalInfo,
           ...mappedInfo,
-          fullname: useServer(mappedInfo.fullname, ["fullname", "fullName", "full_name", "name"], previous.personalInfo.fullname),
-          email: useServer(mappedInfo.email, ["email"], previous.personalInfo.email),
-          location: useServer(mappedInfo.location, ["location", "city", "address"], previous.personalInfo.location),
+          fullname: pickServerValue(mappedInfo.fullname, ["fullname", "fullName", "full_name", "name"], previous.personalInfo.fullname),
+          email: pickServerValue(mappedInfo.email, ["email"], previous.personalInfo.email),
+          location: pickServerValue(mappedInfo.location, ["location", "city", "address"], previous.personalInfo.location),
           phone: serverPhone
             ? splitPhone(phoneValue).phoneNumber
             : (phoneValue || previous.personalInfo.phone || ""),
           countryCode,
-          linkedinUrl: useServer(mappedInfo.linkedinUrl, ["linkedin", "linkedinUrl", "linkedin_url"], previous.personalInfo.linkedinUrl, true),
-          githubUrl: useServer(mappedInfo.githubUrl, ["github", "githubUrl", "github_url"], previous.personalInfo.githubUrl, true),
-          portfolioUrl: useServer(mappedInfo.portfolioUrl, ["portfolio", "portfolioUrl", "portfolio_url"], previous.personalInfo.portfolioUrl, true),
+          linkedinUrl: pickServerValue(mappedInfo.linkedinUrl, ["linkedin", "linkedinUrl", "linkedin_url"], previous.personalInfo.linkedinUrl, true),
+          githubUrl: pickServerValue(mappedInfo.githubUrl, ["github", "githubUrl", "github_url"], previous.personalInfo.githubUrl, true),
+          portfolioUrl: pickServerValue(mappedInfo.portfolioUrl, ["portfolio", "portfolioUrl", "portfolio_url"], previous.personalInfo.portfolioUrl, true),
         },
       };
     });
@@ -2390,6 +2427,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       || operation?.type === "delete_fix"
       || typeof response.deleted_suggestion_id === "string"
     );
+    const undoneSuggestionId = operation?.type === "delete_fix"
+      ? (typeof operation.suggestion_id === "string" ? operation.suggestion_id : undefined)
+      : undefined;
     const appliedFixes = new Map<string, boolean>();
     if (hasAppliedFixLedger) {
       for (const item of response.applied_fixes) {
@@ -2446,6 +2486,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         false,
         options?.isFullSnapshot === true,
         resolvedSections,
+        undoneSuggestionId,
       ));
       return;
     }
