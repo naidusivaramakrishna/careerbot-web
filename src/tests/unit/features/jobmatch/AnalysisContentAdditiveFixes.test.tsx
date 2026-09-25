@@ -138,6 +138,30 @@ describe("fixes the backend did not write to the resume", () => {
     expect(screen.queryByRole("button", { name: "Undo applied fix" })).toBeNull();
   });
 
+  // The score change above is persisted server-side, and the API keeps no
+  // `_applied_suggestions` entry for a fix that resolved no resume edit, so
+  // enhance/remove would 404. The row must not fall back to "Apply Fix" (as
+  // if nothing happened) nor offer an Undo that cannot work.
+  it("keeps an applied-but-not-in-preview fix marked as applied, without Undo", async () => {
+    vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, resume_updated: false, score_diff: { after: 83 } });
+    renderWithPenalty({
+      suggestion_id: "suggest_add_cert_1", category: "certifications", target: "CBAP certification",
+      fix_type: "auto", severity: "critical", penalty: -4.75, message: "Add 'CBAP certification'.",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Recommendations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Fix" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Applied/ })).toBeTruthy());
+    const button = screen.getByRole("button", { name: /Applied/ }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Apply Fix" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Undo applied fix" })).toBeNull();
+    fireEvent.click(button);
+    expect(matcherEnhanceApply).toHaveBeenCalledTimes(1);
+    expect(preview().certifications).toHaveLength(2);
+  });
+
   it("still mirrors a certification the backend says it wrote", async () => {
     vi.mocked(matcherEnhanceApply).mockResolvedValue({ applied: true, resume_updated: true, score_diff: { after: 83 } });
     renderWithPenalty({

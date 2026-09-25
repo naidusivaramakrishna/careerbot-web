@@ -16,7 +16,7 @@ import { matcherEnhanceApply, matcherEnhanceRemove, matcherUpdateSections, downl
 import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import KeywordAnalysis from "./KeywordAnalysis";
-import MatchPenalties, { getFixImpactCounts } from "./MatchPenalties";
+import MatchPenalties, { getFixImpactCounts, type ApplyFixResult } from "./MatchPenalties";
 import {
   addBullet, addCertification, removeBullet, removeCertification, shiftHighlightsAfterRemoval,
 } from "../_lib/utils/fixMirror";
@@ -767,7 +767,7 @@ export default function AnalysisContent({
   // resolved entirely server-side from suggestion_id, so unlike skills there's
   // no separate "target" to persist; we just mirror the resulting text change
   // locally so the live preview matches what the backend wrote to the resume.
-  const applyTextFix = React.useCallback(async (suggestion_id: string, category: string): Promise<boolean> => {
+  const applyTextFix = React.useCallback(async (suggestion_id: string, category: string): Promise<ApplyFixResult> => {
     if (!matchId || !suggestion_id) return false;
     // Set below when the needs_value flow prompted the user for a number —
     // used to patch the cached suggestion text before mirroring it into the
@@ -796,7 +796,7 @@ export default function AnalysisContent({
     // successfully. The caller (MatchPenalties) uses this return value to
     // decide the confident "Added to resume" state, so it must reflect the
     // mirror, not just whether the network call itself succeeded.
-    let mirrored = true;
+    let mirrored: ApplyFixResult = true;
     // careerbot-api reports `resume_updated: false` when it wrote nothing to
     // the stored resume (e.g. suggest_add_cert_* and a bare
     // suggest_demonstrate_* gap resolve no resume edit there). The additive
@@ -896,12 +896,16 @@ export default function AnalysisContent({
         }
       } else if (!penalty?.is_bulk_parent) {
         // No branch could mirror this fix (e.g. a bare "Demonstrate
-        // capability: X" gap that carries only a `target`). The preview did
-        // not change, so the row must not claim the confident "Added" state.
-        // The score change above still stands -- the backend recorded it.
+        // capability: X" gap that carries only a `target`, or a certification
+        // the API does not write). The preview did not change, so the row
+        // must not claim the confident "Added" state. The score change above
+        // still stands -- the backend recorded it -- so the row must not go
+        // back to "Apply Fix" either: it shows "Applied" without Undo, since
+        // the API keeps no undo bookkeeping for a fix that resolved no resume
+        // edit (enhance/remove answers 404 suggestion_not_applied).
         // Bulk parents are excluded: their caller (applyBulkTextFix) already
         // marks the children as "applied, not yet confirmed in preview".
-        mirrored = false;
+        mirrored = "applied_not_in_preview";
         toast.info("Score updated, but this fix couldn't be added to your resume automatically. Add the details in the editor to complete it.");
       }
     }

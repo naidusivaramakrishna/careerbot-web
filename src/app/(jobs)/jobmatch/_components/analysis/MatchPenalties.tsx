@@ -38,6 +38,12 @@ function isRealSuggestion(p: Penalty): boolean {
   return !!p.suggestion_id;
 }
 
+// What onApplyFix reports. "applied_not_in_preview": the backend applied the
+// fix (the score moved) but wrote nothing the preview can show
+// (`resume_updated: false`). The API keeps no undo bookkeeping for such a fix,
+// so the row shows "Applied" without Undo, like a bulk-applied child.
+export type ApplyFixResult = boolean | "applied_not_in_preview";
+
 interface MatchPenaltiesProps {
   readonly recommendations?: boolean;
   readonly compact?: boolean;
@@ -48,8 +54,8 @@ interface MatchPenaltiesProps {
   /** Returns whether the skill was actually persisted server-side (not just applied to local state). */
   readonly onAddSkill: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   readonly onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
-  /** Apply a non-skill fix (job title / summary / bullet rewrite). Returns whether it actually changed anything. */
-  readonly onApplyFix?: (suggestion_id: string, category: string) => Promise<boolean>;
+  /** Apply a non-skill fix (job title / summary / bullet rewrite). Returns whether it actually changed anything (see ApplyFixResult). */
+  readonly onApplyFix?: (suggestion_id: string, category: string) => Promise<ApplyFixResult>;
   /** Undo a previously-applied non-skill fix. Returns whether it actually succeeded. */
   readonly onRemoveFix?: (suggestion_id: string, category: string) => Promise<boolean>;
   /** Open the resume section editor (manual-fix suggestions with no auto-resolver route here). */
@@ -373,7 +379,7 @@ function CategoryGroup({
   readonly items: Penalty[];
   readonly onAddSkill: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   readonly onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
-  readonly onApplyFix?: (suggestion_id: string, category: string) => Promise<boolean>;
+  readonly onApplyFix?: (suggestion_id: string, category: string) => Promise<ApplyFixResult>;
   readonly onRemoveFix?: (suggestion_id: string, category: string) => Promise<boolean>;
   readonly onOpenSection?: (sectionKey: string) => void;
   readonly readOnly?: boolean;
@@ -414,6 +420,9 @@ function CategoryGroup({
   // but tracked separately so their row can say "applied, not yet confirmed
   // in preview" honestly instead of claiming the same verified "Added" state
   // an individually-applied fix gets.
+  // A single fix the backend applied without writing anything to the resume
+  // (ApplyFixResult "applied_not_in_preview") joins this set for the same
+  // reason: it is applied, not shown in the preview, and has nothing to undo.
   // Seeded from persisted provenance so a restored draft still knows which
   // children came from a bulk parent -- otherwise they render an Undo that
   // sends the child id the backend never recorded, and always 404s.
@@ -475,7 +484,12 @@ function CategoryGroup({
       if (isSkillActionable) {
         applied = await onAddSkill(p.target!, p.suggestion_id);
       } else {
-        applied = await onApplyFix!(p.suggestion_id, p.category);
+        const result = await onApplyFix!(p.suggestion_id, p.category);
+        applied = result !== false;
+        if (result === "applied_not_in_preview") {
+          setBulkAppliedIds(prev => new Set(prev).add(p.suggestion_id));
+          onBulkApplied?.([p.suggestion_id]);
+        }
       }
       if (applied) {
         setAddedIds(prev => new Set(prev).add(p.suggestion_id));
