@@ -70,8 +70,13 @@ function TemplatesPageContent() {
   // Fetch catalogues from API
   const { catalogues, loading: cataloguesLoading, getCataloguesMap } = useCatalogues();
 
-  // Use API catalogues with fallback to hardcoded STYLE_CATALOGUES during migration
-  const cataloguesMap = catalogues.length > 0 ? getCataloguesMap() : STYLE_CATALOGUES;
+  // Use API catalogues with fallback to hardcoded STYLE_CATALOGUES during migration.
+  // Only API keys with a local style are listed: previews (buildStyleForCatalogue)
+  // and the export's catalogue template_id come from STYLE_CATALOGUES.
+  const renderableApiCatalogues = catalogues.length > 0
+    ? Object.fromEntries(Object.entries(getCataloguesMap()).filter(([key]) => key in STYLE_CATALOGUES))
+    : {};
+  const cataloguesMap = Object.keys(renderableApiCatalogues).length > 0 ? renderableApiCatalogues : STYLE_CATALOGUES;
 
   // Live preview state
   const [showLivePreview, setShowLivePreview] = useState(false);

@@ -150,7 +150,12 @@ export default function CatalogueTab() {
     }
   };
 
-  const cataloguesMap = catalogues.length > 0 ? getCataloguesMap() : STYLE_CATALOGUES;
+  // List only API catalogues that have a local style: the builder style, the
+  // preview and the export's catalogue template_id all come from STYLE_CATALOGUES.
+  const renderableApiCatalogues = catalogues.length > 0
+    ? Object.fromEntries(Object.entries(getCataloguesMap()).filter(([key]) => key in STYLE_CATALOGUES))
+    : {};
+  const cataloguesMap = Object.keys(renderableApiCatalogues).length > 0 ? renderableApiCatalogues : STYLE_CATALOGUES;
 
   // One request at a time, so the server applies clicks in click order; clicks
   // made while one is in flight collapse to the latest (the enhanced-resume
