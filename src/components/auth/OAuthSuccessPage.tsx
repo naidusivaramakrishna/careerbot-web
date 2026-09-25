@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { isAuthenticated } from "@/api/authApi"
 import { getStoredAuthRedirect } from "@/lib/authRedirect"
+import { clearPendingVerification } from "@/lib/pendingVerification"
 
 interface Props {
     provider: string
@@ -67,6 +68,8 @@ export function OAuthSuccessPage({ provider }: Props) {
                 if (authenticated) {
                     setStatus('success')
                     sessionStorage.removeItem('__signing_out')
+                    // Session handed over, as in authApi.signIn: drop any unverified-signup record.
+                    clearPendingVerification()
                     toast.success(`Successfully signed in with ${provider}!`)
 
                     const redirectTo = getStoredAuthRedirect()
