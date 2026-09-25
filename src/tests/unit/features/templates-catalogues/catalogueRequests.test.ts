@@ -9,9 +9,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
-const { mockGet, mockPost } = vi.hoisted(() => ({ mockGet: vi.fn(), mockPost: vi.fn() }));
+const { mockGet, mockPost, mockPatch } = vi.hoisted(() => ({ mockGet: vi.fn(), mockPost: vi.fn(), mockPatch: vi.fn() }));
 vi.mock('@/lib/http', () => {
-  const client = { get: mockGet, post: mockPost, put: vi.fn(), patch: vi.fn(), delete: vi.fn(), defaults: {} };
+  const client = { get: mockGet, post: mockPost, put: vi.fn(), patch: mockPatch, delete: vi.fn(), defaults: {} };
   return { default: client, httpClient: client };
 });
 vi.mock('@/lib/logger', () => ({
@@ -47,5 +47,21 @@ describe('applyCatalogueToResume', () => {
     expect(mockPost).toHaveBeenCalledWith('/templates/catalogues/r%201%2Fx/apply', undefined, {
       params: { catalogue_key: 'a&b' },
     });
+  });
+});
+
+describe('applyCatalogueToEnhancedResume', () => {
+  // careerbot-api: PATCH /resume/enhance/{enhanced_id} accepts a top-level
+  // `applied_catalogue` (BulkUpdateEnhancedResumeRequest) and the enhanced
+  // download falls back to it (resume_enhancer.py:1985).
+  it('PATCHes applied_catalogue on the enhanced resume with an encoded id', async () => {
+    mockPatch.mockResolvedValue({ data: {} });
+    const apply = (resumeApi as Record<string, unknown>).applyCatalogueToEnhancedResume as
+      | ((enhancedId: string, key: string) => Promise<void>)
+      | undefined;
+    expect(typeof apply).toBe('function');
+    await apply!('e 1/x', 'ocean');
+    expect(mockPatch).toHaveBeenCalledWith('/resume/enhance/e%201%2Fx', { applied_catalogue: 'ocean' });
+    expect(mockPost).not.toHaveBeenCalled();
   });
 });

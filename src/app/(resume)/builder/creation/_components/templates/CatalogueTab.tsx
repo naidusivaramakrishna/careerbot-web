@@ -4,7 +4,7 @@ import { useResume } from "../../_context/ResumeContext";
 import { STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from "@/app/browse-templates/_components/CatalogueThumbnail";
 import { useCatalogues } from "@/hooks/useCatalogues";
-import { applyCatalogueToResume } from "@/api/resumeApi";
+import { applyCatalogueToResume, applyCatalogueToEnhancedResume } from "@/api/resumeApi";
 import logger from "@/lib/logger";
 
 const NATURAL_W = 300;
@@ -64,7 +64,7 @@ function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; 
 }
 
 export default function CatalogueTab() {
-  const { setResumeStyle, sectionOrder, setSectionOrder, setPreviewCatalogueKey, resumeId } = useResume();
+  const { setResumeStyle, sectionOrder, setSectionOrder, setPreviewCatalogueKey, resumeId, resumeSource } = useResume();
   const { catalogues, getCataloguesMap } = useCatalogues();
 
   const [selectedKey, setSelectedKey] = useState<string>(
@@ -151,18 +151,39 @@ export default function CatalogueTab() {
   };
 
   const cataloguesMap = catalogues.length > 0 ? getCataloguesMap() : STYLE_CATALOGUES;
-  const persistQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  // One request at a time, so the server applies clicks in click order; clicks
+  // made while one is in flight collapse to the latest (the enhanced-resume
+  // update re-scores the resume on every call).
+  const persistRef = useRef<{ inFlight: boolean; pending: { id: string; enhanced: boolean; key: string } | null }>(
+    { inFlight: false, pending: null }
+  );
+
+  const persistCatalogue = (key: string) => {
+    if (!resumeId) return;
+    const state = persistRef.current;
+    // Enhanced resumes live in another collection; the regular catalogue
+    // endpoint would answer 404 for their id.
+    state.pending = { id: resumeId, enhanced: resumeSource === "enhanced", key };
+    if (state.inFlight) return;
+    state.inFlight = true;
+    void (async () => {
+      while (state.pending) {
+        const { id, enhanced, key: nextKey } = state.pending;
+        state.pending = null;
+        try {
+          await (enhanced ? applyCatalogueToEnhancedResume(id, nextKey) : applyCatalogueToResume(id, nextKey));
+        } catch (err) {
+          logger.warn('[CatalogueTab] Failed to persist catalogue:', err);
+        }
+      }
+      state.inFlight = false;
+    })();
+  };
 
   const applyCatalogue = (key: string, color?: string) => {
     _applyStyleForKey(key, color, true);
-    // Persist catalogue selection to resume via API. Requests are chained so
-    // the server applies fast clicks in click order (last click wins).
-    if (resumeId) {
-      persistQueueRef.current = persistQueueRef.current
-        .catch(() => undefined)
-        .then(() => applyCatalogueToResume(resumeId, key))
-        .catch(err => logger.warn('[CatalogueTab] Failed to persist catalogue:', err));
-    }
+    persistCatalogue(key);
   };
 
   const previewCatalogue = (key: string) => _applyStyleForKey(key, undefined, false);
