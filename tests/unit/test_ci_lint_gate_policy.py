@@ -45,7 +45,7 @@ def test_whole_repo_advisory_runs_only_on_push(frontend_ci, name):
 
 
 def test_pr_checkout_has_history_for_the_merge_base(frontend_ci):
-    checkout = _steps(frontend_ci)[0]
+    checkout = next(s for s in _steps(frontend_ci) if str(s.get("uses", "")).startswith("actions/checkout@"))
     assert checkout["uses"].startswith("actions/checkout@")
     depth = checkout["with"]["fetch-depth"]
     assert _render(depth, READY) == "0"

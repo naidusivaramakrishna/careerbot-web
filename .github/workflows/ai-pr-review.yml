@@ -109,6 +109,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
 
 jobs:
+  # Runs FIRST; every other job needs it and FAILS (not skips) at its first
+  # step when it did not pass. See FAIL-CLOSED in .github/workflows/pr-size-gate.yml.
+  pr-size:
+    name: PR Size
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pr-size-gate.yml
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    with:
+      gate: ai-review
+      runs-on: '["self-hosted", "ai-review"]'
+      publish: true
+
   ai-review:
     # The issue_comment clause (incl. the author_association gate) is live only
     # once master carries this file -- see the note under `on: issue_comment`.
@@ -139,7 +154,12 @@ jobs:
     # default branch's head commit, not the PR's head (checked on #117: run
     # 36173496504 has head_sha 94e3f8e = master), so a skipped comment run never
     # touches the PR's required check.
+    #
+    # PR Size: this job is NOT skipped when pr-size fails (that skip would read
+    # as a passing `ai-review`); its first step fails it instead. `!cancelled()`
+    # lets it run after a failed `needs`. See FAIL-CLOSED in pr-size-gate.yml.
     if: >
+      !cancelled() && (
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
@@ -147,13 +167,28 @@ jobs:
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
                 github.event.comment.author_association) &&
        startsWith(github.event.comment.body, '/ai-review'))
+      )
     runs-on: [self-hosted, ai-review]
+    needs: pr-size
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Next.js build sometimes needs a public API base at build time; harmless default.
       NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL || '/api/v1' }}
 
     steps:
+      # FIRST step, before anything heavy -- keep it first. Fails this job when
+      # the PR Size gate did not pass, so the job reports FAILURE instead of a
+      # skipped (= passing) required check. No-op on non-PR events, where
+      # pr-size is skipped. See FAIL-CLOSED in pr-size-gate.yml.
+      - name: PR size gate
+        if: github.event_name == 'pull_request' && needs.pr-size.result != 'success'
+        env:
+          GATE_RESULT: ${{ needs.pr-size.result }}
+        run: |
+          echo "::error title=PR size gate failed::PR Size result: $GATE_RESULT. This job stops here; see the PR Size check for the numbers and how to split the PR."
+          echo "### ❌ PR size gate failed — see PR Size (result: \`$GATE_RESULT\`)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - name: Checkout (full history for merge-base + at-SHA reads)
         uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -193,9 +228,23 @@ jobs:
   gate-self-test:
     # issue_comment fires for every comment on every issue/PR, from anyone;
     # there is nothing for this job to test on those events.
-    if: github.event_name != 'issue_comment'
+    needs: pr-size
+    if: ${{ !cancelled() && github.event_name != 'issue_comment' }}
     runs-on: [self-hosted, ai-review]
     steps:
+      # FIRST step, before anything heavy -- keep it first. Fails this job when
+      # the PR Size gate did not pass, so the job reports FAILURE instead of a
+      # skipped (= passing) required check. No-op on non-PR events, where
+      # pr-size is skipped. See FAIL-CLOSED in pr-size-gate.yml.
+      - name: PR size gate
+        if: github.event_name == 'pull_request' && needs.pr-size.result != 'success'
+        env:
+          GATE_RESULT: ${{ needs.pr-size.result }}
+        run: |
+          echo "::error title=PR size gate failed::PR Size result: $GATE_RESULT. This job stops here; see the PR Size check for the numbers and how to split the PR."
+          echo "### ❌ PR size gate failed — see PR Size (result: \`$GATE_RESULT\`)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:

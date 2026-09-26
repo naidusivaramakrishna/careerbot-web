@@ -7,8 +7,9 @@ a comment or onto a key where it has no effect.
 
 `_Expr` implements only the subset of the GitHub Actions expression language
 these workflows use: context property access, ==, !=, !, &&, ||, string/bool/
-null literals, fromJSON, contains and startsWith, with GitHub's loose equality
-and truthiness rules.
+null literals, fromJSON, contains, startsWith and cancelled(), with GitHub's
+loose equality and truthiness rules. `needs.<job-id>.result` is read from a
+`needs` context (see _cond).
 """
 
 import ast
@@ -77,11 +78,18 @@ def _to_python(expr):
             continue
         part = part.replace("&&", " and ").replace("||", " or ")
         part = re.sub(r"!(?!=)", " not ", part)
+        # `needs.pr-size.result`: a hyphenated property name is not a Python
+        # identifier (it would parse as a subtraction).
+        part = re.sub(r"\.([A-Za-z_]\w*(?:-\w+)+)",
+                      lambda m: "." + m.group(1).replace("-", HYPHEN), part)
         part = re.sub(r"\bnull\b", "None", part)
         part = re.sub(r"\btrue\b", "True", part)
         part = re.sub(r"\bfalse\b", "False", part)
         out.append(part)
     return " ".join("".join(out).split())
+
+
+HYPHEN = "__hyphen__"
 
 
 class _Expr:
@@ -109,7 +117,8 @@ class _Expr:
             return ctx.get(node.id)
         if isinstance(node, ast.Attribute):
             base = self._ev(node.value, ctx)
-            return base.get(node.attr) if isinstance(base, dict) else None
+            attr = node.attr.replace(HYPHEN, "-")
+            return base.get(attr) if isinstance(base, dict) else None
         if isinstance(node, ast.BoolOp):
             val = None
             for operand in node.values:
@@ -129,6 +138,8 @@ class _Expr:
             if isinstance(node.ops[0], ast.NotEq):
                 return not _eq(a, b)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "cancelled":
+                return bool(ctx.get("cancelled"))
             return self.FUNCS[node.func.id](*(self._ev(a, ctx) for a in node.args))
         raise NotImplementedError(ast.dump(node))
 
@@ -147,8 +158,15 @@ def _render(template, ctx):
     return re.sub(r"\$\{\{(.*?)\}\}", sub, template, flags=re.S)
 
 
-def _cond(source, ctx):
-    return _truthy(_Expr(source).eval({"github": ctx}))
+def _cond(source, ctx, needs=None, cancelled=False):
+    """Evaluate a job/step `if:`. `needs` defaults to what the PR Size gate
+    (pr-size) reports: it runs -- and here passes -- on pull_request events only,
+    and is skipped on every other event."""
+    if needs is None:
+        needs = {"pr-size": {"result": "success" if ctx["event_name"] == "pull_request"
+                             else "skipped"}}
+    return _truthy(_Expr(source).eval({"github": ctx, "needs": needs,
+                                       "cancelled": cancelled}))
 
 
 def _load(path):

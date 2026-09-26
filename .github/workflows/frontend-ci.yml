@@ -33,10 +33,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Runs FIRST; every other job needs it and FAILS (not skips) at its first
+  # step when it did not pass. See FAIL-CLOSED in .github/workflows/pr-size-gate.yml.
+  pr-size:
+    name: PR Size
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pr-size-gate.yml
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    with:
+      gate: frontend-ci
+      runs-on: '["self-hosted", "Linux", "X64"]'
+
   security-checks:
     name: Security Checks
+    needs: pr-size
+    if: ${{ !cancelled() }}
     runs-on: [self-hosted, Linux, X64]
     steps:
+      # FIRST step, before anything heavy -- keep it first. Fails this job when
+      # the PR Size gate did not pass, so the job reports FAILURE instead of a
+      # skipped (= passing) required check. No-op on non-PR events, where
+      # pr-size is skipped. See FAIL-CLOSED in pr-size-gate.yml.
+      - name: PR size gate
+        if: github.event_name == 'pull_request' && needs.pr-size.result != 'success'
+        env:
+          GATE_RESULT: ${{ needs.pr-size.result }}
+        run: |
+          echo "::error title=PR size gate failed::PR Size result: $GATE_RESULT. This job stops here; see the PR Size check for the numbers and how to split the PR."
+          echo "### ❌ PR size gate failed — see PR Size (result: \`$GATE_RESULT\`)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - uses: actions/checkout@v4
 
       - name: Check .env files are not tracked
@@ -104,8 +133,23 @@ jobs:
 
   lint-and-build:
     name: Lint and Build
+    needs: pr-size
+    if: ${{ !cancelled() }}
     runs-on: [self-hosted, Linux, X64]
     steps:
+      # FIRST step, before anything heavy -- keep it first. Fails this job when
+      # the PR Size gate did not pass, so the job reports FAILURE instead of a
+      # skipped (= passing) required check. No-op on non-PR events, where
+      # pr-size is skipped. See FAIL-CLOSED in pr-size-gate.yml.
+      - name: PR size gate
+        if: github.event_name == 'pull_request' && needs.pr-size.result != 'success'
+        env:
+          GATE_RESULT: ${{ needs.pr-size.result }}
+        run: |
+          echo "::error title=PR size gate failed::PR Size result: $GATE_RESULT. This job stops here; see the PR Size check for the numbers and how to split the PR."
+          echo "### ❌ PR size gate failed — see PR Size (result: \`$GATE_RESULT\`)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           # PR runs diff against, and type-check, the merge-base with the PR's

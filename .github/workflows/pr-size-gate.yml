@@ -1,0 +1,95 @@
+name: PR Size gate
+
+# Reusable: called as the FIRST job (`pr-size`) of every pull_request workflow
+# (frontend-ci.yml, security-scan.yml, ai-pr-review.yml). Every other job in
+# those workflows `needs: pr-size`, so a PR over the limits fails here in
+# seconds and nothing heavy runs on the shared self-hosted runners.
+#
+# Limits, generated-file exclusion and the `ai-review-large` override live in
+# scripts/ai_review/pr_size_gate.py (tests: tests/unit/test_pr_size_gate.py).
+#
+# FAIL-CLOSED, without depending on branch protection: a job skipped because a
+# job it `needs` failed counts as PASSING for required status checks. So the
+# downstream jobs are NOT skipped when this gate fails. Each one has
+#   if: !cancelled() [&& its own condition]     (never `needs...result == 'success'`)
+# and, as its FIRST step (before checkout, npm ci, build or review), a step
+# that fails the job when `needs.pr-size.result != 'success'` on a
+# pull_request event. So on a failed or cancelled gate `Lint and Build`,
+# `ai-review` and every other job report FAILURE, not a skipped "pass". On
+# push / schedule / issue_comment / workflow_dispatch this gate is skipped and
+# that step is skipped too: those runs behave exactly as before.
+# `!cancelled()`, not `always()`: always() also starts jobs in a run that
+# cancel-in-progress (or a person) has cancelled, so a new push could no longer
+# supersede an in-flight review / build. A cancelled run is superseded by the
+# newer run in the same concurrency group, which reports the checks. A gate
+# job that ends `cancelled` on its own (e.g. timeout-minutes) while the run is
+# not cancelled still fails every downstream job.
+# Tests: tests/unit/test_ci_pr_size_policy.py.
+#
+# BRANCH PROTECTION (optional, defence in depth -- NOT a precondition): the
+# gate's own checks can also be made required. Check names are
+# `<caller job name> / <this job's name>`:
+#   PR Size / frontend-ci   PR Size / ai-review   PR Size / security-scan
+# `gate` makes them unique per workflow -- GitHub warns that the same job name
+# in several workflows makes required-check results ambiguous.
+#
+# OVERRIDE: applying `ai-review-large` starts an AI PR Review run (it triggers
+# on that label), whose gate then passes. Frontend CI and Security Scan do not
+# trigger on labels: re-run BOTH of them (the gate reads the PR's CURRENT
+# labels, not the replayed event payload) or push a commit. Until then their
+# jobs stay red, which blocks rather than leaks.
+#
+# FORK PRs: the head commit is fetched from `refs/pull/<N>/head` in THIS repo
+# (then by SHA), never from `origin/<head_ref>`, which does not exist for a
+# fork's branch (pr_size_gate.py --fetch, ensure_commits).
+#
+# TRUST: on pull_request this file and the script come from the PR's merge
+# ref, so a PR can change its own limits. The gate is a hygiene check, not a
+# security boundary (the ai-review job runs PR-authored scripts too).
+#
+# Size labels are set only by the caller that passes `publish: true`
+# (ai-pr-review.yml, the one that also runs on label events), so three callers
+# never race on the same label or comment. Labels applied with GITHUB_TOKEN do
+# not trigger new workflow runs, so labelling cannot loop.
+
+on:
+  workflow_call:
+    inputs:
+      gate:
+        description: "Calling workflow's short name; the check is named 'PR Size / <gate>'."
+        required: true
+        type: string
+      runs-on:
+        description: "JSON list of runner labels -- the caller's own."
+        required: true
+        type: string
+      publish:
+        description: "Set the size/* label and the over-limit comment (one caller only)."
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  size:
+    name: ${{ inputs.gate }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (full history for the merge-base diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Measure the PR against the size limits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUBLISH: ${{ inputs.publish && '--publish' || '' }}
+        # --fetch: refs/pull/<N>/head, then by SHA, and fail closed if either
+        # commit is still missing -- works for fork PRs (see FORK PRs above).
+        run: |
+          python3 scripts/ai_review/pr_size_gate.py --repo "$REPO" --pr "$PR" \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --fetch $PUBLISH
