@@ -6,6 +6,8 @@ import { Toaster } from "sonner";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { VerificationRecovery } from "@/components/VerificationRecovery";
+import { ChatbotWidget } from "@/components/chatbot";
+import { isChatbotAllowedOnPage } from "@/lib/chatbotVisibility";
 
 export default function ClientLayout({
   children,
@@ -101,10 +103,18 @@ export default function ClientLayout({
     return () => window.removeEventListener('userLoggedOut', handleTokenExpired);
   }, [isAuthenticatedRoute, pathname, router]);
 
+  // Route-based gate for the floating chatbot widget: the /chatbot route has
+  // its own full-page chat UI, admin/recruiter have separate tooling, and
+  // exam/assessment/test/coding-test pages must never render it (not just
+  // hide it with CSS) so it can't overlap timers, questions, or submit
+  // controls. See src/lib/chatbotVisibility.ts for the exact rules.
+  const isChatbotAllowed = isChatbotAllowedOnPage(pathname);
+
   return (
     <TenantProvider>
       <Toaster richColors position="bottom-right" />
       <VerificationRecovery />
+      {isChatbotAllowed && <ChatbotWidget />}
       {children}
     </TenantProvider>
   );
