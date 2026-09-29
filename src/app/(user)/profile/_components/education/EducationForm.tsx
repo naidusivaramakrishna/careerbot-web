@@ -1,3 +1,4 @@
+import { toISODate } from "@/utils/dateHelpers";
 import { degrees, streams } from "@/utils/education-data";
 import { Education } from "@/api/userApi";
 import { ValidationError } from "../../_types/education-types";
@@ -27,12 +28,6 @@ export default function EducationForm({
     return error?.message;
   };
 
-  const toISODate = (value: string): string => {
-    const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
-    const match = value.match(ddmmyyyy);
-    if (match) return `${match[3]}-${match[2]}-${match[1]}`;
-    return value;
-  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>

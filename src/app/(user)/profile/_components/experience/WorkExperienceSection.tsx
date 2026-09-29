@@ -158,12 +158,14 @@ export default function WorkExperienceSection({
     const openAddModal = useCallback(() => {
         setExperienceForm({});
         setEditingIndex(null);
+        setValidationErrors([]); // Clear validation errors when opening add modal
         setIsModalOpen(true);
     }, []);
 
     const openEditModal = useCallback((exp: Partial<Experience>, index: number) => {
         setExperienceForm(exp);
         setEditingIndex(index);
+        setValidationErrors([]); // Clear previous validation errors when opening edit modal
         setIsModalOpen(true);
     }, []);
 

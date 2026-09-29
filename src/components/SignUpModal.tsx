@@ -184,27 +184,42 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 return msg
             }
 
+            // For login, always check if we need to set both email and password for generic messages
+            if (isLogin && res?.data?.error?.message) {
+                const msg = res.data.error.message as string
+                const msgLower = msg.toLowerCase()
+                if (msgLower.includes('email') && msgLower.includes('password')) {
+                    // Generic "invalid email or password" - highlight both fields
+                    newErrors.email = msg
+                    newErrors.password = msg
+                    setErrors(newErrors)
+                    return
+                }
+            }
+
             // Handle new backend validation error format (envelope with validation_errors)
             if (res?.data?.error?.details?.validation_errors) {
                 const validationErrors: Array<{ field: string; message: string }> =
                     res.data.error.details.validation_errors
-                validationErrors.forEach((v) => {
+                for (const v of validationErrors) {
                     const field = normaliseField(v.field)
                     if (field in newErrors && !newErrors[field as keyof ErrorState]) {
                         newErrors[field as keyof ErrorState] = cleanMessage(v.message)
+                        if (isLogin) break // For login, only show first error
                     }
-                })
+                }
                 setErrors(newErrors)
             }
             // Handle FastAPI 422 validation format (detail array) — applies to login & signup
             else if (res?.status === 422 && Array.isArray(res.data.detail)) {
-                res.data.detail.forEach((d: { loc: string[]; msg: string }) => {
+                for (const d of res.data.detail) {
                     const rawField = d.loc[d.loc.length - 1]
                     const field = normaliseField(rawField)
                     if (field in newErrors && !newErrors[field as keyof ErrorState]) {
                         newErrors[field as keyof ErrorState] = cleanMessage(d.msg)
+                        if (isLogin) break // For login, only show first error
                     }
-                })
+                }
                 setErrors(newErrors)
             }
             // Handle direct error message from backend
@@ -237,6 +252,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     newErrors.username = safeMessage
                 } else if (!isLogin && rawMsg.includes('email')) {
                     newErrors.email = safeMessage
+                } else if (isLogin && res?.status === 401) {
+                    // For login failures (401 Unauthorized), highlight both fields
+                    newErrors.email = safeMessage
+                    newErrors.password = safeMessage
                 } else {
                     newErrors.login = safeMessage
                 }
@@ -248,7 +267,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
     }
 
     const renderLoginForm = () => {
-        const activeLoginError = errors.email ? 'email' : errors.password ? 'password' : errors.login ? 'login' : null
+        const hasAnyError = !!(errors.email || errors.password || errors.login)
+        const emailHasError = hasAnyError
+        const passwordHasError = hasAnyError
+
         return (
             <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
                 {/* Email Field */}
@@ -265,16 +287,22 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="login-email-input"
                             id="login-email"
-                            className={`w-full rounded-md pl-10 pr-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-white border border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                            className={emailHasError ? 'w-full rounded-md pl-10 pr-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all bg-red-50 border-2 border-red-400 focus:ring-red-300' : 'w-full rounded-md pl-10 pr-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all bg-white border border-gray-300 focus:ring-blue-200 focus:border-blue-400'}
                         />
                     </div>
-                    {activeLoginError === 'email' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
 
                 {/* Password Field */}
                 <div className="mb-4">
                     <label htmlFor="login-password" className="text-sm font-semibold text-gray-900 mb-2 block">Password</label>
-                    <div className="relative">
+                    <div
+                        className="relative rounded-md p-0"
+                        style={{
+                            backgroundColor: errors.password || errors.email || errors.login ? '#fef2f2' : 'transparent',
+                            border: errors.password || errors.email || errors.login ? '2px solid #f87171' : 'none',
+                            transition: 'all 0.2s'
+                        }}
+                    >
                         <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
                             type={showPassword ? "text" : "password"}
@@ -284,7 +312,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="login-password-input"
                             id="login-password"
-                            className={`w-full rounded-md pl-10 pr-10 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-white border border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                            className="w-full rounded-md pl-10 pr-10 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all bg-transparent border-0"
+                            style={{
+                                boxShadow: errors.password || errors.email || errors.login ? '0 0 0 2px #fca5a5 inset' : 'none'
+                            }}
                         />
                         <button
                             type="button"
@@ -296,8 +327,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
-                    {activeLoginError === 'password' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                    {activeLoginError === 'login' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
+                    {(errors.password || errors.email || errors.login) && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password || errors.email || errors.login}</p>}
                 </div>
 
                 <p
@@ -399,6 +429,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             )
         }
 
+        const activeSignupError = formType === "signup"
+            ? (errors.username ? 'username' : errors.email ? 'email' : errors.password ? 'password' : null)
+            : (errors.email ? 'email' : errors.password ? 'password' : errors.login ? 'login' : null)
+
         return (
             <>
                 <div className="text-center mb-6">
@@ -427,10 +461,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                                 onChange={handleChange}
                                 data-testid="signup-username-input"
                                 id="signup-username"
-                                className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                                className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${activeSignupError === 'username' ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                             />
                         </div>
-                        {errors.username && <p role="alert" className="text-red-500 text-xs mt-1">{errors.username}</p>}
+                        {activeSignupError === 'username' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.username}</p>}
                     </div>
                 )}
 
@@ -447,10 +481,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="signup-email-input"
                             id="signup-email"
-                            className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                            className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${activeSignupError === 'email' ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                         />
                     </div>
-                    {errors.email && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                    {activeSignupError === 'email' && (formType === "signup" || !(errors.email && errors.password)) && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
 
                 {/* Password Field */}
@@ -466,7 +500,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="signup-password-input"
                             id="signup-password"
-                            className={`w-full rounded-md pl-10 pr-10 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                            className={`w-full rounded-md pl-10 pr-10 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(activeSignupError === 'email' && errors.email && errors.password) || activeSignupError === 'password' || activeSignupError === 'login' ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                         />
                         <button
                             type="button"
@@ -478,8 +512,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
-                    {errors.password && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                    {errors.login && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
+                    {(formType === "signup" ? activeSignupError === 'password' : errors.password) && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    {errors.login && !errors.email && !errors.password && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
                 </div>
 
                 {/* Forgot Password Link (Signin Only) */}
@@ -587,7 +621,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
     return (
         <div className={`fixed inset-0 flex items-center justify-center z-50 p-4 ${hideOverlay ? "" : "bg-black/60 backdrop-blur-md"}`}>
-            <div className="relative w-full max-w-124 h-150 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
+            <div className="relative w-full max-w-124 h-160 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
                 <button
                     onClick={handleModalClose}
                     data-testid="auth-modal-close-btn"

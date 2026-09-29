@@ -157,12 +157,14 @@ export default function ProjectsSection({
     const openAddModal = useCallback(() => {
         setProjectsForm({});
         setEditingIndex(null);
+        setValidationErrors([]); // Clear validation errors when opening add modal
         setIsModalOpen(true);
     }, []);
 
     const openEditModal = useCallback((exp: Partial<Projects>, index: number) => {
         setProjectsForm(exp);
         setEditingIndex(index);
+        setValidationErrors([]); // Clear validation errors when opening edit modal
         setIsModalOpen(true);
     }, []);
 

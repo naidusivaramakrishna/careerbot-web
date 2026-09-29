@@ -9,6 +9,7 @@ interface RichTextEditorProps {
     minHeight?: string;
     disabled?: boolean;
     className?: string;
+    error?: boolean;
 }
 
 export default function RichTextEditor({
@@ -18,6 +19,7 @@ export default function RichTextEditor({
     minHeight = "150px",
     disabled = false,
     className = "",
+    error = false,
 }: RichTextEditorProps) {
     const editorRef = useRef<HTMLDivElement>(null);
 
@@ -68,7 +70,7 @@ export default function RichTextEditor({
     return (
         <div className={`rich-text-editor-wrapper ${className}`}>
             {/* Toolbar */}
-            <div className={`border border-neutral-200 rounded-t-lg bg-gray-50 p-2 flex gap-1 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className={`border rounded-t-lg p-2 flex gap-1 ${error ? 'border-red-400 bg-red-50' : 'bg-gray-50 border-neutral-200'} ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
                 <button
                     type="button"
                     onClick={toggleBold}
@@ -122,7 +124,7 @@ export default function RichTextEditor({
                 ref={editorRef}
                 contentEditable={!disabled}
                 onInput={handleContentChange}
-                className="border border-t-0 border-neutral-200 rounded-b-lg p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-neutral-500 editor-content"
+                className={`border border-t-0 rounded-b-lg p-3 text-sm focus:outline-none focus:ring-2 editor-content ${error ? 'border-red-400 bg-red-50 focus:ring-red-300' : 'border-neutral-200 bg-white focus:ring-neutral-500'}`}
                 style={{ minHeight }}
                 data-placeholder={placeholder}
                 suppressContentEditableWarning

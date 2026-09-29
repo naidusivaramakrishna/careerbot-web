@@ -72,6 +72,23 @@ const IcoCodingTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
   </svg>
 );
 
+/** Templates — layout grid with customizable blocks */
+const IcoTemplates = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Main frame */}
+    <rect x="2" y="2" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth={sw} />
+    {/* Header area */}
+    <path d="M2 6h16" stroke="currentColor" strokeWidth={sw} />
+    {/* Left sidebar */}
+    <path d="M6 6v12" stroke="currentColor" strokeWidth={sw} />
+    {/* Content blocks - stacked sections */}
+    <rect x="7" y="7" width="10" height="2" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
+    <rect x="7" y="10" width="10" height="2" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
+    <rect x="7" y="13" width="7" height="2" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
+  </svg>
+);
+
 /* ══════════════════════════════════════════════════════════════
    NAV CONFIG
 ══════════════════════════════════════════════════════════════ */
@@ -101,6 +118,7 @@ const NAV_GROUPS: {
     items: [
       { id: "resume", label: "Resume",   icon: IcoResume,  path: "/builder", smartNav: true },
       { id: "ats",    label: "ATS Scan", icon: IcoAtsScan, path: "/atslogin" },
+      { id: "templates", label: "Templates", icon: IcoTemplates, path: "/templates" },
     ],
   },
   {
