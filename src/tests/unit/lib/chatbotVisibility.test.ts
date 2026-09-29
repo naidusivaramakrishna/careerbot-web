@@ -54,6 +54,11 @@ describe('isChatbotAllowedOnPage', () => {
     expect(isChatbotAllowedOnPage('/recruiter/candidates')).toBe(false);
   });
 
+  it('hides the chatbot on /jobslogin, which already has its own Nancy chat panel', () => {
+    expect(isChatbotAllowedOnPage('/jobslogin')).toBe(false);
+    expect(isChatbotAllowedOnPage('/jobslogin/smart-match')).toBe(false);
+  });
+
   it('defaults to allowed for ordinary pages and a missing pathname', () => {
     expect(isChatbotAllowedOnPage('/dashboard')).toBe(true);
     expect(isChatbotAllowedOnPage(null)).toBe(true);
