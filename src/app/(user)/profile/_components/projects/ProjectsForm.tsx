@@ -1,3 +1,4 @@
+import { toISODate } from "@/utils/dateHelpers";
 import { Projects } from "@/api/userApi";
 import { ValidationError } from "../../_types/education-types";
 import { useAISuggestions } from "@/app/(resume)/builder/creation/_hooks/useAISuggestions";
@@ -43,12 +44,6 @@ export default function ProjectsForm({
         return error?.message;
     };
 
-    const toISODate = (value: string): string => {
-        const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
-        const match = value.match(ddmmyyyy);
-        if (match) return `${match[3]}-${match[2]}-${match[1]}`;
-        return value;
-    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -152,6 +147,7 @@ Return ONLY the bullet points, one per line, without numbering or dashes.`;
                     placeholder="Describe your project and contributions..."
                     minHeight="150px"
                     disabled={false}
+                    error={!!getFieldError("description")}
                 />
                 {getFieldError("description") && <p role="alert" className="text-red-500 text-xs">{getFieldError("description")}</p>}
             </div>

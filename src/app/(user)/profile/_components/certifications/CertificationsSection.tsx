@@ -151,12 +151,14 @@ export default function CertificationsSection({
     const openAddModal = useCallback(() => {
         setCertificationForm({});
         setEditingIndex(null);
+        setValidationErrors([]); // Clear validation errors when opening add modal
         setIsModalOpen(true);
     }, []);
 
     const openEditModal = useCallback((exp: Partial<Certification>, index: number) => {
         setCertificationForm(exp);
         setEditingIndex(index);
+        setValidationErrors([]); // Clear validation errors when opening edit modal
         setIsModalOpen(true);
     }, []);
 

@@ -155,12 +155,14 @@ export default function EducationSection({
     const openAddModal = useCallback(() => {
         setEducationForm({});
         setEditingIndex(null);
+        setValidationErrors([]); // Clear validation errors when opening add modal
         setIsModalOpen(true);
     }, []);
 
     const openEditModal = useCallback((exp: Partial<Education>, index: number) => {
         setEducationForm(exp);
         setEditingIndex(index);
+        setValidationErrors([]); // Clear validation errors when opening edit modal
         setIsModalOpen(true);
     }, []);
 

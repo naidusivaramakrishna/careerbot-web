@@ -1,3 +1,4 @@
+import { toISODate } from "@/utils/dateHelpers";
 import { Certification } from "@/api/userApi";
 import { ValidationError } from "../../_types/experience-types";
 
@@ -25,12 +26,6 @@ export default function CertificationForm({
         return error?.message;
     };
 
-    const toISODate = (value: string): string => {
-        const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
-        const match = value.match(ddmmyyyy);
-        if (match) return `${match[3]}-${match[2]}-${match[1]}`;
-        return value;
-    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;

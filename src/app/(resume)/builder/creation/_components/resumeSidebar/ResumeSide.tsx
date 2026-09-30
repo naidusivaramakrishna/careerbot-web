@@ -220,9 +220,10 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
     const hasSavedOrder = typeof window !== 'undefined' && !!localStorage.getItem(sectionOrderKey);
 
+    const mainNames = new Set(sectionOrder);
+
     if (hasSavedOrder) {
       // localStorage sectionOrder = exact main list. Show everything NOT in it.
-      const mainNames = new Set(sectionOrder);
       const allKnown = [
         ...defaultExtraSections,
         ...initialSections.filter(s => !defaultExtraSections.some(d => d.name === s.name)),
@@ -231,12 +232,14 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     }
 
     // No saved order: sectionOrder = getSectionOrderByDomainAndCareer() which includes ALL
-    // sections the backend found relevant. Now that the `sections` initializer above also
-    // pulls matching extras (Achievements/Awards/...) into the main list, mirror the
-    // hasSavedOrder branch's filtering here too — otherwise an extra sectionOrder already
-    // placed in the main list would ALSO still show as addable in "Add New Sections".
-    const mainNames = new Set(sectionOrder);
-    return defaultExtraSections.filter(s => !mainNames.has(s.name));
+    // sections the backend found relevant. Include both defaultExtraSections AND domain-specific
+    // sections from initialSections (like Bar Admissions, Certificates & Clearances, etc).
+    // Only show sections NOT already in the main list for this domain.
+    const allKnown = [
+      ...defaultExtraSections,
+      ...initialSections.filter(s => !defaultExtraSections.some(d => d.name === s.name)),
+    ];
+    return allKnown.filter(s => !mainNames.has(s.name));
   });
 
   const [formData, setFormData] = useState<Record<string, string>>({});

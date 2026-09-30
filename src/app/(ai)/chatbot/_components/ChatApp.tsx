@@ -22,7 +22,7 @@ import {
   AccountOrganizationIcon,
 } from './FeatureIcons';
 
-interface Message {
+export interface Message {
   id: string;
   type: 'user' | 'assistant' | 'system';
   text: string;
@@ -32,11 +32,19 @@ interface Message {
   ticket?: TicketInfo;
 }
 
-interface ChatSession {
+export interface ChatSession {
   id: string;
   title: string;
   date: Date;
   preview: string;
+  // Full transcript, so a saved conversation can be restored as-is rather
+  // than as a title/preview summary. Optional so sessions saved before this
+  // field existed (already sitting in users' localStorage) still load.
+  messages?: Message[];
+  // Owning user's email, so a shared device's localStorage never surfaces
+  // one user's conversations to a different logged-in user. Optional so
+  // sessions saved before this field existed still load (see loadChatHistory).
+  userEmail?: string;
 }
 
 interface TicketInfo {
@@ -46,37 +54,22 @@ interface TicketInfo {
   priority: number;
   created_at: string;
   contact_email?: string;
+  // Already returned by the backend (SupportTicket) but not always present —
+  // older localStorage-cached tickets were saved before these were carried
+  // through, so treat them as optional rather than assuming they exist.
+  description?: string;
+  affected_feature?: string;
+  updated_at?: string;
+  user_name?: string | null;
 }
 
 type SidebarTab = 'history' | 'tickets';
 
-// Minimal Web Speech API shapes (not in the TS DOM lib).
-interface SpeechRecognitionResultLike {
-  readonly isFinal: boolean;
-  readonly [index: number]: { readonly transcript: string };
-}
-
-interface SpeechRecognitionEventLike {
-  readonly resultIndex: number;
-  readonly results: ArrayLike<SpeechRecognitionResultLike>;
-  readonly isFinal?: boolean;
-}
-
-interface SpeechRecognitionLike {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onstart: (() => void) | null;
-  onend: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-type StoredChatSession = Omit<ChatSession, 'date'> & { date: string };
+type StoredMessage = Omit<Message, 'timestamp'> & { timestamp: string };
+type StoredChatSession = Omit<ChatSession, 'date' | 'messages'> & {
+  date: string;
+  messages?: StoredMessage[];
+};
 
 const describeError = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message ? error.message : fallback;
@@ -85,6 +78,103 @@ const getHttpStatus = (error: unknown): number | undefined =>
   typeof error === 'object' && error !== null && 'response' in error
     ? (error as { response?: { status?: number } }).response?.status
     : undefined;
+
+// KB answers arrive as **bold**-style markdown; the chat bubble renders
+// plain text, so strip the markers instead of showing literal asterisks.
+const stripMarkdown = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').trim();
+
+// Collapsed preview: the first sentence, not an arbitrary character cut —
+// so it reads as a clean summary instead of trailing off mid-word. Requires
+// a minimum length before accepting a "." as the end of the sentence, so
+// numbered steps ("1. Go to Settings…") or abbreviations ("e.g. …") don't
+// collapse the preview down to almost nothing.
+const firstSentence = (text: string): string => {
+  const MIN_SENTENCE_LENGTH = 40;
+  const sentenceEnd = /[.!?](?=\s|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = sentenceEnd.exec(text)) !== null) {
+    const candidateEnd = match.index + 1;
+    if (candidateEnd >= MIN_SENTENCE_LENGTH || candidateEnd >= text.length) {
+      return text.slice(0, candidateEnd).trim();
+    }
+  }
+
+  // No long-enough sentence boundary found — cut on a word boundary
+  // instead of mid-word rather than leaving the preview effectively empty.
+  const MAX_PREVIEW_LENGTH = 160;
+  if (text.length <= MAX_PREVIEW_LENGTH) return text.trim();
+  const cut = text.slice(0, MAX_PREVIEW_LENGTH);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > MIN_SENTENCE_LENGTH ? cut.slice(0, lastSpace) : cut).trim()}…`;
+};
+
+const RESTORED_NOTICE_TEXT = 'Previous conversation loaded. Feel free to continue or start a new chat.';
+
+export const CHAT_SESSIONS_STORAGE_KEY = 'saved_chat_sessions';
+
+// Bounds on what a single browser persists for chat history, so an
+// unbounded number of sessions/messages can't blow the localStorage quota
+// (which throws synchronously and would otherwise crash mid-render).
+const MAX_STORED_SESSIONS = 30;
+const MAX_MESSAGES_PER_SESSION = 200;
+
+// Reads every session currently in localStorage, regardless of which
+// account owns it. Used only by saveSessionToStorage, which must merge into
+// the FULL stored set — merging into the current React state (already
+// filtered down to one owner by loadChatHistory) would silently drop every
+// other account's sessions cached on this device the next time anyone saves.
+const readAllStoredSessions = (): ChatSession[] => {
+  try {
+    const raw = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: StoredChatSession[] = JSON.parse(raw);
+    return parsed.map((s) => ({
+      ...s,
+      date: new Date(s.date),
+      messages: s.messages?.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
+    }));
+  } catch (error) {
+    console.error('Failed to read existing chat sessions before saving:', error);
+    return [];
+  }
+};
+
+// Caps each owner's own session count independently, so one account can't
+// crowd out another's saved history (or storage headroom) on a shared device.
+export const capSessionsPerOwner = (sessions: ChatSession[], maxPerOwner: number): ChatSession[] => {
+  const seenPerOwner = new Map<string, number>();
+  const capped: ChatSession[] = [];
+  for (const session of sessions) {
+    const ownerKey = session.userEmail || '';
+    const seen = seenPerOwner.get(ownerKey) || 0;
+    if (seen < maxPerOwner) {
+      capped.push(session);
+      seenPerOwner.set(ownerKey, seen + 1);
+    }
+  }
+  return capped;
+};
+
+// Upserts `session` (replacing any existing entry with the same id and
+// moving it to the front, instead of always prepending — which previously
+// produced duplicate-id entries whenever a restored session was continued
+// and saved again) into the full stored set, caps it per-owner, and persists
+// only when `ownerEmail` is known. Returns just the sessions visible to
+// `ownerEmail`, for the caller to use directly as the new chatSessions state.
+export const saveSessionToStorage = (session: ChatSession, ownerEmail: string | null): ChatSession[] => {
+  const merged = [session, ...readAllStoredSessions().filter((s) => s.id !== session.id)];
+  const capped = capSessionsPerOwner(merged, MAX_STORED_SESSIONS);
+
+  if (ownerEmail) {
+    try {
+      localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(capped));
+    } catch (error) {
+      console.error('Failed to save chat session (storage quota or serialization error):', error);
+    }
+  }
+
+  return capped.filter((s) => !s.userEmail || s.userEmail === ownerEmail);
+};
 
 const FEATURE_ISSUE_TYPES: Record<string, { value: string; label: string }[]> = {
   'login-issues': [
@@ -328,26 +418,17 @@ const ChatApp: React.FC = () => {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('history');
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
 
-  const [activeNavTab, setActiveNavTab] = useState<'chat' | 'voice' | 'forms' | 'history'>('chat');
+  const [activeNavTab, setActiveNavTab] = useState<'chat' | 'history'>('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [tickets, setTickets] = useState<TicketInfo[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<TicketInfo | null>(null);
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
   const [uploadedDocuments, setUploadedDocuments] = useState<File[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [showVoiceMode, setShowVoiceMode] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState<'ready' | 'listening' | 'processing' | 'speaking'>('ready');
-  const [listeningTime, setListeningTime] = useState(0);
-  const [voiceLanguage, setVoiceLanguage] = useState('en-US');
-  const [voiceResponse, setVoiceResponse] = useState('');
-  const [voiceHistory, setVoiceHistory] = useState<Array<{role: 'user' | 'assistant', text: string}>>([]);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const selectedApp = 'CareerBot';
@@ -372,6 +453,13 @@ const ChatApp: React.FC = () => {
   const [userName, setUserName] = useState('');
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
   const [isLocallyAuthenticated, setIsLocallyAuthenticated] = useState(isUserAuthenticated());
+  // The REAL authenticated user's email, from their backend profile — used
+  // to scope localStorage-cached chat/ticket history to its owner. This is
+  // deliberately NOT read from localStorage.user_email: that key is also
+  // written by this widget's own guest-session bootstrap (ensureToken) with
+  // a fake guest-*@careerbot.local address, so it can't reliably tell two
+  // different real accounts apart on a shared device.
+  const [authedEmail, setAuthedEmail] = useState<string | null>(null);
 
   // OTP Verification for unauthenticated users
   const [showOtpVerification, setShowOtpVerification] = useState(false);
@@ -431,141 +519,17 @@ const ChatApp: React.FC = () => {
   // Backend API is now called via chatbotApi service
   // No need to manually construct URLs - httpClient handles baseURL and authentication
 
-  // Initialize Speech Recognition
-  useEffect(() => {
-    const speechWindow = window as unknown as {
-      SpeechRecognition?: SpeechRecognitionConstructor;
-      webkitSpeechRecognition?: SpeechRecognitionConstructor;
-    };
-    const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = voiceLanguage;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setVoiceStatus('listening');
-        setListeningTime(0);
-        setVoiceTranscript('');
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-        }
-      };
-
-      recognition.onresult = (event: SpeechRecognitionEventLike) => {
-        let interim = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-          } else {
-            interim += transcript;
-          }
-        }
-
-        if (finalTranscript) {
-          setVoiceTranscript(finalTranscript);
-          // Auto-send when speech recognition ends
-          if (event.isFinal) {
-            handleSendVoiceMessage(finalTranscript);
-          }
-        }
-      };
-
-      recognition.onerror = (event: { error: string }) => {
-        console.error('Speech recognition error:', event.error);
-        setVoiceStatus('ready');
-      };
-
-      recognitionRef.current = recognition;
-    }
-  }, [voiceLanguage]);
-
-  const startVoiceListening = () => {
-    if (recognitionRef.current) {
-      setVoiceTranscript('');
-      setVoiceResponse('');
-      setVoiceStatus('listening');
-      recognitionRef.current.start();
-
-      // Start timer
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = setInterval(() => {
-        setListeningTime((prev) => prev + 1);
-      }, 1000);
-    }
-  };
-
-  const stopVoiceListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-    }
-  };
-
-  const handleSendVoiceMessage = async (transcript: string) => {
-    if (!transcript.trim() || !sessionId) return;
-
-    stopVoiceListening();
-    setVoiceStatus('processing');
-    setVoiceHistory((prev) => [...prev, { role: 'user', text: transcript }]);
-
-    try {
-      const response = await sendChatMessage(transcript, sessionId);
-      const assistantResponse = response.answer || "I couldn't find a confident answer for that. Would you like to raise a support ticket?";
-      setVoiceResponse(assistantResponse);
-      setVoiceHistory((prev) => [...prev, { role: 'assistant', text: assistantResponse }]);
-      setVoiceStatus('speaking');
-      playVoiceResponse(assistantResponse);
-
-      // Auto-return to ready after response
-      setTimeout(() => {
-        setVoiceStatus('ready');
-        setVoiceResponse('');
-      }, 3000);
-    } catch (error) {
-      console.error('Failed to send voice message:', error);
-      const errorMsg = "I'm having trouble reaching the knowledge base. Please try again.";
-      setVoiceResponse(errorMsg);
-      setVoiceStatus('speaking');
-      playVoiceResponse(errorMsg);
-
-      setTimeout(() => {
-        setVoiceStatus('ready');
-        setVoiceResponse('');
-      }, 3000);
-    }
-  };
-
+  // Text-to-speech readout for the settings.enableVoiceOutput toggle — the
+  // interactive voice-mode UI that used to call this was removed along with
+  // its only entry point (the composer's "Talk" button), but this playback
+  // path is still live for that separate setting.
   const playVoiceResponse = (text: string) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.9;
     utterance.pitch = 1;
     utterance.volume = 1;
-    speechSynthesisRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  };
-
-  const closeVoiceMode = () => {
-    stopVoiceListening();
-    window.speechSynthesis.cancel();
-    setShowVoiceMode(false);
-    setVoiceTranscript('');
-    setVoiceResponse('');
-    setVoiceStatus('ready');
-    setListeningTime(0);
-    setVoiceHistory([]);
   };
 
   const careerBotFeatures = [
@@ -773,19 +737,34 @@ const ChatApp: React.FC = () => {
     loadSettings();
   }, []);
 
+  // ChatApp stays mounted (as a minimized launcher or fully closed bubble)
+  // on essentially every page now that it's wired into ClientLayout, so its
+  // startup work — creating a guest token, fetching tickets/profile — must
+  // not run until the user actually opens the chat. Otherwise every page
+  // load writes a fresh guest-*@careerbot.local identity to localStorage
+  // and fires network requests nobody asked for.
+  const hasOpenedRef = useRef(false);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (isMinimized || hasOpenedRef.current) return;
+    hasOpenedRef.current = true;
+
     const initializeApp = async () => {
       await ensureToken();
       await initializeChat();
-      loadChatHistory();
-      // Load tickets for both authenticated and unauthenticated users
-      await loadTickets();
 
+      // Resolve the real authenticated identity BEFORE loading history/
+      // tickets, so they're scoped to it from the start rather than to
+      // whatever unrelated value was in localStorage at that instant.
+      let resolvedEmail: string | null = null;
       if (isUserAuthenticated()) {
-        // Load user's name for authenticated users
         try {
           const profile = await getProfile();
+          if (profile?.email) {
+            resolvedEmail = profile.email;
+            setAuthedEmail(profile.email);
+          }
           if (profile?.full_name) {
             console.log('Setting userName to:', profile.full_name);
             setUserName(profile.full_name);
@@ -796,10 +775,14 @@ const ChatApp: React.FC = () => {
       } else {
         console.log('User not authenticated, skipping profile load');
       }
+
+      loadChatHistory(resolvedEmail);
+      // Load tickets for both authenticated and unauthenticated users
+      await loadTickets(resolvedEmail);
     };
 
     initializeApp();
-  }, []);
+  }, [isMinimized]);
 
   // Track current user email to detect account switches
   const userEmailRef = useRef<string | null>(null);
@@ -807,6 +790,11 @@ const ChatApp: React.FC = () => {
   // Detect logout, login, or account switch
   useEffect(() => {
     const checkAuthStatus = async () => {
+      // Nothing to reconcile until the widget has actually been opened —
+      // skip the (otherwise-unconditional, every-3-seconds, every-page)
+      // localStorage reads and any profile refetch until then.
+      if (!hasOpenedRef.current) return;
+
       const currentAuth = isUserAuthenticated();
       const currentUserEmail = typeof window !== 'undefined' ? localStorage.getItem('user_email') : null;
 
@@ -815,7 +803,10 @@ const ChatApp: React.FC = () => {
         userEmailRef.current = currentUserEmail;
       }
 
-      // Detect account switch (different user email)
+      // Detect account switch (different user email). Note: currentUserEmail
+      // here is only a trigger/heuristic for "something about auth changed"
+      // — the actual storage-scoping identity (authedEmail) always comes
+      // from the freshly-fetched profile below, never from this value.
       if (userEmailRef.current && currentUserEmail && userEmailRef.current !== currentUserEmail) {
         // User switched to a different account
         console.log('Account switch detected from', userEmailRef.current, 'to', currentUserEmail);
@@ -825,13 +816,19 @@ const ChatApp: React.FC = () => {
         setChatSessions([]);
         setIsLocallyAuthenticated(true);
 
-        // Reload user profile for new account
+        // Reload user profile for new account, then reload their own
+        // history/tickets — otherwise the newly switched-in account would
+        // see an empty History/Tickets tab until a full page reload.
         try {
           const userProfile = await getProfile();
           console.log('Loaded new account profile:', userProfile?.full_name);
           if (userProfile?.full_name) {
             setUserName(userProfile.full_name);
           }
+          const newEmail = userProfile?.email || null;
+          setAuthedEmail(newEmail);
+          loadChatHistory(newEmail);
+          await loadTickets(newEmail);
         } catch (error) {
           console.error('Failed to load new account profile:', error);
         }
@@ -843,6 +840,7 @@ const ChatApp: React.FC = () => {
         console.log('Logout detected, clearing auth state');
         userEmailRef.current = null;
         setIsLocallyAuthenticated(false);
+        setAuthedEmail(null);
         setUserName('');
         setTickets([]);
         setChatSessions([]);
@@ -852,13 +850,18 @@ const ChatApp: React.FC = () => {
         userEmailRef.current = currentUserEmail;
         setIsLocallyAuthenticated(true);
 
-        // Load user profile
+        // Load user profile, then their own history/tickets now that we
+        // know who they are.
         try {
           const userProfile = await getProfile();
           console.log('Loaded user profile:', userProfile?.full_name);
           if (userProfile?.full_name) {
             setUserName(userProfile.full_name);
           }
+          const newEmail = userProfile?.email || null;
+          setAuthedEmail(newEmail);
+          loadChatHistory(newEmail);
+          await loadTickets(newEmail);
         } catch (error) {
           console.error('Failed to load user profile:', error);
         }
@@ -1034,31 +1037,46 @@ const ChatApp: React.FC = () => {
     setMessages([welcomeMessage]);
   };
 
-  const loadChatHistory = () => {
+  // `ownerEmail` must be the real authenticated identity (see authedEmail
+  // above), never derived from localStorage — pass null for guests.
+  const loadChatHistory = (ownerEmail: string | null) => {
     // Clear old default sessions from localStorage
     try {
-      const savedSessions = localStorage.getItem('saved_chat_sessions');
+      const savedSessions = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
       if (savedSessions) {
         const sessions: StoredChatSession[] = JSON.parse(savedSessions);
         const defaultTitles = ['Resume Enhancement Tips', 'Interview Preparation', 'Career Path Planning', 'Skills Development'];
 
         // Filter out default sessions - keep only user-created ones
-        const userSessions = sessions.filter((s) => !defaultTitles.includes(s.title));
+        let userSessions = sessions.filter((s) => !defaultTitles.includes(s.title));
+
+        // Sessions saved before ownership was tracked have no userEmail —
+        // claim them for whoever opens History first, so from here on they
+        // stay attached to one account instead of being visible to anyone.
+        if (ownerEmail) {
+          userSessions = userSessions.map((s) => (s.userEmail ? s : { ...s, userEmail: ownerEmail }));
+        }
 
         if (userSessions.length === 0) {
           // No user sessions, clear localStorage
-          localStorage.removeItem('saved_chat_sessions');
+          localStorage.removeItem(CHAT_SESSIONS_STORAGE_KEY);
           setChatSessions([]);
           return;
         }
 
-        // Save only user sessions back to localStorage (cleanup)
-        localStorage.setItem('saved_chat_sessions', JSON.stringify(userSessions));
+        // Save only user sessions back to localStorage (cleanup + ownership claim)
+        localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(userSessions));
+
+        // Only show sessions that belong to the current user (or are still
+        // unclaimed, which only happens when nobody is logged in) — never
+        // another account's conversations on a shared device.
+        const visibleSessions = userSessions.filter((s) => !s.userEmail || s.userEmail === ownerEmail);
 
         // Load user sessions
-        const loadedSessions: ChatSession[] = userSessions.map((s) => ({
+        const loadedSessions: ChatSession[] = visibleSessions.map((s) => ({
           ...s,
           date: new Date(s.date),
+          messages: s.messages?.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
         }));
         setChatSessions(loadedSessions);
         return;
@@ -1076,28 +1094,41 @@ const ChatApp: React.FC = () => {
     const session = chatSessions.find(s => s.id === sessionId);
     if (!session) return;
 
-    // Create messages from session data
-    const sessionMessages: Message[] = [
-      {
-        id: `${sessionId}-1`,
-        type: 'assistant',
-        text: `📋 ${session.title}\n\n${session.preview}`,
-        timestamp: session.date,
-      },
-      {
-        id: `${sessionId}-2`,
-        type: 'system',
-        text: 'Previous conversation loaded. Feel free to continue or start a new chat.',
-        timestamp: new Date(),
-      },
-    ];
+    const restoredNotice: Message = {
+      id: `${sessionId}-restored`,
+      type: 'system',
+      text: RESTORED_NOTICE_TEXT,
+      timestamp: new Date(),
+    };
 
-    setMessages(sessionMessages);
+    if (session.messages && session.messages.length > 0) {
+      // Full transcript was saved — restore the actual conversation as-is.
+      setMessages([...session.messages, restoredNotice]);
+    } else {
+      // Backward compatibility: sessions saved before the full transcript
+      // was persisted only have a title/preview snapshot — fall back to that.
+      // Older saves could set title === preview, so only show the preview
+      // when it actually adds something beyond the title.
+      const hasDistinctPreview = session.preview && session.preview.trim() !== session.title.trim();
+      const sessionMessages: Message[] = [
+        {
+          id: `${sessionId}-1`,
+          type: 'assistant',
+          text: hasDistinctPreview ? `📋 ${session.title}\n\n${session.preview}` : `📋 ${session.title}`,
+          timestamp: session.date,
+        },
+        restoredNotice,
+      ];
+      setMessages(sessionMessages);
+    }
+
     setIsHistoryOpen(false);
     setSessionId(sessionId);
   };
 
-  const loadTickets = async () => {
+  // `ownerEmail` must be the real authenticated identity (see authedEmail
+  // above), never derived from localStorage — pass null for guests.
+  const loadTickets = async (ownerEmail: string | null) => {
     const isAuth = isUserAuthenticated();
     console.log('[loadTickets] Starting - is authenticated:', isAuth);
 
@@ -1113,6 +1144,10 @@ const ChatApp: React.FC = () => {
           priority: ticket.priority === 'urgent' ? 2 : 1,
           created_at: ticket.created_at,
           contact_email: ticket.user_email,
+          description: ticket.description,
+          affected_feature: ticket.affected_feature,
+          updated_at: ticket.updated_at,
+          user_name: ticket.user_name,
         }));
 
         // If backend returns tickets, use them and save to localStorage
@@ -1146,9 +1181,14 @@ const ChatApp: React.FC = () => {
             return;
           }
         } else {
-          // For authenticated users, show all saved tickets
-          console.log('[loadTickets] Authenticated - showing all saved tickets from localStorage');
-          setTickets(tickets);
+          // Authenticated fallback: only this account's own cached tickets —
+          // the unfiltered list would leak another user's ticket subjects/
+          // descriptions to whoever is logged in on a shared device.
+          const ownTickets = ownerEmail
+            ? tickets.filter((t) => t.contact_email === ownerEmail)
+            : [];
+          console.log('[loadTickets] Authenticated - showing cached tickets for', ownerEmail);
+          setTickets(ownTickets);
           return;
         }
       }
@@ -1194,7 +1234,7 @@ const ChatApp: React.FC = () => {
         };
         setMessages((prev) => [...prev, loginPromptMessage]);
 
-        if (showVoiceMode || settings.enableVoiceOutput) {
+        if (settings.enableVoiceOutput) {
           playVoiceResponse(authMessage);
         }
       } else {
@@ -1216,7 +1256,7 @@ const ChatApp: React.FC = () => {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        if (showVoiceMode || settings.enableVoiceOutput) {
+        if (settings.enableVoiceOutput) {
           playVoiceResponse(assistantMessage.text);
         }
       }
@@ -1231,7 +1271,7 @@ const ChatApp: React.FC = () => {
       };
       setMessages((prev) => [...prev, demoMessage]);
 
-      if (showVoiceMode || settings.enableVoiceOutput) {
+      if (settings.enableVoiceOutput) {
         playVoiceResponse(demoMessage.text);
       }
     } finally {
@@ -1309,19 +1349,44 @@ const ChatApp: React.FC = () => {
   const startNewChat = () => {
     // Save current chat to history if it has messages
     if (messages.length > 1) {
-      const newSession: ChatSession = {
-        id: sessionId || `session-${Date.now()}`,
-        title: messages[1]?.text?.substring(0, 50) || 'New Chat',
-        date: new Date(),
-        preview: messages[1]?.text?.substring(0, 100) || 'New conversation...',
-      };
+      // Drop the "previous conversation loaded" notice before saving — it's
+      // a UI marker from restoring, not real conversation content, and
+      // re-saving a restored+continued session would otherwise accumulate
+      // one of these every round trip. Title/preview are computed from this
+      // filtered array too — computing them from the raw `messages` could
+      // pick the restore notice itself as the title for a legacy session
+      // that was just reopened and immediately re-saved.
+      const messagesToSave = messages.filter((m) => m.text !== RESTORED_NOTICE_TEXT).slice(-MAX_MESSAGES_PER_SESSION);
 
-      setChatSessions((prev) => {
-        const updated = [newSession, ...prev];
-        // Save to localStorage
-        localStorage.setItem('saved_chat_sessions', JSON.stringify(updated));
-        return updated;
-      });
+      // If reopening a session added nothing new, skip re-saving it —
+      // otherwise it'd move to the top with a fresh date for no reason.
+      const existingSession = chatSessions.find((s) => s.id === sessionId);
+      const nothingNewSinceRestore =
+        existingSession?.messages && existingSession.messages.length === messagesToSave.length;
+
+      if (!nothingNewSinceRestore) {
+        const newSession: ChatSession = {
+          id: sessionId || `session-${Date.now()}`,
+          title: messagesToSave[1]?.text?.substring(0, 50) || 'New Chat',
+          date: new Date(),
+          // Preview the assistant's reply, not the user's own question again —
+          // reusing messagesToSave[1] here made title/preview identical (and
+          // so the reloaded session showed the same short text twice).
+          preview: messagesToSave[2]?.text?.substring(0, 100) || messagesToSave[1]?.text?.substring(0, 100) || 'New conversation...',
+          // Full transcript, so reopening this session from History restores
+          // the actual conversation instead of just the title/preview.
+          messages: messagesToSave,
+          // Tag with the owning account so it's never shown to a different
+          // user who later logs in on the same device.
+          userEmail: authedEmail || undefined,
+        };
+
+        // Guests can't see the History tab at all (see the sidebar's
+        // isLocallyAuthenticated gate), so there's nothing to gain — and a
+        // privacy cost — from persisting their transcript to disk. Keep it
+        // in memory only for this tab; only save for signed-in users.
+        setChatSessions(saveSessionToStorage(newSession, authedEmail));
+      }
     }
 
     setMessages([]);
@@ -1643,22 +1708,29 @@ const ChatApp: React.FC = () => {
       <div className="chatbot-root">
         <div className="launcher-container launcher-with-gap">
           <div className="launcher-tooltip-wrapper">
-            <div className="greeting-bubble-tooltip">
-              <div className="bubble-left-icon">
-                <span className="bubble-bot-icon">🤖</span>
-                <span className="bubble-status-dot" />
+            {/* Authenticated users only get the bare launcher button (no
+                auto-shown bubble) — the chat must never pop open on its own
+                after login, only on explicit click. Guests keep the existing
+                greeting bubble. */}
+            {!isLocallyAuthenticated && (
+              <div className="greeting-bubble-tooltip">
+                <div className="bubble-left-icon">
+                  <span className="bubble-bot-icon">🤖</span>
+                  <span className="bubble-status-dot" />
+                </div>
+                <div className="bubble-content">
+                  <h3 className="bubble-title">{selectedApp} Support</h3>
+                  <p className="bubble-subtitle">How can we help?</p>
+                </div>
+                <div className="bubble-pointer" />
               </div>
-              <div className="bubble-content">
-                <h3 className="bubble-title">{selectedApp} Support</h3>
-                <p className="bubble-subtitle">How can we help?</p>
-              </div>
-              <div className="bubble-pointer" />
-            </div>
+            )}
 
             <button
               className="floating-chat-button"
               onClick={() => setIsMinimized(false)}
-              title="Chat with CareerBot Support"
+              title="Chatbot Support"
+              aria-label="Chatbot Support"
             >
               <MessageIcon />
             </button>
@@ -1683,44 +1755,54 @@ const ChatApp: React.FC = () => {
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{userName || 'User'}</div>
             </div>
           )}
-          {isLocallyAuthenticated && (
-            <div className="sidebar-tabs">
-              <button
-                className={`tab-btn ${sidebarTab === 'history' ? 'active' : ''}`}
-                onClick={() => setSidebarTab('history')}
-              >
-                💬 History
-              </button>
-              <button
-                className={`tab-btn ${sidebarTab === 'tickets' ? 'active' : ''}`}
-                onClick={() => setSidebarTab('tickets')}
-              >
-                🎫 Tickets
-                {tickets.length > 0 && <span className="tab-count">{tickets.length}</span>}
-              </button>
-            </div>
-          )}
-          <button className="close-btn" onClick={() => setIsHistoryOpen(false)}>✕</button>
+          <div className="sidebar-header-row">
+            {isLocallyAuthenticated && (
+              <div className="sidebar-tabs">
+                <button
+                  className={`tab-btn ${sidebarTab === 'history' ? 'active' : ''}`}
+                  onClick={() => setSidebarTab('history')}
+                >
+                  💬 History
+                </button>
+                <button
+                  className={`tab-btn ${sidebarTab === 'tickets' ? 'active' : ''}`}
+                  onClick={() => setSidebarTab('tickets')}
+                >
+                  🎫 Tickets
+                  {tickets.length > 0 && <span className="tab-count">{tickets.length}</span>}
+                </button>
+              </div>
+            )}
+            <button className="close-btn" onClick={() => setIsHistoryOpen(false)}>✕</button>
+          </div>
         </div>
 
         {isLocallyAuthenticated ? (
           <>
             {sidebarTab === 'history' ? (
               <div className="sessions-list">
-                {chatSessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className="session-item"
-                    onClick={() => loadSessionMessages(session.id)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className="session-title">{session.title}</div>
-                    <div className="session-preview">{session.preview}</div>
-                    <div className="session-date">
-                      {session.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </div>
+                {chatSessions.length === 0 ? (
+                  <div className="empty-tickets">
+                    <span className="empty-tickets-icon">💬</span>
+                    <p>No messages</p>
+                    <small>No chat history available. Your past conversations will show up here.</small>
                   </div>
-                ))}
+                ) : (
+                  chatSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="session-item"
+                      onClick={() => loadSessionMessages(session.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div className="session-title">{session.title}</div>
+                      <div className="session-preview">{session.preview}</div>
+                      <div className="session-date">
+                        {session.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             ) : (
               <div className="sessions-list">
@@ -1734,7 +1816,12 @@ const ChatApp: React.FC = () => {
                   tickets.map((ticket, index) => {
                     const meta = STATUS_META[ticket.status] || STATUS_META.open;
                     return (
-                      <div key={ticket.id || `ticket-${index}`} className="ticket-card">
+                      <div
+                        key={ticket.id || `ticket-${index}`}
+                        className="ticket-card"
+                        onClick={() => setSelectedTicket(ticket)}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <div className="ticket-card-top">
                           <span className={`status-pill ${meta.color}`}>{meta.label}</span>
                           {ticket.priority === 2 && <span className="priority-flag">🔥 Urgent</span>}
@@ -1932,7 +2019,42 @@ const ChatApp: React.FC = () => {
                   )}
                 </div>
                 <div className="message-content">
-                  <div className="message-text">{message.text}</div>
+                  {(() => {
+                    // Only collapse/strip-markdown for the bot's own KB
+                    // answers. User messages must render exactly what was
+                    // typed, and system notices (tickets, restore banners)
+                    // are already short — collapsing either would be wrong.
+                    if (message.type !== 'assistant') {
+                      return <div className="message-text">{message.text}</div>;
+                    }
+
+                    const cleanText = stripMarkdown(message.text);
+                    const summary = firstSentence(cleanText);
+                    const isLong = cleanText.length > 180 && summary.length < cleanText.length;
+                    const isExpanded = expandedMessageIds.has(message.id);
+                    return (
+                      <>
+                        <div className="message-text">
+                          {isLong && !isExpanded ? summary : cleanText}
+                        </div>
+                        {isLong && (
+                          <button
+                            className="message-expand-toggle"
+                            onClick={() =>
+                              setExpandedMessageIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(message.id)) next.delete(message.id);
+                                else next.add(message.id);
+                                return next;
+                              })
+                            }
+                          >
+                            {isExpanded ? 'Show less' : 'Show more'}
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                   {message.sources && message.sources.length > 0 && (
                     <div className="message-sources">
                       <small>Sources: {message.sources.join(', ')}</small>
@@ -1987,28 +2109,36 @@ const ChatApp: React.FC = () => {
           )}
 
           {messages.length > 5 && !showSuggestionsPanel && (
-            <button
-              onClick={() => setShowSuggestionsPanel(true)}
+            <div
               style={{
                 position: 'sticky',
                 bottom: '16px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                padding: '10px 20px',
-                backgroundColor: '#0066cc',
-                color: 'white',
-                border: 'none',
-                borderRadius: '20px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '600',
-                boxShadow: '0 2px 8px rgba(0, 102, 204, 0.3)',
+                display: 'flex',
+                justifyContent: 'center',
                 zIndex: 10,
-                marginTop: '16px'
+                marginTop: '16px',
+                pointerEvents: 'none',
               }}
             >
-              ✨ Show Suggestions
-            </button>
+              <button
+                onClick={() => setShowSuggestionsPanel(true)}
+                style={{
+                  pointerEvents: 'auto',
+                  padding: '10px 20px',
+                  backgroundColor: '#0066cc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 8px rgba(0, 102, 204, 0.3)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                ✨ Show Suggestions
+              </button>
+            </div>
           )}
         </div>
 
@@ -2052,23 +2182,6 @@ const ChatApp: React.FC = () => {
                 className="message-input"
                 disabled={isLoading}
               />
-              <button
-                className="voice-agent-btn"
-                onClick={() => setShowVoiceMode(true)}
-                title="Talk to CareerBot"
-                disabled={isLoading}
-              >
-                <svg className="voice-agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="4" y1="8" x2="4" y2="16" />
-                  <line x1="8" y1="6" x2="8" y2="18" />
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="16" y1="6" x2="16" y2="18" />
-                  <line x1="20" y1="8" x2="20" y2="16" />
-                </svg>
-                <div className="voice-agent-label">
-                  <span className="voice-agent-title">Talk</span>
-                </div>
-              </button>
             </div>
             <button
               className="send-message-btn"
@@ -2084,7 +2197,7 @@ const ChatApp: React.FC = () => {
           <div className="bottom-nav">
             <button
               className={`nav-tab ${activeNavTab === 'chat' ? 'active' : ''}`}
-              onClick={() => setActiveNavTab('chat')}
+              onClick={() => { setActiveNavTab('chat'); setIsHistoryOpen(false); }}
               title="Chat"
             >
               <svg className="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2092,33 +2205,6 @@ const ChatApp: React.FC = () => {
               </svg>
               <span>Chat</span>
             </button>
-            <button
-              className={`nav-tab ${activeNavTab === 'voice' ? 'active' : ''}`}
-              onClick={() => setActiveNavTab('voice')}
-              title="Voice"
-            >
-              <svg className="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 1v22M4 8v8M8 5v14M16 5v14M20 8v8" />
-              </svg>
-              <span>Voice</span>
-            </button>
-            {isUserAuthenticated() && (
-              <button
-                className={`nav-tab ${activeNavTab === 'forms' ? 'active' : ''}`}
-                onClick={() => setActiveNavTab('forms')}
-                title="Forms"
-              >
-                <svg className="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="8" y1="6" x2="21" y2="6" />
-                  <line x1="8" y1="12" x2="21" y2="12" />
-                  <line x1="8" y1="18" x2="21" y2="18" />
-                  <line x1="3" y1="6" x2="3.01" y2="6" />
-                  <line x1="3" y1="12" x2="3.01" y2="12" />
-                  <line x1="3" y1="18" x2="3.01" y2="18" />
-                </svg>
-                <span>Forms</span>
-              </button>
-            )}
             {isUserAuthenticated() && (
               <button
                 className={`nav-tab ${activeNavTab === 'history' ? 'active' : ''}`}
@@ -2569,6 +2655,67 @@ const ChatApp: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Ticket Detail Modal */}
+      {selectedTicket && (() => {
+        const meta = STATUS_META[selectedTicket.status] || STATUS_META.open;
+        return (
+          <div className="modal-overlay" onClick={() => setSelectedTicket(null)}>
+            <div className="ticket-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="ticket-modal-header">
+                <div>
+                  <h2>🎫 Ticket #{(selectedTicket.id || 'N/A').toString().slice(-8)}</h2>
+                  <p>{selectedTicket.subject}</p>
+                </div>
+                <button className="modal-close-btn" onClick={() => setSelectedTicket(null)}>✕</button>
+              </div>
+
+              <div className="ticket-modal-body">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                  <span className={`status-pill ${meta.color}`}>{meta.label}</span>
+                  {selectedTicket.priority === 2 && <span className="priority-flag">🔥 Urgent</span>}
+                </div>
+
+                <label className="field-label">Subject</label>
+                <p style={{ marginBottom: '16px' }}>{selectedTicket.subject}</p>
+
+                {selectedTicket.description && (
+                  <>
+                    <label className="field-label">Description</label>
+                    <p style={{ marginBottom: '16px', whiteSpace: 'pre-wrap' }}>{selectedTicket.description}</p>
+                  </>
+                )}
+
+                {selectedTicket.affected_feature && (
+                  <>
+                    <label className="field-label">Category</label>
+                    <p style={{ marginBottom: '16px' }}>{selectedTicket.affected_feature}</p>
+                  </>
+                )}
+
+                <label className="field-label">Created</label>
+                <p style={{ marginBottom: '16px' }}>
+                  {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleString() : 'N/A'}
+                </p>
+
+                {selectedTicket.updated_at && (
+                  <>
+                    <label className="field-label">Last Updated</label>
+                    <p style={{ marginBottom: '16px' }}>{new Date(selectedTicket.updated_at).toLocaleString()}</p>
+                  </>
+                )}
+
+                {selectedTicket.contact_email && (
+                  <>
+                    <label className="field-label">Contact Email</label>
+                    <p style={{ marginBottom: '16px' }}>{selectedTicket.contact_email} <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: 600 }}>· Notified</span></p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Settings Modal */}
       {showSettingsModal && (
@@ -3032,110 +3179,6 @@ const ChatApp: React.FC = () => {
         </div>
       )}
 
-      {/* Voice Agent Mode Modal */}
-      {showVoiceMode && (
-        <div className="modal-overlay" onClick={closeVoiceMode}>
-          <div className="voice-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="voice-modal-header">
-              <h2>Talk</h2>
-              <div className="voice-header-status">
-                {voiceStatus === 'listening' && <span className="status-badge listening">🎤 Listening</span>}
-                {voiceStatus === 'processing' && <span className="status-badge processing">⏳ Processing</span>}
-                {voiceStatus === 'speaking' && <span className="status-badge speaking">🔊 Speaking</span>}
-                {voiceStatus === 'ready' && <span className="status-badge ready">Ready</span>}
-                {voiceStatus === 'listening' && <span className="timer-display">{String(Math.floor(listeningTime / 60)).padStart(2, '0')}:{String(listeningTime % 60).padStart(2, '0')}</span>}
-              </div>
-            </div>
-
-            <div className="voice-modal-body">
-              {/* Conversation History */}
-              <div className="voice-conversation-history">
-                {voiceHistory.length === 0 ? (
-                  <div className="voice-welcome-message">
-                    <p>👋 Hello! I&apos;m here to help with your CareerBot questions.</p>
-                    <p style={{marginTop: '8px', fontSize: '12px', color: '#64748b'}}>Click &quot;Start Listening&quot; to ask about CareerBot features, billing, account issues, or support.</p>
-                  </div>
-                ) : (
-                  voiceHistory.map((item, idx) => (
-                    <div key={idx} className={`conversation-message ${item.role}`}>
-                      <div className="message-role">{item.role === 'user' ? 'You' : 'Voice Agent'}</div>
-                      <div className="message-text">{item.text}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Voice Visualization */}
-              {voiceStatus === 'listening' && (
-                <div className="voice-visualization">
-                  <svg className="voice-waveform" viewBox="0 0 200 100">
-                    <line x1="20" y1="50" x2="20" y2="30" className="waveform-line" />
-                    <line x1="40" y1="50" x2="40" y2="20" className="waveform-line" />
-                    <line x1="60" y1="50" x2="60" y2="10" className="waveform-line" />
-                    <line x1="80" y1="50" x2="80" y2="20" className="waveform-line" />
-                    <line x1="100" y1="50" x2="100" y2="35" className="waveform-line" />
-                    <line x1="120" y1="50" x2="120" y2="20" className="waveform-line" />
-                    <line x1="140" y1="50" x2="140" y2="10" className="waveform-line" />
-                    <line x1="160" y1="50" x2="160" y2="30" className="waveform-line" />
-                    <line x1="180" y1="50" x2="180" y2="40" className="waveform-line" />
-                  </svg>
-                </div>
-              )}
-
-              {/* Current Response */}
-              {voiceResponse && (
-                <div className="voice-response-box">
-                  <div className="response-label">Response</div>
-                  <div className="response-text">{voiceResponse}</div>
-                </div>
-              )}
-
-              {/* Controls */}
-              <div className="voice-controls">
-                <select
-                  className="language-selector"
-                  value={voiceLanguage}
-                  onChange={(e) => setVoiceLanguage(e.target.value)}
-                  disabled={isListening || voiceStatus === 'processing' || voiceStatus === 'speaking'}
-                >
-                  <option value="en-US">🌐 English</option>
-                  <option value="es-ES">Español</option>
-                  <option value="fr-FR">Français</option>
-                  <option value="de-DE">Deutsch</option>
-                  <option value="it-IT">Italiano</option>
-                  <option value="pt-BR">Português</option>
-                </select>
-
-                <div className="voice-action-buttons">
-                  {voiceStatus !== 'listening' && voiceStatus !== 'processing' && voiceStatus !== 'speaking' && (
-                    <button className="voice-action-btn start-btn" onClick={startVoiceListening}>
-                      🎤 Start Listening
-                    </button>
-                  )}
-
-                  {voiceStatus === 'listening' && (
-                    <button className="voice-action-btn stop-btn" onClick={stopVoiceListening}>
-                      ⏹️ Stop
-                    </button>
-                  )}
-
-                  {(voiceStatus === 'processing' || voiceStatus === 'speaking') && (
-                    <div className="processing-indicator">
-                      <span className="dot"></span>
-                      <span className="dot"></span>
-                      <span className="dot"></span>
-                    </div>
-                  )}
-
-                  <button className="voice-action-btn close-btn-voice" onClick={closeVoiceMode}>
-                    ✕ Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
     </div>
   );
