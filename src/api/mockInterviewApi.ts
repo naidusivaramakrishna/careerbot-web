@@ -143,7 +143,9 @@ export const getLiveSessions = async (): Promise<{ sessions: LiveSession[] }> =>
 
 export interface ReportAnswer {
   question_text: string;
-  score: number;
+  // null when the answer was excluded/skipped from scoring (see AnswerEvaluation
+  // .scoring_skipped / .excluded_from_scoring on the live WS protocol).
+  score: number | null;
   // The live realtime backend sends a short `note` per answer; older payloads
   // sent `feedback`. Read both.
   feedback?: string;
@@ -233,12 +235,6 @@ export interface ReportResponse {
   redo_questions?: { num: number; text: string; score: number; issue: string }[];
 }
 
-export interface ShareReportResponse {
-  share_url: string;
-  token: string;
-  expires_at: string;
-}
-
 // ==================== PHASE 2 — REPORT FUNCTIONS ====================
 
 /**
@@ -247,29 +243,6 @@ export interface ShareReportResponse {
  */
 export const getReport = async (sessionId: string): Promise<ReportResponse> => {
   const response = await httpClient.get<ReportResponse>(`/mock-interview/report/${sessionId}`);
-  return response.data;
-};
-
-/**
- * View a PII-stripped report by public share token (no auth required)
- * GET /api/v1/mock-interview/shared-report/{token}
- */
-export const getSharedReport = async (token: string): Promise<ReportResponse> => {
-  const response = await httpClient.get<ReportResponse>(
-    `/mock-interview/shared-report/${token}`
-  );
-  return response.data;
-};
-
-/**
- * Generate a public share link for a report (7-day TTL)
- * POST /api/v1/mock-interview/report/{session_id}/share
- */
-export const shareReport = async (sessionId: string): Promise<ShareReportResponse> => {
-  const response = await httpClient.post<ShareReportResponse>(
-    `/mock-interview/report/${sessionId}/share`,
-    {} as unknown as Record<string, unknown>
-  );
   return response.data;
 };
 
@@ -392,6 +365,13 @@ export type WsServerMessage =
   // item_id groups the partials of one spoken item; a transcript_final replaces them.
   | { type: 'transcript_partial'; text: string; item_id?: string }
   | { type: 'transcript_final'; text: string; item_id?: string }
+  // Fired once per answer, after the AI's silence finalizer decides no further
+  // speech is coming (currently a 3s idle window, server-configured). Distinct
+  // from candidate_turn_closed, which is only a per-item VAD boundary and can
+  // fire multiple times within one answer if the candidate pauses mid-thought.
+  // final_text, when present, is the server's authoritative concatenation of
+  // all committed items for this answer — preferred over local accumulation.
+  | { type: 'answer_capture_complete'; final_text?: string }
   | { type: 'transcription_error'; message?: string }
   // Never shown as captions — ignored on purpose.
   | { type: 'transcript_partial_ignored' }

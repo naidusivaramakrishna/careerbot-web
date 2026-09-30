@@ -1,15 +1,14 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import MockSidebar from "./_components/MockSidebar";
 import { MockInterviewProvider } from "./_context/MockInterviewContext";
-import { Inter } from "next/font/google";
 import { usePathname } from "next/navigation";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
-});
+// Inter Variable is already registered globally via @fontsource-variable in
+// src/app/layout.tsx — this just points --font-inter at that family for the
+// font-(family-name:--font-inter) utility below.
+const INTER_VARIABLE_STYLE = { "--font-inter": "'Inter Variable', sans-serif" } as CSSProperties;
 
 export default function MockInterviewLayout({
   children,
@@ -17,15 +16,14 @@ export default function MockInterviewLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isPrivateMockRoute =
-    pathname !== "/mock-interview" &&
-    !pathname.startsWith("/mock-interview/shared-report");
+  const isPrivateMockRoute = pathname !== "/mock-interview";
 
   return (
     <MockInterviewProvider>
       <div
         data-mock-interview={isPrivateMockRoute ? "private" : undefined}
-        className={`${inter.variable} antialiased font-(family-name:--font-inter) h-screen overflow-hidden bg-gray-50`}
+        style={INTER_VARIABLE_STYLE}
+        className="antialiased font-(family-name:--font-inter) h-screen overflow-hidden bg-gray-50"
       >
         <div className="flex h-full">
           <MockSidebar />

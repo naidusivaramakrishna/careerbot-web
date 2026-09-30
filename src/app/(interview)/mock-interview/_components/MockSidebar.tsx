@@ -59,7 +59,7 @@ export default function MockSidebar() {
   const stages = buildStages(stageState);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  if (pathname === "/mock-interview" || pathname.startsWith("/mock-interview/shared-report")) return null;
+  if (pathname === "/mock-interview") return null;
 
   return (
     <>

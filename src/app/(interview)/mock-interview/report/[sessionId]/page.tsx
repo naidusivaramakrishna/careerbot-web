@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getReport, shareReport, downloadReportPdf, ReportResponse } from "@/api/mockInterviewApi";
+import { getReport, downloadReportPdf, ReportResponse, ReportAnswer } from "@/api/mockInterviewApi";
 import { getReportDimensions, humanize, mapCompetencyScores, normalizeOverallScore, type ReportDimension } from "../../_lib/reportScores";
 import {
   ResponsiveContainer,
@@ -16,7 +16,6 @@ import {
 import {
   ChevronLeft,
   Download,
-  Share2,
   Trophy,
   TrendingUp,
   Clock,
@@ -26,9 +25,6 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  Copy,
-  X,
-  Link2,
   MessageSquare,
   BookOpen,
   ListChecks,
@@ -43,7 +39,8 @@ import type { ScoreBreakdown } from "@/app/coding-test/_lib/types";
 interface UiQuestion {
   num: number;
   text: string;
-  mock_score: number;
+  // null = this answer was excluded/skipped from scoring, never a fabricated 0.
+  mock_score: number | null;
   // null = the backend did not report it (never show a fabricated 0).
   duration_s: number | null;
   filler_count: number | null;
@@ -118,8 +115,9 @@ function getEndReasonLabel(reason: string | undefined): string | null {
 /** Map API ReportResponse → UI shape */
 function mapReport(api: ReportResponse): UiReport {
   const answers = api.answers ?? [];
-  const mockAvg = answers.length
-    ? answers.reduce((s, a) => s + a.score, 0) / answers.length
+  const scoredAnswers = answers.filter((a): a is ReportAnswer & { score: number } => typeof a.score === "number");
+  const mockAvg = scoredAnswers.length
+    ? scoredAnswers.reduce((s, a) => s + a.score, 0) / scoredAnswers.length
     : 0;
   const overallScore = normalizeOverallScore(api);
 
@@ -235,7 +233,7 @@ function mapReport(api: ReportResponse): UiReport {
     // The two weakest answers, keeping each one's real question number.
     redo_questions: (api.redo_questions ?? answers
       .map((a, i) => ({ num: i + 1, text: a.question_text, score: a.score, issue: a.feedback ?? a.note ?? "" }))
-      .filter((q) => q.score < 6)
+      .filter((q): q is typeof q & { score: number } => typeof q.score === "number" && q.score < 6)
       .sort((a, b) => a.score - b.score)
       .slice(0, 2)),
     strengths: api.strengths ?? [],
@@ -263,7 +261,14 @@ function getBand(pct: number) {
   return { label: "Needs improvement", hex: "#dc2626", text: "text-red-700", chip: "bg-red-50 text-red-700 ring-red-200", bar: "bg-red-500" };
 }
 
-function ScoreChip({ score, max = 10 }: { score: number; max?: number }) {
+function ScoreChip({ score, max = 10 }: { score: number | null; max?: number }) {
+  if (score === null) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500 ring-1 ring-inset ring-gray-200">
+        Not scored
+      </span>
+    );
+  }
   const band = getBand((score / max) * 100);
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ring-1 ring-inset ${band.chip}`}>
@@ -398,100 +403,11 @@ function QuestionRow({ q }: { q: UiQuestion }) {
   );
 }
 
-function ShareModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
-  const [generating, setGenerating] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    setError(null);
-    try {
-      const data = await shareReport(sessionId);
-      const fullUrl = `${window.location.origin}${data.share_url}`;
-      setShareUrl(fullUrl);
-    } catch {
-      setError("Failed to generate share link. Please try again.");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleCopy = () => {
-    if (shareUrl) {
-      navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Link2 size={16} className="text-[#2557a7]" />
-            <h3 className="text-sm font-bold text-gray-900">Share Your Report</h3>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-        </div>
-        <div className="p-5">
-          <div className="p-3 bg-[#2557a7]/5 border border-[#2557a7]/15 rounded-xl mb-4 text-xs text-[#2557a7] leading-relaxed">
-            A shareable link will be created. The shared version does <strong>NOT</strong> include your name, email, or phone number. Link expires in <strong>7 days</strong>.
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 mb-3">
-              <AlertCircle size={12} className="text-gray-400 shrink-0" />
-              {error}
-            </div>
-          )}
-
-          {shareUrl ? (
-            <div>
-              <p className="text-xs font-semibold text-gray-600 mb-2">Your shareable link:</p>
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={shareUrl}
-                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700 min-w-0"
-                />
-                <button
-                  onClick={handleCopy}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${copied ? "bg-[#2557a7]/10 text-[#2557a7]" : "bg-[#2557a7] text-white hover:bg-[#1e4a8f]"}`}
-                >
-                  <Copy size={12} />
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-              <p className="text-[10px] text-gray-400 mt-2">Expires in 7 days · Shareable without login</p>
-            </div>
-          ) : (
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#1e4a8f] disabled:opacity-60"
-            >
-              {generating ? (
-                <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Generating link…</>
-              ) : (
-                <><Link2 size={14} /> Generate Link</>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ReportPage() {
   const router = useRouter();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const [showShare, setShowShare] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [report, setReport] = useState<UiReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
@@ -542,10 +458,12 @@ export default function ReportPage() {
     }
   };
 
-  const barData = (report?.questions ?? []).map((q) => ({
-    name: `Q${q.num}`,
-    Score: q.mock_score,
-  }));
+  const barData = (report?.questions ?? [])
+    .filter((q): q is typeof q & { mock_score: number } => typeof q.mock_score === "number")
+    .map((q) => ({
+      name: `Q${q.num}`,
+      Score: q.mock_score,
+    }));
 
   if (reportLoading) {
     return (
@@ -586,8 +504,6 @@ export default function ReportPage() {
 
   return (
     <>
-      {showShare && <ShareModal sessionId={sessionId} onClose={() => setShowShare(false)} />}
-
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         {/* Top bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -600,14 +516,6 @@ export default function ReportPage() {
             Back
           </button>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowShare(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]"
-            >
-              <Share2 size={14} aria-hidden="true" />
-              Share Report
-            </button>
             <button
               type="button"
               onClick={handleDownloadPdf}
@@ -638,16 +546,11 @@ export default function ReportPage() {
           </div>
           {(report.end_reason_label || report.pressure_affected) && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {report.end_reason_label && (
+              {/* {report.end_reason_label && (
                 <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                   Session ended: {report.end_reason_label}
                 </span>
-              )}
-              {report.pressure_affected && (
-                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
-                  Performance affected by pressure
-                </span>
-              )}
+              )} */}
             </div>
           )}
         </header>
