@@ -275,14 +275,22 @@ export interface LiveCreateRequest {
   resume_id?: string;
 }
 
-// interview-avatar.txt section 3. `null` is the normal/default case — feature
-// off, concurrency cap reached, or LiveAvatar refused/timed out. Never an error.
-export interface LiveAvatarSession {
-  livekit_url: string;
-  livekit_client_token: string;
-  avatar_id: string;
-  provider_session_id: string;
-  mode: string; // always "LITE" in Phase 1
+// mock-interview-simli-avatar.txt section 3. `null` is the normal/default
+// case — feature off, concurrency cap reached, or Simli refused/timed out.
+// Never an error. (LiveAvatar/HeyGen has been fully removed — Simli is the
+// only avatar vendor now.)
+export interface SimliAvatarSession {
+  provider: "simli";
+  // The ENTIRE credential for this vendor — treat like a bearer secret: never
+  // log it, never put it in analytics, never persist past the session.
+  session_token: string;
+  face_id: string;
+  transport: "simli-client";
+  // The PCM format Simli expects, e.g. "pcm16;rate=16000". Parse the rate out
+  // of this rather than hardcoding 16000 — see parseSimliTargetRate below.
+  audio_input_format: string;
+  max_session_length: number; // seconds, vendor-side hard cap — informational
+  max_idle_time: number; // seconds, vendor-side idle timeout — informational
 }
 
 export interface LiveCreateResponse {
@@ -298,7 +306,7 @@ export interface LiveCreateResponse {
   supports_audio_delta: boolean;
   supports_interruption: boolean;
   supports_transcript_delta: boolean;
-  avatar: LiveAvatarSession | null;
+  avatar: SimliAvatarSession | null;
 }
 
 export interface LiveSessionState {
@@ -385,14 +393,7 @@ export type WsServerMessage =
   | { type: 'heartbeat'; ts_ms?: number }
   | { type: 'error'; code: string; message: string; recoverable?: boolean }
   | { type: 'pong' }
-  | { type: 'coding_round_start'; problem_slug: string; problem_title: string; time_limit_s: number }
-  // interview-avatar.txt section 6. Purely presentational (safe to ignore) —
-  // "listening" is driven by the AI detecting candidate speech.
-  | { type: 'avatar_state'; state: 'idle' | 'listening' | 'talking' }
-  // reason: connect_failed (avatar never came up) or stream_lost (dropped
-  // mid-interview, including LiveAvatar's own session time limit). The
-  // avatar never returns in the same session — fall back to audio deltas.
-  | { type: 'avatar_unavailable'; reason: 'connect_failed' | 'stream_lost' | string };
+  | { type: 'coding_round_start'; problem_slug: string; problem_title: string; time_limit_s: number };
 
 // ==================== PHASE 3 — LIVE INTERVIEW FUNCTIONS ====================
 
