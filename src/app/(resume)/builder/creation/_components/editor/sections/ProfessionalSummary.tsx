@@ -327,7 +327,3 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
 
 
 export default ProfessionalSummary;
-
-
-
-

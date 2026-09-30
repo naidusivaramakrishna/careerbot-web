@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { VerificationRecovery } from "@/components/VerificationRecovery";
+import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
 
 export default function ClientLayout({
   children,
@@ -105,6 +106,7 @@ export default function ClientLayout({
     <TenantProvider>
       <Toaster richColors position="bottom-right" />
       <VerificationRecovery />
+      <ChatbotWidget />
       {children}
     </TenantProvider>
   );

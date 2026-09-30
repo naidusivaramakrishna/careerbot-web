@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getReport, shareReport, downloadReportPdf, ReportResponse } from "@/api/mockInterviewApi";
+import { getReport, shareReport, downloadReportPdf, ReportResponse, ReportAnswer } from "@/api/mockInterviewApi";
 import { getReportDimensions, humanize, mapCompetencyScores, normalizeOverallScore, type ReportDimension } from "../../_lib/reportScores";
 import {
   ResponsiveContainer,
@@ -43,7 +43,8 @@ import type { ScoreBreakdown } from "@/app/coding-test/_lib/types";
 interface UiQuestion {
   num: number;
   text: string;
-  mock_score: number;
+  // null = this answer was excluded/skipped from scoring, never a fabricated 0.
+  mock_score: number | null;
   // null = the backend did not report it (never show a fabricated 0).
   duration_s: number | null;
   filler_count: number | null;
@@ -118,8 +119,9 @@ function getEndReasonLabel(reason: string | undefined): string | null {
 /** Map API ReportResponse → UI shape */
 function mapReport(api: ReportResponse): UiReport {
   const answers = api.answers ?? [];
-  const mockAvg = answers.length
-    ? answers.reduce((s, a) => s + a.score, 0) / answers.length
+  const scoredAnswers = answers.filter((a): a is ReportAnswer & { score: number } => typeof a.score === "number");
+  const mockAvg = scoredAnswers.length
+    ? scoredAnswers.reduce((s, a) => s + a.score, 0) / scoredAnswers.length
     : 0;
   const overallScore = normalizeOverallScore(api);
 
@@ -235,7 +237,7 @@ function mapReport(api: ReportResponse): UiReport {
     // The two weakest answers, keeping each one's real question number.
     redo_questions: (api.redo_questions ?? answers
       .map((a, i) => ({ num: i + 1, text: a.question_text, score: a.score, issue: a.feedback ?? a.note ?? "" }))
-      .filter((q) => q.score < 6)
+      .filter((q): q is typeof q & { score: number } => typeof q.score === "number" && q.score < 6)
       .sort((a, b) => a.score - b.score)
       .slice(0, 2)),
     strengths: api.strengths ?? [],
@@ -263,7 +265,14 @@ function getBand(pct: number) {
   return { label: "Needs improvement", hex: "#dc2626", text: "text-red-700", chip: "bg-red-50 text-red-700 ring-red-200", bar: "bg-red-500" };
 }
 
-function ScoreChip({ score, max = 10 }: { score: number; max?: number }) {
+function ScoreChip({ score, max = 10 }: { score: number | null; max?: number }) {
+  if (score === null) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500 ring-1 ring-inset ring-gray-200">
+        Not scored
+      </span>
+    );
+  }
   const band = getBand((score / max) * 100);
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ring-1 ring-inset ${band.chip}`}>
@@ -542,10 +551,12 @@ export default function ReportPage() {
     }
   };
 
-  const barData = (report?.questions ?? []).map((q) => ({
-    name: `Q${q.num}`,
-    Score: q.mock_score,
-  }));
+  const barData = (report?.questions ?? [])
+    .filter((q): q is typeof q & { mock_score: number } => typeof q.mock_score === "number")
+    .map((q) => ({
+      name: `Q${q.num}`,
+      Score: q.mock_score,
+    }));
 
   if (reportLoading) {
     return (
@@ -602,14 +613,6 @@ export default function ReportPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowShare(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]"
-            >
-              <Share2 size={14} aria-hidden="true" />
-              Share Report
-            </button>
-            <button
-              type="button"
               onClick={handleDownloadPdf}
               disabled={pdfLoading}
               className="flex items-center gap-1.5 rounded-lg bg-[#2557a7] px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1e4a8f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2 disabled:opacity-60"
@@ -638,16 +641,11 @@ export default function ReportPage() {
           </div>
           {(report.end_reason_label || report.pressure_affected) && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {report.end_reason_label && (
+              {/* {report.end_reason_label && (
                 <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                   Session ended: {report.end_reason_label}
                 </span>
-              )}
-              {report.pressure_affected && (
-                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
-                  Performance affected by pressure
-                </span>
-              )}
+              )} */}
             </div>
           )}
         </header>

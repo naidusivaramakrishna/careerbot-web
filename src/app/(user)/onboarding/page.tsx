@@ -98,7 +98,7 @@ export default function UserOnboardingPage() {
       <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_50%_0%,rgba(37,87,167,0.12),transparent_58%)]" />
       <div className="relative mx-auto flex min-h-[calc(100vh-48px)] max-w-[820px] items-center">
         <section className="w-full overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.09)]">
-          <div className="grid lg:grid-cols-[390px_1fr]">
+          <div className="grid lg:grid-cols-[390px_minmax(0,1fr)]">
             <aside className="relative overflow-hidden border-b border-gray-200 bg-[#fbfcfd] px-6 py-7 sm:px-8 lg:border-b-0 lg:border-r">
               <div className="pointer-events-none absolute -right-24 -top-24 h-52 w-52 rounded-full bg-[#eef4ff]" />
               <div className="relative">
@@ -141,7 +141,7 @@ export default function UserOnboardingPage() {
             </aside>
 
             {stage === "upload" ? (
-              <section className="px-6 py-8 sm:px-8 lg:px-10">
+              <section className="min-w-0 px-6 py-8 sm:px-8 lg:px-10">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#2557a7]">Step 1 of 2</p>

@@ -15,7 +15,7 @@ export const MOCK_INTERVIEWERS = [
     role: "AI Interviewer",
     gender: "female",
     voice: "nova",
-    src: "/images/avatar/ananya-fallback.png",
+    src: "/images/avatar/ananya-fallback.jpg",
   },
 ] as const;
 

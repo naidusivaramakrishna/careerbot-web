@@ -857,6 +857,21 @@ export default function LiveSetupPage() {
     router.prefetch('/mock-interview/live/prefetch');
   }, [router]);
 
+  useEffect(() => {
+    if (phase === "pre-interview") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const scrollContainer = document.querySelector('.relative.flex-1.overflow-auto') as HTMLElement;
+          if (scrollContainer) {
+            scrollContainer.scrollTop = 0;
+          } else {
+            window.scrollTo(0, 0);
+          }
+        });
+      });
+    }
+  }, [phase]);
+
   const handleStart = (selectedType = sessionType, targetRole?: string) => {
     setStartError(null);
     setSessionType(selectedType);

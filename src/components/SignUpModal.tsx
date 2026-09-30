@@ -399,6 +399,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             )
         }
 
+        const activeSignupError = formType === "signup"
+            ? (errors.username ? 'username' : errors.email ? 'email' : errors.password ? 'password' : null)
+            : (errors.email ? 'email' : errors.password ? 'password' : errors.login ? 'login' : null)
+
         return (
             <>
                 <div className="text-center mb-6">
@@ -427,10 +431,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                                 onChange={handleChange}
                                 data-testid="signup-username-input"
                                 id="signup-username"
-                                className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                                className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${activeSignupError === 'username' ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                             />
                         </div>
-                        {errors.username && <p role="alert" className="text-red-500 text-xs mt-1">{errors.username}</p>}
+                        {activeSignupError === 'username' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.username}</p>}
                     </div>
                 )}
 
@@ -447,10 +451,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="signup-email-input"
                             id="signup-email"
-                            className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                            className={`w-full rounded-md pl-10 pr-4 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${activeSignupError === 'email' ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                         />
                     </div>
-                    {errors.email && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                    {activeSignupError === 'email' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
 
                 {/* Password Field */}
@@ -466,7 +470,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             onChange={handleChange}
                             data-testid="signup-password-input"
                             id="signup-password"
-                            className={`w-full rounded-md pl-10 pr-10 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
+                            className={`w-full rounded-md pl-10 pr-10 py-3 border text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${activeSignupError === 'password' || activeSignupError === 'login' ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-blue-200'}`}
                         />
                         <button
                             type="button"
@@ -478,8 +482,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
-                    {errors.password && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                    {errors.login && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
+                    {activeSignupError === 'password' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    {activeSignupError === 'login' && <p role="alert" className="text-red-500 text-xs mt-1">{errors.login}</p>}
                 </div>
 
                 {/* Forgot Password Link (Signin Only) */}
@@ -587,7 +591,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
     return (
         <div className={`fixed inset-0 flex items-center justify-center z-50 p-4 ${hideOverlay ? "" : "bg-black/60 backdrop-blur-md"}`}>
-            <div className="relative w-full max-w-124 h-150 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
+            <div className="relative w-full max-w-124 h-160 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
                 <button
                     onClick={handleModalClose}
                     data-testid="auth-modal-close-btn"
