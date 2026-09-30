@@ -94,7 +94,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   pageScrollPreview = false,
 }) => {
   const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey } = useResume();
-  const { canonicalScore, setCanonicalScore } = useScore();
+  const { canonicalScore, canonicalStatus, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
   const { getCataloguesMap } = useCatalogues();
 
@@ -108,7 +108,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   const displayScore = isEnhancedResume && enhancedAtsScore
     ? Math.round(getEnhancedCurrentScore(enhancedAtsScore))
-    : (canonicalScore ?? previewScore.score);
+    : canonicalStatus === "ready"
+      ? (canonicalScore ?? previewScore.score)
+      : previewScore.score;
   const scoreLabel = "Score";
   const fixedPreviewSections = React.useMemo(() => {
     const sections = new Set<string>();

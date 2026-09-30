@@ -1,10 +1,10 @@
 "use client"
 import React, { useEffect, useState, useCallback, Suspense } from 'react'
 import { toast } from 'sonner';
-import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, ResumeResponse } from '@/api/resumeApi';
+import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, getResumeById, ResumeResponse } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import { downloadEnhancedResume } from '@/api/enhancerApi';
-import type { EnhancedResumeSummary } from '@/types/api.types';
+import type { ATSScore, EnhancedResumeSummary } from '@/types/api.types';
 import { formatDateResume } from '@/utils/formatDateResume';
 import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
@@ -14,6 +14,8 @@ import UploadResumeModal from '../_components/UploadResumeModal';
 import { useRouter, useSearchParams } from 'next/navigation';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
+import { computePreviewScore } from '../../creation/_lib/computePreviewScore';
+import { getEnhancedCurrentScore } from '../../creation/_utils/enhancedScore';
 
 export interface Resume {
   id: string;
@@ -92,7 +94,11 @@ const ResumeListContent = () => {
         initials: getInitials(name),
         name: name,
         job: targetRole,
-        score: 0,
+        // A fresh server calculation is authoritative. Otherwise use the same
+        // complete-data preview calculation displayed by the editor.
+        score: typeof item.builder_score?.score === 'number'
+          ? item.builder_score.score
+          : computePreviewScore(item).score,
         modified: formatDateResume(item.updatedAt),
         created: formatDateResume(item.createdAt),
         createdAt: item.createdAt, // ✅ Store raw timestamp
@@ -122,10 +128,11 @@ const ResumeListContent = () => {
       // Transform enhanced resumes (summary shape — no enhanced_data)
       const transformedEnhanced: Resume[] = enhanced_resumes.map((item: EnhancedResumeSummary) => {
         const name = item.display_name || 'Uploaded Resume';
-        const atsObj = typeof item.ats_score === 'object' ? item.ats_score : null;
-        const score = typeof item.ats_score === 'number'
-          ? item.ats_score
-          : atsObj?.final_score ?? atsObj?.Percentage ?? 0;
+        const score = Math.round(
+          typeof item.ats_score === 'number'
+            ? item.ats_score
+            : getEnhancedCurrentScore(item.ats_score as ATSScore | undefined),
+        );
         return {
           id: item.id,
           initials: name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2),
@@ -141,25 +148,30 @@ const ResumeListContent = () => {
         };
       });
 
-      // Transform builder resumes and show list immediately
-      const transformedData = transformResumeData(builder_resumes as unknown as ResumeResponse[], profileName);
-      const merged = [...transformedData, ...transformedEnhanced];
-      setResumes(merged);
-      setLoading(false);
+      // The unified list response is compact. Hydrate builder resumes in
+      // parallel first, then run the shared preview scorer exactly once per
+      // row against the same complete data the editor loads.
+      const fullBuilderResumes = await Promise.all(
+        (builder_resumes as unknown as ResumeResponse[]).map(async (resume) => {
+          const [resumeResult, scoreResult] = await Promise.allSettled([
+            getResumeById(resume.id),
+            getBuilderScore(resume.id),
+          ]);
+          const fullResume = resumeResult.status === 'fulfilled' ? resumeResult.value : resume;
+          if (scoreResult.status !== 'fulfilled' || scoreResult.value.score <= 0) return fullResume;
 
-      // Load scores in the background — update each card as its score arrives
-      transformedData.forEach(async (resume) => {
-        try {
-          const scoreData = await getBuilderScore(resume.id);
-          if (scoreData.score > 0) {
-            setResumes(prev =>
-              prev.map(r => r.id === resume.id ? { ...r, score: scoreData.score } : r)
-            );
-          }
-        } catch {
-          // leave score as 0
-        }
-      });
+          const calculatedAt = Date.parse(scoreResult.value.calculated_at);
+          const modifiedAt = Date.parse(fullResume.updatedAt);
+          const scoreIsFresh = Number.isFinite(calculatedAt)
+            && (!Number.isFinite(modifiedAt) || calculatedAt >= modifiedAt);
+          return scoreIsFresh
+            ? { ...fullResume, builder_score: { score: scoreResult.value.score } }
+            : fullResume;
+        }),
+      );
+      const transformedData = transformResumeData(fullBuilderResumes, profileName);
+      setResumes([...transformedData, ...transformedEnhanced]);
+      setLoading(false);
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {

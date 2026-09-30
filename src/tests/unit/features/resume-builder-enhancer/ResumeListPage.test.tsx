@@ -8,10 +8,12 @@ import {
   downloadResume,
   getAllResumesUnified,
   getBuilderScore,
+  getResumeById,
 } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import { downloadEnhancedResume } from '@/api/enhancerApi';
 import { toast } from 'sonner';
+import { computePreviewScore } from '@/app/(resume)/builder/creation/_lib/computePreviewScore';
 
 const { mockPush } = vi.hoisted(() => ({
   mockPush: vi.fn(),
@@ -23,6 +25,7 @@ const mockRouter = {
 
 vi.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/api/userApi', () => ({
@@ -35,6 +38,7 @@ vi.mock('@/api/resumeApi', () => ({
   downloadResume: vi.fn(),
   getAllResumesUnified: vi.fn(),
   getBuilderScore: vi.fn(),
+  getResumeById: vi.fn(),
 }));
 
 vi.mock('@/api/enhancerApi', () => ({
@@ -170,6 +174,7 @@ vi.mock('@/components/SignUpModal', () => ({
 const mockGetProfile = vi.mocked(getProfile);
 const mockGetAllResumesUnified = vi.mocked(getAllResumesUnified);
 const mockGetBuilderScore = vi.mocked(getBuilderScore);
+const mockGetResumeById = vi.mocked(getResumeById);
 const mockDeleteResume = vi.mocked(deleteResume);
 const mockDownloadResume = vi.mocked(downloadResume);
 const mockDownloadEnhancedResume = vi.mocked(downloadEnhancedResume);
@@ -187,7 +192,10 @@ const builderResume = {
 const enhancedResume = {
   id: 'enhanced-1',
   display_name: 'Uploaded Resume',
-  ats_score: { final_score: 82 },
+  // Some persisted enhancer summaries expose current_score instead of
+  // final_score. The list must use the same compatibility resolver as the
+  // enhancer editor rather than displaying 0%.
+  ats_score: { current_score: 82 },
   updated_at: '2026-01-16T10:00:00.000Z',
   created_at: '2026-01-11T10:00:00.000Z',
 };
@@ -200,11 +208,8 @@ describe('ResumeListPage', () => {
       builder_resumes: [builderResume],
       enhanced_resumes: [enhancedResume],
     } as never);
-    mockGetBuilderScore.mockResolvedValue({
-      resume_id: 'builder-1',
-      score: 74,
-      calculated_at: '2026-01-17T10:00:00.000Z',
-    } as never);
+    mockGetResumeById.mockResolvedValue(builderResume as never);
+    mockGetBuilderScore.mockRejectedValue(new Error('No current server score'));
     mockDeleteResume.mockResolvedValue(undefined as never);
     mockDownloadResume.mockResolvedValue(new Blob(['builder']) as never);
     mockDownloadEnhancedResume.mockResolvedValue(new Blob(['enhanced']) as never);
@@ -235,7 +240,21 @@ describe('ResumeListPage', () => {
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
   });
 
-  it('merges builder and enhanced resumes, then updates builder score in the background', async () => {
+  it('merges builder and enhanced resumes, then updates the builder score from the full resume', async () => {
+    const persistedBuilderResume = {
+      ...builderResume,
+      professional_summary: {
+        summary: builderResume.professionalSummary.summary,
+        target_role: builderResume.professionalSummary.targetRole,
+      },
+      skills: {
+        programmingLanguages: [{ name: 'TypeScript' }, { name: 'Node.js' }],
+        frameworks: [{ name: 'React' }, { name: 'FastAPI' }],
+        softSkills: [{ name: 'Communication' }],
+      },
+    };
+    mockGetResumeById.mockResolvedValueOnce(persistedBuilderResume as never);
+
     render(<ResumeListPage />);
 
     expect(await screen.findByTestId('resume-row-builder-1')).toHaveTextContent('Avery Builder');
@@ -243,12 +262,43 @@ describe('ResumeListPage', () => {
     expect(screen.getByTestId('resume-row-enhanced-1')).toHaveTextContent('82%');
 
     await waitFor(() => {
-      expect(screen.getByTestId('resume-row-builder-1')).toHaveTextContent('74%');
+      expect(screen.getByTestId('resume-row-builder-1')).toHaveTextContent(`${computePreviewScore(persistedBuilderResume as never).score}%`);
     });
     expect(mockGetProfile).toHaveBeenCalledTimes(1);
-    expect(mockGetBuilderScore).toHaveBeenCalledWith('builder-1');
+    expect(mockGetResumeById).toHaveBeenCalledWith('builder-1');
   });
 
+  it('uses a fresh server score for the same resume snapshot', async () => {
+    mockGetBuilderScore.mockResolvedValueOnce({
+      resume_id: 'builder-1',
+      score: 74,
+      calculated_at: '2026-01-16T10:00:00.000Z',
+    } as never);
+
+    render(<ResumeListPage />);
+
+    expect(await screen.findByTestId('resume-row-builder-1')).toHaveTextContent('74%');
+  });
+
+  it('ignores a server score older than the resume content', async () => {
+    mockGetBuilderScore.mockResolvedValueOnce({
+      resume_id: 'builder-1',
+      score: 99,
+      calculated_at: '2026-01-14T10:00:00.000Z',
+    } as never);
+
+    render(<ResumeListPage />);
+
+    expect(await screen.findByTestId('resume-row-builder-1'))
+      .toHaveTextContent(`${computePreviewScore(builderResume as never).score}%`);
+  });
+  it('keeps the compact preview when the full resume cannot be loaded', async () => {
+    mockGetResumeById.mockRejectedValueOnce(new Error('Resume is not ready'));
+
+    render(<ResumeListPage />);
+
+    expect(await screen.findByTestId('resume-row-builder-1')).not.toHaveTextContent('0%');
+  });
   it('shows an empty table state when the API returns no resumes', async () => {
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [],
@@ -280,7 +330,7 @@ describe('ResumeListPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }));
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/templates');
+      expect(mockPush).toHaveBeenCalledWith('/builder/creation/created-resume-1');
     });
     expect(window.localStorage.setItem).toHaveBeenCalledWith('current_resume_id', 'created-resume-1');
     expect(window.localStorage.setItem).toHaveBeenCalledWith(

@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { hasRenderableCustomSectionContent, isRedundantCustomSectionFieldLabel } from "../../_utils/customSectionIdentity";
 import { ResumeData, ResumeStyle } from "../../_context/ResumeContext";
 import { useResume } from "../../_context/ResumeContext";
 import AutoPaginator from "./AutoPaginator";
@@ -609,7 +610,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
       default:
         // Check if it's a custom section
         const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
-        if (customSection && customSection.fields.length > 0) {
+        if (customSection && hasRenderableCustomSectionContent(customSection)) {
           return (
             <section className="mb-4">
               <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>
@@ -625,7 +626,9 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
 
                   return (
                     <div key={field.id} className="mb-2">
-                      <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>
+                      {!isRedundantCustomSectionFieldLabel(customSection, field) && (
+                        <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>
+                      )}
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[])
