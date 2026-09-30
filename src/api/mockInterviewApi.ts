@@ -235,12 +235,6 @@ export interface ReportResponse {
   redo_questions?: { num: number; text: string; score: number; issue: string }[];
 }
 
-export interface ShareReportResponse {
-  share_url: string;
-  token: string;
-  expires_at: string;
-}
-
 // ==================== PHASE 2 — REPORT FUNCTIONS ====================
 
 /**
@@ -249,29 +243,6 @@ export interface ShareReportResponse {
  */
 export const getReport = async (sessionId: string): Promise<ReportResponse> => {
   const response = await httpClient.get<ReportResponse>(`/mock-interview/report/${sessionId}`);
-  return response.data;
-};
-
-/**
- * View a PII-stripped report by public share token (no auth required)
- * GET /api/v1/mock-interview/shared-report/{token}
- */
-export const getSharedReport = async (token: string): Promise<ReportResponse> => {
-  const response = await httpClient.get<ReportResponse>(
-    `/mock-interview/shared-report/${token}`
-  );
-  return response.data;
-};
-
-/**
- * Generate a public share link for a report (7-day TTL)
- * POST /api/v1/mock-interview/report/{session_id}/share
- */
-export const shareReport = async (sessionId: string): Promise<ShareReportResponse> => {
-  const response = await httpClient.post<ShareReportResponse>(
-    `/mock-interview/report/${sessionId}/share`,
-    {} as unknown as Record<string, unknown>
-  );
   return response.data;
 };
 

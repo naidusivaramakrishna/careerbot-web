@@ -44,7 +44,7 @@ export function normalizeOverallScore(report: ReportResponse): number {
   return report.overall_score <= 10 ? Math.round(report.overall_score * 10) : report.overall_score;
 }
 
-// ─── Score breakdown (shared by /report and /shared-report) ──────────────────
+// ─── Score breakdown ────────────────────────────────────────────────────────
 
 export interface ReportDimension {
   key: string;

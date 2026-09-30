@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   },
   createLiveSession: vi.fn(),
   getReport: vi.fn(),
-  shareReport: vi.fn(),
   downloadReportPdf: vi.fn(),
   getLiveSessionState: vi.fn(),
   buildWsUrl: vi.fn((url: string) => `ws://test.local${url}`),
@@ -58,7 +57,6 @@ vi.mock("@/app/(interview)/mock-interview/_context/MockInterviewContext", () => 
 vi.mock("@/api/mockInterviewApi", () => ({
   createLiveSession: mocks.createLiveSession,
   getReport: mocks.getReport,
-  shareReport: mocks.shareReport,
   downloadReportPdf: mocks.downloadReportPdf,
   getLiveSessionState: mocks.getLiveSessionState,
   buildWsUrl: mocks.buildWsUrl,
@@ -480,7 +478,8 @@ describe("LiveInterviewSessionPage", () => {
     expect(MockWebSocket.instances[0].url).toBe("ws://test.local/live/ws-ticket?ticket=ticket-1");
     act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
     expect(screen.getByText(/connected/i)).toBeInTheDocument();
-    expect(screen.getByText("Question 1/6")).toBeInTheDocument();
+    // The total question count is intentionally not shown alongside the number.
+    expect(screen.getByText("Question 1")).toBeInTheDocument();
     expect(screen.queryByText("1/6")).not.toBeInTheDocument();
     expect(screen.getByText("Ananya, AI Interviewer")).toBeInTheDocument();
   }, 15_000);
@@ -493,7 +492,7 @@ describe("LiveInterviewSessionPage", () => {
       ws.open();
       ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
     });
-    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    expect(screen.getByText(/ananya is asking/i)).toBeInTheDocument();
 
     act(() => {
       ws.emit({ type: "interviewer_transcript_delta", text: "Tell me " });
@@ -505,7 +504,7 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByText("Tell me about a difficult project.")).toBeInTheDocument();
 
     act(() => { ws.emit({ type: "turn_complete" }); });
-    expect(screen.queryByText(/interviewer speaking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ananya is asking/i)).not.toBeInTheDocument();
     expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /done speaking/i })).not.toBeInTheDocument();
   });
@@ -519,14 +518,14 @@ describe("LiveInterviewSessionPage", () => {
       ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 20, estimated_duration_m: 20 });
       ws.emit({ type: "question_next", question_text: "Tell me about yourself." });
     });
-    expect(screen.getByText("Question 1/20")).toBeInTheDocument();
-    expect(screen.queryByText("Question 2/20")).not.toBeInTheDocument();
+    expect(screen.getByText("Question 1")).toBeInTheDocument();
+    expect(screen.queryByText("Question 2")).not.toBeInTheDocument();
 
     act(() => { ws.emit({ type: "question_next", question_text: "Why this role?" }); });
-    expect(screen.getByText("Question 2/20")).toBeInTheDocument();
+    expect(screen.getByText("Question 2")).toBeInTheDocument();
   });
 
-  it("streams live transcript while listening and finalizes it when the candidate's turn closes, without sending a retired end_answer", async () => {
+  it("streams live transcript while listening and finalizes it on answer_capture_complete, without sending a retired end_answer", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
@@ -539,7 +538,14 @@ describe("LiveInterviewSessionPage", () => {
     });
     expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
 
+    // candidate_turn_closed is only a VAD/mic boundary now — the candidate may
+    // resume speaking (another item) before the AI decides the answer is done,
+    // so it must NOT flip the phase to "processing" by itself.
     act(() => { ws.emit({ type: "candidate_turn_closed" }); });
+    expect(screen.queryByText(/reviewing answer/i)).not.toBeInTheDocument();
+    expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "answer_capture_complete", final_text: "I worked with a cross functional team" }); });
     expect(screen.getByText(/reviewing answer/i)).toBeInTheDocument();
     expect(screen.getByText("Your answer")).toBeInTheDocument();
     expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
@@ -702,16 +708,16 @@ describe("LiveInterviewSessionPage", () => {
       ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
       ws.emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" });
     });
-    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    expect(screen.getByText(/ananya is asking/i)).toBeInTheDocument();
 
     // Still playing (the mock clock has not reached the end of the scheduled audio).
     act(() => { vi.advanceTimersByTime(3_000); });
-    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    expect(screen.getByText(/ananya is asking/i)).toBeInTheDocument();
 
     // Playback ends: the audio clock passes the scheduled end and stays quiet.
     MockAudioContext.contexts.forEach((c) => { c.currentTime = 100; });
     act(() => { vi.advanceTimersByTime(3_000); });
-    expect(screen.queryByText(/interviewer speaking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ananya is asking/i)).not.toBeInTheDocument();
     expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
   });
 
@@ -723,14 +729,14 @@ describe("LiveInterviewSessionPage", () => {
       ws.open();
       ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
     });
-    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    expect(screen.getByText(/ananya is asking/i)).toBeInTheDocument();
 
     act(() => { ws.emit({ type: "candidate_turn_open" }); });
     expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
 
     // Live transcript alone is enough too (new question -> speaking -> partial).
     act(() => { ws.emit({ type: "question_next", question_text: "Why this role?" }); });
-    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    expect(screen.getByText(/ananya is asking/i)).toBeInTheDocument();
     act(() => { ws.emit({ type: "transcript_partial", text: "Because I enjoy" }); });
     expect(screen.getByText("Because I enjoy")).toBeInTheDocument();
 
@@ -801,7 +807,7 @@ describe("LiveInterviewSessionPage", () => {
     });
 
     expect(screen.queryByRole("dialog", { name: /connection lost/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Question 3/6")).toBeInTheDocument();
+    expect(screen.getByText("Question 3")).toBeInTheDocument();
   });
 
   it("reconnects with a recovery ticket when the connection is interrupted", async () => {
@@ -874,7 +880,6 @@ describe("ReportPage", () => {
     expect(await screen.findByText("Mock Interview Report")).toBeInTheDocument();
     expect(screen.getByText("Strong interview performance.")).toBeInTheDocument();
     expect(screen.getByText("Tell me about teamwork.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /share report/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /download pdf/i })).toBeInTheDocument();
   });
 
@@ -1003,7 +1008,8 @@ describe("ReportPage", () => {
     // Header facts come from the real fields.
     expect(screen.getAllByText("15 min").length).toBeGreaterThan(0);
     expect(screen.getByText("HR interview")).toBeInTheDocument();
-    expect(screen.getByText("Session ended: Question limit reached")).toBeInTheDocument();
+    // The end-reason badge is temporarily disabled (commented out) — must not render.
+    expect(screen.queryByText(/session ended:/i)).not.toBeInTheDocument();
 
     // Backend grade, level and written summary are shown.
     expect(screen.getByText("D")).toBeInTheDocument();
@@ -1075,19 +1081,14 @@ describe("ReportPage", () => {
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
   });
 
-  it("recovers when delayed report succeeds and supports PDF/share actions", async () => {
+  it("recovers when delayed report succeeds and supports PDF download", async () => {
     mocks.params = { sessionId: "eventual-report" };
     mocks.getReport.mockRejectedValueOnce(new Error("404")).mockResolvedValueOnce(report({ report_id: "eventual-report" }));
     mocks.downloadReportPdf.mockResolvedValue(undefined);
-    mocks.shareReport.mockResolvedValue({ share_url: "https://careerbot.test/shared/report-token", token: "report-token", expires_at: "2026-07-24T00:00:00Z" });
     const ReportPage = await importReportPage();
     render(<ReportPage />);
     expect(await screen.findByText("Mock Interview Report", {}, { timeout: 2500 })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(mocks.downloadReportPdf).toHaveBeenCalledWith("eventual-report"));
-    fireEvent.click(screen.getByRole("button", { name: /share report/i }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /generate link/i }));
-    await waitFor(() => expect(mocks.shareReport).toHaveBeenCalledWith("eventual-report"));
   });
 });

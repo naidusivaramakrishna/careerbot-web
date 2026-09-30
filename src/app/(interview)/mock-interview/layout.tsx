@@ -17,9 +17,7 @@ export default function MockInterviewLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isPrivateMockRoute =
-    pathname !== "/mock-interview" &&
-    !pathname.startsWith("/mock-interview/shared-report");
+  const isPrivateMockRoute = pathname !== "/mock-interview";
 
   return (
     <MockInterviewProvider>

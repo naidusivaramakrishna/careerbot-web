@@ -415,6 +415,8 @@ export default function LiveInterviewSessionPage() {
   const interviewer = useMemo<MockInterviewer>(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
+  const phaseRef = useRef<InterviewPhase>("connecting");
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
   const [sessionType, setSessionType] = useState("Live");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [visibleQuestionText, setVisibleQuestionText] = useState("");
@@ -448,7 +450,15 @@ export default function LiveInterviewSessionPage() {
   // candidate is still legitimately mid-answer across a pause.
   const ANSWER_CAPTURE_FALLBACK_MS = 6000;
   const answerCaptureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isAnswerCaptureFallback, setIsAnswerCaptureFallback] = useState(false);
+  const [isAnswerCaptureFallback, setIsAnswerCaptureFallbackState] = useState(false);
+  // Mirrored into a ref so handleWsMessage (a stable useCallback) can read the
+  // current value without it being a dependency — same pattern as
+  // avatarAudioLiveRef / isAudioMutedRef elsewhere in this file.
+  const isAnswerCaptureFallbackRef = useRef(false);
+  const setIsAnswerCaptureFallback = useCallback((value: boolean) => {
+    isAnswerCaptureFallbackRef.current = value;
+    setIsAnswerCaptureFallbackState(value);
+  }, []);
   const clearAnswerCaptureTimer = useCallback(() => {
     if (answerCaptureTimerRef.current) clearTimeout(answerCaptureTimerRef.current);
     answerCaptureTimerRef.current = null;
@@ -457,10 +467,16 @@ export default function LiveInterviewSessionPage() {
     clearAnswerCaptureTimer();
     answerCaptureTimerRef.current = setTimeout(() => {
       answerCaptureTimerRef.current = null;
+      // Defensive root-cause guard: only force "processing" if we're still
+      // genuinely mid-answer. The session may have completed, paused, or
+      // moved on for reasons unrelated to this specific answer while the
+      // timer was ticking (interview_complete, session_paused, a fresh
+      // question) — this must never override any of those states.
+      if (phaseRef.current !== "listening") return;
       setIsAnswerCaptureFallback(true);
       setPhase("processing");
     }, ANSWER_CAPTURE_FALLBACK_MS);
-  }, [clearAnswerCaptureTimer]);
+  }, [clearAnswerCaptureTimer, setIsAnswerCaptureFallback]);
   useEffect(() => () => clearAnswerCaptureTimer(), [clearAnswerCaptureTimer]);
   const [wsConnected, setWsConnected] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
@@ -673,9 +689,6 @@ export default function LiveInterviewSessionPage() {
       videoRef.current.srcObject = cameraStream;
     }
   }, [cameraStream]);
-
-  const phaseRef = useRef<InterviewPhase>("connecting");
-  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // Track fullscreen and guide recovery if the user exits mid-interview
   useEffect(() => {
@@ -1055,6 +1068,10 @@ export default function LiveInterviewSessionPage() {
         setServerError(null);
         setWsConnected(true);
         setShowReconnectModal(false);
+        // A fallback timer scheduled before the disconnect is now stale —
+        // the resumed state below decides the phase fresh.
+        clearAnswerCaptureTimer();
+        setIsAnswerCaptureFallback(false);
         // If the candidate was mid-answer when the connection dropped, the AI
         // is waiting on them — resume straight into listening.
         setPhase(msg.pending_answer ? "listening" : "ai-talking");
@@ -1119,8 +1136,15 @@ export default function LiveInterviewSessionPage() {
       case "candidate_turn_open":
         setIsCandidateSpeaking(true);
         // The candidate is speaking, so it is their turn even if the server
-        // never sent turn_complete. Never overrides processing/completed.
-        setPhase((p) => (p === "ai-talking" ? "listening" : p));
+        // never sent turn_complete. Safe to pull back from "ai-talking" always;
+        // only pull back from "processing" when that state was forced by OUR
+        // fallback timer (isAnswerCaptureFallbackRef) — a legitimate
+        // answer_capture_complete must never be undone by a stray/late event.
+        setPhase((p) => (p === "ai-talking" || (p === "processing" && isAnswerCaptureFallbackRef.current) ? "listening" : p));
+        if (isAnswerCaptureFallbackRef.current) setIsAnswerCaptureFallback(false);
+        // The candidate is demonstrably still active — postpone the fallback
+        // deadline exactly like transcript_final/candidate_turn_closed do.
+        scheduleAnswerCaptureFallback();
         break;
       case "candidate_turn_closed":
         setIsCandidateSpeaking(false);
@@ -1137,7 +1161,12 @@ export default function LiveInterviewSessionPage() {
         setServerError(null);
         setTranscriptionError(false);
         // A live transcript piece means the candidate is answering (see candidate_turn_open).
-        setPhase((p) => (p === "ai-talking" ? "listening" : p));
+        // Same fallback-only recovery rule as candidate_turn_open above.
+        setPhase((p) => (p === "ai-talking" || (p === "processing" && isAnswerCaptureFallbackRef.current) ? "listening" : p));
+        if (isAnswerCaptureFallbackRef.current) setIsAnswerCaptureFallback(false);
+        // Still-arriving partials prove the candidate hasn't gone silent —
+        // postpone the fallback deadline the same way finals/turn-closed do.
+        scheduleAnswerCaptureFallback();
         // The backend sends only the NEW piece in each partial, so pieces of the
         // same item_id are appended. A different item_id starts a fresh caption.
         const itemId = msg.item_id ?? null;
@@ -1199,6 +1228,10 @@ export default function LiveInterviewSessionPage() {
         break;
       case "interview_complete":
         disconnectAvatarRoom();
+        // The session can end mid-answer (early ending, no answer_capture_complete
+        // in between) with a fallback timer still ticking — clear it so it can't
+        // fire later and overwrite the completed screen with "processing".
+        clearAnswerCaptureTimer();
         setCompletedReportId(msg.report_id);
         setPhase("completed");
         break;
@@ -1218,6 +1251,10 @@ export default function LiveInterviewSessionPage() {
       case "session_paused":
         setWsConnected(false);
         setShowReconnectModal(true);
+        // A fallback timer scheduled before the pause must not fire while
+        // reconnecting — session_resumed (or a fresh connect) decides the
+        // phase fresh once the session is actually back.
+        clearAnswerCaptureTimer();
         // Capture token so the reconnect path skips the HTTP /state round-trip
         if (msg.reconnect_token) reconnectTokenRef.current = msg.reconnect_token;
         // Auto-reconnect immediately — the server is about to close the WS;
@@ -1236,7 +1273,7 @@ export default function LiveInterviewSessionPage() {
       default:
         break;
     }
-  }, [showScoreToast, disconnectAvatarRoom, clearPartialTranscript, clearAnswerCaptureTimer, scheduleAnswerCaptureFallback]);
+  }, [showScoreToast, disconnectAvatarRoom, clearPartialTranscript, clearAnswerCaptureTimer, scheduleAnswerCaptureFallback, setIsAnswerCaptureFallback]);
 
   const openWebSocket = useCallback((wsUrl: string) => {
     if (wsRef.current) {

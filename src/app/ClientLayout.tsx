@@ -114,11 +114,7 @@ export default function ClientLayout({
     <TenantProvider>
       <Toaster richColors position="bottom-right" />
       <VerificationRecovery />
-<<<<<<< HEAD
-      <ChatbotWidget />
-=======
       {isChatbotAllowed && <ChatbotWidget />}
->>>>>>> ce869cd1a2e805027de7c5c7f41788182b99b9b2
       {children}
     </TenantProvider>
   );
