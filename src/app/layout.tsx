@@ -1,27 +1,13 @@
 // src/app/layout.tsx
 import React from "react";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+// Inter + JetBrains Mono for the entire UI — bundled in node_modules via
+// @fontsource-variable, so the build never fetches fonts over the network.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 // import "@/app/(jobs)/jobmatch/_components/_styles/docx-preview.css";
 import ClientLayout from "./ClientLayout";
-
-// Inter for the entire UI â€” self-hosted by next/font at build time
-// (no runtime requests to Google).
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-sans",
-  display: "optional",
-  adjustFontFallback: true,
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Careerbot",
@@ -41,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="theme-color" content="#ffffff" />

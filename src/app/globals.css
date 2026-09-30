@@ -2,11 +2,15 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  /* Self-hosted via @fontsource-variable — bundled in node_modules, no
+     network fetch to Google Fonts at build time (see src/app/layout.tsx). */
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   /* --font-montserrat kept as alias so interview/cover-letter pages that reference it still resolve */
   --font-montserrat: var(--font-sans, system-ui, sans-serif);
 }
 
-/* Base Typography — Inter across the UI (self-hosted via next/font) */
+/* Base Typography — Inter across the UI (self-hosted via @fontsource-variable) */
 body {
   font-family: var(--font-sans, system-ui, sans-serif);
   font-weight: 400;
