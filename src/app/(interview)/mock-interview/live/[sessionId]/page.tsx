@@ -3,11 +3,6 @@
 import Image from "next/image";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
-// Type-only — the actual livekit-client module (a full WebRTC SDK) is loaded
-// dynamically inside joinAvatar() below, only when an avatar session exists.
-// avatar: null is the common case (feature off by default per environment),
-// so this keeps that SDK out of the bundle everyone pays for by default.
-import type { Room, RemoteTrack } from "livekit-client";
 import {
   buildWsUrl,
   getLiveSessionState,
@@ -15,8 +10,13 @@ import {
   WsServerMessage,
   WsClientMessage,
   LiveCreateResponse,
-  LiveAvatarSession,
+  SimliAvatarSession,
 } from "@/api/mockInterviewApi";
+// Type-only — the actual simli-client module (a full WebRTC SDK) is loaded
+// dynamically inside joinAvatar() below, only when an avatar session exists.
+// avatar: null is the common case (feature off by default per environment),
+// so this keeps that SDK out of the bundle everyone pays for by default.
+import type { SimliClient } from "simli-client";
 import { MOCK_INTERVIEWERS, isValidInterviewerIndex, pickInterviewerIndex } from "../../_lib/interviewers";
 import type { MockInterviewer } from "../../_lib/interviewers";
 import { useMockInterview } from "../../_context/MockInterviewContext";
@@ -349,6 +349,34 @@ function decodeBase64(b64: string): Uint8Array {
 
 const INTERVIEWER_AUDIO_SAMPLE_RATE = 24000;
 
+// mock-interview-simli-avatar.txt §5: Simli has no ready-made resampler and
+// expects a different rate (currently 16 kHz) than interviewer_audio_delta's
+// fixed 24 kHz. Linear interpolation is what the doc calls for — good enough
+// for speech, and avoids the aliasing a naive decimation would produce.
+// Operates directly on Int16 PCM since the delta arrives that way already
+// (see decodeBase64 / scheduleInterviewerAudioDelta above).
+function resamplePcm16(input: Int16Array, fromRate: number, toRate: number): Int16Array {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const outLen = Math.floor(input.length / ratio);
+  const output = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const lo = Math.floor(pos);
+    const hi = Math.min(lo + 1, input.length - 1);
+    output[i] = input[lo] + (input[hi] - input[lo]) * (pos - lo);
+  }
+  return output;
+}
+
+// mock-interview-simli-avatar.txt §3: audio_input_format is currently always
+// "pcm16;rate=16000" — parse the rate rather than hardcoding it, since a
+// future Simli account/config could change it.
+function parseSimliTargetRate(audioInputFormat: string): number {
+  const match = /rate=(\d+)/.exec(audioInputFormat);
+  return match ? parseInt(match[1], 10) : 16000;
+}
+
 // Candidate partial captions with no transcript_final after this long are dropped.
 const PARTIAL_STALE_MS = 5000;
 
@@ -420,6 +448,14 @@ export default function LiveInterviewSessionPage() {
   const [sessionType, setSessionType] = useState("Live");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [visibleQuestionText, setVisibleQuestionText] = useState("");
+  // question_next/session_resumed set the full question text eagerly (a
+  // fallback for sessions without transcript-delta streaming). If
+  // interviewer_transcript_delta then re-streams the same question from
+  // scratch, appending onto that eager full text produces "old text + new
+  // fragment" until transcript_final replaces it. This flag makes the first
+  // delta after a fresh question REPLACE instead of append, so streaming
+  // starts clean while sessions with no deltas at all keep the eager text.
+  const questionTextStreamStartedRef = useRef(false);
   const [questionNumber, setQuestionNumber] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -486,37 +522,40 @@ export default function LiveInterviewSessionPage() {
   const [completedReportId, setCompletedReportId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // ─── Avatar (interview-avatar.txt) ──────────────────────────────────────
+  // ─── Avatar (mock-interview-simli-avatar.txt) ───────────────────────────
   // Optional talking-face layer on top of the same interviewer_audio_delta
   // stream. avatar: null (the default) is normal — this whole subsystem then
   // stays in "fallback" and the interview behaves exactly as without it.
-  type AvatarConnection = "connecting" | "live" | "audio-blocked" | "fallback";
+  // Simli is the only avatar vendor (LiveAvatar/HeyGen has been removed).
+  type AvatarConnection = "connecting" | "live" | "fallback";
   const [avatarConnection, setAvatarConnection] = useState<AvatarConnection>("fallback");
   const [, setAvatarActivity] = useState<"idle" | "listening" | "talking">("idle");
   const avatarVideoElRef = useRef<HTMLVideoElement | null>(null);
-  const avatarRoomRef = useRef<Room | null>(null);
-  const avatarAudioElRef = useRef<HTMLMediaElement | null>(null); // attach() returns HTMLMediaElement
-  // handleWsMessage reads this via ref, not avatarConnection state, to stay
-  // dependency-free (same reasoning as questionNumberRef / isAudioMutedRef).
-  const avatarAudioLiveRef = useRef(false);
+
+  // Simli has no server-side audio bridge — the browser feeds the
+  // interviewer's audio into it directly (mock-interview-simli-avatar.txt §5).
+  // Its own <audio> element is kept muted for that reason — see the JSX below.
+  const simliClientRef = useRef<SimliClient | null>(null);
+  const simliAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const simliTargetRateRef = useRef(16000); // overwritten from avatar.audio_input_format
+
   const { consumePendingAvatarSession } = useMockInterview();
 
-  const disconnectAvatarRoom = useCallback(() => {
-    avatarRoomRef.current?.disconnect();
-    avatarRoomRef.current = null;
-    avatarAudioElRef.current?.remove();
-    avatarAudioElRef.current = null;
-    avatarAudioLiveRef.current = false;
+  // There is no backend stop endpoint for Simli (mock-interview-simli-avatar.txt
+  // §9) — the browser closing the connection is the only thing that ends it.
+  const disconnectAvatar = useCallback(() => {
+    simliClientRef.current?.stop().catch(() => {});
+    simliClientRef.current = null;
   }, []);
 
-  const joinAvatar = useCallback(async (avatar: LiveAvatarSession) => {
+  const joinAvatar = useCallback(async (avatar: SimliAvatarSession) => {
     setAvatarConnection("connecting");
+    simliTargetRateRef.current = parseSimliTargetRate(avatar.audio_input_format);
 
-    let Room: typeof import("livekit-client").Room;
-    let RoomEvent: typeof import("livekit-client").RoomEvent;
-    let Track: typeof import("livekit-client").Track;
+    let SimliClientCtor: typeof import("simli-client").SimliClient;
+    let LogLevel: typeof import("simli-client").LogLevel;
     try {
-      ({ Room, RoomEvent, Track } = await import("livekit-client"));
+      ({ SimliClient: SimliClientCtor, LogLevel } = await import("simli-client"));
     } catch {
       // Chunk failed to load (offline, blocked, etc.) — same silent fallback
       // as any other avatar-unavailable path.
@@ -524,57 +563,56 @@ export default function LiveInterviewSessionPage() {
       return;
     }
 
-    const room = new Room({ adaptiveStream: true });
-    avatarRoomRef.current = room;
+    const videoEl = avatarVideoElRef.current;
+    const audioEl = simliAudioElRef.current;
+    if (!videoEl || !audioEl) {
+      setAvatarConnection("fallback");
+      return;
+    }
 
-    room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-      if (track.kind === Track.Kind.Video) {
-        if (avatarVideoElRef.current) track.attach(avatarVideoElRef.current);
-        setAvatarConnection((s) => (s === "connecting" ? "live" : s));
-      }
-      if (track.kind === Track.Kind.Audio) {
-        const el = track.attach();
-        el.autoplay = true;
-        document.body.appendChild(el);
-        avatarAudioElRef.current = el;
-        avatarAudioLiveRef.current = true; // from now on, ignore interviewer_audio_delta
-        if (room.canPlaybackAudio === false) setAvatarConnection("audio-blocked");
-      }
-    });
+    // simli-client's LiveKit transport attaches the incoming audio track via
+    // livekit-client's attachToElement(), which unconditionally sets
+    // `element.muted = false` whenever the stream has an audio track (to make
+    // autoplay work) — this silently overrides the JSX `muted` attribute the
+    // instant the track attaches. Re-assert it on every change so playDelta
+    // stays the single audible source (mock-interview-simli-avatar.txt §5).
+    audioEl.muted = true;
+    audioEl.addEventListener("volumechange", () => { audioEl.muted = true; });
 
-    // Autoplay can be blocked or unblocked at any point (e.g. after a tab
-    // switch) — react to it rather than only checking once on attach.
-    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
-      setAvatarConnection((s) => {
-        if (!room.canPlaybackAudio) return "audio-blocked";
-        return s === "audio-blocked" ? "live" : s;
-      });
-    });
+    const client = new SimliClientCtor(
+      avatar.session_token,
+      videoEl,
+      audioEl,
+      null, // iceServers — null selects the LiveKit transport internally
+      LogLevel.ERROR,
+      "livekit",
+    );
+    simliClientRef.current = client;
 
-    room.on(RoomEvent.Disconnected, () => {
-      avatarAudioLiveRef.current = false;
+    client.on("start", () => setAvatarConnection((s) => (s === "connecting" ? "live" : s)));
+    client.on("speaking", () => setAvatarActivity("talking"));
+    client.on("silent", () => setAvatarActivity("idle"));
+    client.on("error", (detail) => {
+      console.warn("Simli avatar error, continuing audio-only", detail);
+      // No reconnect path for Simli (mock-interview-simli-avatar.txt §6/§9) —
+      // treat it as gone for the rest of this session.
+      simliClientRef.current = null;
       setAvatarConnection("fallback");
     });
 
     try {
-      await room.connect(avatar.livekit_url, avatar.livekit_client_token);
-    } catch {
-      // "avatar unavailable, continuing audio-only" — never surfaced as an error.
-      avatarAudioLiveRef.current = false;
+      await client.start();
+    } catch (err) {
+      console.warn("Simli avatar failed to connect, continuing audio-only", err);
+      simliClientRef.current = null;
       setAvatarConnection("fallback");
     }
-  }, []);
-
-  const handleEnableAvatarSound = useCallback(() => {
-    avatarRoomRef.current?.startAudio()
-      .then(() => setAvatarConnection("live"))
-      .catch(() => {});
   }, []);
 
   // Consume the avatar session handed off from the "starting" page, once.
   // Cached in a ref (not just re-read from context) so a React StrictMode
   // double-mount doesn't lose it — same pattern as initialWsUrlRef below.
-  const consumedAvatarRef = useRef<{ done: boolean; avatar: LiveAvatarSession | null }>({ done: false, avatar: null });
+  const consumedAvatarRef = useRef<{ done: boolean; avatar: SimliAvatarSession | null }>({ done: false, avatar: null });
   useEffect(() => {
     if (!sessionId) return;
     if (!consumedAvatarRef.current.done) {
@@ -589,9 +627,9 @@ export default function LiveInterviewSessionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  // Disconnect on unmount (leaving the page) — interview_complete and
-  // avatar_unavailable disconnect it explicitly from handleWsMessage.
-  useEffect(() => () => disconnectAvatarRoom(), [disconnectAvatarRoom]);
+  // Disconnect on unmount (leaving the page) — interview_complete disconnects
+  // it explicitly from handleWsMessage.
+  useEffect(() => () => disconnectAvatar(), [disconnectAvatar]);
 
   useEffect(() => { isAudioMutedRef.current = isAudioMuted; }, [isAudioMuted]);
 
@@ -1048,6 +1086,7 @@ export default function LiveInterviewSessionPage() {
         setServerError(null);
         setWsConnected(true);
         setVisibleQuestionText("");
+        questionTextStreamStartedRef.current = false;
         lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
         break;
@@ -1064,6 +1103,7 @@ export default function LiveInterviewSessionPage() {
         if (msg.current_question) {
           setCurrentQuestion({ number: msg.questions_asked + 1, text: msg.current_question });
           setVisibleQuestionText(msg.current_question);
+          questionTextStreamStartedRef.current = false;
         }
         setServerError(null);
         setWsConnected(true);
@@ -1080,11 +1120,9 @@ export default function LiveInterviewSessionPage() {
       case "interviewer_audio_delta": {
         lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
-        // The server always sends these whether or not the avatar is up, so
-        // it can switch instantly if the avatar drops. While the avatar's
-        // LiveKit audio track is live, it IS this same voice — playing both
-        // would double it, slightly out of step. See interview-avatar.txt §5.
-        if (avatarAudioLiveRef.current) break;
+        // The server always sends these whether or not the avatar is up.
+        // playDelta is always the single audible source — Simli's own audio
+        // output is deliberately muted (mock-interview-simli-avatar.txt §5).
         if (!interviewerAudioPlayerRef.current) {
           interviewerAudioPlayerRef.current = createInterviewerAudioPlayer();
           if (interviewerAudioPlayerRef.current) {
@@ -1092,13 +1130,34 @@ export default function LiveInterviewSessionPage() {
           }
         }
         const player = interviewerAudioPlayerRef.current;
-        if (!player) break;
-        scheduleInterviewerAudioDelta(player, msg.audio_base64);
+        if (player) scheduleInterviewerAudioDelta(player, msg.audio_base64);
+
+        // Simli has no server-side audio bridge (mock-interview-simli-avatar.txt
+        // §2/§5) — forward the same delta into it so it can lip-sync. This is
+        // additive to, never a replacement for, playDelta above: playDelta
+        // stays the single audible source; Simli's own <audio> element is
+        // deliberately muted (see the JSX below).
+        if (simliClientRef.current) {
+          const pcm24k = decodeBase64(msg.audio_base64);
+          const samples = new Int16Array(pcm24k.buffer, pcm24k.byteOffset, pcm24k.byteLength >> 1);
+          const pcm16k = resamplePcm16(samples, INTERVIEWER_AUDIO_SAMPLE_RATE, simliTargetRateRef.current);
+          simliClientRef.current.sendAudioData(new Uint8Array(pcm16k.buffer));
+        }
         break;
       }
       case "interviewer_transcript_delta":
         setServerError(null);
-        setVisibleQuestionText((prev) => prev + msg.text);
+        // The first delta for a question REPLACES whatever question_next/
+        // session_resumed eagerly pre-filled (their full text was only a
+        // fallback for sessions without delta streaming) — appending onto it
+        // here would show "old text" + "new fragment" concatenated together.
+        // Subsequent deltas for the same question append normally.
+        if (!questionTextStreamStartedRef.current) {
+          questionTextStreamStartedRef.current = true;
+          setVisibleQuestionText(msg.text);
+        } else {
+          setVisibleQuestionText((prev) => prev + msg.text);
+        }
         break;
       case "interviewer_transcript_final":
         setServerError(null);
@@ -1127,6 +1186,10 @@ export default function LiveInterviewSessionPage() {
         clearPartialTranscript();
         setTranscriptionError(false);
         setVisibleQuestionText(text);
+        // text is a fallback for sessions without delta streaming — if
+        // interviewer_transcript_delta re-streams this same question from
+        // scratch, its first chunk must replace this, not append to it.
+        questionTextStreamStartedRef.current = false;
         lastInterviewerActivityRef.current = Date.now();
         clearAnswerCaptureTimer();
         setIsAnswerCaptureFallback(false);
@@ -1227,26 +1290,13 @@ export default function LiveInterviewSessionPage() {
         setIsSessionClosing(true);
         break;
       case "interview_complete":
-        disconnectAvatarRoom();
+        disconnectAvatar();
         // The session can end mid-answer (early ending, no answer_capture_complete
         // in between) with a fallback timer still ticking — clear it so it can't
         // fire later and overwrite the completed screen with "processing".
         clearAnswerCaptureTimer();
         setCompletedReportId(msg.report_id);
         setPhase("completed");
-        break;
-      // Purely presentational — safe to ignore, but a good "I'm listening" cue.
-      case "avatar_state":
-        setAvatarActivity(msg.state);
-        // "listening" means the AI detected the candidate speaking.
-        if (msg.state === "listening") setPhase((p) => (p === "ai-talking" ? "listening" : p));
-        break;
-      // The avatar never returns in the same session — switch to the audio
-      // deltas and show no error, per interview-avatar.txt §6.
-      case "avatar_unavailable":
-        avatarAudioLiveRef.current = false;
-        setAvatarConnection("fallback");
-        disconnectAvatarRoom();
         break;
       case "session_paused":
         setWsConnected(false);
@@ -1273,7 +1323,7 @@ export default function LiveInterviewSessionPage() {
       default:
         break;
     }
-  }, [showScoreToast, disconnectAvatarRoom, clearPartialTranscript, clearAnswerCaptureTimer, scheduleAnswerCaptureFallback, setIsAnswerCaptureFallback]);
+  }, [showScoreToast, disconnectAvatar, clearPartialTranscript, clearAnswerCaptureTimer, scheduleAnswerCaptureFallback, setIsAnswerCaptureFallback]);
 
   const openWebSocket = useCallback((wsUrl: string) => {
     if (wsRef.current) {
@@ -1627,24 +1677,31 @@ export default function LiveInterviewSessionPage() {
               <section
                 className="relative min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)] lg:min-h-0"
               >
-                {/* Live avatar (interview-avatar.txt). Element stays mounted the
-                    whole time so LiveKit has a target to attach the track to
-                    before it arrives; only shown once video is actually live.
-                    Plain inset-0 cover — not the static photo's crop frame
-                    below, which is calibrated to that PNG's exact pixels. */}
+                {/* Live avatar (mock-interview-simli-avatar.txt). Element stays
+                    mounted the whole time so Simli has a target to attach the
+                    track to before it arrives; only shown once video is
+                    actually live. object-top: Simli's face_id output frames
+                    the subject with headroom above, so a centered crop leaves
+                    the face too low — bias the crop upward, same convention
+                    as the static fallback photo below. */}
                 <video
                   ref={avatarVideoElRef}
                   autoPlay
                   playsInline
                   muted
-                  className={`absolute inset-0 h-full w-full object-cover ${
-                    avatarConnection === "live" || avatarConnection === "audio-blocked" ? "block" : "hidden"
+                  className={`absolute inset-0 h-full w-full object-cover object-top ${
+                    avatarConnection === "live" ? "block" : "hidden"
                   }`}
                 />
+                {/* Simli's constructor requires a real, already-mounted <audio>
+                    element to render into (mock-interview-simli-avatar.txt §4).
+                    Kept muted the whole time — playDelta stays the single
+                    audible source; see the interviewer_audio_delta handler. */}
+                <audio ref={simliAudioElRef} autoPlay muted className="hidden" />
 
                 {/* Fallback shown when there's no avatar at all, or while it's
                     connecting / down. */}
-                {avatarConnection !== "live" && avatarConnection !== "audio-blocked" && (
+                {avatarConnection !== "live" && (
                   <div className="absolute inset-0 bg-gray-900">
                     <Image
                       src={interviewer.src}
@@ -1669,15 +1726,6 @@ export default function LiveInterviewSessionPage() {
                   </div>
                 )}
 
-                {avatarConnection === "audio-blocked" && (
-                  <button
-                    onClick={handleEnableAvatarSound}
-                    className="absolute left-1/2 top-14 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-[#2557a7] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm backdrop-blur-md hover:bg-[#1e4a8f]"
-                  >
-                    <Volume2 size={12} />
-                    Tap to enable sound
-                  </button>
-                )}
 
 
                 <div className="absolute bottom-4 left-4 max-w-[min(380px,calc(100%-2rem))] rounded-lg border border-white/15 bg-black/50 px-4 py-3 text-white shadow-xl backdrop-blur-md">
