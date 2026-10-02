@@ -268,6 +268,20 @@ function reconcileServerSuggestions(
 // Array-of-items sections whose entries carry an optional backend `id`.
 // syncEnhancedResumeData uses this list to avoid blindly overwriting a
 // section with the server's copy -- see mergeSectionPreservingLocalIdLess.
+//
+// achievements and languages need the id-less check to be content-aware, not
+// to be dropped from this list. The parser/AI service returns both as plain
+// strings for most resumes (see their mapping branches in resumeMappers.ts),
+// and that string branch never attaches an id -- so an already-saved entry
+// looks exactly like a brand-new not-yet-saved local one. Keeping every
+// id-less local entry re-appended all of the resume's own achievements onto
+// themselves whenever any OTHER section was saved (duplicated in the live
+// preview only; export reads straight from the backend and bypasses this
+// reconciliation). Dropping the two sections from this list instead swaps
+// that for the opposite bug: an achievement the user has typed but not saved
+// yet is silently discarded by the next unrelated sync. So both stay listed
+// and mergeSectionPreservingLocalIdLess compares content -- see the
+// contentKey() note there.
 const ID_KEYED_ARRAY_SECTIONS = [
   "education", "workExperience", "projects", "certifications", "achievements",
   "volunteering", "references", "internships", "awards", "hobbies",
@@ -291,14 +305,31 @@ const ID_KEYED_ARRAY_SECTIONS = [
  * call sites -- apply_fix, delete_fix, autosave, explicit save, GET -- to
  * do that reliably everywhere).
  */
+/** Comparable form of one section entry, used only to recognise a local
+ * entry that is a re-mapped copy of an entry the server just sent back.
+ * Keys are sorted because the server copy is re-mapped on every sync and
+ * need not preserve the local object's key order. Sections whose entries
+ * carry a backend id never reach this test; it exists for achievements and
+ * languages, which arrive as plain strings and so are mapped to id-less
+ * objects whether or not they are already saved. If two entries differ in
+ * any field the comparison fails and the local copy is kept -- erring toward
+ * the duplicate, never toward discarding something the user typed. */
+function contentKey(item: unknown): string {
+  if (!item || typeof item !== "object") return JSON.stringify(item ?? null);
+  const record = item as Record<string, unknown>;
+  return JSON.stringify(Object.keys(record).sort().map((key) => [key, record[key]]));
+}
+
 function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
   serverItems: unknown,
   localItems: unknown,
 ): unknown {
   if (!Array.isArray(serverItems)) return serverItems;
   if (!Array.isArray(localItems)) return serverItems;
+  const serverContent = new Set((serverItems as unknown[]).map(contentKey));
   const localIdLess = (localItems as T[]).filter(
-    (item) => item && typeof item === "object" && !item.id && !item._id,
+    (item) => item && typeof item === "object" && !item.id && !item._id
+      && !serverContent.has(contentKey(item)),
   );
   return localIdLess.length > 0 ? [...serverItems, ...localIdLess] : serverItems;
 }

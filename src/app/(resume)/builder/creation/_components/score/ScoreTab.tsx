@@ -8,6 +8,10 @@ import { useResume } from "../../_context/ResumeContext";
 import { useResumeScorePreview } from "../../_hooks/useResumeScorePreview";
 import { CheckCircle2, ChevronDown, Clock, Loader2, Pencil, RefreshCw, Undo2, Zap } from "lucide-react";
 import { getEnhancedCurrentScore } from "../../_utils/enhancedScore";
+import {
+  isBulkAutoFixSuggestion,
+  withoutPendingChildrenOfFixedBulkSuggestions,
+} from "../../_utils/enhancedSuggestionGroups";
 import { getScoreSectionAction } from "../../_utils/scoreSectionRouting";
 
 const AUTO_CALC_THRESHOLD = 7;
@@ -72,27 +76,27 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
   const breakdown = enhancedAtsScore.section_breakdown ?? {};
   const score = getEnhancedCurrentScore(enhancedAtsScore);
   const scoreColor = tier(score);
-  const trackedSuggestions = enhancedSuggestions.filter((suggestion) => {
+  const visibleSuggestions = withoutPendingChildrenOfFixedBulkSuggestions(enhancedSuggestions);
+  const trackedSuggestions = visibleSuggestions.filter((suggestion) => {
     if (suggestion.status !== "pending" && suggestion.status !== "fixed") return false;
     // A stale bulk action has no remaining server IDs after its concrete
     // recommendations are already fixed. This applies to every ATS section
     // (for example, Leadership bullets and Keywords). Hiding it prevents a
     // dead Auto Fix click and does not hide any pending individual finding.
-    const isBulkBulletAction = suggestion.fix_type === "auto"
-      && /^(?:apply|add)\s+all(?:\s+at\s+once)?\b/i.test(suggestion.message);
-    if (!isBulkBulletAction) return true;
+    const isBulkBulletAction = isBulkAutoFixSuggestion(suggestion);
+    if (!isBulkBulletAction || suggestion.status === "fixed") return true;
     const sectionToken = normalizedSectionToken(suggestion.section);
-    const hasFixedPeer = enhancedSuggestions.some((item) =>
+    const hasFixedPeer = visibleSuggestions.some((item) =>
       item.id !== suggestion.id
       && normalizedSectionToken(item.section) === sectionToken
       && item.status === "fixed",
     );
-    const hasPendingIndividualAutoFix = enhancedSuggestions.some((item) =>
+    const hasPendingIndividualAutoFix = visibleSuggestions.some((item) =>
       item.id !== suggestion.id
       && normalizedSectionToken(item.section) === sectionToken
       && item.status === "pending"
       && item.fix_type === "auto"
-      && !/^(?:apply|add)\s+all(?:\s+at\s+once)?\b/i.test(item.message),
+      && !isBulkAutoFixSuggestion(item),
     );
     return !hasFixedPeer || hasPendingIndividualAutoFix;
   });
@@ -309,8 +313,8 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
     </div>
   );
 }
-export default function ATSScorePanel({ onFixNow, compact = false }: { onFixNow?: (section: string, entryIndex?: number) => void; compact?: boolean } = {}) {
-  const { resumeData, resumeSource, completionStatus } = useResume();
+export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIndex?: number) => void; compact?: boolean } = {}) {
+  const { resumeData, resumeId: activeResumeId, resumeSource, completionStatus } = useResume();
   const { canonicalScore, canonicalStatus, lastCalculatedAt, setCanonicalScore, setCanonicalStatus, markScoreStale } = useScore();
 
   const [isCalculating, setIsCalculating] = useState(false);
@@ -329,7 +333,7 @@ export default function ATSScorePanel({ onFixNow, compact = false }: { onFixNow?
   useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
 
   const handleCalculateScore = async () => {
-    const resumeId = localStorage.getItem("current_resume_id");
+    const resumeId = activeResumeId ?? localStorage.getItem("current_resume_id");
     if (!resumeId || resumeId === "null" || resumeId === "undefined") {
       toast.error("No resume found. Please create a resume first.");
       return;
@@ -362,6 +366,16 @@ export default function ATSScorePanel({ onFixNow, compact = false }: { onFixNow?
         toast.error("Score calculation timed out.");
       }
     } catch (err) {
+      // 422 here means one specific thing: the score service validated the
+      // resume and refused to score it yet (not enough content). It is an
+      // expected response, not a failure, so it does not become a visible
+      // error -- the live client-side preview is still a valid number. Every
+      // other status keeps the error pill. Mount-guarded like the branch
+      // below: this runs after an await and the panel may be gone.
+      if ((err as { response?: { status?: number } })?.response?.status === 422) {
+        if (isMountedRef.current) setCanonicalStatus("not_calculated");
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Failed to calculate score";
       if (isMountedRef.current) { setError(msg); setCanonicalStatus("error"); toast.error(msg); }
     } finally {
@@ -383,11 +397,21 @@ export default function ATSScorePanel({ onFixNow, compact = false }: { onFixNow?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, canonicalStatus, isEnhanced]);
 
-  if (isEnhanced) return <EnhancedScorePanel onFixNow={onFixNow} compact={compact} />;
+  if (isEnhanced) return <EnhancedScorePanel onFixNow={onFixNow} />;
 
-  const showFullScore  = canonicalStatus === "ready" || canonicalStatus === "stale";
+  // "ready" survives exactly one commit: the first effect in this component
+  // calls markScoreStale() as soon as canonicalStatus is "ready" with a
+  // non-null score, so "stale" is the steady state for EVERY server
+  // calculation. Gating the full score on "ready" alone therefore hides the
+  // result of Calculate ATS Score permanently and leaves the client-side
+  // preview as the only number the user can ever see. Keep showing the server
+  // score while it is stale -- the "Score may be outdated / Recalculate" pill
+  // below is the signal that it predates the latest edits -- and fall back to
+  // the preview only when there is no server score at all.
+  const showFullScore  = canonicalScore !== null
+    && (canonicalStatus === "ready" || canonicalStatus === "stale");
   const isCalcRunning  = isCalculating || canonicalStatus === "calculating";
-  const displayScore   = showFullScore ? (canonicalScore ?? 0) : previewScore.score;
+  const displayScore   = showFullScore ? (canonicalScore ?? previewScore.score) : previewScore.score;
   const isThresholdMet = completedCount >= AUTO_CALC_THRESHOLD;
   const tc = tier(displayScore);
 
