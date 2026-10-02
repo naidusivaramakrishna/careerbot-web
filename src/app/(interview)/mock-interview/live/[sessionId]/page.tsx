@@ -470,10 +470,15 @@ export default function LiveInterviewSessionPage() {
   // audio+video stream. Same "one audio rule" the HeyGen/LiveAvatar
   // integration used: once the avatar's own rendered audio is live, it is
   // the single audible source and playDelta is skipped; before that (or if
-  // via ref, not avatarConnection state, to stay dependency-free (same
-  // reasoning as isAudioMutedRef elsewhere in this file).
+  // the avatar errors out) playDelta is the audible source. Tracked via ref,
+  // not avatarConnection state, to stay dependency-free (same reasoning as
+  // isAudioMutedRef elsewhere in this file).
   const simliAudioLiveRef = useRef(false);
   const simliClientRef = useRef<SimliClient | null>(null);
+  const simliAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const simliTargetRateRef = useRef(16000); // overwritten from avatar.audio_input_format
+
+  const { consumePendingAvatarSession } = useMockInterview();
 
   // There is no backend stop endpoint for Simli (mock-interview-simli-avatar.txt
   // §9) — the browser closing the connection is the only thing that ends it.
@@ -507,7 +512,26 @@ export default function LiveInterviewSessionPage() {
 
     // Muted by default until "start" fires — before that, playDelta is the
     // audible source and Simli's own rendered audio must stay silent.
+    // simli-client's LiveKit transport attaches the incoming audio track via
+    // livekit-client's attachToElement(), which unconditionally sets
+    // `element.muted = false` whenever the stream has an audio track (to make
+    // autoplay work) — that would make both sources audible at once in the
+    // window before "start". Re-assert muted on every change until Simli's own
+    // audio becomes the single audible source.
     audioEl.muted = true;
+    audioEl.addEventListener("volumechange", () => {
+      if (!simliAudioLiveRef.current) audioEl.muted = true;
+    });
+
+    const client = new SimliClientCtor(
+      avatar.session_token,
+      videoEl,
+      audioEl,
+      null, // iceServers — null selects the LiveKit transport internally
+      LogLevel.ERROR,
+      "livekit",
+    );
+    simliClientRef.current = client;
 
     client.on("start", () => {
       setAvatarConnection((s) => (s === "connecting" ? "live" : s));
@@ -519,7 +543,7 @@ export default function LiveInterviewSessionPage() {
     });
     client.on("speaking", () => setAvatarActivity("talking"));
     client.on("silent", () => setAvatarActivity("idle"));
-    client.on("error", (detail) => {
+    client.on("error", (detail: string) => {
       console.warn("Simli avatar error, continuing audio-only", detail);
       // No reconnect path for Simli (mock-interview-simli-avatar.txt §6/§9) —
       // treat it as gone for the rest of this session. Fall back to playDelta
@@ -550,6 +574,9 @@ export default function LiveInterviewSessionPage() {
   // client.start() is positioned to catch, since it rejects LiveKit's own
   // internal connect-future, not the promise we're awaiting.
   const avatarJoinStartedRef = useRef(false);
+  // Cached in a ref (not just re-read from context) so a React StrictMode
+  // double-mount doesn't lose it — same pattern as initialWsUrlRef below.
+  const consumedAvatarRef = useRef<{ done: boolean; avatar: SimliAvatarSession | null }>({ done: false, avatar: null });
   useEffect(() => {
     if (!sessionId) return;
     if (!consumedAvatarRef.current.done) {
@@ -1274,8 +1301,12 @@ export default function LiveInterviewSessionPage() {
       // failure (e.g. ticket expired during StrictMode remount or slow
       // navigation), not a mid-interview drop. Same "nothing started yet"
       // case as above: redirect to setup for a fresh ticket.
-      const TERMINAL_CODES = [4001, 4002, 4003];
-      if (TERMINAL_CODES.includes(event.code) && !sessionReadyRef.current) {
+      // Any abnormal close before session_ready (4001/4002/4003, but also a
+      // bare 1006 when the socket never came up at all — server down, network
+      // blocked, proxy reset). No interview started, so there is nothing to
+      // report: sending the candidate to the "Interview Complete!" screen
+      // would claim saved answers that do not exist. Back to setup instead.
+      if (!sessionReadyRef.current) {
         routerRef.current.replace('/mock-interview/live');
         return;
       }

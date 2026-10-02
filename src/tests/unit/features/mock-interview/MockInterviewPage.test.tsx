@@ -829,6 +829,22 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByText("Interview Complete!")).toBeInTheDocument();
   });
 
+  it("sends an abnormal close that happens BEFORE session_ready back to setup — never the completed screen", async () => {
+    // The socket never came up (server down / proxy reset gives a bare 1006,
+    // not one of the 4001-4003 codes). No interview started, so there are no
+    // saved answers and no report — claiming "Interview Complete!" here would
+    // be false and "View My Report" would resolve to a sessionId with no report.
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.onclose?.({ code: 1006 } as CloseEvent);
+    });
+
+    expect(screen.queryByText("Interview Complete!")).not.toBeInTheDocument();
+    expect(mocks.replace).toHaveBeenCalledWith("/mock-interview/live");
+  });
+
   it("shows and dismisses backend error messages without ending the room", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
