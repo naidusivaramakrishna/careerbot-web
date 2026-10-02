@@ -2,8 +2,11 @@ node_modules
 npm-debug.log
 .git
 .gitignore
-.env.local
-.env*.local
+.env*
+# .env.example is documentation, not config: it carries no real values and
+# Next does not load it. Keep it so the build context still documents what
+# the app expects.
+!.env.example
 .next
 out
 dist
