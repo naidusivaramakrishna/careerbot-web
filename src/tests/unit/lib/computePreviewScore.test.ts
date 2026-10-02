@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { computePreviewScore } from "@/app/(resume)/builder/creation/_lib/computePreviewScore";
 import type { ResumeResponse } from "@/api/resumeApi";
 
@@ -173,7 +174,11 @@ describe("computePreviewScore", () => {
       updatedAt: "2026-01-01",
       createdAt: "2026-01-01",
     };
-    const persistedBuilderPayload = {
+    // Deliberately the persisted server shape, not ResumeResponse: snake_case
+    // keys and a categorized `skills` OBJECT where ResumeResponse has a string
+    // array. Typed as unknown so the cast below is legal rather than a
+    // not-sufficiently-overlapping conversion.
+    const persistedBuilderPayload: unknown = {
       id: "parity-1",
       personalInfo: editorResume.personalInfo,
       professional_summary: {
