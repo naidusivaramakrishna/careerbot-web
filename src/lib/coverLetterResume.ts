@@ -2,9 +2,10 @@ export type CoverLetterResumeCandidate = Record<string, unknown>;
 export type CoverLetterResumeSource = 'parser' | 'builder';
 
 function asNonEmptyString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0
-    ? value.trim()
-    : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized || /^(?:none|null|undefined)$/i.test(normalized)) return null;
+  return normalized;
 }
 
 function hasParsedData(resume: CoverLetterResumeCandidate): boolean {

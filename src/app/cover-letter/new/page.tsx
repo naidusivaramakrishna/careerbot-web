@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { listCoverLetterResumeOptions, setDefaultCoverLetterResume } from "@/api/coverLetterApi";
+import { getExtensionSession, type ExtensionSession } from "@/api/extensionApi";
 import { parseJDByJob, parseJDFile, parseJDText, parseJDUrl } from "@/api/parserApi";
 import { getResumeById } from "@/api/resumeApi";
 import { extractResume } from "@/api/resumeParsingApi";
@@ -57,6 +58,13 @@ const MAX_HIGHLIGHT_ACHIEVEMENT_CHARS = 1_000;
 const WORD_COUNT_FLOOR = 200;
 const WORD_COUNT_CEIL = 500;
 const COVER_LETTER_TEMPLATE_PREF_KEY = "careerbot:cover-letter-template";
+// The subset of an ExtensionSession this form prefills from. Narrower than the
+// API response on purpose: it is what gets cached in sessionStorage, and
+// user_id / profile have no business being persisted there.
+type ExtensionPrefill = Pick<
+  ExtensionSession,
+  "job_description" | "job_title" | "company" | "job_location" | "resume_id"
+>;
 const ALLOWED_RESUME_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -380,9 +388,90 @@ export default function CoverLetterNewPage() {
     }
   }, [activeStep]);
 
+  // The browser extension hands off a scraped job + resume via
+  // /extension/prefill -> ?session=<id> instead of putting raw data in the
+  // URL — a JD can run up to 50k chars, well past safe URL-length limits.
+  const sessionId = searchParams.get("session");
+  const [sessionExtResumeId, setSessionExtResumeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    // The extension session is single-use server-side ("Session may have
+    // expired or already been consumed" below). If this effect ever runs a
+    // second time for the same sessionId — e.g. a remount triggered by one
+    // of this page's several data-loading hooks — a second live fetch would
+    // hit an already-consumed session and come back empty, silently. Cache
+    // the first successful read so a rerun reuses it instead of
+    // re-consuming (and losing) it.
+    const cacheKey = `careerbot:ext-session:${sessionId}`;
+    const applySession = (prefill: ExtensionPrefill) => {
+      // Every value here was scraped from a third-party job page, so it is
+      // untrusted input and gets the same caps the typed inputs below enforce
+      // via `maxLength`. Writing it straight to state would bypass them: the
+      // extension truncates meta fields at 300 chars
+      // (extension/background/service-worker.js), which is over
+      // MAX_COMPANY_LOCATION_CHARS, and these values are read back into
+      // application_context on the generate request.
+      if (prefill.job_description) setJd(prefill.job_description);
+      if (prefill.job_title) setRoleTitle(prefill.job_title.slice(0, MAX_ROLE_TITLE_CHARS));
+      if (prefill.company) setCompanyName(prefill.company);
+      if (prefill.job_location) setLocation(prefill.job_location.slice(0, MAX_COMPANY_LOCATION_CHARS));
+      if (prefill.resume_id) setSessionExtResumeId(prefill.resume_id);
+      // Signature name is deliberately left for the user to type in —
+      // neither the account profile name nor a resume-parsed name can be
+      // trusted to match the resume actually being used (e.g. testing
+      // with someone else's resume), and a wrong auto-filled name is
+      // worse than an empty field.
+    };
+
+    let cached: ExtensionPrefill | null = null;
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      cached = raw ? (JSON.parse(raw) as ExtensionPrefill) : null;
+    } catch {
+      cached = null;
+    }
+    if (cached) {
+      applySession(cached);
+      return;
+    }
+
+    let cancelled = false;
+    getExtensionSession(sessionId)
+      .then((session) => {
+        if (cancelled) return;
+        // Cache only the five fields this form consumes. The session response
+        // also carries user_id and a `profile` object; there is no reason to
+        // persist those into sessionStorage for the lifetime of the tab.
+        const prefill: ExtensionPrefill = {
+          job_description: session.job_description,
+          job_title: session.job_title,
+          company: session.company,
+          job_location: session.job_location ?? null,
+          resume_id: session.resume_id,
+        };
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(prefill));
+        } catch {
+          // Storage can be unavailable in private/locked-down contexts — the
+          // form still works from this successful read, just not cached.
+        }
+        applySession(prefill);
+      })
+      .catch((err) => {
+        // Session may have expired or already been consumed — the form still
+        // works with manual entry, same as landing on this page directly.
+        console.error("[cover-letter/new] Could not resolve extension session", sessionId, err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
   const defaultResumeBlob = toDefaultResumeBlob(defaultResume.defaultResume);
-  const requestedResumeId = searchParams.get("resume_id");
-  const requestedResumeSourceParam = searchParams.get("resume_source");
+  const requestedResumeId = searchParams.get("resume_id") ?? sessionExtResumeId;
+  const requestedResumeSourceParam = searchParams.get("resume_source") ?? (sessionExtResumeId ? "parser" : null);
   const requestedResumeSource =
     requestedResumeSourceParam === "builder" || requestedResumeSourceParam === "parser"
       ? requestedResumeSourceParam
