@@ -470,15 +470,10 @@ export default function LiveInterviewSessionPage() {
   // audio+video stream. Same "one audio rule" the HeyGen/LiveAvatar
   // integration used: once the avatar's own rendered audio is live, it is
   // the single audible source and playDelta is skipped; before that (or if
-  // Simli errors out), playDelta is the fallback. handleWsMessage reads this
   // via ref, not avatarConnection state, to stay dependency-free (same
   // reasoning as isAudioMutedRef elsewhere in this file).
   const simliAudioLiveRef = useRef(false);
   const simliClientRef = useRef<SimliClient | null>(null);
-  const simliAudioElRef = useRef<HTMLAudioElement | null>(null);
-  const simliTargetRateRef = useRef(16000); // overwritten from avatar.audio_input_format
-
-  const { consumePendingAvatarSession } = useMockInterview();
 
   // There is no backend stop endpoint for Simli (mock-interview-simli-avatar.txt
   // §9) — the browser closing the connection is the only thing that ends it.
@@ -514,16 +509,6 @@ export default function LiveInterviewSessionPage() {
     // audible source and Simli's own rendered audio must stay silent.
     audioEl.muted = true;
 
-    const client = new SimliClientCtor(
-      avatar.session_token,
-      videoEl,
-      audioEl,
-      null, // iceServers — null selects the LiveKit transport internally
-      LogLevel.ERROR,
-      "livekit",
-    );
-    simliClientRef.current = client;
-
     client.on("start", () => {
       setAvatarConnection((s) => (s === "connecting" ? "live" : s));
       // Simli's rendered output becomes the single audible source — unmute
@@ -551,14 +536,10 @@ export default function LiveInterviewSessionPage() {
       console.warn("Simli avatar failed to connect, continuing audio-only", err);
       simliAudioLiveRef.current = false;
       simliClientRef.current = null;
-      setAvatarConnection("fallback");
     }
   }, []);
 
   // Consume the avatar session handed off from the "starting" page, once.
-  // Cached in a ref (not just re-read from context) so a React StrictMode
-  // double-mount doesn't lose it — same pattern as initialWsUrlRef below.
-  const consumedAvatarRef = useRef<{ done: boolean; avatar: SimliAvatarSession | null }>({ done: false, avatar: null });
   // Separately guards joinAvatar() itself (not just the consume-from-context
   // step above) — without this, StrictMode's double-invoke can construct a
   // second SimliClient while the first is still mid-connect, and the
