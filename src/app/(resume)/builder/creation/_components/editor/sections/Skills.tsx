@@ -324,11 +324,17 @@ const Skills: React.FC = () => {
                           // for parser-extracted skills missing a stored id (see
                           // resumeMappers.ts's technical_skills id-backfill for the real
                           // fix -- this is just the safety net for whatever it still
-                          // misses). Bail out instead of ever sending the name as an id;
-                          // the chip still disappears locally (TechnologyChipsInput calls
-                          // onTechnologiesChange regardless of how this resolves) even
-                          // though it isn't persisted by this call in that residual case.
-                          if (!storedSkillId) return;
+                          // misses). Bail out instead of ever sending the name as an id.
+                          // The chip still disappears locally (TechnologyChipsInput calls
+                          // onTechnologiesChange regardless of how this resolves) while
+                          // the skill is still on the server, so SAY SO -- the previous
+                          // name-as-id call at least surfaced the backend's rejection in
+                          // a toast, and a silent return made a failed delete look like
+                          // a successful one until the next reload brought it back.
+                          if (!storedSkillId) {
+                            toast.error("Could not remove this skill. Please refresh the page and try again.");
+                            return;
+                          }
                           try {
                             const apiCategory = skillCategoryApiName(cat.key);
                             if (isEnhancedResume) {
@@ -446,8 +452,12 @@ const Skills: React.FC = () => {
                         const storedSkillId = categorizedSkills.skill_id_map?.[`${custom.name}:${skill}`];
                         // See the predefined-category handler above: the delete-by-id
                         // endpoints require the real backend id, not the skill name --
-                        // bail rather than ever sending the name as a fake id.
-                        if (!storedSkillId) return;
+                        // bail rather than ever sending the name as a fake id, and tell
+                        // the user, because the chip disappears locally either way.
+                        if (!storedSkillId) {
+                          toast.error("Could not remove this skill. Please refresh the page and try again.");
+                          return;
+                        }
                         try {
                           if (isEnhancedResume) {
                             await deleteSkillFromEnhancedResume(resumeData.resume_id!, custom.name, storedSkillId);
