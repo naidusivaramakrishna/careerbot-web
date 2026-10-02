@@ -162,26 +162,34 @@ const ResumeListContent = () => {
       setLoading(false);
 
       // Then hydrate every builder resume and re-score it against the same
-      // complete data the editor loads, in ONE batched update.
-      const fullBuilderResumes = await Promise.all(
-        builderList.map(async (resume) => {
-          const [resumeResult, scoreResult] = await Promise.allSettled([
-            getResumeById(resume.id),
-            getBuilderScore(resume.id),
-          ]);
-          const fullResume = resumeResult.status === 'fulfilled' ? resumeResult.value : resume;
-          if (scoreResult.status !== 'fulfilled' || scoreResult.value.score <= 0) return fullResume;
+      // complete data the editor loads, in ONE batched update. Kept in its own
+      // try: the list is already on screen by now, so a failure here must leave
+      // the compact scores in place, not fall through to the outer catch and
+      // raise "Failed to fetch resumes" over an already-populated table (the
+      // pre-existing per-row background fetch swallowed its own errors).
+      try {
+        const fullBuilderResumes = await Promise.all(
+          builderList.map(async (resume) => {
+            const [resumeResult, scoreResult] = await Promise.allSettled([
+              getResumeById(resume.id),
+              getBuilderScore(resume.id),
+            ]);
+            const fullResume = resumeResult.status === 'fulfilled' ? resumeResult.value : resume;
+            if (scoreResult.status !== 'fulfilled' || scoreResult.value.score <= 0) return fullResume;
 
-          const calculatedAt = Date.parse(scoreResult.value.calculated_at);
-          const modifiedAt = Date.parse(fullResume.updatedAt);
-          const scoreIsFresh = Number.isFinite(calculatedAt)
-            && (!Number.isFinite(modifiedAt) || calculatedAt >= modifiedAt);
-          return scoreIsFresh
-            ? { ...fullResume, builder_score: { score: scoreResult.value.score } }
-            : fullResume;
-        }),
-      );
-      setResumes([...transformResumeData(fullBuilderResumes, profileName), ...transformedEnhanced]);
+            const calculatedAt = Date.parse(scoreResult.value.calculated_at);
+            const modifiedAt = Date.parse(fullResume.updatedAt);
+            const scoreIsFresh = Number.isFinite(calculatedAt)
+              && (!Number.isFinite(modifiedAt) || calculatedAt >= modifiedAt);
+            return scoreIsFresh
+              ? { ...fullResume, builder_score: { score: scoreResult.value.score } }
+              : fullResume;
+          }),
+        );
+        setResumes([...transformResumeData(fullBuilderResumes, profileName), ...transformedEnhanced]);
+      } catch (hydrationErr) {
+        logger.warn('Builder resume hydration failed; keeping the compact preview scores', hydrationErr);
+      }
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {
