@@ -486,3 +486,97 @@ def test_messages_say_to_rerun_both_label_blind_workflows():
         assert "other CI jobs run" not in s
     s = gate.summary_markdown(stats, gate.evaluate(stats, []))
     assert "FAILS at its first step" in s and "skipped until" not in s
+
+
+# ── Test-file exemption from the LINE cap (added 2026-10-02) ────────────────
+# The gate calls size_stats(exempt_tests=True); the ai-review scope guard does
+# not. These pin both halves, because the gate and the guard share one function
+# and the guard's 8,000-line limit must keep counting tests.
+
+def _gate_stats(rows, commits=1):
+    """Exactly how the gate computes stats: size_stats(..., exempt_tests=True)."""
+    stats = gate.size_stats("\n".join(f"{a}\t{r}\t{p}" for a, r, p in rows),
+                            exempt_tests=True)
+    stats["commits"] = commits
+    return stats
+
+
+def test_test_lines_do_not_count_toward_the_line_cap():
+    # Shape of careerbot-web #144: 550 production + 948 test lines. It measured
+    # 1,498/1,500 and the cap then blocked an 11-line correctness fix.
+    rows = [(550, 0, "src/utils/resumeMappers.ts"),
+            (948, 0, "src/tests/unit/utils/resumeMapperCgpa.test.ts")]
+    stats = _gate_stats(rows)
+    assert stats["added"] == 550, "production lines only"
+    assert stats["tests_added"] == 948
+    assert stats["added_total"] == 1498, "the raw diff is unchanged"
+    assert gate.evaluate(stats, [])["passed"] is True
+
+
+def test_a_test_only_pr_can_never_trip_the_line_cap():
+    stats = _gate_stats([(9000, 0, "src/tests/unit/huge.test.ts")])
+    assert stats["added"] == 0 and stats["tests_added"] == 9000
+    assert gate.evaluate(stats, [])["passed"] is True
+
+
+def test_test_files_still_count_as_files_and_the_file_cap_still_bites():
+    rows = [(1, 0, f"src/tests/unit/f{i}.test.ts") for i in range(gate.MAX_FILES + 1)]
+    stats = _gate_stats(rows)
+    assert stats["added"] == 0, "no lines counted"
+    assert stats["files"] == gate.MAX_FILES + 1
+    verdict = gate.evaluate(stats, [])
+    assert verdict["passed"] is False
+    assert any("files" in t for t in verdict["tripped"])
+
+
+def test_production_code_is_still_capped():
+    stats = _gate_stats([(gate.MAX_ADDED_LINES + 1, 0, "src/app/big.tsx")])
+    assert gate.evaluate(stats, [])["passed"] is False
+
+
+def test_generated_wins_over_test():
+    """A checked-in bundle under __tests__ is generated, not a test."""
+    stats = _gate_stats([(100, 0, "src/__tests__/vendor.min.js")])
+    assert stats["excluded_added"] == 100 and stats["tests_added"] == 0
+
+
+@pytest.mark.parametrize("path", [
+    "src/a.test.ts", "src/a.test.tsx", "src/a.spec.ts", "src/a.spec.tsx",
+    "src/a.test.js", "src/a.spec.jsx",
+    "src/__tests__/helper.ts", "src/__mocks__/axios.ts", "src/__fixtures__/resume.json",
+])
+def test_is_test_matches_the_project_s_test_shapes(path):
+    assert review.is_test(path)
+
+
+@pytest.mark.parametrize("path", [
+    "src/app/page.tsx", "src/utils/latest.ts", "src/lib/contest.ts",
+    "src/testimonials.ts", "src/app/protest/page.tsx",
+])
+def test_is_test_does_not_fire_on_production_paths(path):
+    """'test'/'spec' inside a longer word must not match -- `latest.ts`,
+    `contest.ts`, `testimonials.ts` are production files."""
+    assert not review.is_test(path)
+
+
+def test_the_scope_guard_default_still_counts_test_lines():
+    """THE REGRESSION GUARD. size_stats is shared with the ai-review scope
+    guard's 8,000-line limit, which must keep counting tests: a 9,000-line diff
+    is unreviewable whatever is in it. Only the gate opts out."""
+    rows = [(9000, 0, "src/tests/unit/huge.test.ts")]
+    assert gate.size_stats("\n".join(f"{a}\t{r}\t{p}" for a, r, p in rows))["added"] == 9000
+    assert review.size_stats("\n".join(f"{a}\t{r}\t{p}" for a, r, p in rows))["added"] == 9000
+
+
+def test_the_report_never_calls_a_test_file_generated():
+    """A hand-written test is not generated; saying so in the report would be a
+    false statement about the code."""
+    stats = _gate_stats([(10, 0, "src/app/page.tsx"),
+                         (900, 0, "src/tests/unit/a.test.ts"),
+                         (17393, 0, "package-lock.json")])
+    s = gate.summary_markdown(stats, gate.evaluate(stats, []))
+    assert "Excluded test added lines | 900" in s
+    assert "Excluded test files" in s and "`src/tests/unit/a.test.ts`" in s
+    # the test file must appear under the TEST heading, not the generated one
+    generated_block = s.split("Excluded generated files")[1].split("Excluded test files")[0]
+    assert "a.test.ts" not in generated_block
