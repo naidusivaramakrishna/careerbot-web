@@ -14,7 +14,7 @@ const montserrat = Montserrat({
 // Everything else — the test runner ('/mock-test/<companyId>',
 // '/mock-test/custom-test') and the results page — hides the sidebar so the
 // user owns the full canvas while testing.
-const ROUTES_WITH_SIDEBAR = ['', 'company', 'custom', 'history', 'leaderboard', 'weak-areas'];
+const ROUTES_WITH_SIDEBAR = ['browse', 'company', 'custom', 'history', 'leaderboard', 'weak-areas'];
 
 export default function MockTestLayout({
   children,

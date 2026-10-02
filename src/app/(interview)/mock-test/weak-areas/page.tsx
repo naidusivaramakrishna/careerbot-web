@@ -5,45 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Target, TrendingUp, AlertTriangle, ChevronRight, RefreshCcw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getWeakAreasAnalytics, getProgressAnalytics, WeakAreasAnalytics, ProgressAnalytics } from '@/api/mockTestApi';
+import { resolveTopicTarget } from '@/lib/resolveTopicTarget';
 import LoadingScreen from '../_components/LoadingScreen';
 import HighlightBox from '../_components/HighlightBox';
-
-// Map a weak-area topic label (e.g. "Percentages", "Time & Work") to a
-// practiceable category + backend subcategory slug, so "Practice this topic"
-// launches a focused custom test instead of the generic company list.
-// The subcategory is only set when we can confidently match a valid slug
-// (see CATEGORY_SUBCATEGORIES in lib/mockTestConstants).
-function resolveTopicTarget(topic: string): { category: string; subcategory?: string } {
-  const t = (topic || '').toLowerCase();
-  const rules: Array<{ kws: string[]; category: string; sub?: string }> = [
-    { kws: ['percent'],               category: 'arithmetic', sub: 'percentages' },
-    { kws: ['profit', 'loss'],        category: 'arithmetic', sub: 'profit_loss' },
-    { kws: ['ratio'],                 category: 'arithmetic', sub: 'ratios' },
-    { kws: ['interest'],              category: 'arithmetic', sub: 'simple_interest' },
-    { kws: ['time', 'work'],          category: 'arithmetic', sub: 'time_and_work' },
-    { kws: ['algebra'],               category: 'arithmetic', sub: 'algebra' },
-    { kws: ['verbal'],                category: 'aptitude',   sub: 'verbal' },
-    { kws: ['abstract'],              category: 'aptitude',   sub: 'abstract' },
-    { kws: ['analyt'],                category: 'aptitude',   sub: 'analytical' },
-    { kws: ['statistic'],             category: 'aptitude',   sub: 'statistics' },
-    { kws: ['geometry'],              category: 'aptitude',   sub: 'geometry' },
-    { kws: ['trigon'],                category: 'aptitude',   sub: 'trigonometry' },
-    { kws: ['logic', 'reason', 'blood', 'direction', 'coding', 'sequence', 'puzzle'], category: 'reasoning', sub: 'logical' },
-    { kws: ['python'],                category: 'technical',  sub: 'python' },
-    { kws: ['java'],                  category: 'technical',  sub: 'java' },
-    { kws: ['dsa', 'data structure'], category: 'technical',  sub: 'dsa' },
-    { kws: ['sql'],                   category: 'technical',  sub: 'sql' },
-    { kws: ['oop'],                   category: 'technical',  sub: 'oops' },
-    { kws: ['web'],                   category: 'technical',  sub: 'web' },
-  ];
-  for (const r of rules) {
-    if (r.kws.some(k => t.includes(k))) return { category: r.category, subcategory: r.sub };
-  }
-  if (t.includes('aptitude')) return { category: 'aptitude' };
-  if (t.includes('reason'))   return { category: 'reasoning' };
-  if (t.includes('tech') || t.includes('program')) return { category: 'technical' };
-  return { category: 'arithmetic' };
-}
 
 export default function WeakAreasPage() {
   const router = useRouter();
@@ -96,7 +60,9 @@ export default function WeakAreasPage() {
       parentSessionId: crypto.randomUUID(),
       categories: category,
       difficulty: 'medium',
-      count: '10',
+      // No `count`: nothing reads it (`grep -rn "get('count')" src` is empty)
+      // and the custom builder sizes sections from SECTION_CONFIG, so sending
+      // count: '10' advertised a 10-question practice that was never honoured.
     });
     if (subcategory) params.set('subcategory', subcategory);
     router.push(`/mock-test/custom-test?${params.toString()}`);
@@ -108,7 +74,7 @@ export default function WeakAreasPage() {
 
         {/* Breadcrumb — same shape as section intro */}
         <div className="mb-6 text-sm flex items-center gap-2">
-          <button onClick={() => router.push('/mock-test')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
+          <button onClick={() => router.push('/mock-test/browse')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
           <span style={{ color: '#CBD5E1' }}>›</span>
           <span className="font-semibold" style={{ color: '#0F172A' }}>Weak Areas</span>
         </div>
@@ -267,7 +233,7 @@ export default function WeakAreasPage() {
         {/* Bottom action row — section-intro DNA */}
         <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
           <button
-            onClick={() => router.push('/mock-test')}
+            onClick={() => router.push('/mock-test/browse')}
             className="text-sm font-medium hover:underline"
             style={{ color: '#475569' }}
           >

@@ -17,7 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Company tests',
     icon: LayoutGrid,
-    path: '/mock-test',
+    path: '/mock-test/browse',
     activeFor: ['/mock-test/company', '/mock-test/results'],
   },
   {
@@ -52,9 +52,9 @@ export default function MockTestSidebar() {
   }, []);
 
   const isActive = (item: NavItem) => {
-    if (item.path === '/mock-test') {
-      // active on exact /mock-test OR any extra activeFor prefixes
-      if (pathname === '/mock-test') return true;
+    if (item.path === '/mock-test/browse') {
+      // active on exact /mock-test/browse OR any extra activeFor prefixes
+      if (pathname === '/mock-test/browse') return true;
       return (item.activeFor ?? []).some(p => pathname.startsWith(p));
     }
     if (item.soon) return false;

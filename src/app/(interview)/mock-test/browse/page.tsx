@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trophy, Target, ChevronRight, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import { Trophy, Target, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Zap, Search, Info } from 'lucide-react';
 import HighlightBox from '../_components/HighlightBox';
 import { motion } from 'framer-motion';
 import {
@@ -18,7 +18,7 @@ import {
   WeakAreasAnalytics,
   HistoryRecord,
 } from '@/api/mockTestApi';
-import { resolveCompanyInfo, resolveCompanyId } from '@/lib/mockTestConstants';
+import { resolveCompanyInfo, resolveCompanyId, STANDARD_TEST_TOTALS, resolveResumeRoute } from '@/lib/mockTestConstants';
 
 function formatRelTime(iso?: string): string {
   if (!iso) return '';
@@ -58,12 +58,12 @@ const TIER_MAP: Record<string, 1 | 2> = {
 };
 
 const fallbackTests: MockTest[] = [
-  { id: 'tcs',       company: 'TCS NQT',            logoPath: '/assets/company_logos/Tata_Consultancy_Services.svg', initials: 'TCS', color: '#003366', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Hard',   attempts: 0, tier: 1 },
-  { id: 'infosys',   company: 'Infosys',            logoPath: '/assets/company_logos/infosys.svg',                  initials: 'INF', color: '#007cc2', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 1 },
-  { id: 'cognizant', company: 'Cognizant GenC',     logoPath: '/assets/company_logos/cognizant.svg',                initials: 'COG', color: '#1a4398', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 1 },
-  { id: 'accenture', company: 'Accenture',          logoPath: '/assets/company_logos/Accenture-Logo.wine.svg',      initials: 'ACC', color: '#a100ff', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 1 },
-  { id: 'wipro',     company: 'Wipro NLTH',         logoPath: '/assets/company_logos/wipro-1.svg',                  initials: 'WIP', color: '#341c5c', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Easy',   attempts: 0, tier: 2 },
-  { id: 'capgemini', company: 'Capgemini Exceller', logoPath: '/assets/company_logos/capgemini.png',                initials: 'CAP', color: '#0070ad', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 2 },
+  { id: 'tcs',       company: 'TCS NQT',            logoPath: '/assets/company_logos/Tata_Consultancy_Services.svg', initials: 'TCS', color: '#003366', categories: ['ARITH','APT','REAS','TECH'], questions: STANDARD_TEST_TOTALS.questions, duration: STANDARD_TEST_TOTALS.minutes, sections: STANDARD_TEST_TOTALS.sections, difficulty: 'Hard',   attempts: 0, tier: 1 },
+  { id: 'infosys',   company: 'Infosys',            logoPath: '/assets/company_logos/infosys.svg',                  initials: 'INF', color: '#007cc2', categories: ['ARITH','APT','READ','TECH'], questions: STANDARD_TEST_TOTALS.questions, duration: STANDARD_TEST_TOTALS.minutes, sections: STANDARD_TEST_TOTALS.sections, difficulty: 'Medium', attempts: 0, tier: 1 },
+  { id: 'cognizant', company: 'Cognizant GenC',     logoPath: '/assets/company_logos/cognizant.svg',                initials: 'COG', color: '#1a4398', categories: ['ARITH','APT','READ','TECH'], questions: STANDARD_TEST_TOTALS.questions, duration: STANDARD_TEST_TOTALS.minutes, sections: STANDARD_TEST_TOTALS.sections, difficulty: 'Medium', attempts: 0, tier: 1 },
+  { id: 'accenture', company: 'Accenture',          logoPath: '/assets/company_logos/Accenture-Logo.wine.svg',      initials: 'ACC', color: '#a100ff', categories: ['ARITH','APT','REAS','TECH'], questions: STANDARD_TEST_TOTALS.questions, duration: STANDARD_TEST_TOTALS.minutes, sections: STANDARD_TEST_TOTALS.sections, difficulty: 'Medium', attempts: 0, tier: 1 },
+  { id: 'wipro',     company: 'Wipro NLTH',         logoPath: '/assets/company_logos/wipro-1.svg',                  initials: 'WIP', color: '#341c5c', categories: ['ARITH','APT','READ','TECH'], questions: STANDARD_TEST_TOTALS.questions, duration: STANDARD_TEST_TOTALS.minutes, sections: STANDARD_TEST_TOTALS.sections, difficulty: 'Easy',   attempts: 0, tier: 2 },
+  { id: 'capgemini', company: 'Capgemini Exceller', logoPath: '/assets/company_logos/capgemini.png',                initials: 'CAP', color: '#0070ad', categories: ['ARITH','APT','REAS','TECH'], questions: STANDARD_TEST_TOTALS.questions, duration: STANDARD_TEST_TOTALS.minutes, sections: STANDARD_TEST_TOTALS.sections, difficulty: 'Medium', attempts: 0, tier: 2 },
 ];
 
 // Brand palette — solid colors, no gradients.
@@ -75,6 +75,13 @@ const BRAND_BLUE = '#1e3a8a';
 function fmtAttempts(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.0', '')}k`;
   return String(n);
+}
+
+// Weak-area topics come straight from the backend's own slug/label, which for
+// this one topic reads as a bare "OOPs" — ambiguous next to the other, fuller
+// topic names in the same list ("Ratio and Proportion", etc). Display-only fix.
+function displayTopicLabel(topic: string): string {
+  return /^oops?\s*(concepts?)?$/i.test(topic.trim()) ? 'Technical - OOPs Concepts' : topic;
 }
 
 // Convert a hex color to rgba with given alpha
@@ -127,6 +134,11 @@ export default function MockTestPage() {
   const [weakAreas, setWeakAreas]         = useState<WeakAreasAnalytics | null>(null);
   const [history, setHistory]             = useState<HistoryRecord[]>([]);
 
+  // Search, Filter & Sort state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
+  const [sortBy, setSortBy] = useState<'attempts' | 'company' | 'difficulty'>('attempts');
+
   useEffect(() => {
     getMockTestCompanies()
       .then((companies: any[]) => {
@@ -147,12 +159,16 @@ export default function MockTestPage() {
             company: info.logoPath ? info.name : name,
             logoPath: info.logoPath, initials: info.initials, color: info.color,
             categories: cats,
-            questions: 40,
-            duration:  80,
-            // Real section count from the template. Falls back to 4 only when the
-            // payload carries no sections array.
-            sections:  rawSections.length > 0 ? rawSections.length : 4,
-            difficulty: c.difficulty ?? 'Medium',
+            // Every company runs the same standardized test now (SECTION_CONFIG) —
+            // matches the page header, which reads STANDARD_TEST_TOTALS directly.
+            questions: STANDARD_TEST_TOTALS.questions,
+            duration:  STANDARD_TEST_TOTALS.minutes,
+            sections:  STANDARD_TEST_TOTALS.sections,
+            // Normalised: API difficulty may be lowercase, but the filter/sort
+            // below compare against exact 'Easy'/'Medium'/'Hard'.
+            difficulty: (['Easy', 'Medium', 'Hard'] as const).find(
+              d => d.toLowerCase() === String(c.difficulty ?? '').toLowerCase()
+            ) ?? 'Medium',
             // The backend counts submitted attempts per company and returns them as
             // `attempts_count` (mock_test_service list_companies). The older names are
             // kept only as a fallback for any deployment that predates that field.
@@ -208,12 +224,39 @@ export default function MockTestPage() {
       ? `${Math.round(analytics.average_score)}%`
       : '—';
 
+  // Filter and sort tests
+  const filteredTests = tests
+    .filter(t => {
+      const matchesSearch = t.company.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesDifficulty = selectedDifficulty === 'All' || t.difficulty === selectedDifficulty;
+      return matchesSearch && matchesDifficulty;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'attempts') return b.attempts - a.attempts;
+      if (sortBy === 'company') return a.company.localeCompare(b.company);
+      if (sortBy === 'difficulty') {
+        const diffOrder = { 'Easy': 0, 'Medium': 1, 'Hard': 2 };
+        return diffOrder[a.difficulty] - diffOrder[b.difficulty];
+      }
+      return 0;
+    });
+
   return (
     <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
-      <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 pt-6 sm:pt-8 lg:pt-10 pb-12 sm:pb-16">
+
+        {/* Back Button */}
+        <button
+          onClick={() => router.push('/mock-test')}
+          className="flex items-center gap-2 mb-6 sm:mb-8 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-100 active:opacity-80 transition"
+          style={{ color: '#475569', background: 'transparent', border: '1px solid #E5E7EB' }}
+        >
+          <ChevronLeft size={18} />
+          Back
+        </button>
 
         {/* Breadcrumb — same shape as section intro */}
-        <div className="mb-6 text-sm flex items-center gap-2">
+        <div className="mb-4 sm:mb-6 text-xs sm:text-sm flex items-center gap-2">
           <span className="font-semibold" style={{ color: '#0F172A' }}>Mock Tests</span>
         </div>
 
@@ -222,18 +265,18 @@ export default function MockTestPage() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="bg-white rounded-2xl border p-8 md:p-10 mb-6"
+          className="bg-white rounded-2xl border p-6 sm:p-8 md:p-10 mb-6"
           style={{
             borderColor: '#E5E7EB',
             boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.06)',
           }}
         >
-          <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight mb-1.5" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+          <div className="flex items-start justify-between gap-3 sm:gap-4 mb-4 sm:mb-6 flex-wrap">
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-1.5" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
                 The smarter way to prep for placements
               </h2>
-              <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
+              <p className="text-xs sm:text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
                 Pick a company simulator or build your own custom test. Exam-grade timing,
                 AI-generated questions, and per-section scoring — so you walk in knowing how it feels.
               </p>
@@ -241,45 +284,112 @@ export default function MockTestPage() {
           </div>
 
           <HighlightBox>
-            <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
-              <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{tests.length} companies</span> ·{' '}
-              <span className="font-bold tabular-nums" style={{ color: '#1e3a8a' }}>80 min</span> per test ·{' '}
-              <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>40 questions</span> across 4 sections
+            <p className="text-xs sm:text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+              <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{tests.length}</span> <span className="hidden sm:inline">companies</span> ·{' '}
+              <span className="font-bold tabular-nums" style={{ color: '#1e3a8a' }}>{STANDARD_TEST_TOTALS.minutes}</span> <span className="hidden sm:inline">min</span> ·{' '}
+              <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{STANDARD_TEST_TOTALS.questions}</span> <span className="hidden sm:inline">questions</span>
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               {activeSession && (
                 <button
-                  onClick={() => router.push(`/mock-test/${activeSession.company_id ?? 'custom'}`)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition hover:bg-white"
+                  // NOT handled by resolveResumeRoute (pre-existing, not introduced by
+                  // this PR): careerbot-api's session document never stores company_id
+                  // for ANY session — verified directly against generate_test()'s
+                  // session_data construction, which has no company_id field at all. So
+                  // every Resume click currently falls back to the builder, even for a
+                  // company session. The same gap breaks the "Active" company-card
+                  // highlight below and per-company attempts_count. Needs a backend fix
+                  // (store company_id, or derive it from parent_session_id) before Resume
+                  // can be made to land back on the actual company session.
+                  onClick={() => router.push(resolveResumeRoute(activeSession.company_id))}
+                  className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition hover:bg-white active:opacity-80"
                   style={{ border: '1px solid #1e3a8a', color: '#1e3a8a' }}
                 >
-                  Resume — {activeTestName}
+                  <span className="hidden sm:inline">Resume — {activeTestName}</span>
+                  <span className="sm:hidden">Resume</span>
                   <ChevronRight size={14} />
                 </button>
               )}
               <button
                 onClick={() => router.push('/mock-test/custom')}
-                className="group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(30,58,138,0.5)]"
+                className="group flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(30,58,138,0.5)] active:opacity-80"
                 style={{ background: '#1e3a8a', boxShadow: '0 4px 14px -4px rgba(30,58,138,0.35)' }}
               >
-                <Zap size={14} className="transition-transform group-hover:rotate-12" />
-                Custom build
+                <Zap size={14} className="transition-transform group-hover:rotate-12 flex-shrink-0" />
+                <span className="hidden sm:inline">Custom build</span>
+                <span className="sm:hidden">Custom</span>
               </button>
             </div>
           </HighlightBox>
         </motion.div>
 
+        {/* ── Search, Filter, Sort Controls ──────────────────────── */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <div className="flex-1 relative min-w-0">
+            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none" style={{ color: '#94A3B8' }} />
+            <input
+              type="text"
+              placeholder="Search tests..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg border transition-colors text-sm"
+              style={{
+                borderColor: '#E5E7EB',
+                background: '#FFFFFF',
+                color: '#0F172A',
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#1e3a8a'}
+              onBlur={(e) => e.target.style.borderColor = '#E5E7EB'}
+            />
+          </div>
+
+          <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+            <select
+              value={selectedDifficulty}
+              onChange={(e) => setSelectedDifficulty(e.target.value as typeof selectedDifficulty)}
+              className="px-3 sm:px-4 py-2.5 rounded-lg border text-xs sm:text-sm font-medium flex-1 sm:flex-none"
+              style={{ borderColor: '#E5E7EB', background: '#FFFFFF', color: '#0F172A' }}
+            >
+              <option value="All">All Levels</option>
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="px-3 sm:px-4 py-2.5 rounded-lg border text-xs sm:text-sm font-medium flex-1 sm:flex-none"
+              style={{ borderColor: '#E5E7EB', background: '#FFFFFF', color: '#0F172A' }}
+            >
+              <option value="attempts">Popular</option>
+              <option value="company">Company</option>
+              <option value="difficulty">Difficulty</option>
+            </select>
+          </div>
+        </div>
+
         {/* ── Body: company cards on the left, insights column on the right ─── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 lg:gap-6 items-start">
 
           {/* ── Company cards ─────────────────────────── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {tests.map((test, i) => {
+          {filteredTests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center rounded-2xl" style={{ background: '#ffffff', border: '1px solid rgba(15,23,42,0.07)' }}>
+              <Search size={28} style={{ color: '#CBD5E1' }} />
+              <p className="text-sm font-semibold" style={{ color: '#475569' }}>No tests match your search or filter</p>
+              <p className="text-xs" style={{ color: '#94A3B8' }}>Try a different company name or difficulty.</p>
+            </div>
+          ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 lg:gap-5">
+            {filteredTests.map((test, i) => {
               const isActive = activeSession?.company_id === test.id;
-              // Real submitted-attempt count from the backend. Zero is a truthful
-              // answer (nobody has taken this test yet) — it must NOT be swapped for
-              // an invented number.
               const attStr   = fmtAttempts(test.attempts);
+
+              // Fixed, not derived from a company's stored categories — a stale
+              // template (e.g. legacy "Reading") would advertise a section the
+              // runner (STANDARD_SECTIONS) never actually delivers.
+              const displaySections = ['Aptitude', 'Arithmetic', 'Reasoning', 'Technical'];
+
               return (
                 <motion.div
                   key={test.id}
@@ -287,30 +397,28 @@ export default function MockTestPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05, duration: 0.4 }}
                   onClick={() => router.push(`/mock-test/company/${test.id}`)}
-                  className="group relative bg-white rounded-2xl cursor-pointer overflow-hidden transition-all duration-300"
+                  className="group relative bg-white rounded-2xl cursor-pointer overflow-hidden transition-all duration-300 flex flex-col h-full"
                   style={{
                     border: '1px solid rgba(15,23,42,0.07)',
                     boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
                   }}
                   whileHover={{ y: -4, boxShadow: `0 16px 40px -16px ${toRGBA(test.color, 0.35)}, 0 4px 14px -4px rgba(15,23,42,0.08)` }}
                 >
-                  {/* Top accent: gradient using company color */}
+                  {/* Top accent */}
                   <div
                     className="absolute inset-x-0 top-0 h-[3px]"
                     style={{ background: `linear-gradient(90deg, ${test.color} 0%, ${toRGBA(test.color, 0.4)} 100%)` }}
                   />
-                  {/* Subtle company-color tint at top */}
                   <div
                     className="absolute inset-x-0 top-0 h-32 pointer-events-none"
                     style={{ background: `linear-gradient(180deg, ${toRGBA(test.color, 0.05)} 0%, transparent 100%)` }}
                   />
 
-                  <div className="relative p-5">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-3 mb-5">
-                      <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative p-4 sm:p-5 flex flex-col h-full">
+                    <div className="flex items-start justify-between gap-2 sm:gap-3 mb-4 sm:mb-5">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                         <div
-                          className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                          className="w-10 sm:w-12 h-10 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                           style={{
                             background: '#fff',
                             border: `1px solid ${toRGBA(test.color, 0.2)}`,
@@ -336,12 +444,12 @@ export default function MockTestPage() {
                             <span className="font-bold text-sm text-white">{test.initials}</span>
                           )}
                         </div>
-                        <div className="min-w-0">
-                          <h3 className="text-[16px] font-bold leading-tight truncate tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.01em' }}>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm sm:text-base font-bold leading-tight truncate tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.01em' }}>
                             {test.company}
                           </h3>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-xs" style={{ color: '#94A3B8' }}>
+                          <div className="flex items-center gap-1 sm:gap-1.5 mt-1">
+                            <span className="text-[11px] sm:text-xs" style={{ color: '#94A3B8' }}>
                               {attStr} attempts
                             </span>
                           </div>
@@ -349,11 +457,9 @@ export default function MockTestPage() {
                       </div>
                     </div>
 
-                    {/* Stats — one row of three. min-w-0 lets the cells shrink below their
-                        label's min-content width; without it the uppercase labels overflow
-                        the card and get clipped by overflow-hidden. */}
+                    {/* Stats */}
                     <div
-                      className="grid grid-cols-3 rounded-xl overflow-hidden mb-4"
+                      className="grid grid-cols-3 rounded-lg sm:rounded-xl overflow-hidden mb-3 sm:mb-4"
                       style={{ background: '#F8FAFC', border: '1px solid #F1F5F9' }}
                     >
                       {[
@@ -363,51 +469,68 @@ export default function MockTestPage() {
                       ].map(({ label, val }, idx, arr) => (
                         <div
                           key={label}
-                          className="min-w-0 text-center py-3 px-1"
+                          className="min-w-0 text-center py-2 sm:py-3 px-1"
                           style={{ borderRight: idx < arr.length - 1 ? '1px solid #F1F5F9' : 'none' }}
                         >
-                          <p className="font-bold tabular-nums" style={{ color: '#0F172A', fontSize: '15px' }}>
+                          <p className="font-bold tabular-nums" style={{ color: '#0F172A', fontSize: 'clamp(13px, 3vw, 15px)' }}>
                             {val}
                           </p>
-                          {/* Inline fontSize (not a Tailwind arbitrary class) so the label
-                              size is immune to a stale JIT bundle that would otherwise render
-                              it at the base 14px and truncate "Questions". */}
-                          <p className="mt-0.5 font-medium uppercase truncate" style={{ color: '#94A3B8', letterSpacing: 0, fontSize: '10px' }}>
+                          <p className="mt-0.5 font-medium uppercase truncate text-[9px] sm:text-[10px]" style={{ color: '#94A3B8', letterSpacing: 0 }}>
                             {label}
                           </p>
                         </div>
                       ))}
                     </div>
 
-                    {/* Section dots */}
-                    <div className="flex flex-wrap gap-1.5 mb-5">
-                      {['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'].map(name => (
+                    {/* Sections/Skills Covered */}
+                    <div className="flex flex-wrap gap-1 sm:gap-1.5 mb-4 sm:mb-5 flex-1">
+                      {displaySections.map(name => (
                         <span
                           key={name}
-                          className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full font-semibold"
+                          className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 rounded-full font-semibold"
                           style={{ background: '#F1F5F9', color: '#000' }}
                         >
-                          <span className="w-1 h-1 rounded-full" style={{ background: test.color }} />
-                          {name}
+                          <span className="w-0.5 sm:w-1 h-0.5 sm:h-1 rounded-full" style={{ background: test.color }} />
+                          <span className="leading-tight">{name}</span>
                         </span>
                       ))}
                     </div>
 
-                    {/* CTA */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs" style={{ color: '#94A3B8' }}>
-                        {isActive ? 'Active session' : 'Click to begin'}
-                      </span>
+                    {/* CTA — locked at bottom */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 pt-3 sm:pt-4 border-t" style={{ borderColor: '#F1F5F9' }}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-[11px] sm:text-xs shrink-0" style={{ color: '#94A3B8' }}>
+                          {isActive ? 'Active session' : 'Click to begin'}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={e => { e.stopPropagation(); router.push(`/mock-test/company/${test.id}`); }}
+                            className="text-[11px] sm:text-xs font-semibold hover:underline"
+                            style={{ color: '#475569' }}
+                          >
+                            View Details
+                          </button>
+                          <div className="group relative cursor-help" title="See the full section breakdown and your past attempts">
+                            <Info size={13} style={{ color: '#CBD5E1' }} />
+                            <div
+                              className="absolute hidden group-hover:block bottom-full mb-2 left-0 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap z-10"
+                              style={{ fontSize: '11px' }}
+                            >
+                              See the full section breakdown and your past attempts
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <button
                         onClick={e => { e.stopPropagation(); router.push(`/mock-test/company/${test.id}`); }}
-                        className="flex items-center gap-1 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all group-hover:translate-x-0.5"
+                        className="flex items-center justify-center sm:justify-start gap-1 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all group-hover:translate-x-0.5 active:opacity-80"
                         style={{
                           background: BRAND_BLUE,
                           boxShadow: '0 2px 8px -2px rgba(30,58,138,0.35)',
                         }}
                       >
                         {isActive ? 'Resume' : 'Start'}
-                        <ChevronRight size={12} />
+                        <ChevronRight size={14} />
                       </button>
                     </div>
                   </div>
@@ -415,6 +538,7 @@ export default function MockTestPage() {
               );
             })}
           </div>
+          )}
 
           {/* ── Insights column (right): progress · stats · top this week · focus ── */}
           <aside className="space-y-5">
@@ -459,7 +583,21 @@ export default function MockTestPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Avg accuracy</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Avg accuracy</p>
+                    <div
+                      className="group relative cursor-help"
+                      title="Your average accuracy across all tests taken"
+                    >
+                      <Info size={14} style={{ color: '#CBD5E1' }} />
+                      <div
+                        className="absolute hidden group-hover:block bottom-full mb-2 right-0 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap z-10"
+                        style={{ fontSize: '11px' }}
+                      >
+                        Average accuracy across all tests
+                      </div>
+                    </div>
+                  </div>
                   <p
                     className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight"
                     style={{
@@ -474,7 +612,21 @@ export default function MockTestPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Best score</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Best score</p>
+                    <div
+                      className="group relative cursor-help"
+                      title="Your highest score achieved"
+                    >
+                      <Info size={14} style={{ color: '#CBD5E1' }} />
+                      <div
+                        className="absolute hidden group-hover:block bottom-full mb-2 right-0 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap z-10"
+                        style={{ fontSize: '11px' }}
+                      >
+                        Your highest score achieved
+                      </div>
+                    </div>
+                  </div>
                   <p className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
                     {analytics?.best_score ?? '—'}
                   </p>
@@ -494,7 +646,7 @@ export default function MockTestPage() {
                   >
                     {analytics?.improvement_trend === 'improving' && (<><TrendingUp size={16} /> Up</>)}
                     {analytics?.improvement_trend === 'declining' && (<><TrendingDown size={16} /> Down</>)}
-                    {(!analytics?.improvement_trend || analytics?.improvement_trend === 'stable') && 'Stable'}
+                    {(!analytics?.improvement_trend || analytics?.improvement_trend === 'stable') && (<><Minus size={16} /> Stable</>)}
                   </p>
                 </div>
               </div>
@@ -593,7 +745,7 @@ export default function MockTestPage() {
                     return (
                       <div key={i}>
                         <div className="flex items-baseline justify-between mb-1.5">
-                          <span className="text-xs font-medium truncate max-w-[75%]" style={{ color: '#0F172A' }}>{area.topic}</span>
+                          <span className="text-xs font-medium truncate max-w-[75%]" style={{ color: '#0F172A' }}>{displayTopicLabel(area.topic)}</span>
                           <span className="text-xs font-bold tabular-nums" style={{ color: textColor }}>{area.accuracy}%</span>
                         </div>
                         <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#F1F5F9' }}>
