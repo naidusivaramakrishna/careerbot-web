@@ -919,44 +919,58 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
 
   const renderCoreCompetencies = () => {
     if (!coreCompetenciesSection) return null;
-    const field = coreCompetenciesSection.fields[0];
-    if (!field) return null;
-    if (Array.isArray(field.value)) {
-      const list = field.value.filter(v => v?.trim());
-      if (list.length === 0) return null;
+    // Render EVERY field, not only fields[0]. A Core Competencies section the
+    // user created in the custom-section editor can hold several fields, and
+    // until this section was pulled out of the generic custom-sections block
+    // below, that block printed all of them. Reading only the first field here
+    // would silently drop the rest from the rendered resume.
+    const body = coreCompetenciesSection.fields.map((field) => {
+      const fieldLabel = isRedundantCustomSectionFieldLabel(coreCompetenciesSection, field)
+        ? null
+        : <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>;
+      if (Array.isArray(field.value)) {
+        const list = field.value.filter(v => v?.trim());
+        if (list.length === 0) return null;
+        return (
+          <div key={field.id}>
+            {fieldLabel}
+            <ul style={{ ...baseTextStyle, margin: 0, paddingLeft: "20px", fontSize: "12px", listStyleType: "disc" }}>
+              {list.map((point, idx) => {
+                const labelMatch = point.match(/^([^.]+\.)\s*([\s\S]*)$/);
+                return (
+                  <li key={idx}>
+                    {labelMatch ? (
+                      <>
+                        <strong>{labelMatch[1]}</strong>
+                        {labelMatch[2] ? ` ${labelMatch[2]}` : ""}
+                      </>
+                    ) : point}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      }
+      // A manually-created Core Competencies section (via the custom-section
+      // editor) can be a single text block rather than a list -- fall back to
+      // the same HTML/newline-aware renderer the generic custom sections use,
+      // so a user's own entry never silently disappears here.
+      const text = field.value?.toString().trim();
+      if (!text) return null;
       return (
-        <div>
-          {renderSectionHeading("CORE COMPETENCIES")}
-          <div style={sectionBorderStyle("12px")} />
-          <ul style={{ ...baseTextStyle, margin: 0, paddingLeft: "20px", fontSize: "12px", listStyleType: "disc" }}>
-            {list.map((point, idx) => {
-              const labelMatch = point.match(/^([^.]+\.)\s*([\s\S]*)$/);
-              return (
-                <li key={idx}>
-                  {labelMatch ? (
-                    <>
-                      <strong>{labelMatch[1]}</strong>
-                      {labelMatch[2] ? ` ${labelMatch[2]}` : ""}
-                    </>
-                  ) : point}
-                </li>
-              );
-            })}
-          </ul>
+        <div key={field.id} style={{ paddingLeft: "20px" }}>
+          {fieldLabel}
+          {renderHTMLToReact(text)}
         </div>
       );
-    }
-    // A manually-created Core Competencies section (via the custom-section
-    // editor) can be a single text block rather than a list -- fall back to
-    // the same HTML/newline-aware renderer the generic custom sections use,
-    // so a user's own entry never silently disappears here.
-    const text = field.value?.toString().trim();
-    if (!text) return null;
+    }).filter(Boolean);
+    if (body.length === 0) return null;
     return (
       <div>
         {renderSectionHeading("CORE COMPETENCIES")}
         <div style={sectionBorderStyle("12px")} />
-        <div style={{ paddingLeft: "20px" }}>{renderHTMLToReact(text)}</div>
+        {body}
       </div>
     );
   };
@@ -1334,6 +1348,13 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           );
         });
       })() : null}
+
+      {/* Core Competencies is inserted into the ordered list above, which only
+          runs when there IS an order. With an empty order (the prop's own
+          default) that insertion never happens -- and the section is no longer
+          in otherCustomSections either, because it was extracted out of it. So
+          render it here instead of dropping it from the resume entirely. */}
+      {(!sectionOrder || sectionOrder.length === 0) && renderCoreCompetencies()}
 
       {/* Custom Sections */}
       {otherCustomSections.map((section, sectionIdx) => (
