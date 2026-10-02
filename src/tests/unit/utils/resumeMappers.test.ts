@@ -312,6 +312,60 @@ describe("core_competencies synthesized custom section", () => {
       "Microservices Migration. Led migration of legacy monoliths to a microservices architecture.",
     ]);
   });
+
+  it("keeps an elaboration sentence shorter than the label-word limit attached to its label", () => {
+    // Word count alone treated "Delivered systems." (2 words) as a new label
+    // and emitted it as its own bullet, chopping one competency into two.
+    const mapped = mapParserOutputToBuilderData({
+      core_competencies:
+        "Backend Engineering at Scale. Delivered systems. Event-Driven Messaging. Built Kafka pipelines.",
+    });
+
+    expect(mapped.customSections?.[0].fields[0].value).toEqual([
+      "Backend Engineering at Scale. Delivered systems.",
+      "Event-Driven Messaging. Built Kafka pipelines.",
+    ]);
+  });
+
+  it("does not treat an abbreviation's period as a sentence boundary", () => {
+    // "U.S." was split off as its own point, leaving "Market Expansion. Grew
+    // revenue..." as a second bogus point.
+    const mapped = mapParserOutputToBuilderData({
+      core_competencies:
+        "U.S. Market Expansion. Grew revenue 30 percent year over year across the western region territory.",
+    });
+
+    expect(mapped.customSections?.[0].fields[0].value).toEqual([
+      "U.S. Market Expansion. Grew revenue 30 percent year over year across the western region territory.",
+    ]);
+  });
+
+  it("still splits competencies whose labels are not title-cased", () => {
+    // Labels are Title Case in the AI service's output, but a label that is
+    // not must still start a new point once the previous point already has
+    // its own label plus an elaboration.
+    const mapped = mapParserOutputToBuilderData({
+      core_competencies:
+        "backend engineering. delivered systems. event-driven messaging. built kafka pipelines.",
+    });
+
+    expect(mapped.customSections?.[0].fields[0].value).toEqual([
+      "backend engineering. delivered systems.",
+      "event-driven messaging. built kafka pipelines.",
+    ]);
+  });
+
+  it("keeps consecutive title-cased labels with no elaboration as separate points", () => {
+    const mapped = mapParserOutputToBuilderData({
+      core_competencies: "Stakeholder Management. Team Leadership. Data Analysis.",
+    });
+
+    expect(mapped.customSections?.[0].fields[0].value).toEqual([
+      "Stakeholder Management.",
+      "Team Leadership.",
+      "Data Analysis.",
+    ]);
+  });
 });
 
 describe("technical_skills id backfill", () => {

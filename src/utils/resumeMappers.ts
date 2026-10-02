@@ -858,28 +858,80 @@ function toCustomFields(data: unknown, sectionName: string): CustomField[] {
 // problem, since it only judges each already-delimited sentence as a whole.
 const MAX_LABEL_WORDS = 6;
 
+// Words that stay lowercase inside an otherwise title-cased label
+// ("Backend Engineering at Scale.", "Design of Distributed Systems.").
+const LABEL_LOWERCASE_WORDS = new Set([
+  "a", "an", "and", "as", "at", "across", "by", "for", "from", "in", "into",
+  "of", "on", "or", "per", "the", "to", "via", "with",
+]);
+
+/**
+ * True when a sentence reads like a Title-Cased label rather than prose: every
+ * word either starts with a capital/digit or is one of the small lowercase
+ * connector words above. "Event-Driven Messaging." passes; "Delivered systems."
+ * does not, because "systems" is lowercase and is not a connector.
+ */
+function looksLikeLabelCase(sentence: string): boolean {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return false;
+  return words.every((word, idx) => {
+    const core = word.replace(/^[^\p{L}\p{N}]+/u, "");
+    if (!core) return true;
+    if (idx > 0 && LABEL_LOWERCASE_WORDS.has(core.replace(/[^\p{L}]/gu, "").toLowerCase())) return true;
+    return /^[\p{Lu}\p{N}]/u.test(core);
+  });
+}
+
+/**
+ * Splits flattened text into sentences on "period + whitespace", re-attaching
+ * the period each split consumed. A period that terminates a single-letter
+ * token is an abbreviation, not a sentence end, so "U.S. Market Expansion."
+ * stays one sentence instead of becoming "U.S." plus "Market Expansion.".
+ */
+function splitIntoSentences(flattened: string): string[] {
+  const sentences: string[] = [];
+  const boundary = /\.\s+/g;
+  let start = 0;
+  let match: RegExpExecArray | null;
+  while ((match = boundary.exec(flattened)) !== null) {
+    const beforePeriod = flattened[match.index - 1] ?? "";
+    const twoBefore = match.index >= 2 ? flattened[match.index - 2] : "";
+    const isAbbreviation =
+      /\p{Lu}/u.test(beforePeriod) && (match.index < 2 || /[\s.]/.test(twoBefore));
+    if (isAbbreviation) continue;
+    const sentence = flattened.slice(start, match.index + 1).trim();
+    if (sentence) sentences.push(sentence);
+    start = match.index + match[0].length;
+  }
+  const tail = flattened.slice(start).trim();
+  if (tail) sentences.push(tail);
+  return sentences;
+}
+
 function splitOnRepeatingLabel(text: string): string[] | null {
   const flattened = text.replace(/\s+/g, " ").trim();
   if (!flattened) return null;
-  // Split into whole sentences (period + whitespace), re-attaching the
-  // period every split consumed so each sentence still reads naturally.
-  const rawParts = flattened.split(/\.\s+/);
-  const sentences = rawParts
-    .map((part, idx) => (idx < rawParts.length - 1 ? `${part}.` : part))
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const sentences = splitIntoSentences(flattened);
   if (sentences.length < 2) return null;
 
-  const groups: string[] = [];
+  // Each group is one competency: its label sentence plus the elaboration
+  // sentences that follow it. Word count ALONE cannot decide where the next
+  // label starts -- an elaboration shorter than MAX_LABEL_WORDS
+  // ("Delivered systems.") scores as a label and chops one competency into
+  // two. A short sentence therefore only starts a new group when it also
+  // reads like a label (Title Case), or when the current group already has
+  // its own label plus at least one elaboration sentence.
+  const groups: string[][] = [];
   for (const sentence of sentences) {
     const wordCount = sentence.split(/\s+/).filter(Boolean).length;
-    if (groups.length === 0 || wordCount <= MAX_LABEL_WORDS) {
-      groups.push(sentence);
-    } else {
-      groups[groups.length - 1] = `${groups[groups.length - 1]} ${sentence}`;
-    }
+    const current = groups[groups.length - 1];
+    const startsNewGroup =
+      !current ||
+      (wordCount <= MAX_LABEL_WORDS && (looksLikeLabelCase(sentence) || current.length >= 2));
+    if (startsNewGroup) groups.push([sentence]);
+    else current.push(sentence);
   }
-  return groups.length > 1 ? groups : null;
+  return groups.length > 1 ? groups.map((group) => group.join(" ")) : null;
 }
 
 /**
