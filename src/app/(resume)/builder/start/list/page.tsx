@@ -94,8 +94,10 @@ const ResumeListContent = () => {
         initials: getInitials(name),
         name: name,
         job: targetRole,
-        // A fresh server calculation is authoritative. Otherwise use the same
-        // complete-data preview calculation displayed by the editor.
+        // builder_score is set upstream only for a server score newer than the
+        // resume's own updatedAt, so a value here already passed that freshness
+        // check and wins. Otherwise fall back to the same complete-data preview
+        // calculation the editor displays.
         score: typeof item.builder_score?.score === 'number'
           ? item.builder_score.score
           : computePreviewScore(item).score,
@@ -148,11 +150,21 @@ const ResumeListContent = () => {
         };
       });
 
-      // The unified list response is compact. Hydrate builder resumes in
-      // parallel first, then run the shared preview scorer exactly once per
-      // row against the same complete data the editor loads.
+      // The unified list response is compact, so each row gets scored twice:
+      // once from the compact payload right away, then again from the full
+      // record. Paint the list from the compact payload FIRST -- hydrating
+      // every builder resume before the first paint puts 2 requests per
+      // resume behind the loading spinner, which is what the background pass
+      // below exists to avoid (the pre-existing behaviour this replaced
+      // showed the list immediately and filled scores in afterwards).
+      const builderList = builder_resumes as unknown as ResumeResponse[];
+      setResumes([...transformResumeData(builderList, profileName), ...transformedEnhanced]);
+      setLoading(false);
+
+      // Then hydrate every builder resume and re-score it against the same
+      // complete data the editor loads, in ONE batched update.
       const fullBuilderResumes = await Promise.all(
-        (builder_resumes as unknown as ResumeResponse[]).map(async (resume) => {
+        builderList.map(async (resume) => {
           const [resumeResult, scoreResult] = await Promise.allSettled([
             getResumeById(resume.id),
             getBuilderScore(resume.id),
@@ -169,9 +181,7 @@ const ResumeListContent = () => {
             : fullResume;
         }),
       );
-      const transformedData = transformResumeData(fullBuilderResumes, profileName);
-      setResumes([...transformedData, ...transformedEnhanced]);
-      setLoading(false);
+      setResumes([...transformResumeData(fullBuilderResumes, profileName), ...transformedEnhanced]);
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {
