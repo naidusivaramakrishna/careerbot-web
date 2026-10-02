@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   createLiveSession: vi.fn(),
   getReport: vi.fn(),
   downloadReportPdf: vi.fn(),
-  getLiveSessionState: vi.fn(),
   buildWsUrl: vi.fn((url: string) => `ws://test.local${url}`),
   isAuthenticated: false,
   authLoading: false,
@@ -58,7 +57,6 @@ vi.mock("@/api/mockInterviewApi", () => ({
   createLiveSession: mocks.createLiveSession,
   getReport: mocks.getReport,
   downloadReportPdf: mocks.downloadReportPdf,
-  getLiveSessionState: mocks.getLiveSessionState,
   buildWsUrl: mocks.buildWsUrl,
 }));
 
@@ -790,36 +788,33 @@ describe("LiveInterviewSessionPage", () => {
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/report/report-from-backend");
   });
 
-  it("recovers the room when the backend resumes a paused session", async () => {
+  it("treats session_paused as purely informational — no dialog, interview_complete in the same burst lands on the completed screen", async () => {
+    // live-interview-reconnect-and-simli-avatar.txt: reconnect is removed —
+    // session_paused is now immediately followed by interview_complete,
+    // then the socket closes for good. No "Connection Lost" dialog anymore.
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
     act(() => {
       ws.open();
       ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
-      ws.emit({ type: "session_paused", reason: "network", reconnect_token: "retry-token" });
-    });
-
-    expect(screen.getByRole("dialog", { name: /connection lost/i })).toBeInTheDocument();
-
-    act(() => {
-      ws.emit({ type: "session_resumed", session_id: "live-session-123", questions_asked: 2, total_questions: 6, current_question: "Next question" });
+      ws.emit({ type: "session_paused", reason: "hard_time_limit" });
     });
 
     expect(screen.queryByRole("dialog", { name: /connection lost/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Question 3")).toBeInTheDocument();
+
+    act(() => {
+      ws.emit({ type: "interview_complete", report_id: "r1", overall_score: 70 });
+    });
+
+    expect(screen.getByText("Interview Complete!")).toBeInTheDocument();
   });
 
-  it("reconnects with a recovery ticket when the connection is interrupted", async () => {
-    mocks.getLiveSessionState.mockResolvedValue({
-      session_id: "live-session-123",
-      status: "active",
-      current_question: 2,
-      questions_asked: 1,
-      time_elapsed_s: 90,
-      can_reconnect: true,
-      reconnect_token: "reconnect-token",
-    });
+  it("treats every WebSocket close during an active interview as terminal — lands on the completed screen, never a reconnect dialog", async () => {
+    // Reconnect is fully removed. If the socket drops abnormally and
+    // interview_complete never arrives (a true network failure), the client
+    // must not show a "reconnecting" spinner or retry — it goes straight to
+    // the completed/report screen using sessionId as the report fallback.
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
@@ -829,10 +824,9 @@ describe("LiveInterviewSessionPage", () => {
       ws.onclose?.({ code: 1006 } as CloseEvent);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
-
-    await waitFor(() => expect(mocks.getLiveSessionState).toHaveBeenCalledWith("live-session-123"));
-    expect(MockWebSocket.instances[1].url).toBe("ws://test.local/api/v1/mock-interview/live/live-session-123?ticket=reconnect-token");
+    expect(screen.queryByRole("dialog", { name: /connection lost/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Interview Complete!")).toBeInTheDocument();
   });
 
   it("shows and dismisses backend error messages without ending the room", async () => {

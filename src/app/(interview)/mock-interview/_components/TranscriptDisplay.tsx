@@ -63,6 +63,7 @@ export default function TranscriptDisplay({
 
         <div className="flex items-center gap-1.5">
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); handleCopy(); }}
             className="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center transition-all"
             aria-label="Copy transcript"

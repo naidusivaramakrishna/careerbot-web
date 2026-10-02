@@ -11,6 +11,12 @@ interface TextToSpeechPlayerProps {
   onAudioEnd?: () => void; // Callback when audio finishes playing
 }
 
+// Non-cryptographic randomness for a purely cosmetic waveform animation.
+// Uses crypto.getRandomValues instead of Math.random() to satisfy static analysis.
+function randomFloat(): number {
+  return crypto.getRandomValues(new Uint32Array(1))[0] / (0xffffffff + 1);
+}
+
 export default function TextToSpeechPlayer({
   text,
   onAudioEnd
@@ -101,7 +107,7 @@ export default function TextToSpeechPlayer({
                 key={i}
                 className="w-1 bg-[#2557a7] rounded-full animate-pulse"
                 style={{
-                  height: `${Math.random() * 24 + 8}px`,
+                  height: `${randomFloat() * 24 + 8}px`,
                   animationDelay: `${i * 0.08}s`,
                 }}
               />

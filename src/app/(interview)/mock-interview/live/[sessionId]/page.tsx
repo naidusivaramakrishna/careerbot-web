@@ -5,7 +5,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   buildWsUrl,
-  getLiveSessionState,
   evaluateLiveSessionVideo,
   WsServerMessage,
   WsClientMessage,
@@ -37,7 +36,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  RefreshCw,
   Maximize2,
   X,
 } from "lucide-react";
@@ -202,7 +200,7 @@ function EndEarlyModal({
       <div className="mx-4 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
         <div className="flex items-center justify-between mb-4">
           <h2 id="end-modal-title" className="text-base font-bold text-gray-900">End Interview Early?</h2>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -211,84 +209,18 @@ function EndEarlyModal({
         </p>
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onCancel}
             className="flex-1 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e4a8f]"
           >
             Continue Interview
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             className="flex-1 rounded-lg border border-gray-200 bg-gray-100 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200"
           >
             End
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Reconnection modal ───────────────────────────────────────────────────────
-
-function ReconnectModal({
-  attempt,
-  maxAttempts,
-  onRetry,
-  onAbandon,
-}: {
-  attempt: number;
-  maxAttempts: number;
-  onRetry: () => void;
-  onAbandon: () => void;
-}) {
-  const failed = attempt > maxAttempts;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="reconnect-modal-title"
-    >
-      <div className="mx-4 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100">
-          {failed ? (
-            <WifiOff size={24} className="text-gray-400" />
-          ) : (
-            <Loader2 size={24} className="text-[#2557a7] animate-spin" />
-          )}
-        </div>
-        <h2 id="reconnect-modal-title" className="text-base font-bold text-gray-900 mb-2">
-          {failed ? "Connection Failed" : "Connection Lost"}
-        </h2>
-        <p className="text-sm text-gray-600 mb-1">
-          {failed
-            ? "Unable to reconnect after 3 attempts."
-            : `Reconnecting… attempt ${attempt} of ${maxAttempts}`}
-        </p>
-        {!failed && (
-          <p className="text-xs text-gray-500 mb-6">Your progress is saved. Please wait.</p>
-        )}
-        {failed && (
-          <p className="text-xs text-gray-500 mb-6">Your answers so far have been saved. You can view a partial report.</p>
-        )}
-        <div className="flex gap-3">
-          {!failed && (
-            <button
-              onClick={onRetry}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e4a8f]"
-            >
-              <RefreshCw size={13} /> Try Again
-            </button>
-          )}
-          <button
-            onClick={onAbandon}
-            className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
-              failed
-                ? "flex-1 bg-[#2557a7] text-white hover:bg-[#1e4a8f]"
-                : "px-4 bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
-            }`}
-          >
-            {failed ? "View Partial Report" : "Abandon Session"}
           </button>
         </div>
       </div>
@@ -320,6 +252,7 @@ function CompletedScreen({ sessionId, reportId }: { sessionId: string; reportId?
         ))}
       </div>
       <button
+        type="button"
         onClick={() => router.push(`/mock-interview/report/${reportTargetId}`)}
         className="mx-auto flex items-center gap-2 rounded-lg bg-[#2557a7] px-6 py-3 font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f]"
       >
@@ -448,8 +381,8 @@ export default function LiveInterviewSessionPage() {
   const [sessionType, setSessionType] = useState("Live");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [visibleQuestionText, setVisibleQuestionText] = useState("");
-  // question_next/session_resumed set the full question text eagerly (a
-  // fallback for sessions without transcript-delta streaming). If
+  // question_next sets the full question text eagerly (a fallback for
+  // sessions without transcript-delta streaming). If
   // interviewer_transcript_delta then re-streams the same question from
   // scratch, appending onto that eager full text produces "old text + new
   // fragment" until transcript_final replaces it. This flag makes the first
@@ -533,8 +466,14 @@ export default function LiveInterviewSessionPage() {
   const avatarVideoElRef = useRef<HTMLVideoElement | null>(null);
 
   // Simli has no server-side audio bridge — the browser feeds the
-  // interviewer's audio into it directly (mock-interview-simli-avatar.txt §5).
-  // Its own <audio> element is kept muted for that reason — see the JSX below.
+  // interviewer's audio into it directly so it can render a lip-synced
+  // audio+video stream. Same "one audio rule" the HeyGen/LiveAvatar
+  // integration used: once the avatar's own rendered audio is live, it is
+  // the single audible source and playDelta is skipped; before that (or if
+  // Simli errors out), playDelta is the fallback. handleWsMessage reads this
+  // via ref, not avatarConnection state, to stay dependency-free (same
+  // reasoning as isAudioMutedRef elsewhere in this file).
+  const simliAudioLiveRef = useRef(false);
   const simliClientRef = useRef<SimliClient | null>(null);
   const simliAudioElRef = useRef<HTMLAudioElement | null>(null);
   const simliTargetRateRef = useRef(16000); // overwritten from avatar.audio_input_format
@@ -546,6 +485,7 @@ export default function LiveInterviewSessionPage() {
   const disconnectAvatar = useCallback(() => {
     simliClientRef.current?.stop().catch(() => {});
     simliClientRef.current = null;
+    simliAudioLiveRef.current = false;
   }, []);
 
   const joinAvatar = useCallback(async (avatar: SimliAvatarSession) => {
@@ -570,14 +510,9 @@ export default function LiveInterviewSessionPage() {
       return;
     }
 
-    // simli-client's LiveKit transport attaches the incoming audio track via
-    // livekit-client's attachToElement(), which unconditionally sets
-    // `element.muted = false` whenever the stream has an audio track (to make
-    // autoplay work) — this silently overrides the JSX `muted` attribute the
-    // instant the track attaches. Re-assert it on every change so playDelta
-    // stays the single audible source (mock-interview-simli-avatar.txt §5).
+    // Muted by default until "start" fires — before that, playDelta is the
+    // audible source and Simli's own rendered audio must stay silent.
     audioEl.muted = true;
-    audioEl.addEventListener("volumechange", () => { audioEl.muted = true; });
 
     const client = new SimliClientCtor(
       avatar.session_token,
@@ -589,13 +524,23 @@ export default function LiveInterviewSessionPage() {
     );
     simliClientRef.current = client;
 
-    client.on("start", () => setAvatarConnection((s) => (s === "connecting" ? "live" : s)));
+    client.on("start", () => {
+      setAvatarConnection((s) => (s === "connecting" ? "live" : s));
+      // Simli's rendered output becomes the single audible source — unmute
+      // it (respecting the candidate's own mute toggle) and stop feeding
+      // playDelta from here on (same "one audio rule" as HeyGen/LiveAvatar).
+      simliAudioLiveRef.current = true;
+      audioEl.muted = isAudioMutedRef.current;
+    });
     client.on("speaking", () => setAvatarActivity("talking"));
     client.on("silent", () => setAvatarActivity("idle"));
     client.on("error", (detail) => {
       console.warn("Simli avatar error, continuing audio-only", detail);
       // No reconnect path for Simli (mock-interview-simli-avatar.txt §6/§9) —
-      // treat it as gone for the rest of this session.
+      // treat it as gone for the rest of this session. Fall back to playDelta
+      // and make sure Simli's own output can't still be heard.
+      simliAudioLiveRef.current = false;
+      audioEl.muted = true;
       simliClientRef.current = null;
       setAvatarConnection("fallback");
     });
@@ -604,6 +549,7 @@ export default function LiveInterviewSessionPage() {
       await client.start();
     } catch (err) {
       console.warn("Simli avatar failed to connect, continuing audio-only", err);
+      simliAudioLiveRef.current = false;
       simliClientRef.current = null;
       setAvatarConnection("fallback");
     }
@@ -613,6 +559,16 @@ export default function LiveInterviewSessionPage() {
   // Cached in a ref (not just re-read from context) so a React StrictMode
   // double-mount doesn't lose it — same pattern as initialWsUrlRef below.
   const consumedAvatarRef = useRef<{ done: boolean; avatar: SimliAvatarSession | null }>({ done: false, avatar: null });
+  // Separately guards joinAvatar() itself (not just the consume-from-context
+  // step above) — without this, StrictMode's double-invoke can construct a
+  // second SimliClient while the first is still mid-connect, and the
+  // synthetic cleanup's disconnectAvatar() calling .stop() on a client still
+  // inside room.connect() surfaces as an unhandled "Client initiated
+  // disconnect" ConnectionError from inside livekit-client (which Simli's
+  // transport uses internally) — not something our own try/catch around
+  // client.start() is positioned to catch, since it rejects LiveKit's own
+  // internal connect-future, not the promise we're awaiting.
+  const avatarJoinStartedRef = useRef(false);
   useEffect(() => {
     if (!sessionId) return;
     if (!consumedAvatarRef.current.done) {
@@ -620,7 +576,10 @@ export default function LiveInterviewSessionPage() {
     }
     const avatar = consumedAvatarRef.current.avatar;
     if (avatar) {
-      joinAvatar(avatar);
+      if (!avatarJoinStartedRef.current) {
+        avatarJoinStartedRef.current = true;
+        joinAvatar(avatar);
+      }
     } else {
       setAvatarConnection("fallback");
     }
@@ -640,6 +599,17 @@ export default function LiveInterviewSessionPage() {
       interviewerAudioPlayerRef.current.gainNode.gain.value = isAudioMuted ? 0 : 1;
     }
   }, [isAudioMuted]);
+
+  // Mirror the same toggle onto Simli's own audio element once it's the
+  // active audible source — avatarConnection === "live" is set at the exact
+  // same moment simliAudioLiveRef flips (the "start" event in joinAvatar).
+  // While not live, leave the element's muted state alone — joinAvatar/error
+  // already manage it directly for that case.
+  useEffect(() => {
+    if (avatarConnection === "live" && simliAudioElRef.current) {
+      simliAudioElRef.current.muted = isAudioMuted;
+    }
+  }, [isAudioMuted, avatarConnection]);
 
   useEffect(() => {
     const storedType = sessionStorage.getItem("live_session_type");
@@ -793,14 +763,6 @@ export default function LiveInterviewSessionPage() {
   const [showCodingTransition, setShowCodingTransition] = useState(false);
 
   const [showEndModal, setShowEndModal] = useState(false);
-  const [showReconnectModal, setShowReconnectModal] = useState(false);
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const MAX_RECONNECT = 3;
-
-  // Reconnect state kept in refs to avoid stale-closure issues inside WS callbacks
-  const reconnectAttemptRef = useRef(0);
-  const reconnectTokenRef = useRef<string | null>(null);   // token from session_paused
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventIdRef = useRef<number>(0);                // event dedup baseline
 
   const [scoreToast, setScoreToast] = useState<ScoreToast | null>(null);
@@ -1053,10 +1015,6 @@ export default function LiveInterviewSessionPage() {
     scoreToastTimerRef.current = setTimeout(() => setScoreToast(null), 4000);
   }, []);
 
-  // Stable ref so onclose/session_paused can call doReconnect without stale closures.
-  // The real implementation is assigned after doReconnect is defined below.
-  const doReconnectRef = useRef<() => void>(() => {});
-
   // Tracks whether session_ready was ever received — used to distinguish
   // an initial-connection failure (ticket expired) from a mid-session drop.
   const sessionReadyRef = useRef(false);
@@ -1090,53 +1048,28 @@ export default function LiveInterviewSessionPage() {
         lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
         break;
-      case "session_resumed": {
-        // Reset reconnect tracking for future disconnects
-        reconnectAttemptRef.current = 0;
-        setReconnectAttempt(0);
-        // Establish dedup baseline so replayed events are ignored
-        lastEventIdRef.current = msg.resumed_from_event_id ?? 0;
-
-        setQuestionNumber(msg.questions_asked + 1);
-        questionsAnnouncedRef.current = msg.questions_asked + 1;
-        // Restore the current question text (not just the number)
-        if (msg.current_question) {
-          setCurrentQuestion({ number: msg.questions_asked + 1, text: msg.current_question });
-          setVisibleQuestionText(msg.current_question);
-          questionTextStreamStartedRef.current = false;
-        }
-        setServerError(null);
-        setWsConnected(true);
-        setShowReconnectModal(false);
-        // A fallback timer scheduled before the disconnect is now stale —
-        // the resumed state below decides the phase fresh.
-        clearAnswerCaptureTimer();
-        setIsAnswerCaptureFallback(false);
-        // If the candidate was mid-answer when the connection dropped, the AI
-        // is waiting on them — resume straight into listening.
-        setPhase(msg.pending_answer ? "listening" : "ai-talking");
-        break;
-      }
       case "interviewer_audio_delta": {
         lastInterviewerActivityRef.current = Date.now();
         setPhase("ai-talking");
-        // The server always sends these whether or not the avatar is up.
-        // playDelta is always the single audible source — Simli's own audio
-        // output is deliberately muted (mock-interview-simli-avatar.txt §5).
-        if (!interviewerAudioPlayerRef.current) {
-          interviewerAudioPlayerRef.current = createInterviewerAudioPlayer();
-          if (interviewerAudioPlayerRef.current) {
-            interviewerAudioPlayerRef.current.gainNode.gain.value = isAudioMutedRef.current ? 0 : 1;
+        // The server always sends these whether or not the avatar is up, so
+        // it can switch instantly if the avatar drops. Once Simli's own
+        // rendered audio is live, it IS this same voice — playing both would
+        // double it, slightly out of step (same "one audio rule" as the old
+        // HeyGen/LiveAvatar integration, just with Simli in its place).
+        if (!simliAudioLiveRef.current) {
+          if (!interviewerAudioPlayerRef.current) {
+            interviewerAudioPlayerRef.current = createInterviewerAudioPlayer();
+            if (interviewerAudioPlayerRef.current) {
+              interviewerAudioPlayerRef.current.gainNode.gain.value = isAudioMutedRef.current ? 0 : 1;
+            }
           }
+          const player = interviewerAudioPlayerRef.current;
+          if (player) scheduleInterviewerAudioDelta(player, msg.audio_base64);
         }
-        const player = interviewerAudioPlayerRef.current;
-        if (player) scheduleInterviewerAudioDelta(player, msg.audio_base64);
 
         // Simli has no server-side audio bridge (mock-interview-simli-avatar.txt
-        // §2/§5) — forward the same delta into it so it can lip-sync. This is
-        // additive to, never a replacement for, playDelta above: playDelta
-        // stays the single audible source; Simli's own <audio> element is
-        // deliberately muted (see the JSX below).
+        // §2/§5) — forward the same delta into it regardless, so it can
+        // render the lip-synced audio+video it needs to produce once live.
         if (simliClientRef.current) {
           const pcm24k = decodeBase64(msg.audio_base64);
           const samples = new Int16Array(pcm24k.buffer, pcm24k.byteOffset, pcm24k.byteLength >> 1);
@@ -1147,10 +1080,10 @@ export default function LiveInterviewSessionPage() {
       }
       case "interviewer_transcript_delta":
         setServerError(null);
-        // The first delta for a question REPLACES whatever question_next/
-        // session_resumed eagerly pre-filled (their full text was only a
-        // fallback for sessions without delta streaming) — appending onto it
-        // here would show "old text" + "new fragment" concatenated together.
+        // The first delta for a question REPLACES whatever question_next
+        // eagerly pre-filled (its full text was only a fallback for sessions
+        // without delta streaming) — appending onto it here would show
+        // "old text" + "new fragment" concatenated together.
         // Subsequent deltas for the same question append normally.
         if (!questionTextStreamStartedRef.current) {
           questionTextStreamStartedRef.current = true;
@@ -1298,22 +1231,12 @@ export default function LiveInterviewSessionPage() {
         setCompletedReportId(msg.report_id);
         setPhase("completed");
         break;
+      // Informational only now — reconnect is removed
+      // (live-interview-reconnect-and-simli-avatar.txt). interview_complete
+      // always follows within the same message burst, then the socket
+      // closes for good; just stop a fallback timer that can no longer matter.
       case "session_paused":
-        setWsConnected(false);
-        setShowReconnectModal(true);
-        // A fallback timer scheduled before the pause must not fire while
-        // reconnecting — session_resumed (or a fresh connect) decides the
-        // phase fresh once the session is actually back.
         clearAnswerCaptureTimer();
-        // Capture token so the reconnect path skips the HTTP /state round-trip
-        if (msg.reconnect_token) reconnectTokenRef.current = msg.reconnect_token;
-        // Auto-reconnect immediately — the server is about to close the WS;
-        // we want to fire before onclose so the timer is already set when it arrives.
-        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          doReconnectRef.current();
-        }, 500);
         break;
       case "heartbeat":
         break;
@@ -1338,14 +1261,15 @@ export default function LiveInterviewSessionPage() {
     ws.onmessage = (event) => {
       try {
         const raw = JSON.parse(event.data) as WsServerMessage & { event_id?: number; total_questions?: number };
-        // Skip replayed frames sent by the server after reconnect (dedup by event_id)
+        // Defensive dedup in case the server ever redelivers a frame (event_id
+        // is monotonic) — not reconnect-specific, just general WS hygiene.
         if (raw.event_id !== undefined) {
           if (raw.event_id <= lastEventIdRef.current) return;
           lastEventIdRef.current = raw.event_id;
         }
-        // Not documented on session_ready/session_resumed anymore, but read it
-        // defensively if the backend still sends it — the question-progress
-        // bar just shows no "of N" when it's absent.
+        // Not documented on session_ready anymore, but read it defensively if
+        // the backend still sends it — the question-progress bar just shows
+        // no "of N" when it's absent.
         if (typeof raw.total_questions === "number") setTotalQuestions(raw.total_questions);
         handleWsMessage(raw);
       } catch { /* ignore malformed frames */ }
@@ -1354,46 +1278,42 @@ export default function LiveInterviewSessionPage() {
     ws.onclose = (event) => {
       setWsConnected(false);
 
-      // Clean close — interview ended normally; do not reconnect
+      // Clean close — interview ended normally; nothing more to do.
       if (event.code === 1000 || event.code === 1001) return;
 
       // AI_SESSION_UNAVAILABLE: the AI provider itself was unreachable when
-      // the server tried to connect. Doc's own remedy is unconditional —
-      // "retry with a new session" — reconnecting THIS session would just
-      // fail the same way again, so go straight back to set up a fresh one.
+      // the server tried to connect — no interview ever started, nothing to
+      // report. Go straight back to set up a fresh one.
       if (event.code === 1011) {
         routerRef.current.replace('/mock-interview/live');
         return;
       }
 
-      // Terminal server codes — the token/session is gone; reconnecting would fail.
-      // If session_ready was never received this is an initial-connection failure
-      // (e.g. ticket expired during StrictMode remount or slow navigation): redirect
-      // back to the setup page so the user can get a fresh ticket.
+      // Terminal server codes before session_ready — an initial-connection
+      // failure (e.g. ticket expired during StrictMode remount or slow
+      // navigation), not a mid-interview drop. Same "nothing started yet"
+      // case as above: redirect to setup for a fresh ticket.
       const TERMINAL_CODES = [4001, 4002, 4003];
-      if (TERMINAL_CODES.includes(event.code)) {
-        if (!sessionReadyRef.current) {
-          routerRef.current.replace('/mock-interview/live');
-          return;
-        }
-        setShowReconnectModal(true);
-        reconnectAttemptRef.current = MAX_RECONNECT + 1; // force "Connection Failed" state in modal
-        setReconnectAttempt(MAX_RECONNECT + 1);
+      if (TERMINAL_CODES.includes(event.code) && !sessionReadyRef.current) {
+        routerRef.current.replace('/mock-interview/live');
         return;
       }
 
-      // Abnormal drop — auto-reconnect unless session_paused already scheduled it
-      setShowReconnectModal(true);
-      if (!reconnectTimerRef.current) {
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          doReconnectRef.current();
-        }, 1500); // brief delay to let the network stabilise
+      // Every other disconnect during an active interview is now terminal —
+      // reconnect is removed (live-interview-reconnect-and-simli-avatar.txt).
+      // The backend has already ended the session and built a report from
+      // whatever was captured; interview_complete should have arrived just
+      // before this fires and already driven the UI to "completed". If it
+      // somehow didn't (a true network failure, nothing received at all),
+      // land on the same completed screen directly — CompletedScreen falls
+      // back to sessionId when reportId is null.
+      if (phaseRef.current !== "completed") {
+        setCompletedReportId(null);
+        setPhase("completed");
       }
     };
 
     ws.onerror = () => {
-      // onerror is always followed by onclose; rely on onclose to drive reconnect
       setWsConnected(false);
     };
   }, [handleWsMessage]);
@@ -1440,53 +1360,6 @@ export default function LiveInterviewSessionPage() {
     router.push("/mock-interview/history");
   }, [wsSend, router]);
 
-  const doReconnect = useCallback(async () => {
-    if (!sessionId) return;
-
-    reconnectAttemptRef.current += 1;
-    const attempt = reconnectAttemptRef.current;
-    setReconnectAttempt(attempt);
-
-    if (attempt > MAX_RECONNECT) return; // all attempts exhausted — modal shows "Connection Failed"
-
-    try {
-      // Prefer the token captured from session_paused (avoids an HTTP round-trip inside the narrow reconnect window)
-      let token = reconnectTokenRef.current;
-      reconnectTokenRef.current = null; // consume it
-
-      if (!token) {
-        const state = await getLiveSessionState(sessionId);
-        if (!state.can_reconnect || !state.reconnect_token) {
-          // Session expired or ended — abandon to partial report
-          router.push(`/mock-interview/report/${sessionId}`);
-          return;
-        }
-        token = state.reconnect_token;
-      }
-
-      const wsPath = `/api/v1/mock-interview/live/${sessionId}?ticket=${token}`;
-      openWebSocket(wsPath);
-      // Modal stays open until session_resumed confirms success
-    } catch {
-      // getLiveSessionState threw (network still down) or openWebSocket failed.
-      // No new WS was created, so no onclose will fire — schedule the next attempt manually.
-      if (attempt <= MAX_RECONNECT) {
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          doReconnectRef.current();
-        }, 2000);
-      }
-    }
-  }, [sessionId, openWebSocket, router]);
-
-  // Keep doReconnectRef current so onclose/setTimeout callbacks never hold stale closures
-  useEffect(() => { doReconnectRef.current = doReconnect; }, [doReconnect]);
-
-  // Manual retry button in ReconnectModal
-  const handleReconnect = useCallback(() => {
-    doReconnect();
-  }, [doReconnect]);
-
   const isQuestionBeingSpoken = phase === "ai-talking";
   const questionTextForDisplay = currentQuestion
     ? isQuestionBeingSpoken
@@ -1529,15 +1402,6 @@ export default function LiveInterviewSessionPage() {
         />
       )}
 
-      {showReconnectModal && (
-        <ReconnectModal
-          attempt={reconnectAttempt}
-          maxAttempts={MAX_RECONNECT}
-          onRetry={handleReconnect}
-          onAbandon={() => router.push(`/mock-interview/report/${sessionId}`)}
-        />
-      )}
-
       {showCodingTransition && codingRound && (
         <CodingTransition
           problemTitle={codingRound.problemTitle}
@@ -1558,7 +1422,7 @@ export default function LiveInterviewSessionPage() {
               <AlertCircle size={14} className="shrink-0 text-yellow-400" />
               Fullscreen helps simulate the interview environment.
             </p>
-            <button onClick={toggleFullscreen} className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-white/20">
+            <button type="button" onClick={toggleFullscreen} className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-white/20">
               Enter fullscreen
             </button>
           </div>
@@ -1586,6 +1450,7 @@ export default function LiveInterviewSessionPage() {
             </span>
             {!isFullscreen && (
               <button
+                type="button"
                 onClick={toggleFullscreen}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white/70 transition-colors hover:bg-white/15"
                 aria-label="Enter full screen"
@@ -1594,6 +1459,7 @@ export default function LiveInterviewSessionPage() {
               </button>
             )}
             <button
+              type="button"
               onClick={() => setShowEndModal(true)}
               className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/75 transition-colors hover:bg-white/15"
             >
@@ -1608,7 +1474,7 @@ export default function LiveInterviewSessionPage() {
               <AlertCircle size={13} className="text-yellow-300 shrink-0" />
               {serverError}
             </p>
-            <button onClick={() => setServerError(null)} className="text-white/70 hover:text-white">
+            <button type="button" onClick={() => setServerError(null)} className="text-white/70 hover:text-white">
               <X size={14} />
             </button>
           </div>
@@ -1624,7 +1490,7 @@ export default function LiveInterviewSessionPage() {
                   <p className="mt-0.5 text-xs text-gray-500">Allow microphone access from the browser address bar, then retry. Your completed answers remain saved.</p>
                 </div>
               </div>
-              <button onClick={() => setMicRetryKey((key) => key + 1)} className="shrink-0 rounded-lg bg-[#2557a7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1e4a8f]">
+              <button type="button" onClick={() => setMicRetryKey((key) => key + 1)} className="shrink-0 rounded-lg bg-[#2557a7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1e4a8f]">
                 Retry mic
               </button>
             </div>
@@ -1650,7 +1516,7 @@ export default function LiveInterviewSessionPage() {
               <AlertCircle size={13} className="shrink-0" />
               Are you still there? Keep speaking — the interview will continue automatically.
             </p>
-            <button onClick={() => setShowInactivityBanner(false)} className="text-[#2557a7] hover:text-[#1e4a8f]">
+            <button type="button" onClick={() => setShowInactivityBanner(false)} className="text-[#2557a7] hover:text-[#1e4a8f]">
               <X size={14} />
             </button>
           </div>
@@ -1695,8 +1561,10 @@ export default function LiveInterviewSessionPage() {
                 />
                 {/* Simli's constructor requires a real, already-mounted <audio>
                     element to render into (mock-interview-simli-avatar.txt §4).
-                    Kept muted the whole time — playDelta stays the single
-                    audible source; see the interviewer_audio_delta handler. */}
+                    Starts muted (playDelta is the audible source until the
+                    avatar is live); joinAvatar unmutes it once Simli's own
+                    rendered audio becomes the active source — see the "start"
+                    event handler and the mute-toggle effect above. */}
                 <audio ref={simliAudioElRef} autoPlay muted className="hidden" />
 
                 {/* Fallback shown when there's no avatar at all, or while it's
@@ -1864,6 +1732,7 @@ export default function LiveInterviewSessionPage() {
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setIsAudioMuted((m) => !m)}
                     className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:bg-gray-100"
                     aria-label={isAudioMuted ? "Unmute interviewer audio" : "Mute interviewer audio"}
