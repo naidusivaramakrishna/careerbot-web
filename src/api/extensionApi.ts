@@ -9,6 +9,14 @@ export interface ExtensionSession {
   company: string | null;
   job_description: string | null;
   job_url: string | null;
+  // OPTIONAL, and absent in practice today: the only producer in this repo —
+  // `doTailor` in extension/popup/popup.js, which POSTs /extension/prefill —
+  // sends job_description, job_title, company, job_url, resume_id and jd_id
+  // and no location, even though the scraper already captures one
+  // (extension/background/service-worker.js sanitizes `meta.location`).
+  // Declared here so the portal can consume it the moment the extension
+  // starts sending it; until then reads of it are always undefined.
+  job_location?: string | null;
   resume_id: string | null;
   jd_id: string | null;
   profile: Record<string, unknown>;

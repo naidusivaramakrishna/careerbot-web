@@ -78,4 +78,17 @@ describe("writeJobmatchSessionSnapshot", () => {
     expect(writeJobmatchSessionSnapshot(snapshot("1"))).toBe(false);
     KEYS.forEach((key) => expect(store[key]).toBeUndefined());
   });
+
+  it("always sets jm_activeTab to analysis, overwriting a stale 'upload' value", () => {
+    // Simulates a user who clicked "Back to Job Match" earlier in this tab
+    // (Overview.tsx sets jm_activeTab="upload" directly), then triggers a
+    // fresh match via JobCard's "Fix Resume" shortcut (fixResumeForJob.ts),
+    // which goes through this function and hard-navigates to /jobmatch/app.
+    // Without this, Overview's mount-time tab restore would honor the
+    // leftover "upload" value and hide the brand-new match results.
+    store.jm_activeTab = "upload";
+
+    expect(writeJobmatchSessionSnapshot(snapshot("1"))).toBe(true);
+    expect(store.jm_activeTab).toBe("analysis");
+  });
 });

@@ -1,5 +1,5 @@
 import { httpClient } from '@/lib/http';
-import { CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
+import { CATEGORY_SUBCATEGORIES, SECTION_CONFIG, sectionConfigFor } from '@/lib/mockTestConstants';
 import { getExcludeQuestionIds } from '@/utils/seenQuestionIds';
 
 export interface MockTestCompany {
@@ -86,11 +86,14 @@ export const getMockTestCompanyById = async (companyId: string): Promise<any> =>
   }
 };
 
-// The backend has been observed to reject — or silently cap — count > 10
-// on /mock-test/generate. Cap here so the request always sends a value
-// known to succeed; the runner can chain multiple generate calls if it
-// needs more than this per section.
-const MAX_QUESTIONS_PER_GENERATE = 10;
+// Upper bound on `count` for one /mock-test/generate call — at least the
+// biggest SECTION_CONFIG entry (or a section gets quietly trimmed back down),
+// capped at the backend's own limit (GenerateTestRequest: count <= 100) so a
+// future SECTION_CONFIG value above that doesn't just 422 at generate time.
+export const MAX_QUESTIONS_PER_GENERATE = Math.min(
+  100,
+  Math.max(...Object.values(SECTION_CONFIG).map(s => s.questions)),
+);
 
 // Backend rejects exclude_question_ids with > 50 items
 // ("VALIDATION_ERROR: exclude_question_ids cannot exceed 50 items").
@@ -196,19 +199,28 @@ export const generateMockTest = async (
   difficulty: MockTestDifficulty,
   parentSessionId?: string,
   timeoutMs: number = 60000,
-  count: number = 10,
-  timeLimit: number = 20,
-  // When true, the session is created with negative marking so the backend deducts
-  // marks per wrong answer at scoring time. Company tests leave this false.
-  negativeMarking: boolean = false,
+  // Defaults derived from SECTION_CONFIG instead of a stale hardcoded 10/20 —
+  // a future caller that omits these gets the current standard section size,
+  // not numbers nobody has used since before this PR.
+  count: number = sectionConfigFor(categories[0] || 'arithmetic').questions,
+  timeLimit: number = sectionConfigFor(categories[0] || 'arithmetic').minutes,
 ): Promise<MockTestSession> => {
-  const resolvedSubcategories = subcategories.length > 0 ? subcategories : categories;
-  // Send the IDs the user has already seen for this company so the backend
-  // doesn't re-serve them on a fresh attempt. Scope by companyId so taking
-  // TCS doesn't suppress the Infosys pool. See utils/seenQuestionIds.
+  const category = categories[0] || 'arithmetic';
+  // Fall back to a real subcategory slug for this category, not the category
+  // name itself, when none was given. The deleted generateCustomTest's own
+  // comment documented that the backend rejects a category name as a
+  // subcategory value — the previous fallback here (`categories[0] ||
+  // 'time_and_work'`, since an empty `subcategories` array defaults to
+  // `categories`) would have sent exactly that whenever a caller omitted
+  // subcategories. Every current caller always provides one, so this was
+  // dead in practice, but the fallback itself was unsafe.
+  const subcategory = subcategories[0] || CATEGORY_SUBCATEGORIES[category]?.[0] || 'time_and_work';
+  // Exclude questions the user has already seen so the backend doesn't re-serve
+  // them. Merges the global bucket with this companyId's own scope (see
+  // utils/seenQuestionIds) — every company now draws from one unified pool
+  // (no company_context reaches /generate), so a question seen under TCS can
+  // just as easily come back under Infosys without the global bucket here.
   // Capped at MAX_EXCLUDE_IDS to satisfy backend validation.
-  // Exclude questions seen in this company AND across all companies (global bucket),
-  // so the same question is not re-served under a different company.
   const excludeIds = limitExcludeIds(getExcludeQuestionIds(companyId));
   const cappedCount = Math.min(Math.max(1, count), MAX_QUESTIONS_PER_GENERATE);
   if (cappedCount !== count) {
@@ -218,18 +230,12 @@ export const generateMockTest = async (
     count: cappedCount,
     time_limit: timeLimit,
     type: 'mcq',
-    company_context: companyId,
-    category: categories,
-    subcategory: resolvedSubcategories,
+    category,
+    subcategory,
     difficulty,
     cross_verify: false,
     exclude_question_ids: excludeIds,
   };
-
-  if (negativeMarking) {
-    payload.negative_marking = true;
-    payload.negative_marks_per_wrong = 1 / 3; // -1/3 per wrong answer
-  }
 
   if (parentSessionId) {
     payload.parent_session_id = parentSessionId;
@@ -263,67 +269,6 @@ export const generateMockTest = async (
       url: err?.config?.url,
       method: err?.config?.method,
       timeout_ms: err?.config?.timeout,
-      payload,
-    });
-    throw err;
-  }
-};
-
-/**
- * Generate a custom mock-test session for the Custom Builder.
- * The builder calls this as a reachability probe (validates the AI service,
- * then submits the probe session) before navigating to the custom-test runner,
- * which generates each section via generateMockTest under the same parent.
- * Unlike generateMockTest, the caller-selected difficulty is forwarded.
- */
-export const generateCustomTest = async (
-  categories: string[],
-  difficulty: string = 'medium',
-  parentSessionId?: string,
-  timeoutMs: number = 60000
-): Promise<MockTestSession> => {
-  const resolvedCategories = categories.length > 0 ? categories : ['arithmetic'];
-  // Backend rejects category names as subcategory values — it expects the
-  // specific slugs listed in CATEGORY_SUBCATEGORIES. Pick one valid sub per category.
-  const resolvedSubcategories = resolvedCategories.map(cat => {
-    const subs = CATEGORY_SUBCATEGORIES[cat];
-    return subs && subs.length > 0
-      ? subs[Math.floor(Math.random() * subs.length)]
-      : cat;
-  });
-  // Same dedup story as generateMockTest, scoped to the synthetic 'custom-test'
-  // bucket so custom-builder attempts don't suppress company tests.
-  const excludeIds = limitExcludeIds(getExcludeQuestionIds('custom-test'));
-  const payload: Record<string, any> = {
-    count: 10,
-    time_limit: 20,
-    type: 'mcq',
-    company_context: 'tcs',
-    category: resolvedCategories,
-    subcategory: resolvedSubcategories,
-    difficulty,
-    cross_verify: false,
-    exclude_question_ids: excludeIds,
-  };
-
-  if (parentSessionId) {
-    payload.parent_session_id = parentSessionId;
-  }
-
-  console.log('[generateCustomTest] sending payload:', JSON.stringify({ ...payload, exclude_question_ids: `<${excludeIds.length} ids>` }, null, 2));
-
-  try {
-    const response = await httpClient.post<any>('/mock-test/generate', payload, { timeout: timeoutMs });
-    console.log('[generateCustomTest] response:', JSON.stringify(response.data, null, 2));
-    const session = response.data?.data ?? response.data;
-    return session;
-  } catch (err: any) {
-    const d = err?.response?.data;
-    console.error('[generateCustomTest] FAILED', {
-      status: err?.response?.status,
-      error_code: d?.error?.error_code,
-      message: d?.error?.message,
-      error_id: d?.error?.error_id,
       payload,
     });
     throw err;
@@ -555,6 +500,7 @@ export interface TestResult {
   total_score: number;
   total_questions: number;
   grade: string;
+  average_accuracy?: number;
   time_taken?: number;
   time_remaining?: number;
   not_attempted?: number;
@@ -584,6 +530,11 @@ export interface TestResult {
     common_mistakes: string[] | null;
     difficulty?: string;
     time_taken_seconds?: number;
+    // Backend returns these per question (service.py submit_test_by_parent) so a
+    // completed attempt can be regrouped by section for review — the flat list
+    // alone loses which section each question belonged to.
+    section_id?: string;
+    category?: string;
   }[];
   strengths?: string[];
   improvements?: string[];
@@ -654,6 +605,19 @@ const mapRawResult = (rawData: any): TestResult => {
   const scoreForDisplay = totalQuestions > 0 ? totalCorrect : (rawData.overall_score ?? rawData.overall_marks ?? 0);
   const questionsForDisplay = totalQuestions > 0 ? totalQuestions : (rawData.total_marks ?? 100);
 
+  // Grade matches the displayed scoreForDisplay/questionsForDisplay — deliberately
+  // NOT an unweighted mean of per-section accuracy, which can disagree with it
+  // whenever sections differ in size (e.g. a 0/0 section pulling the average down
+  // despite not affecting the actual total). Named `grade`, not `gradeFromAccuracy`:
+  // it's computed from score/total, not from the accuracy metric below.
+  const grade = calculateGrade(scoreForDisplay, questionsForDisplay);
+  // average_accuracy is a distinct, separately-displayed metric (the report's
+  // "Overall Assessment" accuracy) — an unweighted per-section mean on purpose,
+  // not a grade input.
+  const overallAccuracy = mappedSections.length > 0
+    ? mappedSections.reduce((sum: number, s: { accuracy?: number }) => sum + (s.accuracy ?? 0), 0) / mappedSections.length
+    : (questionsForDisplay > 0 ? (scoreForDisplay / questionsForDisplay) * 100 : 0);
+
   // Map per-question review data
   const mappedQuestions = Array.isArray(rawData.questions)
     ? rawData.questions.map((q: any, idx: number) => {
@@ -671,6 +635,8 @@ const mapRawResult = (rawData: any): TestResult => {
           user_answer: q.user_answer ?? '',
           correct_answer: q.correct_answer ?? '',
           is_correct: q.is_correct ?? false,
+          section_id: q.section_id,
+          category: q.category,
           explanation: explanation,
           solution_steps: solutionSteps,
           common_mistakes: commonMistakes,
@@ -708,7 +674,8 @@ const mapRawResult = (rawData: any): TestResult => {
   return {
     total_score: scoreForDisplay,
     total_questions: questionsForDisplay,
-    grade: calculateGrade(scoreForDisplay, questionsForDisplay),
+    grade,
+    average_accuracy: Math.round(overallAccuracy),
     time_taken: rawData.time_taken,
     time_remaining: rawData.time_remaining,
     not_attempted: rawData.not_attempted ?? 0,

@@ -267,10 +267,17 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     // Restore an existing analysis for the lifetime of this browser tab. The
     // previous implementation deleted these values on every route remount,
     // which made ordinary in-app navigation destroy the user's work.
+    if (sessionId) return "upload";
     try {
-      if (!sessionId && sessionStorage.getItem("jm_matchResults")) {
-        return "analysis";
-      }
+      // jm_activeTab tracks which tab the user was last actually looking at,
+      // separately from whether a stale analysis still sits in
+      // jm_matchResults. Without it, this only ever checked for the
+      // results' presence — so explicitly clicking "Back to Job Match" (an
+      // intentional return to the upload screen), then navigating to
+      // another feature and back, kept restoring the old results instead of
+      // honoring that the user had already left them.
+      if (sessionStorage.getItem("jm_activeTab") === "upload") return "upload";
+      if (sessionStorage.getItem("jm_matchResults")) return "analysis";
     } catch {}
     return "upload";
   });
@@ -479,6 +486,8 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       setTimeout(() => {
         setIsProcessing(false);
         setActiveTab("analysis");
+        // writeJobmatchSessionSnapshot above already persists jm_activeTab
+        // as "analysis" — no separate sessionStorage write needed here.
         if (containerRef.current) {
           const top = containerRef.current.getBoundingClientRect().top + window.scrollY - 80;
           window.scrollTo({ top, behavior: "smooth" });
@@ -512,7 +521,8 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           resumeSizeMB={(uploadedFile ? uploadedFile.size / (1024 * 1024) : resumeSizeMB) ?? undefined}
           jdSizeMB={(jdFile ? jdFile.size / (1024 * 1024) : jdSizeMB) ?? undefined}
           analyzedAt={analyzedAt ?? undefined}
-          onBack={() => { setActiveTab("upload"); setWizardStep(0); setShowDetailedAnalysis(false); }}
+          jdText={jdText}
+          onBack={() => { setActiveTab("upload"); try { sessionStorage.setItem("jm_activeTab", "upload"); } catch {} setWizardStep(0); setShowDetailedAnalysis(false); }}
           onDetails={() => setShowDetailedAnalysis(true)}
         />}
         <ErrorPopupModal

@@ -180,10 +180,11 @@ client.interceptors.request.use(
     //      readable by every visitor in DevTools. A key in the browser is not
     //      a key.
     //   2. This client does not talk to the AI layer. BASE_URL is
-    //      NEXT_PUBLIC_BASE_URL || '/api/v1' — i.e. careerbot-api. The only
-    //      code that reaches the AI layer directly is
-    //      src/app/api/backend/ai-health/route.ts, which is a Next.js SERVER
-    //      route and can hold secrets safely.
+    //      NEXT_PUBLIC_BASE_URL || '/api/v1' — i.e. careerbot-api. Nothing in
+    //      this repo reaches the AI layer directly any more. The one route
+    //      that used to — src/app/api/backend/ai-health/route.ts, a Next.js
+    //      SERVER route that can hold secrets safely — now reads
+    //      careerbot-api's own /health/detailed instead.
     //   3. It sat in the GLOBAL request interceptor, so every request without
     //      an Authorization header received it — including calls to
     //      careerbot-api, which authenticates with httpOnly cookies and did

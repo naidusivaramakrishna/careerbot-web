@@ -15,7 +15,10 @@ vi.mock("@/utils/jobmatchSession", () => ({ writeJobmatchSessionSnapshot: vi.fn(
 vi.mock("sonner", () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 vi.mock("@/app/(jobs)/jobmatch/_components/analysis/MatchResultsOverview", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  default: (p: any) => <div data-testid="results-overview"><button onClick={p.onDetails}>Open details</button></div>,
+  default: (p: any) => <div data-testid="results-overview">
+    <button onClick={p.onDetails}>Open details</button>
+    <button onClick={p.onBack}>Back to Job Match</button>
+  </div>,
 }));
 vi.mock("@/app/(jobs)/jobmatch/_components/analysis/AnalysisContent", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -179,6 +182,50 @@ describe("Overview: replacing the job description with a file after an extension
 
     await waitFor(() => expect(matchResumeAndJD).toHaveBeenLastCalledWith("resume-old", "jd-file"), SLOW);
   }, TEST_TIMEOUT);
+});
+
+// sessionStorage-driven tab restore only applies when there's no extension
+// session (Overview.tsx:270 forces "upload" whenever sessionId is set) —
+// these render without sessionId so the restore logic under test runs.
+describe("Overview: restoring the active tab across remounts", () => {
+  it("shows the results view on mount when a completed match is already in storage", () => {
+    sessionStorage.setItem("jm_matchResults", JSON.stringify(eligible));
+    render(<Overview />);
+    expect(screen.getByTestId("results-overview")).toBeTruthy();
+  });
+
+  it("returns to the upload view on mount after the user clicked Back to Job Match", () => {
+    sessionStorage.setItem("jm_matchResults", JSON.stringify(eligible));
+    const { unmount } = render(<Overview />);
+    expect(screen.getByTestId("results-overview")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Job Match" }));
+    unmount();
+
+    // jm_matchResults is still sitting in storage here (only the real
+    // writeJobmatchSessionSnapshot clears/rewrites it, and it's mocked in
+    // this file) — the remount must still honor the explicit "upload"
+    // choice over the presence of stale results.
+    render(<Overview />);
+    expect(screen.queryByTestId("results-overview")).toBeNull();
+  });
+
+  it("shows the fresh results once jm_activeTab has been overwritten back to analysis", () => {
+    // Simulates the bug this fixes: the user clicked Back earlier
+    // (jm_activeTab="upload"), then JobCard's "Fix Resume" shortcut wrote a
+    // fresh match via writeJobmatchSessionSnapshot, which now always sets
+    // jm_activeTab="analysis" (see jobmatchSession.ts) so it wins over the
+    // stale "upload" flag on the next mount.
+    sessionStorage.setItem("jm_matchResults", JSON.stringify(eligible));
+    sessionStorage.setItem("jm_activeTab", "upload");
+    const { unmount } = render(<Overview />);
+    expect(screen.queryByTestId("results-overview")).toBeNull();
+    unmount();
+
+    sessionStorage.setItem("jm_activeTab", "analysis");
+    render(<Overview />);
+    expect(screen.getByTestId("results-overview")).toBeTruthy();
+  });
 });
 
 describe("Overview: the wizard during analysis", () => {

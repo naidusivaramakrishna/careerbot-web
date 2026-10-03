@@ -40,7 +40,7 @@ export default function LeaderboardPage() {
 
         {/* Breadcrumb — same shape as section intro */}
         <div className="mb-6 text-sm flex items-center gap-2">
-          <button onClick={() => router.push('/mock-test')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
+          <button onClick={() => router.push('/mock-test/browse')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
           <span style={{ color: '#CBD5E1' }}>›</span>
           <span className="font-semibold" style={{ color: '#0F172A' }}>Leaderboard</span>
         </div>
@@ -197,7 +197,7 @@ export default function LeaderboardPage() {
         {/* Bottom action row — section-intro DNA */}
         <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
           <button
-            onClick={() => router.push('/mock-test')}
+            onClick={() => router.push('/mock-test/browse')}
             className="text-sm font-medium hover:underline"
             style={{ color: '#475569' }}
           >

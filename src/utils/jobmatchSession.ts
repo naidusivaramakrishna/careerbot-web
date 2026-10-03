@@ -32,6 +32,13 @@ export function writeJobmatchSessionSnapshot(fields: {
     ["jm_resumeSizeMB", fields.resumeSizeMB != null ? String(fields.resumeSizeMB) : ""],
     ["jm_jdSizeMB", fields.jdSizeMB != null ? String(fields.jdSizeMB) : ""],
     ["jm_analyzedAt", fields.analyzedAt ?? ""],
+    // Every caller of this snapshot has a freshly computed match to show, so
+    // this always wins over a stale "upload" left by an earlier Overview
+    // mount's "Back to Job Match" click — otherwise JobCard's "Fix Resume"
+    // shortcut (fixResumeForJob.ts) can hard-navigate to /jobmatch/app with
+    // a brand-new match result that Overview then hides behind the upload
+    // wizard because of leftover tab state from a previous visit.
+    ["jm_activeTab", "analysis"],
   ];
   const priorValues = entries.map(([key]) => {
     try { return sessionStorage.getItem(key); } catch { return null; }

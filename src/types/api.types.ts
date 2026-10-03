@@ -575,6 +575,9 @@ export interface EnhancedResumeSummary {
   ats_score?: number | {
     final_score?: number;
     Percentage?: number;
+    current_score?: number;
+    overall_score?: number;
+    score?: number;
     MaxScore?: number;
   };
   enhancement_report?: Record<string, unknown>;

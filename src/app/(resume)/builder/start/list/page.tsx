@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, ResumeResponse } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import { downloadEnhancedResume } from '@/api/enhancerApi';
-import type { EnhancedResumeSummary } from '@/types/api.types';
+import type { ATSScore, EnhancedResumeSummary } from '@/types/api.types';
+import { getEnhancedCurrentScore } from '@/app/(resume)/builder/creation/_utils/enhancedScore';
 import { formatDateResume } from '@/utils/formatDateResume';
 import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
@@ -122,10 +123,13 @@ const ResumeListContent = () => {
       // Transform enhanced resumes (summary shape — no enhanced_data)
       const transformedEnhanced: Resume[] = enhanced_resumes.map((item: EnhancedResumeSummary) => {
         const name = item.display_name || 'Uploaded Resume';
-        const atsObj = typeof item.ats_score === 'object' ? item.ats_score : null;
+        // Resolve the object form through the same helper the score tab, the
+        // preview panel and the v2 editor header use, so one enhanced resume
+        // shows one number everywhere instead of a per-surface reading of
+        // whichever headline field the backend happened to send.
         const score = typeof item.ats_score === 'number'
           ? item.ats_score
-          : atsObj?.final_score ?? atsObj?.Percentage ?? 0;
+          : Math.round(getEnhancedCurrentScore(item.ats_score as ATSScore | undefined));
         return {
           id: item.id,
           initials: name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2),

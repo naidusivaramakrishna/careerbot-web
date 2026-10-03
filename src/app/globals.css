@@ -10,6 +10,14 @@
   --font-montserrat: var(--font-sans, system-ui, sans-serif);
 }
 
+/* The mock-test subtree is the one place that wants REAL Montserrat rather than
+   the alias above. Scoped to [data-mock-test], which its layout already sets,
+   so nothing else changes. Loaded by that layout via
+   @fontsource-variable/montserrat -- no build-time network fetch. */
+[data-mock-test] {
+  --font-montserrat: 'Montserrat Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
 /* Base Typography — Inter across the UI (self-hosted via @fontsource-variable) */
 body {
   font-family: var(--font-sans, system-ui, sans-serif);
