@@ -539,6 +539,10 @@ export default function LiveInterviewSessionPage() {
       // it (respecting the candidate's own mute toggle) and stop feeding
       // playDelta from here on (same "one audio rule" as HeyGen/LiveAvatar).
       simliAudioLiveRef.current = true;
+      // Drop whatever playDelta already queued: if "start" lands
+      // mid-utterance those buffers would keep playing under Simli's voice.
+      const player = interviewerAudioPlayerRef.current;
+      if (player) stopInterviewerAudio(player);
       audioEl.muted = isAudioMutedRef.current;
     });
     client.on("speaking", () => setAvatarActivity("talking"));
@@ -547,7 +551,10 @@ export default function LiveInterviewSessionPage() {
       console.warn("Simli avatar error, continuing audio-only", detail);
       // No reconnect path for Simli (mock-interview-simli-avatar.txt §6/§9) —
       // treat it as gone for the rest of this session. Fall back to playDelta
-      // and make sure Simli's own output can't still be heard.
+      // and make sure Simli's own output can't still be heard. Accepted gap:
+      // audio already sent to Simli but not yet played is lost, so a sentence
+      // in flight at the moment of the error is cut off; playDelta resumes
+      // with the next delta.
       simliAudioLiveRef.current = false;
       audioEl.muted = true;
       // Close Simli's LiveKit connection too -- dropping the ref alone leaves

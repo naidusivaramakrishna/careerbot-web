@@ -125,6 +125,7 @@ class MockAudioContext {
   // one buffer source — count of these is how tests verify whether playDelta
   // ran for a given delta, without caring about the decoded sample content.
   static bufferSourcesCreated = 0;
+  static bufferSources: { stop: ReturnType<typeof vi.fn> }[] = [];
   state: string = "running";
   destination = {};
   currentTime = 0;
@@ -144,7 +145,9 @@ class MockAudioContext {
   }
   createBufferSource() {
     MockAudioContext.bufferSourcesCreated += 1;
-    return { buffer: null as unknown, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+    const source = { buffer: null as unknown, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+    MockAudioContext.bufferSources.push(source);
+    return source;
   }
   resume() { return Promise.resolve(); }
   close() { return Promise.resolve(); }
@@ -178,6 +181,7 @@ beforeEach(() => {
   MockSimliClient.pendingStart = null;
   MockAudioContext.scriptProcessors = [];
   MockAudioContext.bufferSourcesCreated = 0;
+  MockAudioContext.bufferSources = [];
   vi.stubGlobal("WebSocket", MockWebSocket);
   vi.stubGlobal("AudioContext", MockAudioContext);
   vi.stubGlobal("ResizeObserver", class { observe = vi.fn(); unobserve = vi.fn(); disconnect = vi.fn(); });
@@ -341,6 +345,26 @@ describe("Simli avatar integration", () => {
 
     act(() => { MockWebSocket.instances[0].emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" }); });
     expect(MockAudioContext.bufferSourcesCreated).toBe(1); // unchanged — not played locally
+  });
+
+  it("stops locally queued playDelta audio when Simli goes live, so both voices never overlap", async () => {
+    mocks.consumePendingAvatarSession.mockReturnValue(simliAvatarSession());
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+
+    await waitFor(() => expect(MockSimliClient.instances).toHaveLength(1));
+    const client = MockSimliClient.instances[0];
+
+    // A delta queued in the local player mid-utterance...
+    act(() => { MockWebSocket.instances[0].emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" }); });
+    expect(MockAudioContext.bufferSources).toHaveLength(1);
+    const queued = MockAudioContext.bufferSources[0];
+    expect(queued.stop).not.toHaveBeenCalled();
+
+    // ...is stopped the moment Simli's own audio becomes the audible source.
+    act(() => { client.emit("start"); });
+    expect(queued.stop).toHaveBeenCalled();
   });
 
   it("falls back to playDelta and re-mutes Simli's audio if the SDK errors mid-session", async () => {

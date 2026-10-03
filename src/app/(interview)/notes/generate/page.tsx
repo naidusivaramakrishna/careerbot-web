@@ -28,6 +28,7 @@ import {
   Upload,
 } from "lucide-react";
 import { escapeHtml } from "@/lib/sanitizeHtml";
+import { randomUuid } from "@/lib/idempotencyKey";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,15 +76,6 @@ interface NotesData {
 
 // ─── API → NotesData mapper ───────────────────────────────────────────────────
 
-// crypto.randomUUID() exists only in secure contexts (HTTPS / localhost); on a
-// plain-HTTP deployment it is undefined and this mapping would throw.
-// getRandomValues is available in every context.
-function fallbackQuestionId(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
   const selfIntroRaw = apiNotes.self_introduction;
@@ -96,7 +88,9 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
   } else if (Array.isArray(apiNotes.common_answers?.answers)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     hrAnswers = (apiNotes.common_answers.answers as any[]).map((a) => ({
-      question_id: a.question_id ?? fallbackQuestionId(),
+      // randomUuid() falls back to getRandomValues where crypto.randomUUID is
+      // missing (non-secure contexts, i.e. a plain-HTTP deployment).
+      question_id: a.question_id ?? randomUuid(),
       question_text: a.question_text ?? a.question ?? "",
       why_asked: a.why_asked ?? "",
       answer_script: a.answer_script ?? a.model_answer ?? "",
