@@ -550,6 +550,9 @@ export default function LiveInterviewSessionPage() {
       // and make sure Simli's own output can't still be heard.
       simliAudioLiveRef.current = false;
       audioEl.muted = true;
+      // Close Simli's LiveKit connection too -- dropping the ref alone leaves
+      // it open until the page unmounts.
+      client.stop().catch(() => {});
       simliClientRef.current = null;
       setAvatarConnection("fallback");
     });
@@ -558,8 +561,15 @@ export default function LiveInterviewSessionPage() {
       await client.start();
     } catch (err) {
       console.warn("Simli avatar failed to connect, continuing audio-only", err);
+      // Same silent fallback as the "error" path: playDelta stays the audible
+      // source, Simli's element stays muted, the half-open client is closed,
+      // and the "Connecting avatar…" overlay is cleared (it otherwise stayed
+      // up for the rest of the session).
       simliAudioLiveRef.current = false;
+      audioEl.muted = true;
+      client.stop().catch(() => {});
       simliClientRef.current = null;
+      setAvatarConnection("fallback");
     }
   }, []);
 
@@ -1319,6 +1329,9 @@ export default function LiveInterviewSessionPage() {
       // somehow didn't (a true network failure, nothing received at all),
       // land on the same completed screen directly — CompletedScreen falls
       // back to sessionId when reportId is null.
+      // interview_complete normally stops the avatar; on a bare drop it never
+      // arrived, so stop it here or Simli keeps streaming on the completed screen.
+      disconnectAvatar();
       if (phaseRef.current !== "completed") {
         setCompletedReportId(null);
         setPhase("completed");
@@ -1328,7 +1341,7 @@ export default function LiveInterviewSessionPage() {
     ws.onerror = () => {
       setWsConnected(false);
     };
-  }, [handleWsMessage]);
+  }, [handleWsMessage, disconnectAvatar]);
 
   // On mount: read session data from sessionStorage and open WebSocket.
   // initialWsUrlRef survives StrictMode double-mount: the first mount reads and
