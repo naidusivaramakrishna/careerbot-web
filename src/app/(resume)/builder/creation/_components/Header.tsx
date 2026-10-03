@@ -2,18 +2,20 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { RiArrowLeftLine, RiCheckLine } from 'react-icons/ri';
+import { toSameOriginPath } from "@/lib/internalPath";
 
 const BUILDER_RETURN_TO_STORAGE_KEY = "careerbot:builder:return_to";
+const COVER_LETTER_FALLBACK_PATH = "/cover-letter/new";
 
 const Header: React.FC = () => {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const isEnhanced = searchParams.get("source") === "enhanced";
-  const rawReturnTo = searchParams.get("return_to");
-  const returnTo = rawReturnTo?.startsWith("/") && !rawReturnTo.startsWith("//")
-    ? rawReturnTo
-    : null;
+  // Normalized form only. A raw `startsWith("/") && !startsWith("//")` test
+  // lets "/..//evil.com" through, and the URL resolution below turns that into
+  // the protocol-relative path "//evil.com".
+  const returnTo = toSameOriginPath(searchParams.get("return_to"));
   const [storedReturnTo, setStoredReturnTo] = useState<string | null>(null);
   const [isUsingForCoverLetter, setIsUsingForCoverLetter] = useState(false);
   const resumeId = typeof params?.resumeId === "string" ? params.resumeId : null;
@@ -26,25 +28,34 @@ const Header: React.FC = () => {
       setStoredReturnTo(returnTo);
       return;
     }
-    const savedReturnTo = window.localStorage.getItem(BUILDER_RETURN_TO_STORAGE_KEY);
-    if (savedReturnTo?.startsWith("/") && !savedReturnTo.startsWith("//")) {
+    // Re-validate on the way OUT of storage too: a value written by an older
+    // build (or by any other writer of this key) has not been through the
+    // check above.
+    const savedReturnTo = toSameOriginPath(
+      window.localStorage.getItem(BUILDER_RETURN_TO_STORAGE_KEY),
+    );
+    if (savedReturnTo) {
       setStoredReturnTo(savedReturnTo);
     }
   }, [returnTo]);
 
   const handleBackClick = () => {
     localStorage.removeItem('resumeData');
-    router.push(effectiveReturnTo ?? '/builder/start/list');
+    localStorage.removeItem(BUILDER_RETURN_TO_STORAGE_KEY);
+    router.push('/builder/start/list');
   };
 
   const buildCoverLetterResumeUrl = () => {
-    const target = effectiveReturnTo ?? "/cover-letter/new";
+    const target = effectiveReturnTo ?? COVER_LETTER_FALLBACK_PATH;
     const url = new URL(target, window.location.origin);
     if (resumeId) {
       url.searchParams.set("resume_id", resumeId);
       url.searchParams.set("resume_source", "builder");
     }
-    return `${url.pathname}${url.search}`;
+    // This is the only place a return_to value is actually navigated to, so
+    // the final string gets the check as well — whatever the provenance of
+    // `target` was, the router must never be handed an off-origin path.
+    return toSameOriginPath(`${url.pathname}${url.search}`) ?? COVER_LETTER_FALLBACK_PATH;
   };
 
   const handleUseForCoverLetter = () => {

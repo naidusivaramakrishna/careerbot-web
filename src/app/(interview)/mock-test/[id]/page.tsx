@@ -5,7 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, EyeOff, AlertTriangle, CheckCircle, Star, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { resolveCompanyId, resolveCompanyInfo, CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
+import { resolveCompanyId, resolveCompanyInfo, CATEGORY_SUBCATEGORIES, sectionConfigFor, parseSubcategoriesParam } from '@/lib/mockTestConstants';
 import { addSeenQuestionIds } from '@/utils/seenQuestionIds';
 import { useAttemptRecorder } from '@/hooks/useAttemptRecorder';
 import {
@@ -83,6 +83,8 @@ export default function MockTestPage() {
   // launched from Weak Areas → "Practice this topic"). Falls back to a random
   // subcategory of the section's category when absent or invalid.
   const customSubcategory = isCustomTest ? searchParams.get('subcategory') : null;
+  // Per-category topic narrowing from the Custom Builder — see parseSubcategoriesParam.
+  const rawSubcategoriesParam = isCustomTest ? searchParams.get('subcategories') : null;
 
   // Difficulty chosen on the setup screen (company page / custom builder / weak
   // areas), forwarded here so every section of the test generates at the level
@@ -90,10 +92,6 @@ export default function MockTestPage() {
   // and silently substituting 'medium' is what discarded the choice before.
   const rawDifficulty = searchParams.get('difficulty');
   const selectedDifficulty = isMockTestDifficulty(rawDifficulty) ? rawDifficulty : null;
-
-  // Custom builder's negative-marking toggle, forwarded so the backend creates the
-  // session with the penalty and deducts marks per wrong answer at scoring time.
-  const negativeMarking = isCustomTest && searchParams.get('negativeMarking') === '1';
 
   // Section progression: Arithmetic(0) → Aptitude(1) → Reasoning(2) → Technical(3)
 
@@ -187,10 +185,12 @@ export default function MockTestPage() {
   // Completed section results (for transition screen)
   const [sectionResults, setSectionResults] = useState<SectionResult[]>([]);
 
-  // Every section — company and custom — is a flat 10 questions / 20 minutes.
-  const perSectionCount = 10;
-  const perSectionMinutes = 20;
-  const questionCountFor = (_sectionIdx: number): number => perSectionCount;
+  // Per-section question count/duration from SECTION_CONFIG — the one place the
+  // frontend states these numbers (see mockTestConstants.ts).
+  const questionCountFor = (sectionIdx: number): number =>
+    sectionConfigFor(SECTION_PROGRESSION[sectionIdx]?.name ?? '').questions;
+  const minutesFor = (sectionIdx: number): number =>
+    sectionConfigFor(SECTION_PROGRESSION[sectionIdx]?.name ?? '').minutes;
 
   // Use SECTION_PROGRESSION as the source of truth for section names
   const currentSectionProgression = SECTION_PROGRESSION[currentSectionProgressionIndex];
@@ -199,7 +199,7 @@ export default function MockTestPage() {
     section_name: currentSectionProgression ?
       currentSectionProgression.name.charAt(0).toUpperCase() + currentSectionProgression.name.slice(1)
       : 'Unknown',
-    duration_minutes: perSectionMinutes,
+    duration_minutes: minutesFor(currentSectionProgressionIndex),
     question_count: questionCountFor(currentSectionProgressionIndex),
   };
   const isLastSection = currentSectionProgressionIndex === SECTION_PROGRESSION.length - 1;
@@ -209,7 +209,7 @@ export default function MockTestPage() {
   const EDUCATIONAL_SECTIONS: MockTestSection[] = SECTION_PROGRESSION.map((s, idx) => ({
     section_id: s.name,
     section_name: s.name.charAt(0).toUpperCase() + s.name.slice(1),
-    duration_minutes: perSectionMinutes,
+    duration_minutes: minutesFor(idx),
     question_count: questionCountFor(idx),
   }));
 
@@ -290,15 +290,18 @@ export default function MockTestPage() {
       const activeCategory = isCustomTest && customCategories
         ? customCategories[currentSectionProgressionIndex % customCategories.length]
         : sectionInfo.name;
+      // Narrow to the Custom Builder's picked topics for this section, if any.
+      const narrowedSubcategories = parseSubcategoriesParam(rawSubcategoriesParam, currentSectionProgressionIndex, sectionInfo.subcategories);
+      const subcategoryPool = narrowedSubcategories.length > 0 ? narrowedSubcategories : sectionInfo.subcategories;
       // Prefer the focused subcategory (from Weak Areas) when it's valid for
-      // this section's category; otherwise pick a random one.
+      // this section's category; otherwise pick a random one from the pool.
       const chosenSubcategory = (customSubcategory && sectionInfo.subcategories.includes(customSubcategory))
         ? customSubcategory
-        : sectionInfo.subcategories[Math.floor(Math.random() * sectionInfo.subcategories.length)];
+        : subcategoryPool[Math.floor(Math.random() * subcategoryPool.length)];
 
       let newSession: MockTestSession;
       try {
-        newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], selectedDifficulty, parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes, negativeMarking);
+        newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], selectedDifficulty, parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes);
       } catch (genErr: unknown) {
         const _genErr = genErr as { response?: { data?: { error_code?: string; details?: { session_id?: string } } } };
         if (_genErr?.response?.data?.error_code === 'ACTIVE_SESSION_EXISTS') {
@@ -306,7 +309,7 @@ export default function MockTestPage() {
           if (existingId) {
             try { await submitTest(existingId); } catch { /* ignore close errors */ }
           }
-          newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], selectedDifficulty, parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes, negativeMarking);
+          newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], selectedDifficulty, parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes);
         } else {
           throw genErr;
         }

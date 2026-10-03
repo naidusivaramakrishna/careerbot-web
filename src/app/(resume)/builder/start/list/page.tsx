@@ -5,6 +5,7 @@ import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, 
 import { getProfile } from '@/api/userApi';
 import { downloadEnhancedResume } from '@/api/enhancerApi';
 import type { ATSScore, EnhancedResumeSummary } from '@/types/api.types';
+import { getEnhancedCurrentScore } from '@/app/(resume)/builder/creation/_utils/enhancedScore';
 import { formatDateResume } from '@/utils/formatDateResume';
 import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
@@ -15,7 +16,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
 import { computePreviewScore } from '../../creation/_lib/computePreviewScore';
-import { getEnhancedCurrentScore } from '../../creation/_utils/enhancedScore';
 
 export interface Resume {
   id: string;
@@ -130,6 +130,12 @@ const ResumeListContent = () => {
       // Transform enhanced resumes (summary shape — no enhanced_data)
       const transformedEnhanced: Resume[] = enhanced_resumes.map((item: EnhancedResumeSummary) => {
         const name = item.display_name || 'Uploaded Resume';
+        // Resolve the object form through the same helper the score tab, the
+        // preview panel and the v2 editor header use, so one enhanced resume
+        // shows one number everywhere instead of a per-surface reading of
+        // whichever headline field the backend happened to send.
+        // Math.round wraps BOTH arms: getEnhancedCurrentScore returns a clamped
+        // float, and ResumeTableRow renders `{displayScore}%` verbatim.
         const score = Math.round(
           typeof item.ats_score === 'number'
             ? item.ats_score

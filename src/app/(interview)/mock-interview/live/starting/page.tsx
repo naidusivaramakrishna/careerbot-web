@@ -56,9 +56,9 @@ export default function LiveStartingPage() {
     const interviewerGender = selectedInterviewer?.gender ?? params.gender;
 
     const onSuccess = (data: Awaited<ReturnType<typeof createLiveSession>>) => {
-      // livekit_client_token is a live credential — interview-avatar.txt says
-      // never store it (localStorage/sessionStorage/logs). Relay it in-memory
-      // via context instead; everything else is fine in sessionStorage as before.
+      // session_token is a live credential — mock-interview-simli-avatar.txt
+      // says never store it (localStorage/sessionStorage/logs). Relay it
+      // in-memory via context instead; everything else is fine in sessionStorage.
       const { avatar, ...storable } = data;
       setPendingAvatarSession(data.session_id, avatar);
       sessionStorage.setItem("live_session_data", JSON.stringify(storable));

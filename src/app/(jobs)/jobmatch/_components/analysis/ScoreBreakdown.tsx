@@ -53,8 +53,8 @@ type PriorityLevel = "high" | "medium" | "low";
 // Card-level priority accent — icon circle, badge colors. Text labels stay
 // exactly what each call site passes; this only drives color/icon.
 const PRIORITY_STYLES: Record<PriorityLevel, { Icon: LucideIcon; text: string; bg: string; border: string }> = {
-  high:   { Icon: Flame, text: "#B42318", bg: "#FEF3F2", border: "#fecaca" },
-  medium: { Icon: Star,  text: "#92400E", bg: "#FFFBEB", border: "#fde68a" },
+  high:   { Icon: Flame, text: "#b32b47", bg: "#FEF3F2", border: "#fecaca" },
+  medium: { Icon: Star,  text: "#8a5a10", bg: "#FFFBEB", border: "#fde68a" },
   low:    { Icon: Info,  text: "#2257A7", bg: "#EEF3FB", border: "#bfdbfe" },
 };
 
@@ -224,9 +224,9 @@ function ErrorSectionCard({
 // values, just named and taken out of the render body so the ternary
 // nesting doesn't count against SectionCard's own complexity.
 function scoreColor(score: number, passed: boolean): string {
-  if (passed) return "#167044";
-  if (score >= 60) return "#92400E";
-  return "#B42318";
+  if (passed) return "#076b4e";
+  if (score >= 60) return "#8a5a10";
+  return "#b32b47";
 }
 
 // One compact row (icon + title + meta on the left, score % + chevron on the
@@ -264,7 +264,7 @@ function SectionCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-[#DCE3EB] bg-white">
+    <div data-analysis-section className="overflow-hidden rounded-md border border-[#DCE3EB] bg-white">
       <div
         role={hasDetails ? "button" : undefined}
         aria-expanded={hasDetails ? expanded : undefined}
@@ -273,13 +273,13 @@ function SectionCard({
         onKeyDown={hasDetails ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded((v) => !v); } } : undefined}
         className={`flex items-center gap-2.5 bg-white px-3 ${passed ? "min-h-12 py-2" : "min-h-16 py-2.5"} ${hasDetails ? "cursor-pointer hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600" : ""}`}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EEF3FB] text-[#2257A7]">
+        <div data-analysis-icon className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EEF3FB] text-[#2257A7]">
           <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <p className="text-[14px] font-semibold leading-tight text-slate-800">{label}</p>
-            {!passed && <span className="rounded px-2 py-1 text-[12px] font-semibold" style={{ background: prio.bg, color: prio.text }}>{priorityLevel === "high" ? "High Impact" : priorityLevel === "medium" ? "Medium Impact" : "Low Impact"}</span>}
+            {!passed && <span data-analysis-impact className="rounded px-2 py-1 text-[12px] font-semibold" style={{ background: prio.bg, color: prio.text }}>{priorityLevel === "high" ? "High Impact" : priorityLevel === "medium" ? "Medium Impact" : "Low Impact"}</span>}
           </div>
           <div className="mt-0.5">{meta}</div>
         </div>

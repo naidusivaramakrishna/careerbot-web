@@ -46,6 +46,22 @@ GENERATED_FILE_PATTERNS = (
     "*.min.js", "*.min.css", "*.map", "**/__snapshots__/*.snap",
 )
 
+# Test files. NOT generated -- a human wrote them and they deserve review -- but
+# they are exempt from pr_size_gate's line cap, because counting them taxes the
+# one thing the cap should encourage. Measured on careerbot-web PRs #144-#148,
+# tests were 18-74% of each diff and NO PR exceeded 1,500 lines of production
+# code (largest: 1,007). Two PRs failed the gate purely on test volume.
+#
+# Only pr_size_gate opts into this exemption (size_stats(exempt_tests=True)).
+# The ai-review scope guard's own 8,000-line limit is deliberately unchanged:
+# it decides whether a diff is reviewable AT ALL, and a 9,000-line test file
+# still is not.
+TEST_FILE_PATTERNS = (
+    "*.test.ts", "*.test.tsx", "*.test.js", "*.test.jsx",
+    "*.spec.ts", "*.spec.tsx", "*.spec.js", "*.spec.jsx",
+    "**/__tests__/*", "**/__mocks__/*", "**/__fixtures__/*",
+)
+
 # Applying this label lifts the four size caps (files / added lines / commits /
 # authors) for ONE PR: the review runs anyway and the report says, at the top,
 # that the limits were overridden and who applied the label. Only MAINTAINERS
@@ -188,12 +204,17 @@ def _numstat_path(field: str) -> str:
     return p
 
 
-def is_generated(path: str) -> bool:
-    """Does `path` match GENERATED_FILE_PATTERNS?"""
+def _matches_any(path: str, patterns) -> bool:
+    """Does `path` match any of `patterns`?
+
+    Lifted out of is_generated so is_test shares the exact same matching rules
+    (trailing-segment match, `**/` prefix, anchored multi-segment patterns)
+    rather than a second copy that could drift from it.
+    """
     parts = PurePosixPath(_numstat_path(path)).parts
     if not parts:
         return False
-    for pat in GENERATED_FILE_PATTERNS:
+    for pat in patterns:
         segs = pat.split("/")
         if segs[0] == "**":
             segs = segs[1:]
@@ -206,12 +227,35 @@ def is_generated(path: str) -> bool:
     return False
 
 
-def size_stats(numstat: str) -> dict:
-    """Split `git diff --numstat` output into reviewable and generated sizes.
+def is_generated(path: str) -> bool:
+    """Does `path` match GENERATED_FILE_PATTERNS?"""
+    return _matches_any(path, GENERATED_FILE_PATTERNS)
+
+
+def is_test(path: str) -> bool:
+    """Does `path` match TEST_FILE_PATTERNS?
+
+    A generated path wins: a checked-in `*.min.js` under __tests__ is still
+    generated, and is_generated is checked first in size_stats.
+    """
+    return _matches_any(path, TEST_FILE_PATTERNS)
+
+
+def size_stats(numstat: str, exempt_tests: bool = False) -> dict:
+    """Split `git diff --numstat` output into reviewable and non-counting sizes.
 
     Binary files print `-\t-\t<path>` and count 0 added lines, as before.
+
+    `exempt_tests=True` additionally keeps TEST_FILE_PATTERNS out of `added`,
+    reporting them under `tests` / `tests_added`. Only pr_size_gate passes it;
+    the scope guard's own limit is intentionally computed without it, so the
+    default leaves every existing caller's numbers unchanged.
+
+    `excluded` / `excluded_added` stay generated-only in both modes, so a
+    report can say "generated" and "tests" separately rather than calling a
+    hand-written test file generated.
     """
-    files, added, added_total, removed, excluded = 0, 0, 0, 0, []
+    files, added, added_total, removed, excluded, tests = 0, 0, 0, 0, [], []
     for line in numstat.splitlines():
         if not line.strip():
             continue
@@ -222,13 +266,18 @@ def size_stats(numstat: str) -> dict:
             removed += int(p[1])
         added_total += n
         path = p[2] if len(p) > 2 else ""
+        # Generated is checked first: a checked-in `*.min.js` that happens to
+        # sit under __tests__ is generated, not a test.
         if is_generated(path):
             excluded.append((_numstat_path(path), n))
+        elif exempt_tests and is_test(path):
+            tests.append((_numstat_path(path), n))
         else:
             added += n
     return {"files": files, "added": added, "added_total": added_total,
             "removed": removed, "excluded": excluded,
-            "excluded_added": sum(n for _p, n in excluded)}
+            "excluded_added": sum(n for _p, n in excluded),
+            "tests": tests, "tests_added": sum(n for _p, n in tests)}
 
 
 # (stats key, label, cap) -- the order the limits are reported in.

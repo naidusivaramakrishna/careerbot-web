@@ -1,8 +1,9 @@
 "use client"
-import React, { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { getAllResumesUnified } from '@/api/resumeApi';
+import { toSameOriginPath } from '@/lib/internalPath';
 import EmptyState from './_components/EmptyState';
 
 export interface Resume {
@@ -43,8 +44,25 @@ const PageShell = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-const ResumePage = () => {
+const LoadingShell = () => (
+  <PageShell>
+    <div className="flex items-center justify-center py-32">
+      <div className="flex flex-col items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ background: "linear-gradient(135deg,rgba(88,150,215,0.15),rgba(31,78,152,0.15))" }}
+        >
+          <div className="w-5 h-5 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+        </div>
+        <span className="text-sm text-gray-400">Loading your resumes…</span>
+      </div>
+    </div>
+  </PageShell>
+);
+
+const ResumePageContent = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -56,12 +74,38 @@ const ResumePage = () => {
       // ✅ If not authenticated, API will return 401 (handled in catch block)
       const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
 
-      if (builder_resumes.length > 0 || enhanced_resumes.length > 0) {
+      // Normalized, same-origin path or null. The raw param is NOT usable: a
+      // `startsWith("/") && !startsWith("//")` test on it accepts
+      // "/..//evil.com", which the downstream consumer (builder/creation
+      // Header) resolves to the protocol-relative path "//evil.com".
+      const returnTo = toSameOriginPath(searchParams.get("return_to"));
+
+      // A Cover Letter user needs a builder resume, not an uploaded/enhanced
+      // record. Reopen their most recently active builder resume directly; if
+      // none exists, keep this page open so they can create one.
+      if (returnTo && builder_resumes.length > 0) {
+        const currentResumeId = localStorage.getItem("current_resume_id");
+        const selectedBuilderResume = builder_resumes.find((resume) => resume.id === currentResumeId)
+          ?? builder_resumes[0];
+        // builder_resumes is typed Record<string, unknown>[], so `id` is
+        // `unknown` — a truthiness check alone would let a number or an
+        // object through into the route.
+        const selectedBuilderResumeId = typeof selectedBuilderResume?.id === "string"
+          ? selectedBuilderResume.id
+          : null;
+        if (selectedBuilderResumeId) {
+          const params = new URLSearchParams({ return_to: returnTo });
+          router.push(`/builder/creation/${encodeURIComponent(selectedBuilderResumeId)}?${params.toString()}`);
+          return;
+        }
+      }
+
+      if (!returnTo && (builder_resumes.length > 0 || enhanced_resumes.length > 0)) {
         router.push('/builder/start/list');
         return;
       }
 
-      // No resumes - show empty state
+      // No builder resume for this return flow - show the creation choices.
     } catch (err: unknown) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {
@@ -72,28 +116,14 @@ const ResumePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, searchParams]);
 
   useEffect(() => {
     checkForResumes();
   }, [checkForResumes]);
 
   if (loading) {
-    return (
-      <PageShell>
-        <div className="flex items-center justify-center py-32">
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,rgba(88,150,215,0.15),rgba(31,78,152,0.15))" }}
-            >
-              <div className="w-5 h-5 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
-            </div>
-            <span className="text-sm text-gray-400">Loading your resumes…</span>
-          </div>
-        </div>
-      </PageShell>
-    );
+    return <LoadingShell />;
   }
 
   return (
@@ -106,5 +136,15 @@ const ResumePage = () => {
     </PageShell>
   );
 };
+
+// useSearchParams() forces a client-side bailout, so the page component that
+// calls it must sit inside a Suspense boundary. Without this, `next build`
+// fails prerendering /builder/start with
+// "useSearchParams() should be wrapped in a suspense boundary".
+const ResumePage = () => (
+  <Suspense fallback={<LoadingShell />}>
+    <ResumePageContent />
+  </Suspense>
+);
 
 export default ResumePage;

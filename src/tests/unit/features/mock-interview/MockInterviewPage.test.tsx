@@ -404,7 +404,7 @@ describe("LiveSetupPage", () => {
       ticket_id: "ticket-1",
       ticket_expires_at: "2026-07-17T10:00:00Z",
       ws_url: "/ws",
-      avatar: { livekit_url: "wss://avatar.test", livekit_client_token: "secret-token", avatar_id: "a1", provider_session_id: "p1", mode: "LITE" },
+      avatar: { provider: "simli", session_token: "secret-token", face_id: "f1", transport: "simli-client", audio_input_format: "pcm16;rate=16000", max_session_length: 1200, max_idle_time: 300 },
     });
     vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
       session_type: "technical",
@@ -429,11 +429,11 @@ describe("LiveSetupPage", () => {
       target_role: "Frontend Developer",
     }));
 
-    // livekit_client_token is a live credential — never persisted, only
-    // relayed in-memory via the context.
+    // session_token is a live credential — never persisted, only relayed
+    // in-memory via the context.
     expect(mocks.setPendingAvatarSession).toHaveBeenCalledWith(
       "created-session",
-      { livekit_url: "wss://avatar.test", livekit_client_token: "secret-token", avatar_id: "a1", provider_session_id: "p1", mode: "LITE" }
+      { provider: "simli", session_token: "secret-token", face_id: "f1", transport: "simli-client", audio_input_format: "pcm16;rate=16000", max_session_length: 1200, max_idle_time: 300 }
     );
     const storedSessionData = vi.mocked(window.sessionStorage.setItem).mock.calls.find(([key]) => key === "live_session_data")?.[1];
     expect(storedSessionData).toBeDefined();
@@ -721,7 +721,7 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
   });
 
-  it("treats the candidate speaking (turn open, live transcript, avatar 'listening') as their turn, without overriding a finished interview", async () => {
+  it("treats the candidate speaking (turn open, live transcript) as their turn, without overriding a finished interview", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
     const ws = MockWebSocket.instances[0];
@@ -741,7 +741,7 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByText("Because I enjoy")).toBeInTheDocument();
 
     act(() => { ws.emit({ type: "question_next", question_text: "Any questions for us?" }); });
-    act(() => { ws.emit({ type: "avatar_state", state: "listening" }); });
+    act(() => { ws.emit({ type: "candidate_turn_open" }); });
     expect(screen.getByText(/ananya is listening/i)).toBeInTheDocument();
 
     // A late candidate event never pulls a completed interview back into the room.
