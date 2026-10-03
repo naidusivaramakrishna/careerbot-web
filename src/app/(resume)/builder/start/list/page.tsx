@@ -192,7 +192,18 @@ const ResumeListContent = () => {
               : fullResume;
           }),
         );
-        setResumes([...transformResumeData(fullBuilderResumes, profileName), ...transformedEnhanced]);
+        const scored = new Map(
+          transformResumeData(fullBuilderResumes, profileName).map(row => [row.id, row] as const),
+        );
+        // MERGE into current state; do NOT replace the array. The list has been
+        // interactive since the paint above, so a row can be deleted while these
+        // requests are in flight -- rebuilding from the pre-delete `builderList`
+        // snapshot puts the deleted row back on screen. Mapping over current
+        // state can only update rows that are still present, which is the
+        // property develop2's per-row `setResumes(prev => prev.map(...))` had and
+        // the wholesale replacement lost. Enhanced rows are absent from `scored`,
+        // so they pass through untouched.
+        setResumes(prev => prev.map(row => scored.get(row.id) ?? row));
       } catch (hydrationErr) {
         logger.warn('Builder resume hydration failed; keeping the compact preview scores', hydrationErr);
       }
@@ -222,8 +233,10 @@ const ResumeListContent = () => {
 
       // ✅ No manual token check needed - httpClient sends cookies automatically
       await deleteResumeApi(resumeId);
-      const updatedResumes = resumes.filter(r => r.id !== resumeId);
-      setResumes(updatedResumes);
+      // Functional update: `resumes` is the render-time snapshot, and the
+      // background hydration above can commit between this click and the
+      // delete request resolving.
+      setResumes(prev => prev.filter(r => r.id !== resumeId));
       toast.success("Resume deleted successfully");
       setDeleteConfirmId(null);
 

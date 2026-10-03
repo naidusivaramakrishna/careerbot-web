@@ -363,6 +363,42 @@ describe('ResumeListPage', () => {
     expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
   });
 
+  // Regression: the list paints from the compact payload and hydrates in the
+  // background, which opens a window where the user can delete a row while the
+  // 2N hydration requests are still in flight. The hydration must MERGE into
+  // current state -- replacing the array wholesale rebuilds the deleted row
+  // from the pre-delete `builderList` snapshot and it reappears on screen.
+  // develop2 did this with `setResumes(prev => prev.map(...))`, which could not
+  // resurrect a row because it only ever mapped over rows still present.
+  it('does not bring back a resume deleted while the background hydration is in flight', async () => {
+    let releaseHydration: (value: unknown) => void = () => undefined;
+    const hydrationGate = new Promise(resolve => { releaseHydration = resolve; });
+    mockGetResumeById.mockImplementation((async () => {
+      await hydrationGate;
+      return builderResume;
+    }) as never);
+
+    render(<ResumeListPage />);
+
+    // First paint comes from the compact payload, before hydration resolves.
+    await screen.findByTestId('resume-row-builder-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete builder-1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+    await waitFor(() => {
+      expect(mockDeleteResume).toHaveBeenCalledWith('builder-1');
+    });
+    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
+
+    // Now let the in-flight hydration land.
+    releaseHydration(undefined);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('resume-row-enhanced-1')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
+  });
+
   it('downloads builder and enhanced resumes through their correct APIs', async () => {
     render(<ResumeListPage />);
 
