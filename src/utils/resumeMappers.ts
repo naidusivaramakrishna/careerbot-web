@@ -1063,19 +1063,13 @@ function buildCustomSections(p: AnyRecord, llm: AnyRecord = {}): CustomSection[]
     }
   }
 
-  // core_competencies is a dedicated top-level field (not part of
-  // custom_sections/section_metadata), so unlike Strengths-style content it
-  // never round-trips through either branch above -- a saved resume with a
-  // persisted customSections array would otherwise never show it at all,
-  // regardless of template. Synthesize it as its own custom section here,
-  // the same generic mechanism every template already renders, instead of
-  // adding bespoke JSX per template. Skip it if the user already has their
-  // own section named "Core Competencies" (e.g. a prior manual add) so this
-  // never overwrites their edits.
-  const hasCoreCompetenciesSection = sections.some(
-    (s) => s.sectionName.trim().toLowerCase() === "core competencies"
-  );
-  if (!hasCoreCompetenciesSection) {
+  // core_competencies is parser-only compatibility data. Synthesize it only
+  // for records that predate customSections; once a collection is persisted,
+  // that collection is authoritative for additions, renames, and deletions.
+  // Once customSections exists (including []), it is the user's authoritative
+  // collection: a deleted or renamed Core Competencies section must not be
+  // recreated from the stale parser-only top-level field on reload.
+  if (persistedSections === undefined) {
     const coreCompetenciesRaw = p.core_competencies || llm.core_competencies;
     const coreCompetenciesPoints = splitIntoPoints(coreCompetenciesRaw);
     if (coreCompetenciesPoints.length > 0) {

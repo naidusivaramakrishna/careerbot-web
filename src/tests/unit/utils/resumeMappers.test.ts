@@ -211,34 +211,29 @@ describe("core_competencies synthesized custom section", () => {
     }]);
   });
 
-  it("appends alongside an already-saved, differently-named custom section instead of replacing it", () => {
+  it("does not resurrect Core Competencies after it is deleted from a persisted collection", () => {
     const mapped = mapParserOutputToBuilderData({
-      customSections: [{
-        id: "strengths-id",
-        sectionName: "Strengths",
-        fields: [{ id: "f1", fieldName: "Strengths", fieldType: "list", value: ["Java"] }],
-      }],
+      customSections: [],
       core_competencies: ["Stakeholder Management"],
     });
 
-    expect(mapped.customSections).toHaveLength(2);
-    expect(mapped.customSections?.map((s) => s.sectionName)).toEqual(["Strengths", "Core Competencies"]);
+    expect(mapped.customSections).toEqual([]);
   });
 
-  it("does not add a duplicate when the user already has their own Core Competencies section saved", () => {
+  it("does not resurrect Core Competencies after the user renames it", () => {
     const mapped = mapParserOutputToBuilderData({
       customSections: [{
         id: "cc-id",
-        sectionName: "Core Competencies",
-        fields: [{ id: "f1", fieldName: "Core Competencies", fieldType: "list", value: ["User Edited Value"] }],
+        sectionName: "Key Competencies",
+        fields: [{ id: "f1", fieldName: "Key Competencies", fieldType: "list", value: ["User Edited Value"] }],
       }],
       core_competencies: ["Stakeholder Management", "Mentoring"],
     });
 
     expect(mapped.customSections).toEqual([{
       id: "cc-id",
-      sectionName: "Core Competencies",
-      fields: [{ id: "f1", fieldName: "Core Competencies", fieldType: "list", value: ["User Edited Value"] }],
+      sectionName: "Key Competencies",
+      fields: [{ id: "f1", fieldName: "Key Competencies", fieldType: "list", value: ["User Edited Value"] }],
     }]);
   });
 
