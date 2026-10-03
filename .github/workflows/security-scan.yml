@@ -17,6 +17,16 @@ on:
   # normally online, so effective capacity is ONE.
   push:
     branches: [master, develop2]
+  # npm audit moved off the per-PR path (see the npm-audit job below): it
+  # could never fail a PR, but it was costing 6-12 minutes of the ONE online
+  # runner on every push. The nightly run is for npm audit only (gitleaks skips
+  # `schedule`). GitHub reads `schedule` from the DEFAULT branch only
+  # (master), so the nightly takes effect once this reaches master and audits
+  # master's lockfile; develop2 is audited on every push to it and on demand
+  # (Actions > Security Scan > Run workflow, branch develop2).
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
 
 
 # Supersede in-flight runs for the same PR. Every push to a PR - or to the
@@ -27,8 +37,13 @@ on:
 #
 # github.workflow is part of the group key so Frontend CI and Security Scan do
 # not cancel each other - they are separate workflows and both must report.
+#
+# Scheduled runs get their OWN group. A `schedule` run takes the default
+# branch's ref, so in the shared group the nightly (which skips gitleaks) would
+# cancel an in-flight push-to-master run and those commits would never get
+# their gitleaks scan.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || (github.event.pull_request.number || github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -53,7 +68,15 @@ jobs:
   npm-audit:
     name: npm audit
     needs: pr-size
-    if: ${{ !cancelled() }}
+    # NOT on pull_request. On PRs both audit steps ended in `|| true`, so this
+    # job could never fail a PR -- it reported a result nobody could act on
+    # while holding a runner for 6-12 minutes per push, serialising every other
+    # PR behind it. It now runs on every push to master/develop2, nightly, and
+    # on demand, and FAILS (red run + notification) on a high/critical
+    # advisory, so a new advisory is surfaced within a day.
+    # It is not a required check (branch protection requires only `ai-review`
+    # and `Lint and Build`), so dropping it from PRs blocks nothing.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: [self-hosted, Linux, X64]
     steps:
       # FIRST step, before anything heavy -- keep it first. Fails this job when
@@ -83,16 +106,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: npm audit (production, advisory)
-        run: npm audit --omit=dev --audit-level=high || true
+      # These steps CAN fail, on purpose. Off the PR path a red run blocks
+      # nothing (this job never runs on a PR and is not a required check), and
+      # a red nightly / post-merge run is the signal: GitHub marks the branch
+      # and notifies on a failed scheduled run. With `|| true` a new high or
+      # critical advisory sat in a log that was green every time. Both steps
+      # always run and write what they found to the run summary.
+      - name: npm audit (production, high+)
+        run: |
+          set -o pipefail
+          if npm audit --omit=dev --audit-level=high 2>&1 | tee audit-prod.txt; then
+            echo "### ✅ npm audit (production, high+): no findings" >> "$GITHUB_STEP_SUMMARY"
+          else
+            { echo "### ❌ npm audit (production, high+) found advisories"; echo '```'; tail -n 40 audit-prod.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
-      - name: npm audit (full, advisory)
-        run: npm audit --audit-level=critical || true
+      - name: npm audit (full, critical)
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          if npm audit --audit-level=critical 2>&1 | tee audit-full.txt; then
+            echo "### ✅ npm audit (full, critical): no findings" >> "$GITHUB_STEP_SUMMARY"
+          else
+            { echo "### ❌ npm audit (full, critical) found advisories"; echo '```'; tail -n 40 audit-full.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
   gitleaks:
     name: Gitleaks Secret Detection
     needs: pr-size
-    if: ${{ !cancelled() }}
+    # Not on the nightly schedule: that exists for npm audit. A full-history
+    # gitleaks scan at 01:30 finds nothing the push run did not, and would
+    # hold the single runner. Still runs on every PR, push and manual dispatch.
+    if: ${{ !cancelled() && github.event_name != 'schedule' }}
     runs-on: [self-hosted, Linux, X64]
     steps:
       # FIRST step, before anything heavy -- keep it first. Fails this job when

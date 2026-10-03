@@ -40,6 +40,10 @@ PR_WORKFLOWS = sorted(name for name, wf in _workflows().items()
                       if "pull_request" in _triggers(wf))
 
 
+def schedule_event():
+    return {"event_name": "schedule", "ref": "refs/heads/master", "event": {}}
+
+
 def dispatch_event():
     return {"event_name": "workflow_dispatch", "ref": "refs/heads/develop2",
             "event": {"inputs": {"pr": ""}}}
@@ -97,9 +101,36 @@ def _guard(job):
     return job["steps"][0]
 
 
+# A job may opt OUT of the pull_request path entirely by saying so in its own
+# `if`. Such a job cannot be a required check (a check that never runs on a PR
+# can never be satisfied), so the "must fail, not skip" policy below does not
+# apply to it -- there is nothing to skip. Decided by EVALUATING the condition
+# for every PR context and every gate result -- not by grepping it -- so
+# `!cancelled() || github.event_name != 'pull_request'` (which still runs on a
+# PR) is not mistaken for an opt-out. The set of opted-out jobs is pinned in
+# test_only_npm_audit_is_pr_exempt, so a new opt-out needs a deliberate edit.
+_GATE_RESULTS = ("success", "failure", "cancelled", "skipped")
+
+
+def _skips_pull_requests(job):
+    job_if = job.get("if") or "true"
+    return all(
+        not _cond(job_if, ctx, needs={"pr-size": {"result": result}})
+        for ctx in PR_CTXS
+        for result in _GATE_RESULTS
+    )
+
+
+def _pr_exempt():
+    return [(name, jid, job) for name in PR_WORKFLOWS
+            for jid, job in _other_jobs(_workflows()[name]).items()
+            if _skips_pull_requests(job)]
+
+
 def _downstream():
     return [(name, jid, job) for name in PR_WORKFLOWS
-            for jid, job in _other_jobs(_workflows()[name]).items()]
+            for jid, job in _other_jobs(_workflows()[name]).items()
+            if not _skips_pull_requests(job)]
 
 
 DOWNSTREAM_IDS = [f"{n}:{j}" for n, j, _ in _downstream()]
@@ -269,3 +300,95 @@ def test_gate_docs_list_every_gate_check_and_do_not_require_branch_protection():
     for n in ("PR Size / frontend-ci", "PR Size / ai-review", "PR Size / security-scan"):
         assert n in text
     assert "NOT a precondition" in text and "FAIL-CLOSED" in text
+
+
+# ── Jobs exempt from the pull_request path (added 2026-10-02) ───────────────
+
+def test_a_pr_exempt_job_is_never_a_required_check():
+    """The exemption must stay bounded. A required check that never runs on a
+    PR can never be satisfied, so it would block every PR forever. Branch
+    protection on develop2 requires `ai-review` and `Lint and Build`; neither
+    may opt out of the pull_request path."""
+    REQUIRED = {"ai-review", "Lint and Build"}
+    for name, jid, job in _pr_exempt():
+        assert job.get("name") not in REQUIRED, (name, jid, job.get("name"))
+
+
+def test_only_npm_audit_is_pr_exempt():
+    """Which jobs may leave the PR path is a deliberate decision, not something
+    a condition edit can do silently. gitleaks in particular must stay on PRs:
+    catching a secret BEFORE merge is the whole point of it."""
+    assert {(n, j) for n, j, _ in _pr_exempt()} == {("security-scan.yml", "npm-audit")}
+
+
+def test_exemption_is_evaluated_not_grepped():
+    """A condition that merely CONTAINS the opt-out text but still runs on a PR
+    (here `||` instead of `&&`) is not an exemption."""
+    runs_on_pr = {"if": "${{ !cancelled() || github.event_name != 'pull_request' }}"}
+    assert not _skips_pull_requests(runs_on_pr)
+    opted_out = {"if": "${{ !cancelled() && github.event_name != 'pull_request' }}"}
+    assert _skips_pull_requests(opted_out)
+
+
+def test_gitleaks_runs_on_prs_and_pushes_but_not_nightly():
+    """The nightly schedule exists for npm audit. gitleaks (full history,
+    fetch-depth 0) adds nothing nightly that the push run did not already
+    scan, and the single runner is shared."""
+    job = _workflows()["security-scan.yml"]["jobs"]["gitleaks"]
+    skipped = {"pr-size": {"result": "skipped"}}
+    assert all(_cond(job["if"], ctx) for ctx in PR_CTXS)
+    assert _cond(job["if"], push_event(), needs=skipped)
+    assert _cond(job["if"], dispatch_event(), needs=skipped)
+    assert not _cond(job["if"], schedule_event(), needs=skipped)
+
+
+def test_a_pr_exempt_job_still_runs_on_push_and_schedule():
+    """Opting out of PRs must not mean opting out of everything: the signal has
+    to keep arriving on the branches that ship."""
+    wfs = _workflows()
+    skipped = {"pr-size": {"result": "skipped"}}
+    for name, jid, job in _pr_exempt():
+        triggers = _triggers(wfs[name])
+        assert "push" in triggers, (name, jid)
+        assert "schedule" in triggers, (name, jid, "a PR-exempt job needs a schedule")
+        assert "workflow_dispatch" in triggers, (name, jid, "and an on-demand run")
+        for ctx in (push_event(), schedule_event(), dispatch_event()):
+            assert _cond(job["if"], ctx, needs=skipped), (name, jid, ctx["event_name"])
+
+
+def test_npm_audit_is_pr_exempt_and_reports_off_the_pr_path():
+    """npm audit is the current exemption. It is allowed off the PR path
+    because it is not a required check and on PRs it could never fail (both
+    steps ended in `|| true`) -- it held the single online runner for 6-12
+    minutes to report something nobody could act on. Off the PR path it must
+    be ABLE to fail: a red nightly / post-merge run is how a new high or
+    critical advisory surfaces. `|| true` there would make every run green and
+    the advisory invisible (ai-review P1 on #159)."""
+    job = _workflows()["security-scan.yml"]["jobs"]["npm-audit"]
+    assert _skips_pull_requests(job)
+    assert job.get("name") not in {"ai-review", "Lint and Build"}
+    audit_steps = [st for st in job["steps"] if "npm audit" in str(st.get("run", ""))]
+    assert len(audit_steps) == 2, "expected the production and full audit steps"
+    for st in audit_steps:
+        run = st["run"]
+        assert "|| true" not in run, (st.get("name"), "audit must be able to fail")
+        assert "exit 1" in run and "pipefail" in run, st.get("name")
+        assert "GITHUB_STEP_SUMMARY" in run, (st.get("name"), "findings must reach the run summary")
+    # The second audit runs even when the first one failed.
+    assert audit_steps[1].get("if") == "${{ !cancelled() }}"
+
+
+def test_nightly_run_has_its_own_concurrency_group():
+    """A scheduled run takes the default branch's ref. Sharing a group with
+    push-to-master runs, the nightly (which skips gitleaks) would cancel an
+    in-flight push run and leave those commits without a gitleaks scan."""
+    from test_ci_draft_policy import PR, _group
+    wf = _workflows()["security-scan.yml"]
+    master_push = {"event_name": "push", "ref": "refs/heads/master", "event": {}}
+    nightly = _group(wf, schedule_event())
+    assert nightly != _group(wf, master_push)
+    assert nightly != _group(wf, push_event())
+    assert nightly.endswith("-nightly")
+    # PR runs still group per PR number, pushes per ref.
+    assert _group(wf, pr_event("synchronize", False)).endswith(f"-{PR}")
+    assert _group(wf, push_event()).endswith("-refs/heads/develop2")
