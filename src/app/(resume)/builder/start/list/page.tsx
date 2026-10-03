@@ -94,10 +94,9 @@ const ResumeListContent = () => {
         initials: getInitials(name),
         name: name,
         job: targetRole,
-        // builder_score is set upstream only for a server score newer than the
-        // resume's own updatedAt, so a value here already passed that freshness
-        // check and wins. Otherwise fall back to the same complete-data preview
-        // calculation the editor displays.
+        // `builder_score` is attached only after this component verifies its
+        // calculation timestamp against updatedAt. Raw API payload scores are
+        // stripped before this mapper runs.
         score: typeof item.builder_score?.score === 'number'
           ? item.builder_score.score
           : computePreviewScore(item).score,
@@ -108,6 +107,14 @@ const ResumeListContent = () => {
         primary: false,
       };
     });
+  };
+
+  // A builder_score attached to a list/detail payload carries no calculation
+  // timestamp. It is therefore unverified until getBuilderScore confirms it
+  // was calculated after the resume's updatedAt.
+  const withoutUnverifiedBuilderScore = (resume: ResumeResponse): ResumeResponse => {
+    const { builder_score: _builderScore, ...withoutScore } = resume;
+    return withoutScore as ResumeResponse;
   };
 
   const fetchResumes = useCallback(async () => {
@@ -164,7 +171,7 @@ const ResumeListContent = () => {
       // below exists to avoid (the pre-existing behaviour this replaced
       // showed the list immediately and filled scores in afterwards).
       const builderList = builder_resumes as unknown as ResumeResponse[];
-      setResumes([...transformResumeData(builderList, profileName), ...transformedEnhanced]);
+      setResumes([...transformResumeData(builderList.map(withoutUnverifiedBuilderScore), profileName), ...transformedEnhanced]);
       setLoading(false);
 
       // Then hydrate every builder resume and re-score it against the same
@@ -180,7 +187,9 @@ const ResumeListContent = () => {
               getResumeById(resume.id),
               getBuilderScore(resume.id),
             ]);
-            const fullResume = resumeResult.status === 'fulfilled' ? resumeResult.value : resume;
+            const fullResume = withoutUnverifiedBuilderScore(
+              resumeResult.status === 'fulfilled' ? resumeResult.value : resume,
+            );
             if (scoreResult.status !== 'fulfilled' || scoreResult.value.score <= 0) return fullResume;
 
             const calculatedAt = Date.parse(scoreResult.value.calculated_at);

@@ -292,6 +292,25 @@ describe('ResumeListPage', () => {
     expect(await screen.findByTestId('resume-row-builder-1'))
       .toHaveTextContent(`${computePreviewScore(builderResume as never).score}%`);
   });
+
+  it('does not display stale builder_score values attached to compact or detail payloads', async () => {
+    const staleCompactResume = { ...builderResume, builder_score: { score: 99 } };
+    const staleDetailResume = { ...builderResume, builder_score: { score: 98 } };
+    mockGetAllResumesUnified.mockResolvedValueOnce({
+      builder_resumes: [staleCompactResume],
+      enhanced_resumes: [],
+    } as never);
+    mockGetResumeById.mockResolvedValueOnce(staleDetailResume as never);
+
+    render(<ResumeListPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-builder-1'))
+        .toHaveTextContent(`${computePreviewScore(staleDetailResume as never).score}%`);
+    });
+    expect(screen.getByTestId('resume-row-builder-1')).not.toHaveTextContent('99%');
+    expect(screen.getByTestId('resume-row-builder-1')).not.toHaveTextContent('98%');
+  });
   it('keeps the compact preview when the full resume cannot be loaded', async () => {
     mockGetResumeById.mockRejectedValueOnce(new Error('Resume is not ready'));
 

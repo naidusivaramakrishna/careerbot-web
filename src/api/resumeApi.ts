@@ -166,6 +166,7 @@ export interface ResumeResponse {
   updatedAt: string;
   createdAt: string;
   customSections?: CustomSection[];
+  coreCompetenciesDismissed?: boolean;
 }
 
 export interface TemplateResponse {
@@ -442,6 +443,7 @@ interface BackendCustomSection {
   sectionName: string;
   icon: string;
   items: BackendCustomSectionItem[];
+  source?: "core_competencies";
   // The frontend's own named-fields model, round-tripped verbatim through
   // the backend's CustomSection (extra="allow" preserves unknown keys as-is
   // — verified directly against the API). `items` above is a lossy, generic
@@ -497,6 +499,7 @@ export const transformCustomSectionsForBackend = (customSections: CustomSection[
       icon: 'custom',
       items: [],
       fields: section.fields,
+      ...(section.source ? { source: section.source } : {}),
     }));
 };
 
@@ -520,6 +523,7 @@ const transformCustomSectionsFromBackend = (backendSections: BackendCustomSectio
         id: section.id || `custom_${Date.now()}_${sectionIndex}`,
         sectionName: section.sectionName,
         fields: section.fields,
+        ...(section.source ? { source: section.source } : {}),
       };
     }
 
@@ -607,6 +611,7 @@ const transformCustomSectionsFromBackend = (backendSections: BackendCustomSectio
       id: section.id || `custom_${Date.now()}_${sectionIndex}`,
       sectionName: section.sectionName,
       fields,
+      ...(section.source ? { source: section.source } : {}),
     };
   });
 };

@@ -1414,9 +1414,25 @@ const EditorTab: React.FC<Props> = ({
     resumeId: string,
     updatedSections: typeof resumeData.customSections,
   ): Promise<typeof resumeData.customSections | undefined> => {
+    const previousSections = resumeDataRef.current.customSections || [];
+    const hadGeneratedCoreCompetencies = previousSections.some(
+      section => section.source === "core_competencies",
+    );
+    const retainsGeneratedCoreCompetencies = (updatedSections || []).some(
+      section => section.source === "core_competencies",
+    );
+    const coreCompetenciesDismissed = resumeDataRef.current.coreCompetenciesDismissed === true
+      || (hadGeneratedCoreCompetencies && !retainsGeneratedCoreCompetencies);
+    if (coreCompetenciesDismissed && !resumeDataRef.current.coreCompetenciesDismissed) {
+      resumeDataRef.current = {
+        ...resumeDataRef.current,
+        coreCompetenciesDismissed: true,
+      };
+      setResumeData(previous => ({ ...previous, coreCompetenciesDismissed: true }));
+    }
     if (isEnhancedResume) {
       const response = await updateEnhancedResume(resumeId, {
-        enhanced_sections: { customSections: updatedSections },
+        enhanced_sections: { customSections: updatedSections, coreCompetenciesDismissed },
       });
       const resp = response as unknown as Record<string, unknown>;
       const rawEnhanced = resp?.enhanced_resume as Record<string, unknown> | undefined;
@@ -1424,7 +1440,10 @@ const EditorTab: React.FC<Props> = ({
         | typeof resumeData.customSections
         | undefined;
     }
-    const response = await updateResume(resumeId, { customSections: updatedSections } as Parameters<typeof updateResume>[1]);
+    const response = await updateResume(resumeId, {
+      customSections: updatedSections,
+      coreCompetenciesDismissed,
+    } as Parameters<typeof updateResume>[1]);
     return response.customSections;
   };
 

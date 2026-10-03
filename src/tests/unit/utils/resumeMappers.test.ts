@@ -185,6 +185,7 @@ describe("core_competencies synthesized custom section", () => {
     expect(mapped.customSections).toEqual([{
       id: expect.any(String),
       sectionName: "Core Competencies",
+      source: "core_competencies",
       fields: [{
         id: expect.any(String),
         fieldName: "Core Competencies",
@@ -202,6 +203,7 @@ describe("core_competencies synthesized custom section", () => {
     expect(mapped.customSections).toEqual([{
       id: expect.any(String),
       sectionName: "Core Competencies",
+      source: "core_competencies",
       fields: [{
         id: expect.any(String),
         fieldName: "Core Competencies",
@@ -211,21 +213,39 @@ describe("core_competencies synthesized custom section", () => {
     }]);
   });
 
-  it("does not resurrect Core Competencies after it is deleted from a persisted collection", () => {
+  it("does not resurrect Core Competencies after an explicitly recorded deletion", () => {
     const mapped = mapParserOutputToBuilderData({
       customSections: [],
+      coreCompetenciesDismissed: true,
       core_competencies: ["Stakeholder Management"],
     });
 
     expect(mapped.customSections).toEqual([]);
   });
 
-  it("does not resurrect Core Competencies after the user renames it", () => {
+  it("keeps Core Competencies alongside unrelated persisted custom sections", () => {
+    const mapped = mapParserOutputToBuilderData({
+      customSections: [{
+        id: "strengths-id",
+        sectionName: "Strengths",
+        fields: [{ id: "f1", fieldName: "Strengths", fieldType: "list", value: ["Communication"] }],
+      }],
+      core_competencies: ["Stakeholder Management"],
+    });
+
+    expect(mapped.customSections).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sectionName: "Strengths" }),
+      expect.objectContaining({ sectionName: "Core Competencies", source: "core_competencies" }),
+    ]));
+  });
+
+  it("does not resurrect Core Competencies after the user renames its tagged section", () => {
     const mapped = mapParserOutputToBuilderData({
       customSections: [{
         id: "cc-id",
         sectionName: "Key Competencies",
         fields: [{ id: "f1", fieldName: "Key Competencies", fieldType: "list", value: ["User Edited Value"] }],
+        source: "core_competencies",
       }],
       core_competencies: ["Stakeholder Management", "Mentoring"],
     });
@@ -233,6 +253,7 @@ describe("core_competencies synthesized custom section", () => {
     expect(mapped.customSections).toEqual([{
       id: "cc-id",
       sectionName: "Key Competencies",
+      source: "core_competencies",
       fields: [{ id: "f1", fieldName: "Key Competencies", fieldType: "list", value: ["User Edited Value"] }],
     }]);
   });

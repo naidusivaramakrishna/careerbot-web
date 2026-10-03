@@ -771,6 +771,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     declarationDate: str(p.declarationDate || p.declaration_date || llm.declarationDate || llm.declaration_date),
     declarationPlace: str(p.declarationPlace || p.declaration_place || llm.declarationPlace || llm.declaration_place),
     customSections: buildCustomSections(p, llm),
+    coreCompetenciesDismissed: p.coreCompetenciesDismissed === true || p.core_competencies_dismissed === true,
   };
 }
 
@@ -1030,10 +1031,14 @@ function buildCustomSections(p: AnyRecord, llm: AnyRecord = {}): CustomSection[]
       // An empty persisted section is still a valid editable definition. The
       // templates hide it until it has fields/content, but dropping it here
       // leaves a stale sidebar name that can only open a blank modal.
+      const isCoreCompetencies = section.source === "core_competencies"
+        || (sectionName.trim().toLowerCase() === "core competencies"
+          && splitIntoPoints(p.core_competencies || llm.core_competencies).length > 0);
       return [{
         id: str(section.id || section._id) || `custom_${sectionIndex}`,
         sectionName,
         fields,
+        ...(isCoreCompetencies ? { source: "core_competencies" as const } : {}),
       }];
     });
   } else {
@@ -1063,22 +1068,19 @@ function buildCustomSections(p: AnyRecord, llm: AnyRecord = {}): CustomSection[]
     }
   }
 
-  // core_competencies is parser-only compatibility data. Synthesize it only
-  // for records that predate customSections; once a collection is persisted,
-  // that collection is authoritative for additions, renames, and deletions.
-  // Once customSections exists (including []), it is the user's authoritative
-  // collection: a deleted or renamed Core Competencies section must not be
-  // recreated from the stale parser-only top-level field on reload.
-  if (persistedSections === undefined) {
-    const coreCompetenciesRaw = p.core_competencies || llm.core_competencies;
-    const coreCompetenciesPoints = splitIntoPoints(coreCompetenciesRaw);
-    if (coreCompetenciesPoints.length > 0) {
-      sections.push({
-        id: uid(),
-        sectionName: "Core Competencies",
-        fields: [{ id: uid(), fieldName: "Core Competencies", fieldType: "list", value: coreCompetenciesPoints }],
-      });
-    }
+  const coreCompetenciesRaw = p.core_competencies || llm.core_competencies;
+  const coreCompetenciesPoints = splitIntoPoints(coreCompetenciesRaw);
+  const coreCompetenciesDismissed = p.coreCompetenciesDismissed === true
+    || p.core_competencies_dismissed === true;
+  const hasCoreCompetencies = sections.some(section => section.source === "core_competencies");
+  const legacyEmptyCollection = persistedSections !== undefined && persistedSections.length === 0;
+  if (!coreCompetenciesDismissed && !legacyEmptyCollection && !hasCoreCompetencies && coreCompetenciesPoints.length > 0) {
+    sections.push({
+      id: uid(),
+      sectionName: "Core Competencies",
+      fields: [{ id: uid(), fieldName: "Core Competencies", fieldType: "list", value: coreCompetenciesPoints }],
+      source: "core_competencies",
+    });
   }
 
   return sections;

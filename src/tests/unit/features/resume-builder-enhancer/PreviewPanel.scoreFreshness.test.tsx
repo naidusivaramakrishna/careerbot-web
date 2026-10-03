@@ -9,8 +9,8 @@ afterEach(() => {
 });
 
 describe("PreviewPanel score freshness", () => {
-  it("uses the live preview instead of a stale canonical score", () => {
-    expect(selectPreviewScore(31, 88, "stale")).toBe(31);
+  it("uses the canonical score consistently while it is stale", () => {
+    expect(selectPreviewScore(31, 88, "stale")).toBe(88);
     expect(selectPreviewScore(31, 88, "ready")).toBe(88);
   });
 

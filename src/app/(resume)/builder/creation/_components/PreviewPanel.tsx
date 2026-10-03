@@ -88,7 +88,9 @@ export const selectPreviewScore = (
   canonicalStatus: CanonicalScoreStatus,
   enhancedScore?: number,
 ): number => enhancedScore ?? (
-  canonicalStatus === "ready" ? (canonicalScore ?? previewScore) : previewScore
+  (canonicalStatus === "ready" || canonicalStatus === "stale")
+    ? (canonicalScore ?? previewScore)
+    : previewScore
 );
 
 
