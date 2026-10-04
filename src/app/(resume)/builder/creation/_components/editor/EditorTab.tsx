@@ -95,10 +95,8 @@ export async function persistEnhancedCustomSections(
       ...(coreCompetenciesDismissed === undefined ? {} : { coreCompetenciesDismissed }),
     },
   } as Parameters<typeof updateEnhancedResume>[1]);
-  const enhancedData = response?.enhanced_data as Record<string, unknown> | undefined;
-  return (enhancedData?.customSections ?? enhancedData?.custom_sections) as
-    | CustomSection[]
-    | undefined;
+  // Same reader as explicit Save, so both paths sync ids from the same keys.
+  return readSyncedCustomSections(response as unknown as Record<string, unknown>, true);
 }
 
 interface SectionComponentProps {
@@ -290,20 +288,41 @@ export function endExplicitSave(ctx: {
 }
 
 /**
+ * True when the API refused the Save's DATA (HTTP 422, a VALIDATION_ERROR
+ * code, or validation_errors), as opposed to a transport or server failure.
+ * updateResume rethrows the axios error; updateEnhancedResume (safePatch)
+ * throws an Error with the response body in `__raw` and no status.
+ */
+export function isServerValidationRejection(error: unknown): boolean {
+  const e = error as { status?: number; response?: { status?: number; data?: unknown }; __raw?: unknown } | null | undefined;
+  if ((e?.response?.status ?? e?.status) === 422) return true;
+  const apiError = ((e?.response?.data ?? e?.__raw) as {
+    error?: { error_code?: unknown; validation_errors?: unknown[]; details?: { validation_errors?: unknown[] } };
+  } | undefined)?.error;
+  return /VALIDATION_ERROR$/.test(String(apiError?.error_code ?? ""))
+    || (apiError?.validation_errors?.length ?? 0) > 0
+    || (apiError?.details?.validation_errors?.length ?? 0) > 0;
+}
+
+/**
  * Explicit Save cancels a QUEUED autosave before it writes. If that Save then
  * does not complete because the REQUEST failed, re-arm the autosave it
- * cancelled, or the last edits would never be persisted. Not when client
- * validation blocked it: that data must not be written by any path.
+ * cancelled, or the last edits would never be persisted. Not when validation
+ * refused the data, on the client or on the server: that data must not be
+ * written by any path.
  */
 export function restoreCancelledAutosave(ctx: {
   cancelledQueuedAutosave: boolean;
   saveSucceeded: boolean;
   /** Client validation refused the data: re-sending it via autosave would write what Save blocked. */
   blockedByValidation: boolean;
+  /** What the Save request threw, if anything; a server-side validation rejection counts as blocked too. */
+  saveError?: unknown;
   section: string | null;
   triggerAutoSave: (section: string) => unknown;
 }): boolean {
-  if (!ctx.cancelledQueuedAutosave || ctx.saveSucceeded || ctx.blockedByValidation || !ctx.section) return false;
+  if (!ctx.cancelledQueuedAutosave || ctx.saveSucceeded || ctx.blockedByValidation
+    || isServerValidationRejection(ctx.saveError) || !ctx.section) return false;
   ctx.triggerAutoSave(ctx.section);
   return true;
 }
@@ -1389,6 +1408,7 @@ const EditorTab: React.FC<Props> = ({
   const cancelledQueuedAutosave = autoSaveTimerRef.current !== null;
   let saveSucceeded = false;
   let blockedByValidation = false;
+  let saveError: unknown;
 
   try {
     // Cancel/await any autosave still pending for this section before sending
@@ -1619,6 +1639,7 @@ const EditorTab: React.FC<Props> = ({
     bumpResumeSavedVersion();
     closeModal();
   } catch (error) {
+    saveError = error;
     const axiosError = error as { response?: { data?: { error?: { message?: string; details?: { validation_errors?: Array<{ field: string; message: string }> } } } } };
     const validationErrors = axiosError?.response?.data?.error?.details?.validation_errors;
 
@@ -1641,7 +1662,7 @@ const EditorTab: React.FC<Props> = ({
     }
   } finally {
     endExplicitSave({ explicitSaveInProgressRef, setIsSaving });
-    restoreCancelledAutosave({ cancelledQueuedAutosave, saveSucceeded, blockedByValidation, section: savedSection, triggerAutoSave });
+    restoreCancelledAutosave({ cancelledQueuedAutosave, saveSucceeded, blockedByValidation, saveError, section: savedSection, triggerAutoSave });
   }
 };
 

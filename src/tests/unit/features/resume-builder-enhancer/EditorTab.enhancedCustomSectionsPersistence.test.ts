@@ -89,3 +89,32 @@ describe("enhanced custom-section persistence", () => {
     });
   });
 });
+
+describe("enhanced custom-section persistence reads the response like explicit Save (#166 P3)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("reads the nested enhanced_resume.enhanced_data shape that readSyncedCustomSections accepts", async () => {
+    const server = [{ id: "server-1", sectionName: "Volunteer", fields: [] }];
+    updateEnhancedResume.mockResolvedValueOnce({ enhanced_resume: { enhanced_data: { customSections: server } } });
+    await expect(persistEnhancedCustomSections("enhanced-1", [{ id: "custom_x", sectionName: "Volunteer", fields: [] }]))
+      .resolves.toEqual(server);
+  });
+
+  it("control: the top-level enhanced_data.custom_sections shape is still read", async () => {
+    const server = [{ id: "server-2", sectionName: "Awards", fields: [] }];
+    updateEnhancedResume.mockResolvedValueOnce({ enhanced_data: { custom_sections: server } });
+    await expect(persistEnhancedCustomSections("enhanced-1", [{ id: "custom_y", sectionName: "Awards", fields: [] }]))
+      .resolves.toEqual(server);
+  });
+
+  it("still reads the nested shape when #148's coreCompetenciesDismissed flag is passed", async () => {
+    const server = [{ id: "server-3", sectionName: "Volunteer", fields: [] }];
+    updateEnhancedResume.mockResolvedValueOnce({ enhanced_resume: { enhanced_data: { customSections: server } } });
+    await expect(persistEnhancedCustomSections("enhanced-1", [], true)).resolves.toEqual(server);
+    expect(updateEnhancedResume).toHaveBeenCalledWith("enhanced-1", {
+      enhanced_sections: { customSections: [], coreCompetenciesDismissed: true },
+    });
+  });
+});

@@ -121,3 +121,53 @@ describe("mergeBackendItemIds (autosave id write-back shared by state and the li
     expect(editor.mergeBackendItemIds([{ school: "B" }], [{}])).toEqual([{ school: "B" }]);
   });
 });
+
+/**
+ * #166 (follow-up to #144), P2: a Save the SERVER rejected for validation
+ * re-armed the autosave it had cancelled, so the lenient autosave endpoint
+ * wrote the data explicit Save was refused for. Both transports are covered:
+ * updateResume rethrows the axios error; updateEnhancedResume (safePatch)
+ * throws an Error carrying the response body as `__raw` and no status.
+ */
+describe("restoreCancelledAutosave: Save rejected by server-side validation", () => {
+  const base = { cancelledQueuedAutosave: true, saveSucceeded: false, blockedByValidation: false, section: "Education" };
+  const validationBody = {
+    success: false,
+    error: { message: "Validation failed.", error_code: "VALIDATION_ERROR", details: { validation_errors: [{ field: "education → 0 → score_value", message: "out of range" }] } },
+  };
+
+  it("does NOT re-arm after a builder Save's axios 422", () => {
+    const triggerAutoSave = vi.fn();
+    const saveError = Object.assign(new Error("Request failed with status code 422"), { response: { status: 422, data: validationBody } });
+    expect(editor.restoreCancelledAutosave({ ...base, saveError, triggerAutoSave })).toBe(false);
+    expect(triggerAutoSave).not.toHaveBeenCalled();
+  });
+
+  it("does NOT re-arm after an enhanced Save's validation rejection (safePatch error: body in __raw, no status)", () => {
+    const triggerAutoSave = vi.fn();
+    const saveError = Object.assign(new Error("Validation failed."), { __raw: validationBody });
+    expect(editor.restoreCancelledAutosave({ ...base, saveError, triggerAutoSave })).toBe(false);
+    expect(triggerAutoSave).not.toHaveBeenCalled();
+  });
+
+  it("does NOT re-arm after a 400 VALIDATION_ERROR (the API's ValidationException, e.g. a rejected email edit)", () => {
+    const triggerAutoSave = vi.fn();
+    const saveError = Object.assign(new Error("Bad Request"), {
+      response: { status: 400, data: { success: false, error: { message: "Validation error on field 'email'", error_code: "VALIDATION_ERROR", details: { field: "email" } } } },
+    });
+    expect(editor.restoreCancelledAutosave({ ...base, saveError, triggerAutoSave })).toBe(false);
+    expect(triggerAutoSave).not.toHaveBeenCalled();
+  });
+
+  it("control: a transport/server failure (500, network) still re-arms, so the edits are not lost", () => {
+    for (const saveError of [
+      Object.assign(new Error("Request failed with status code 500"), { response: { status: 500, data: { success: false, error: { message: "boom", error_code: "INTERNAL_ERROR" } } } }),
+      Object.assign(new Error("Network Error"), { __raw: "Network Error" }),
+      new Error("Network Error"),
+    ]) {
+      const triggerAutoSave = vi.fn();
+      expect(editor.restoreCancelledAutosave({ ...base, saveError, triggerAutoSave })).toBe(true);
+      expect(triggerAutoSave).toHaveBeenCalledWith("Education");
+    }
+  });
+});

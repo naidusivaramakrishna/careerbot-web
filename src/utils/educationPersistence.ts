@@ -131,7 +131,16 @@ function projectLegacyEducationAliases(
       item.gpa_value,
       item.grade,
     );
-    const inferredScoreType = inferEducationScoreType(item, rawScoreValue);
+    // Guess a type only for a score that came from a parser alias. The user's
+    // own scoreValue keeps the type they picked, even none; an explicit type
+    // alias (score_type / gradeType / grade_type) still applies to it.
+    const userScoreValue = Boolean(firstText(item.scoreValue, item.score_value));
+    const explicitScoreType = normalizeScoreType(
+      item.scoreType || item.score_type || item.gradeType || item.grade_type,
+    );
+    const inferredScoreType = userScoreValue && !explicitScoreType
+      ? undefined
+      : inferEducationScoreType(item, rawScoreValue);
     if (canFillScoreType && inferredScoreType) prepared.scoreType = inferredScoreType;
     if (canFillScoreValue && rawScoreValue) {
       const scoreType = canFillScoreType

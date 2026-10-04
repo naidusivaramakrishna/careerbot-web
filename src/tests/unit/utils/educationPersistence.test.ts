@@ -156,5 +156,38 @@ describe("Education autosave persistence", () => {
     });
     expect(prepareEducationForPersistence([explicitSave])[0]).toEqual(explicitSave);
   });
-});
 
+  /**
+   * #166 (follow-up to #144), P2: the alias projection also inferred a Score
+   * Type from the user's OWN scoreValue, so "8.5" with Score Type left blank
+   * was saved as CGPA ("85" as Percentage) while the editor showed no type.
+   */
+  it("does not infer a Score Type from the user's own scoreValue (persistence)", () => {
+    for (const scoreValue of ["8.5", "85", "3.8"]) {
+      const [prepared] = prepareEducationForPersistence([{ id: "edu-1", degree: "MBA", scoreValue, scoreType: undefined }]);
+      expect(prepared.scoreType).toBeUndefined();
+      expect(prepared.scoreValue).toBe(scoreValue);
+    }
+  });
+
+  it("does not infer a Score Type from a stored scoreValue on builder load either", () => {
+    const [loaded] = normalizeEducationForBuilder([{ id: "edu-1", degree: "MBA", scoreValue: "8.5" }]);
+    expect(loaded.scoreType).toBeUndefined();
+    expect(loaded.scoreValue).toBe("8.5");
+    expect(prepareEducationForPersistence([loaded])[0].scoreType).toBeUndefined();
+  });
+
+  it("control: an alias-only score still gets its type inferred (persistence and load)", () => {
+    expect(prepareEducationForPersistence([{ id: "edu-1", scoreValue: undefined, percentage: "85%" }])[0])
+      .toMatchObject({ scoreType: "Percentage", scoreValue: "85" });
+    expect(prepareEducationForPersistence([{ id: "edu-1", scoreValue: undefined, grade: "8.5" }])[0])
+      .toMatchObject({ scoreType: "CGPA", scoreValue: "8.5" });
+    expect(normalizeEducationForBuilder([{ id: "edu-1", gpa: "3.8" }])[0])
+      .toMatchObject({ scoreType: "GPA", scoreValue: "3.8" });
+  });
+
+  it("opposite state: an explicit type alias still applies to the user's scoreValue", () => {
+    expect(prepareEducationForPersistence([{ id: "edu-1", scoreValue: "85", score_type: "percentage" }])[0])
+      .toMatchObject({ scoreType: "Percentage", scoreValue: "85" });
+  });
+});
