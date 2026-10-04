@@ -2,6 +2,7 @@
 import React from "react";
 import { ResumeData, ResumeStyle } from "../../_context/ResumeContext";
 import { useResume } from "../../_context/ResumeContext";
+import { hasRenderableCustomSectionContent } from "../../_utils/customSectionIdentity";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
 import SafeHTML from "@/components/common/SafeHTML";
@@ -609,7 +610,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
       default:
         // Check if it's a custom section
         const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
-        if (customSection && customSection.fields.length > 0) {
+        if (customSection && hasRenderableCustomSectionContent(customSection)) {
           return (
             <section className="mb-4">
               <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>

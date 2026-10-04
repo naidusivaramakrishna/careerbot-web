@@ -1,19 +1,51 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+
+/**
+ * Click bookkeeping depends on what the CALLER's onSelect does:
+ *
+ * "append" (default; 7 of the 8 call sites) APPENDS another bullet via
+ *   appendSuggestionBullet. Picking several is intended; applying the SAME
+ *   one twice duplicates its text, so an applied card is retired for good.
+ * "single" REPLACES the value (Professional Summary clears the editor
+ *   first), so a different card is a replace and re-picking stays available.
+ */
+export type SuggestionSelectionMode = "append" | "single";
 
 interface Props {
   options: string[];
   onSelect: (s: string) => void;
   onClose: () => void;
+  selectionMode?: SuggestionSelectionMode;
 }
 
-const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose }) => {
-  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose, selectionMode = "append" }) => {
+  const isSingleSelect = selectionMode === "single";
+  // The card shown as chosen: in "single" mode the one in the box, in
+  // "append" mode just the most recent pick.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  // Every index already applied -- "append" mode only. A lone selectedIndex
+  // cannot stop a double-append: pick A, pick B, pick A again and A is
+  // re-applied, which is what let one Summary pass the 2000-char limit.
+  const [appliedIndices, setAppliedIndices] = useState<Set<number>>(new Set());
+
+  // Regeneration replaces an entry's option array while leaving the popup
+  // mounted; switching entries does the same. Those are new suggestion sets,
+  // so none of their cards have been applied yet.
+  useEffect(() => {
+    setSelectedIndex(null);
+    setAppliedIndices(new Set());
+  }, [options]);
+
+  const isRetired = (i: number) =>
+    isSingleSelect ? selectedIndex === i : appliedIndices.has(i);
 
   const handleSelect = (s: string, i: number) => {
     if (s.startsWith("⚠️")) return;
-    setSelectedIndices(prev => new Set(prev).add(i));
+    if (isRetired(i)) return;
+    setSelectedIndex(i);
+    if (!isSingleSelect) setAppliedIndices(prev => new Set(prev).add(i));
     onSelect(s);
     // Popup stays open — only X closes it
   };
@@ -49,14 +81,16 @@ const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose }) => {
               key={i}
               type="button"
               onClick={() => handleSelect(s, i)}
+              disabled={isRetired(i)}
+              aria-pressed={isRetired(i)}
               className={`text-left px-3 py-3 rounded-md text-sm transition-all duration-200 flex items-start justify-between gap-2 ${
-                selectedIndices.has(i)
+                isRetired(i)
                   ? "bg-green-50 border border-green-300 text-green-900 cursor-default"
                   : "text-[#2d2d2d] bg-white hover:bg-[#e8eff9] hover:-translate-y-1 hover:shadow-md"
               }`}
             >
               <span className="flex-1">{s}</span>
-              {selectedIndices.has(i) && (
+              {isRetired(i) && (
                 <Check size={14} className="shrink-0 mt-0.5 text-green-600" />
               )}
             </button>
@@ -64,9 +98,11 @@ const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose }) => {
         )}
       </div>
 
-      {selectedIndices.size > 0 && (
+      {selectedIndex !== null && (
         <p className="text-[11px] text-gray-400 italic text-center">
-          {selectedIndices.size} suggestion{selectedIndices.size > 1 ? "s" : ""} added · Click × to close
+          {isSingleSelect
+            ? "Summary updated · Click × to close, or pick a different suggestion to replace it"
+            : `${appliedIndices.size} suggestion${appliedIndices.size > 1 ? "s" : ""} added · Click × to close`}
         </p>
       )}
     </div>

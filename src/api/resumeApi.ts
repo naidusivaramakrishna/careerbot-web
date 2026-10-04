@@ -229,27 +229,46 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
   try {
     logger.debug("📤 Creating resume with authenticated user...");
 
-    // ✅ Fetch user profile to populate personalInfo
+    // Fetching the profile is best-effort; an authenticated user can still
+    // start a blank resume if their profile is temporarily unavailable.
     let userProfile;
     try {
       userProfile = await getProfile();
-      logger.debug("✅ User profile fetched:", userProfile);
+      logger.debug("Profile fetched for new resume");
     } catch (profileError) {
-      logger.warn("⚠️ Could not fetch user profile, creating resume with empty personalInfo", profileError);
+      logger.warn("Could not fetch profile for new resume", profileError);
     }
 
-    // ✅ Map user profile to personalInfo
+    // The create endpoint validates optional fields when they are present. Do
+    // not send empty (or legacy malformed) profile values -- absence is valid,
+    // while an empty URL/phone value can reject the entire new-resume request.
+    const nonEmpty = (value: unknown): string | undefined =>
+      typeof value === "string" && value.trim() ? value.trim() : undefined;
+    const profileEmail = nonEmpty(userProfile?.email);
+    const profileName = nonEmpty(userProfile?.full_name)
+      ?? nonEmpty(userProfile?.username)
+      ?? (profileEmail ? profileEmail.split("@")[0] : undefined);
+    const profilePhone = nonEmpty(userProfile?.phone_number);
+    const profileLocation = nonEmpty(userProfile?.location);
+    const linkedInUrl = nonEmpty(userProfile?.linkedin_url);
+    // Two conditions, not one: the shape check alone passes a value made
+    // entirely of separators ("------", "(...)...", "   ...   " all match
+    // /^\+?[\d\s().-]{6,}$/ with no digit), exactly the malformed legacy
+    // value this guard exists to exclude. So require 6+ digits too.
+    const hasValidPhone =
+      !!profilePhone
+      && /^\+?[\d\s().-]+$/.test(profilePhone)
+      && (profilePhone.match(/\d/g)?.length ?? 0) >= 6;
+
     const resumeData = {
       personalInfo: {
-        fullname: userProfile?.full_name || '',
-        email: userProfile?.email || '',
-        phone: userProfile?.phone_number || '',
-        location: userProfile?.location || '',
-        linkedinUrl: userProfile?.linkedin_url || '',
-        portfolioUrl: '', // User can fill this manually
+        ...(profileName ? { fullname: profileName } : {}),
+        ...(profileEmail ? { email: profileEmail } : {}),
+        ...(hasValidPhone ? { phone: profilePhone } : {}),
+        ...(profileLocation ? { location: profileLocation } : {}),
+        ...(linkedInUrl && /^https?:\/\//i.test(linkedInUrl) ? { linkedinUrl: linkedInUrl } : {}),
       },
     };
-
     logger.debug("📋 Creating resume with personalInfo:", resumeData.personalInfo);
 
     const response = await httpClient.post<ResumeResponse>(
@@ -476,22 +495,12 @@ export const transformCustomSectionsForBackend = (customSections: CustomSection[
   // directly (see the BackendCustomSection.fields comment above for the
   // backend PR that made this safe). Legacy records that only have `items`
   // still use the read fallback.
-  return customSections
-    .filter((section) => {
-      // A section with no fields, or where every field is blank, has
-      // nothing to render. This filter existed before this file's last
-      // rewrite and was dropped as a side effect of it, not on purpose --
-      // restored so an empty "+ Add custom section" click doesn't persist
-      // a section with a heading and no content forever.
-      if (!section.fields || section.fields.length === 0) return false;
-      return section.fields.some((field) => {
-        const value = field.value;
-        if (typeof value === 'string') return value.trim() !== '';
-        if (Array.isArray(value)) return value.length > 0;
-        return !!value;
-      });
-    })
-    .map((section) => ({
+  // Persist the section definition even before it has fields or values. The
+  // editor needs that shell on reload so the user can add the first field.
+  // Preview templates already suppress custom sections with no fields, and
+  // exporters ignore empty `fields`, so retaining the definition does not
+  // create a blank section in the rendered resume.
+  return customSections.map((section) => ({
       ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
       sectionName: section.sectionName,
       icon: 'custom',

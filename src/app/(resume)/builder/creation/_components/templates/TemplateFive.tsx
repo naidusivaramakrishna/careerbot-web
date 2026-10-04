@@ -2,6 +2,7 @@
 import React from "react";
 import { ResumeData, ResumeStyle } from "../../_context/ResumeContext";
 import { useResume } from "../../_context/ResumeContext";
+import { hasRenderableCustomSectionContent } from "../../_utils/customSectionIdentity";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
 
@@ -485,7 +486,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
 
       default: {
         const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
-        if (customSection && customSection.fields.length > 0) {
+        if (customSection && hasRenderableCustomSectionContent(customSection)) {
           return (
             <section className="mb-5">
               <h2 style={headingStyle}>{customSection.sectionName.toUpperCase()}</h2>

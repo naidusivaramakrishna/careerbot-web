@@ -164,7 +164,20 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                         if (gradeRaw === null || gradeRaw === undefined) return undefined;
                         const num = parseFloat(asStr(gradeRaw).replace('%', ''));
                         if (isNaN(num)) return undefined;
-                        return parseFloat((num > 10 ? num / 10 : num).toFixed(2));
+                        // CBSE's factor is 9.5, not 10; the forward half of the
+                        // pair is Education.tsx's convertScoreValue.
+                        const converted = num > 10 ? num / 9.5 : num;
+                        const rounded = parseFloat(converted.toFixed(2));
+                        // Off the scale (every grade above 95%: 100 -> 10.53),
+                        // report nothing. Resume import POSTs this after
+                        // DELETING the user's education rows
+                        // (RightSection.tsx:139-146 then :227-240, one catch
+                        // around the loop), so a rejected cgpa loses every
+                        // row. cgpa is optional (ProfileData.ts:21), so
+                        // omitting stays valid and leaves one blank field;
+                        // clamping to 10 would relabel a 98% student as a 10.
+                        if (rounded < 0 || rounded > 10) return undefined;
+                        return rounded;
                     })();
 
                     return {

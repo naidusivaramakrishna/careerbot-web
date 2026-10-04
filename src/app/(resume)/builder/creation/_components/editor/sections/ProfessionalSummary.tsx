@@ -59,6 +59,29 @@ const ProfessionalSummary: React.FC = () => {
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [aiRoleHint, setAIRoleHint] = useState("");
+  // No default: the user must explicitly pick Fresher or Experienced.
+  // AI Writer's prompt materially differs by level (years of experience,
+  // metrics, tone) -- silently defaulting to "experienced" meant a user
+  // who never touched this toggle got that prompt without ever choosing
+  // it. handleAIWriterClick below now requires an explicit selection,
+  // the same way it already requires Target Role.
+  const [careerLevel, setCareerLevel] = useState<"fresher" | "experienced" | null>(null);
+
+  // Local draft, not written straight to the shared resumeData context on
+  // every keystroke. The live preview and autosave both read that SAME
+  // shared context, so typing directly into it (the previous behavior) made
+  // an in-progress, optional Target Role edit appear in the preview before
+  // Summary -- the field actually marked required ("*") -- had any content
+  // at all, and before Save was ever clicked. Confirmed via a real report:
+  // entering only Target Role updated the live preview immediately.
+  // draftSummary/draftTargetRole seed from the shared context on mount (this
+  // modal fully unmounts/remounts on open/close, so that only happens once
+  // per open) and are committed back to it -- which is what the preview and
+  // autosave observe -- only once Summary has real content. See the sync
+  // effect below.
+  const [draftSummary, setDraftSummary] = useState(resumeData.professionalSummary.summary || "");
+  const [draftTargetRole, setDraftTargetRole] = useState(resumeData.professionalSummary.targetRole || "");
+  const hasSyncedSummaryRef = useRef(false);
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -67,27 +90,37 @@ const ProfessionalSummary: React.FC = () => {
   const formScrollRef = useRef<HTMLDivElement>(null);
 
   const handleChange = (value: string) => {
-    setResumeData({
-      ...resumeData,
-      professionalSummary: {
-        ...resumeData.professionalSummary,
-        summary: value,
-      },
-    });
+    setDraftSummary(value);
     clearError("", 0, "summary");
   };
 
   const handleTargetRoleChange = (value: string) => {
-    setResumeData({
-      ...resumeData,
-      professionalSummary: {
-        ...resumeData.professionalSummary,
-        targetRole: value,
-      },
-    });
+    setDraftTargetRole(value);
     clearError("summary", 0, "targetRole");
     if (value.trim()) setAIRoleHint("");
   };
+
+  // Commits the draft into the shared context (and so into the live preview
+  // and whatever autosave picks up next) once Summary has real content --
+  // and, from that point on, keeps committing every further edit to either
+  // field, matching ordinary live-editing behavior once the required field
+  // is actually satisfied. hasSyncedSummaryRef makes that "from then on"
+  // durable even if the user later clears Summary back out again (that
+  // clearing itself is then a real edit to already-synced content, not a
+  // still-incomplete draft, so it must still reach the preview).
+  useEffect(() => {
+    if (!draftSummary.trim() && !hasSyncedSummaryRef.current) return;
+    hasSyncedSummaryRef.current = true;
+    setResumeData((previous) => ({
+      ...previous,
+      professionalSummary: {
+        ...previous.professionalSummary,
+        summary: draftSummary,
+        targetRole: draftTargetRole,
+      },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftSummary, draftTargetRole]);
 
 
   const cleanHtmlContent = (html: string): string => {
@@ -123,8 +156,12 @@ const ProfessionalSummary: React.FC = () => {
 
 
   const handleAIWriterClick = () => {
-    if (!resumeData.professionalSummary.targetRole?.trim()) {
+    if (!draftTargetRole.trim()) {
       setAIRoleHint("Please enter a target role to generate an AI description.");
+      return;
+    }
+    if (!careerLevel) {
+      setAIRoleHint("Please select a Career Level (Fresher or Experienced) to generate an AI description.");
       return;
     }
     setAIRoleHint("");
@@ -144,38 +181,65 @@ const ProfessionalSummary: React.FC = () => {
 
     setShowTips(false);
 
+        const role = draftTargetRole;
+        const isFresher = careerLevel === "fresher";
 
-        const prompt = `Generate 5 concise unique(different) professional summary options for a resume targeting the following role:
-Target Role: ${resumeData.professionalSummary.targetRole}
+        const prompt = isFresher
+          ? `Generate 5 concise unique professional summary options for a FRESHER or RECENT GRADUATE targeting the following role:
+Target Role: ${role}
 Requirements for each summary:
-- Length: 3-4 lines maximum (approximately 25-30 words)
-- Start directly with your professional identity or key strength (e.g., "Results-driven software engineer...", "Strategic marketing professional...", "Detail-oriented data analyst...")
-- Highlight years of experience, core competencies, and measurable achievements
-- Include industry-specific keywords and technical skills relevant to ${resumeData.professionalSummary.targetRole}
+- Length: 2-3 lines maximum (approximately 25-35 words)
+- Do NOT mention years of work experience or fabricate metrics — this person is just starting their career
+- Emphasize academic background, internships, academic projects, or relevant coursework where applicable
+- Highlight eagerness to learn, adaptability, and relevant technical or soft skills
+- Include keywords relevant to ${role}
+- Each summary should emphasize a different angle: academic strength, technical skills, or project/internship experience
+Formatting rules:
+- Return ONLY the 5 summaries
+- NO numbering, NO bullet points, NO labels
+- Separate summaries with a blank line
+Example format:
+Recent Computer Science graduate with hands-on project experience in full-stack development, strong fundamentals in data structures, and a drive to build scalable user-focused applications as a ${role}
+ 
+Motivated ${role} fresher with internship experience in agile teams, proficient in modern development tools and eager to contribute innovative ideas in a collaborative professional environment`
+          : `Generate 5 concise unique professional summary options for an EXPERIENCED professional targeting the following role:
+Target Role: ${role}
+Requirements for each summary:
+- Length: 3-4 lines maximum (approximately 25-35 words)
+- Start with a strong professional identity (e.g., "Results-driven ${role}...", "Strategic ${role}...")
+- Highlight years of experience, measurable achievements, and core competencies
+- Include industry-specific keywords and technical skills relevant to ${role}
 - Focus on unique value proposition and tangible impact
 - Avoid generic phrases like "hardworking," "team player," "seeking opportunities," or "passionate professional"
 - Each summary should emphasize a different angle: technical expertise, leadership/impact, or specialized skills
 Formatting rules:
-- Return ONLY the 5 unique(different) summaries
-- Each summary on a new line
-- NO numbering (1, 2, 3), NO bullet points, NO labels
-- Start each summary directly with a descriptor or professional title
+- Return ONLY the 5 summaries
+- NO numbering, NO bullet points, NO labels
 - Separate summaries with a blank line
 Example format:
 Results-driven Full Stack Developer with 5+ years building scalable web applications, expertise in React and Node.js, and a track record of reducing load times by 40% while serving 100K+ users
-
+ 
 Strategic Product Manager with proven ability to launch 10+ successful features, drive 35% revenue growth, and lead cross-functional teams of 15+ members in agile environments
-
+ 
 Innovative UX Designer specializing in user-centered design methodologies, creating intuitive interfaces that improved user satisfaction scores by 50% and reduced customer support tickets by 30%`;
-
-
+ 
+ 
     generateSuggestions(0, prompt, "summary");
   };
+ 
 
 
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
+      // Single-select in AISuggestions: picking a suggestion REPLACES the
+      // summary rather than accumulating with a previous pick (or with
+      // anything else already in the box) -- confirmed as the expected
+      // workflow ("only one should need to add, not 5; picking another
+      // replaces the first"). Clearing first, then appending onto the
+      // now-empty editor, reuses appendSuggestionBullet's own
+      // bullet-creation logic instead of duplicating it here.
+      el.innerHTML = '';
       appendSuggestionBullet(el, suggestion);
       handleChange(el.innerHTML);
 
@@ -205,12 +269,12 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
 
   useEffect(() => {
     const el = editorRef.current;
-    if (el && resumeData.professionalSummary.summary) {
-      if (document.activeElement !== el && el.innerHTML !== resumeData.professionalSummary.summary) {
-        el.innerHTML = resumeData.professionalSummary.summary;
+    if (el && draftSummary) {
+      if (document.activeElement !== el && el.innerHTML !== draftSummary) {
+        el.innerHTML = draftSummary;
       }
     }
-  }, [resumeData.professionalSummary.summary]);
+  }, [draftSummary]);
 
 
   return (
@@ -226,7 +290,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             {/* Target Role Input with Autocomplete */}
             <AutocompleteInput
               label="Target Role"
-              value={resumeData.professionalSummary.targetRole}
+              value={draftTargetRole}
               onChange={(val) => handleTargetRoleChange(val)}
               placeholder="e.g., Frontend Developer, Data Analyst"
               suggestions={roles}
@@ -234,6 +298,26 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
               hint={aiRoleHint}
             />
 
+            {/* Career Level Toggle */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-semibold text-gray-700">Career Level</label>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
+                {(["fresher", "experienced"] as const).map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setCareerLevel(level)}
+                    className={`px-5 py-2 text-sm font-medium transition-colors ${
+                      careerLevel === level
+                        ? "bg-[#2557a7] text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {level === "fresher" ? "Fresher" : "Experienced"}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Professional Summary */}
             <div ref={summaryRef} className="flex flex-col gap-1 relative">
@@ -311,6 +395,11 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             activePopup !== null && suggestions[activePopup] && (
               <AISuggestions
                 options={suggestions[activePopup]}
+                // handleSuggestionSelect above clears the editor before
+                // appending, i.e. it REPLACES. This is the one call site with
+                // that contract -- the other eight append -- so it is the one
+                // that opts into single-select.
+                selectionMode="single"
                 onSelect={(s) => handleSuggestionSelect(s)}
                 onClose={() => {
                   setActivePopup(null);

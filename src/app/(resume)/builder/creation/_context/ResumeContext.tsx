@@ -5,6 +5,7 @@ import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix, deleteFix, addSkillToEnhancedResume } from "@/api/enhancerApi";
 import type { ATSScore, ATSSectionScore, ATSSectionDeduction, EnhancedSuggestion, EnhanceResumeResponse } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import { normalizeEducationForBuilder } from "@/utils/educationPersistence";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { SUGGESTION_SECTION_MAP } from "../_utils/suggestionSection";
@@ -1809,7 +1810,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               summary: data.professionalSummary?.summary || "",
               targetRole: data.professionalSummary?.targetRole || (data.professionalSummary as Record<string, string>)?.target_role || "",
             },
-          education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
+          education: normalizeEducationForBuilder(
+            normalizeId((data.education || []) as Record<string, unknown>[]),
+          ) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
           // patents is required on ResumeData and defaulted to [] for a new

@@ -2,6 +2,7 @@
 // Handles both raw snake_case parser fields AND camelCase enhanced_resume fields.
 
 import type { ResumeData, CategorizedSkills, CustomSection, CustomField, CustomCategory } from "@/app/(resume)/builder/creation/_context/ResumeContext";
+import { mergeEducationDegree } from "@/utils/educationPersistence";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
@@ -403,14 +404,14 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
         str(edu.school) ||
         str(edu.university) ||
         str(edu.college),
-      // Combine degree + branch so "M.Sc." + "Software Engineering" → "M.Sc. Software Engineering"
-      degree:
-        [
-          str(edu.degree) || str(edu.qualification) || str(edu.program),
-          str(edu.branch) || str(edu.field_of_study) || str(edu.specialization),
-        ]
-          .filter(Boolean)
-          .join(" ") || "",
+      // "M.Sc." + "Software Engineering" -> "M.Sc. Software Engineering".
+      // mergeEducationDegree, not a plain join: once saved back as `degree`,
+      // a reload still carrying the branch alias would append it again
+      // ("M.Sc. Software Engineering Software Engineering").
+      degree: mergeEducationDegree(
+        str(edu.degree) || str(edu.qualification) || str(edu.program),
+        str(edu.branch) || str(edu.field_of_study) || str(edu.specialization),
+      ),
       startDate: str(edu.start_date) || str(edu.from) || str(edu.startDate) || startFromDuration,
       endDate:
         str(edu.end_date) ||
@@ -861,8 +862,12 @@ function buildCustomSections(p: AnyRecord): CustomSection[] {
       const fields = persistedFields.length > 0
         ? persistedFields
         : toCustomFields(section.items || section.content, sectionName);
-      if (fields.length === 0) return [];
 
+      // A field-less section is kept, not dropped: resumeApi.ts's
+      // transformCustomSectionsForBackend persists a named section before it
+      // has fields so the editor has a shell to add the first one to, and
+      // dropping it here made that shell unreachable. Only this branch keeps
+      // empties -- the parser fallback below still requires content.
       return [{
         id: str(section.id || section._id) || `custom_${sectionIndex}`,
         sectionName,

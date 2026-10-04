@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { ResumeData, ResumeStyle, useResume } from "../../_context/ResumeContext";
+import { hasRenderableCustomSectionContent } from "../../_utils/customSectionIdentity";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
 import SafeHTML from "@/components/common/SafeHTML";
@@ -590,7 +591,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
       default:
         // Check if it's a custom section
         const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
-        if (customSection && customSection.fields.length > 0) {
+        if (customSection && hasRenderableCustomSectionContent(customSection)) {
           return (
             <section className="mb-6">
               <div style={headingContainerStyle}>
