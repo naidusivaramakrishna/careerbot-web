@@ -342,3 +342,86 @@ jobs:
           fi
           echo "::error title=New lint/type errors::This PR adds ESLint and/or TypeScript errors in the code it changes. The job summary lists every one (file:line, rule)."
           exit 1
+
+  # ADVISORY - not a required check (the owner decides). Runs the vitest files
+  # the PR affects on the PR head AND its merge-base and fails only on tests
+  # that fail on head but not on base: the base already has failing tests.
+  # Rules: scripts/ci/new-vitest-failures.mjs. Drafts: warnings. Pushes: no-op.
+  unit-tests:
+    name: Unit Tests (new failures)
+    needs: pr-size
+    if: ${{ !cancelled() }}
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60 # backstop for the script's per-chunk timeouts; fails, never passes
+    steps:
+      # FIRST step -- keep it first. See FAIL-CLOSED in pr-size-gate.yml.
+      - name: PR size gate
+        if: github.event_name == 'pull_request' && needs.pr-size.result != 'success'
+        env:
+          GATE_RESULT: ${{ needs.pr-size.result }}
+        run: |
+          echo "::error title=PR size gate failed::PR Size result: $GATE_RESULT. This job stops here; see the PR Size check for the numbers and how to split the PR."
+          echo "### ❌ PR size gate failed — see PR Size (result: \`$GATE_RESULT\`)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Not a pull request
+        if: github.event_name != 'pull_request'
+        run: echo "::notice title=Unit tests not compared::This job compares a PR with its base; a push has nothing to compare with."
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Test the unit-test gate
+        if: github.event_name == 'pull_request'
+        run: node --test scripts/ci/test_new_vitest_failures.mjs
+
+      - name: Select affected test files
+        id: affected
+        if: github.event_name == 'pull_request'
+        env:
+          ADVISORY: ${{ github.event.pull_request.draft && '1' || '' }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          # HEAD is GitHub's merge of the PR into the base branch.
+          base_sha=$(git merge-base "origin/$BASE_REF" HEAD)
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          git diff --name-status -z -M "$base_sha" HEAD > "$RUNNER_TEMP/vt-changes.z"
+          git ls-files -z > "$RUNNER_TEMP/vt-tracked.z"
+          node scripts/ci/new-vitest-failures.mjs affected --changes "$RUNNER_TEMP/vt-changes.z" \
+            --files "$RUNNER_TEMP/vt-tracked.z" --out "$RUNNER_TEMP/vt-tests.txt" ${ADVISORY:+--advisory}
+          echo "count=$(wc -l < "$RUNNER_TEMP/vt-tests.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: github.event_name == 'pull_request' && steps.affected.outputs.count != '0'
+        run: |
+          npm install -g npm@11 || echo "skipping global npm upgrade (no permission on self-hosted runner)"
+          npm ci
+
+      - name: Unit tests (fail on new failures)
+        if: github.event_name == 'pull_request' && steps.affected.outputs.count != '0'
+        env:
+          ADVISORY: ${{ github.event.pull_request.draft && '1' || '' }}
+          BASE_SHA: ${{ steps.affected.outputs.base_sha }}
+        run: |
+          set -o pipefail # a failed `git archive` must not leave an empty base
+          gate=scripts/ci/new-vitest-failures.mjs
+          base_dir="$RUNNER_TEMP/vt-base"
+          rm -rf "$base_dir" && mkdir -p "$base_dir"
+          git archive "$BASE_SHA" | tar -x -C "$base_dir"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$base_dir/node_modules"
+          # Each run has a 25-min budget (--budget), so compare still runs inside timeout-minutes.
+          node "$gate" run --root . --tests "$RUNNER_TEMP/vt-tests.txt" --out "$RUNNER_TEMP/vt-head.json" ${ADVISORY:+--advisory}
+          node "$gate" run --root "$base_dir" --side base --changes "$RUNNER_TEMP/vt-changes.z" \
+            --tests "$RUNNER_TEMP/vt-tests.txt" --out "$RUNNER_TEMP/vt-base.json" ${ADVISORY:+--advisory}
+          rm -rf "$base_dir"
+          node "$gate" compare --head "$RUNNER_TEMP/vt-head.json" --base "$RUNNER_TEMP/vt-base.json" ${ADVISORY:+--advisory}
