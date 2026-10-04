@@ -88,11 +88,17 @@ HERE = Path(__file__).resolve().parent
 _BOT_ONLY = '.[] | select(.user.login == "github-actions[bot]")'
 
 
+_TIER_OPEN_RE = re.compile(r"<(?=summary><b>)", re.I)
+
+
 def _inert(text):
     """Model / tool output made unable to open or close an HTML comment, so a
     quoted marker can never pose as this script's own (review sha, ledger,
-    status markers)."""
-    return (text or "").replace("<!--", "&lt;!--").replace("-->", "--&gt;")
+    status markers). Nor can it write a tier heading (`<summary><b>T1 · ...`):
+    severity_counts ends a section at the next one, so a heading in Claude's
+    text hid every finding after it, carried ones included (api#315)."""
+    text = (text or "").replace("<!--", "&lt;!--").replace("-->", "--&gt;")
+    return _TIER_OPEN_RE.sub("&lt;", text)
 
 
 def _last(regex, text):
@@ -755,7 +761,12 @@ DECISION_CLASSES = ("FALSE-POSITIVE", "DECISION", "ACKNOWLEDGED")
 TRUSTED_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
 _DECISIONS_RE = re.compile(re.escape(DECISIONS_MARKER)
                            + r"\s*\n[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)\n[ \t]*\1", re.S)
-_LOCKFILE_BLOCK_RE = re.compile(r"\*\*Deterministic lockfile check\*\*.*?\n\n---\n\n", re.S)
+# The block starts with a hidden marker model text cannot write (_inert), so a
+# review that quotes the block's title and a `---` rule cannot cut its own
+# findings out of the ledger.
+LOCKFILE_MARKER = "<!-- ai-review-lockfile -->"
+_LOCKFILE_BLOCK_RE = re.compile(re.escape(LOCKFILE_MARKER)
+                                + r"\n\*\*Deterministic lockfile check\*\*.*?\n\n---\n\n", re.S)
 _DISPOSITION_RE = re.compile(
     r"PRIOR[ \t]+F(\d+)[ \t*_]*[:\-–—][ \t*_]*(FIXED|STILL[- ]OPEN|MOOT)\b", re.I)
 _AGREE_RE = re.compile(r"(?<![A-Za-z0-9])F(\d+)[ \t*_]*[:\-–—][ \t*_]*(AGREE|DISPUTE)\b", re.I)
@@ -825,6 +836,30 @@ def read_ledger(text):
     except Exception:  # noqa: BLE001 - a corrupt ledger must not fail the run
         return None
     return items
+
+
+# Exact shapes only, case-sensitive: the Codex dispositions (upper case, as its
+# prompt asks) and lockfile_findings' own titles. A Claude finding titled
+# "Confirm dialog ..." or "Lockfile ..." is a finding and is carried.
+_RECOUNT_SKIP_RE = re.compile(
+    r"(?:CONFIRM|REFUTE|REGRADE)(?:ED|S)?\b|Lockfile (?:installs packages from outside the npm "
+    r"registry|integrity hash changed on an unchanged version|check did not run) \|")
+
+
+def prior_findings(since_body):
+    """The earlier review's ledger, or None (read_ledger). A comment posted
+    before tier headings were bot-only may hold a model-written heading that
+    cut findings out of its stored ledger (_foreign_tiers): those are carried
+    too, recounted from its body. The recount is whole-body, so it leaves out
+    what that ledger rightly never held -- Codex dispositions on Claude's
+    findings and the lockfile block (recomputed each run; no marker yet) --
+    or they would be carried until a verdict step clears them."""
+    prior = read_ledger(since_body) if since_body else None
+    if prior is not None and _foreign_tiers(mask_code(since_body)):
+        known = {_ident(f) for f in prior}
+        prior += [f for f in finding_ledger(since_body) if _ident(f) not in known
+                  and not _RECOUNT_SKIP_RE.match(f.get("title") or "")]
+    return prior
 
 
 def _ident(f):
@@ -1411,6 +1446,8 @@ def override_banner(stats) -> str:
 
 
 def build_report(head, stats, claude, codex, dyn, live, partial=False):
+    lock_md = _inert(lockfile_findings(stats.get("lockfile")))
+    lock_md = LOCKFILE_MARKER + "\n" + lock_md if lock_md else ""   # own line: HTML block
     live_md = live_section(live)
     live_md = _inert(live_md) if live_md is not None else None
     live_block = (f"""
@@ -1424,22 +1461,22 @@ def build_report(head, stats, claude, codex, dyn, live, partial=False):
     if deleted:
         shown = "\n".join(f"- `{f}`" for f in deleted[:40])
         more = f"\n- …and {len(deleted) - 40} more" if len(deleted) > 40 else ""
-        del_block = (f"\n> ⚠️ **{len(deleted)} file(s) deleted — confirm this removal is "
-                     f"intentional** (cleanup/optimization) and not an accidental drop. "
-                     f"Verify nothing still imports/calls/registers them.\n{shown}{more}\n")
+        del_block = _inert(f"\n> ⚠️ **{len(deleted)} file(s) deleted — confirm this removal is "
+                           f"intentional** (cleanup/optimization) and not an accidental drop. "
+                           f"Verify nothing still imports/calls/registers them.\n{shown}{more}\n")
     else:
         del_block = ""
     report = f"""## 🤖 AI Code Review — Claude + Codex (advisory)
 
 {override_banner(stats)}
 **Scope:** {stats['files']} files, +{stats.get('added_total', stats['added'])}/-{stats.get('removed', 0)} lines, {stats['commits']} commits, {stats['authors']} author(s). Advisory — a human still approves/merges. Findings **confirmed by both** models are highest-confidence.
-**Size:** {size_line(stats)}.
-{lockfile_line(stats.get("lockfile"))}{stats.get("review_mode", "")}
+**Size:** {_inert(size_line(stats))}.
+{_inert(lockfile_line(stats.get("lockfile")))}{stats.get("review_mode", "")}
 {del_block}
 
 <details open><summary><b>T1 · Claude static review</b></summary>
 
-{lockfile_findings(stats.get("lockfile"))}{claude}
+{lock_md}{claude}
 
 </details>
 
@@ -1574,12 +1611,32 @@ def mask_code(text: str) -> str:
 
 
 # --- sections --------------------------------------------------------------
-_CLAUDE_SUMMARY = "T1 · Claude static review"
-_CODEX_SUMMARY = "T1 · Codex cross-check"
+# The full heading, `<summary><b>` included: _inert escapes that prefix in all
+# untrusted text, so only build_report can write one. The bare title is not
+# enough -- a review or a file name that names the tier moved the section.
+_CLAUDE_SUMMARY = "<summary><b>T1 · Claude static review"
+_CODEX_SUMMARY = "<summary><b>T1 · Codex cross-check"
+_BOT_TIERS = (_CLAUDE_SUMMARY, _CODEX_SUMMARY, "<summary><b>T2 · Dynamic testing",
+              "<summary><b>T3 · Live-LLM")
 # Section boundaries are the tier <summary> markers, not </details>: matching a
 # close tag ends the section at the first one the review MENTIONS, which on
 # careerbot-ai#305 truncated the Claude section to 2 of its 8 findings.
 _TIER_SUMMARY_RE = re.compile(r"<summary><b>T\d+[ \t]*·", re.I)
+
+
+def _foreign_tiers(masked: str) -> bool:
+    """Is any tier heading not one of build_report's own, repeated, or out of
+    build_report's order (_BOT_TIERS)? Then a section boundary may be text a
+    model wrote -- a comment posted before _inert escaped headings, e.g. a lone
+    T3 heading in Claude's text of a report with no live tier -- and the
+    sections cannot be trusted."""
+    last = -1
+    for m in _TIER_SUMMARY_RE.finditer(masked):
+        at = next((i for i, t in enumerate(_BOT_TIERS) if masked.startswith(t, m.start())), None)
+        if at is None or at <= last:
+            return True
+        last = at
+    return False
 
 
 def _extract_details(masked: str, summary: str):
@@ -1730,11 +1787,14 @@ def severity_counts(text: str, collect=None) -> dict:
     # masking failure, not an absent section -- build_report always emits both.
     # Silently contributing 0 for the lost tier is the false-green this gate
     # exists to close, so fall back to counting the whole body: over-counting
-    # is the safe direction.
+    # is the safe direction. The same holds when a heading is not the bot's own
+    # (_foreign_tiers): every tag is counted, and the MISSED rule runs over the
+    # whole body too, since the real Codex section may lie past a forged one.
     lost = (codex_at is None and _CODEX_SUMMARY in raw) or \
-           (claude_at is None and _CLAUDE_SUMMARY in raw)
+           (claude_at is None and _CLAUDE_SUMMARY in raw) or _foreign_tiers(masked)
     if lost:
         lo, hi = 0, len(masked)
+        codex_at = (0, len(masked)) if _CODEX_SUMMARY in raw else codex_at
     elif claude_at is not None:
         lo, hi = claude_at
     elif codex_at is not None:
@@ -2202,7 +2262,7 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
         body = (f"## 🤖 AI Code Review — SCOPE GUARD\n\nThis PR is too large for a meaningful "
                 f"single review, so **nothing was reviewed**.\n\n"
                 f"- **Limit exceeded:** {limits_line(stats)}\n"
-                f"- **Size:** {size_line(stats)}\n"
+                f"- **Size:** {_inert(size_line(stats))}\n"
                 f"- Removed lines: -{stats.get('removed', 0):,}; deleted files: "
                 f"{len(stats.get('deleted') or [])}\n\n"
                 f"Generated files ({', '.join(f'`{g}`' for g in GENERATED_FILE_PATTERNS)}) do "
@@ -2248,7 +2308,7 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
                    f"label `{FULL_REVIEW_LABEL}`" if FULL_REVIEW_LABEL in labels else
                    "could not read the PR's comments" if comments is None else None)
     since, since_body = last_real_review(comments)
-    prior = read_ledger(since_body) if since_body else None
+    prior = prior_findings(since_body)
     plan = plan_increment(since, prior is not None, head, base, full_reason)
     stat = ""
     if plan["mode"] == "incremental":
