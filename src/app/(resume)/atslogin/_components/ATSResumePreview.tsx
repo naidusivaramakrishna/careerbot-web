@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { getEducationScore } from "@/utils/resumeMappers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyObj = Record<string, any>;
@@ -311,8 +312,7 @@ const renderEducationList = (items: any[]): React.ReactNode => (
       const duration = toStr(item.duration || item.period || "");
       const dateStr  = duration || (start && end ? `${formatDate(start)} – ${formatDate(end)}` : formatDate(start || end));
 
-      const gradeType = toStr(item.grade_type || item.gradeType || "");
-      const gradeVal  = toStr(item.grade || item.gpa || item.cgpa || item.percentage || "");
+      const { type: gradeType, value: gradeVal } = getEducationScore(item);
       const gradePct  = item.grade_percentage != null ? String(item.grade_percentage) : "";
       let gradeDisplay = "";
       if (gradeType && (gradeType.toUpperCase() === "CGPA" || gradeType.toUpperCase() === "GPA")) {

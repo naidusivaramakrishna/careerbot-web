@@ -2,6 +2,7 @@
 
 import React, { useId, useState, useEffect } from "react";
 import { X, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { getEducationScore, withEducationScoreValue } from "@/utils/resumeMappers";
 
 interface Props {
   sectionKey: string;
@@ -263,7 +264,7 @@ const EduItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) =
             <Field label="Start Year" value={item.startDate || item.start_date || item.from || ""} onChange={v => onChange({ ...item, startDate: v })} placeholder="e.g. 2019" />
             <Field label="End Year" value={item.endDate || item.end_date || item.graduation_year || item.year || ""} onChange={v => onChange({ ...item, endDate: v })} placeholder="e.g. 2023" />
           </div>
-          <Field label="Grade / CGPA / Percentage" value={item.grade || item.gpa || item.cgpa || item.percentage || ""} onChange={v => onChange({ ...item, grade: v })} placeholder="e.g. 8.5 CGPA" />
+          <Field label="Grade / CGPA / Percentage" value={getEducationScore(item).value} onChange={v => onChange(withEducationScoreValue(item, v))} placeholder="e.g. 8.5 CGPA" />
         </div>
       )}
     </div>

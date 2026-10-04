@@ -52,6 +52,39 @@ function strArr(v: unknown): string[] {
   return [];
 }
 
+// Unwraps the {value}/{text} objects some parser records use for scalars.
+function scoreText(v: unknown): string {
+  if (v && typeof v === "object") v = (v as AnyRecord).value ?? (v as AnyRecord).text;
+  return typeof v === "string" || typeof v === "number" ? str(v) : "";
+}
+
+const LEGACY_EDUCATION_SCORE_KEYS = ["grade", "gpa", "GPA", "cgpa", "CGPA", "percentage"];
+
+/**
+ * Education score for views that read the stored resume document directly
+ * (JobMatch preview/editor, ATS preview). The builder persists a score ONLY as
+ * scoreValue/scoreType (stored snake_case as score_value/score_type; the API's
+ * builder Education schema drops every other score key on save); parser-only
+ * records may still carry the legacy aliases. Builder fields win, aliases are
+ * the fallback. `display` restores the "%" the builder stores without (legacy
+ * values are shown as stored).
+ */
+export function getEducationScore(edu: unknown): { type: string; value: string; display: string } {
+  const e: AnyRecord = edu && typeof edu === "object" ? (edu as AnyRecord) : {};
+  const builderValue = scoreText(e.scoreValue) || scoreText(e.score_value);
+  const value = builderValue || LEGACY_EDUCATION_SCORE_KEYS.map((k) => scoreText(e[k])).find(Boolean) || "";
+  const type = [e.scoreType, e.score_type, e.gradeType, e.grade_type].map(scoreText).find(Boolean) || "";
+  const addPercent = Boolean(builderValue) && type === "Percentage" && !value.endsWith("%");
+  return { type, value, display: addPercent ? `${value}%` : value };
+}
+
+/** Writes an edited score where getEducationScore reads it first and drops stale aliases. */
+export function withEducationScoreValue(edu: AnyRecord, value: string): AnyRecord {
+  const next: AnyRecord = { ...edu, scoreValue: value };
+  for (const key of ["score_value", ...LEGACY_EDUCATION_SCORE_KEYS]) delete next[key];
+  return next;
+}
+
 /**
  * Maps parser API output (parsed_data) OR enhance API output (enhanced_resume)
  * to the builder's ResumeData shape.

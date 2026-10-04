@@ -7,6 +7,7 @@ import SafeHTML from "@/components/common/SafeHTML";
 import { highlightResumeKeywords, ResumeKeywordHtml, matchedKeywordStyle, missingKeywordStyle, missingKeywordBorderColor } from "./resumeKeywordHighlights";
 import AutoPaginator from "@/components/common/AutoPaginator";
 import { getSafeExternalUrl } from "@/utils/validators";
+import { getEducationScore } from "@/utils/resumeMappers";
 
 interface JobMatchTemplateTHREEProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -901,8 +902,9 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const startDate = toStr(edu.startDate || edu.start_date || edu.from || "");
                   const endDate = toStr(edu.endDate || edu.end_date || edu.to || edu.graduation_year || edu.passed_out || edu.year || "");
                   const dateStr = duration || (startDate && endDate ? `${formatDate(startDate)} – ${formatDate(endDate)}` : formatDate(startDate || endDate));
-                  const grade = toStr(edu.grade || edu.gpa || edu.cgpa || edu.percentage || "");
-                  const gradeType = toStr(edu.gradeType || edu.grade_type || "Grade");
+                  const score = getEducationScore(edu);
+                  const grade = score.display;
+                  const gradeType = score.type || "Grade";
                   const itemChanged = hlIdx("education", idx);
                   return (
                     <div key={`${degree || college}-${idx}`} className="page-break-inside-avoid" style={{
