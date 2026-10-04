@@ -60,6 +60,11 @@ TEST_FILE_PATTERNS = (
     "*.test.ts", "*.test.tsx", "*.test.js", "*.test.jsx",
     "*.spec.ts", "*.spec.tsx", "*.spec.js", "*.spec.jsx",
     "**/__tests__/*", "**/__mocks__/*", "**/__fixtures__/*",
+    # pytest files: where this repo keeps them and CI collects them (`pytest
+    # tests/unit`). #168 hit 1,534 > 1,500 only on its +869-line test file.
+    # Anchored to the repo root, so a `test_*.py` under scripts/ still counts.
+    # One level only: a mid-pattern `**` is NOT recursive in _matches_any.
+    "tests/unit/test_*.py",
 )
 
 # Applying this label lifts the four size caps (files / added lines / commits /

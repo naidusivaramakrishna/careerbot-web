@@ -580,3 +580,86 @@ def test_the_report_never_calls_a_test_file_generated():
     # the test file must appear under the TEST heading, not the generated one
     generated_block = s.split("Excluded generated files")[1].split("Excluded test files")[0]
     assert "a.test.ts" not in generated_block
+
+
+# ── Python test files (added 2026-10-04) ────────────────────────────────────
+# careerbot-web #168 (scripts/ai_review/ai_pr_review.py +665,
+# tests/unit/test_ai_review_incremental_ledger.py +869) failed the gate at
+# 1,534 > 1,500 only because its pytest file counted, and needed
+# `ai-review-large`. This repo's Python tests are tests/unit/test_*.py, which is
+# what CI collects (`pytest tests/unit` in ai-pr-review.yml).
+
+PR_168_NUMSTAT = ("665\t20\tscripts/ai_review/ai_pr_review.py\n"
+                  "869\t0\ttests/unit/test_ai_review_incremental_ledger.py")
+
+
+def test_pr_168_counts_only_its_script_lines(monkeypatch):
+    def fake_run(cmd, **kw):
+        return subprocess.CompletedProcess(
+            cmd, 0, PR_168_NUMSTAT if cmd[1] == "diff" else "1\n", "")
+    monkeypatch.setattr(gate.subprocess, "run", fake_run)
+    stats = gate.git_stats("B", "H")  # the gate's real path: exempt_tests=True
+    assert stats["added_total"] == 1534
+    assert stats["added"] == 665
+    assert stats["tests"] == [("tests/unit/test_ai_review_incremental_ledger.py", 869)]
+    verdict = gate.evaluate(stats, [])
+    assert verdict["passed"] is True and not verdict["tripped"]
+    assert "`tests/unit/test_*.py`" in gate.summary_markdown(stats, verdict)
+
+
+def test_non_test_python_still_counts_toward_the_line_cap():
+    stats = _gate_stats([(1400, 0, "scripts/ai_review/pr_size_gate.py"),
+                         (200, 0, "scripts/ai_review/test_helpers.py"),
+                         (900, 0, "tests/unit/test_x.py")])
+    assert stats["added"] == 1600 and stats["tests_added"] == 900
+    assert gate.evaluate(stats, [])["passed"] is False
+
+
+@pytest.mark.parametrize("path", [
+    "tests/unit/test_x.py", "tests/unit/test_ai_review_incremental_ledger.py",
+    '"tests/unit/test_\\303\\251.py"',  # git's C-quoted numstat path
+])
+def test_is_test_matches_the_repo_s_pytest_files(path):
+    assert review.is_test(path)
+
+
+@pytest.mark.parametrize("path", [
+    "scripts/ai_review/ai_pr_review.py", "scripts/dynamic-review/platform_admin_role.py",
+    "scripts/ai_review/test_helpers.py",  # test_ name, but not under tests/unit
+    "tests/unit/helpers.py", "tests/unit/test_data.json", "vendor/tests/unit/test_x.py",
+])
+def test_is_test_does_not_fire_on_non_test_python(path):
+    assert not review.is_test(path)
+
+
+def test_every_pytest_file_in_the_tree_is_exempt_and_no_script_is():
+    pytest_files = sorted((REPO_ROOT / "tests" / "unit").glob("test_*.py"))
+    assert pytest_files
+    for p in pytest_files:
+        assert review.is_test(p.relative_to(REPO_ROOT).as_posix()), p
+    for p in (REPO_ROOT / "scripts").rglob("*.py"):
+        assert not review.is_test(p.relative_to(REPO_ROOT).as_posix()), p
+
+
+def test_the_js_patterns_are_unchanged_and_python_is_the_only_addition():
+    assert review.TEST_FILE_PATTERNS == (
+        "*.test.ts", "*.test.tsx", "*.test.js", "*.test.jsx",
+        "*.spec.ts", "*.spec.tsx", "*.spec.js", "*.spec.jsx",
+        "**/__tests__/*", "**/__mocks__/*", "**/__fixtures__/*",
+        "tests/unit/test_*.py",
+    )
+    assert gate.TEST_FILE_PATTERNS is review.TEST_FILE_PATTERNS
+
+
+def test_the_scope_guard_still_counts_python_tests(monkeypatch):
+    """The ai-review scope guard (8,000 lines) does not opt in."""
+    numstat = PR_168_NUMSTAT.replace("869\t", "7400\t")
+
+    def fake_out(cmd, **kw):
+        if cmd[:3] == ["git", "diff", "--numstat"]:
+            return numstat
+        return "1" if cmd[:3] == ["git", "rev-list", "--count"] else ""
+    monkeypatch.setattr(review, "out", fake_out)
+    ok, reason, stats = review.scope_guard("b" * 40, "c" * 40)
+    assert stats["added"] == 665 + 7400
+    assert not ok and "added lines 8,065 > 8,000" in reason
