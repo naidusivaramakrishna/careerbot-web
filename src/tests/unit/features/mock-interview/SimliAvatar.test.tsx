@@ -77,6 +77,7 @@ class MockSimliClient {
   start = vi.fn(() => MockSimliClient.pendingStart?.promise ?? Promise.resolve());
   stop = vi.fn(() => Promise.resolve());
   sendAudioData = vi.fn();
+  ClearBuffer = vi.fn();
   constructor(
     public session_token: string,
     public videoElement: HTMLVideoElement,
@@ -406,6 +407,54 @@ describe("Simli avatar integration", () => {
 
     act(() => { screen.getByRole("button", { name: /unmute interviewer audio/i }).click(); });
     expect(audioEl.muted).toBe(false);
+  });
+
+  it("keeps the candidate's mute when LiveKit force-unmutes Simli's element after it went live", async () => {
+    mocks.consumePendingAvatarSession.mockReturnValue(simliAvatarSession());
+    const LiveSessionPage = await importLiveSessionPage();
+    const { container } = render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+
+    await waitFor(() => expect(MockSimliClient.instances).toHaveLength(1));
+    const client = MockSimliClient.instances[0];
+    const audioEl = container.querySelector("audio") as HTMLAudioElement;
+    act(() => { client.emit("start"); });
+    act(() => { screen.getByRole("button", { name: /mute interviewer audio/i }).click(); });
+    expect(audioEl.muted).toBe(true);
+
+    // livekit-client's attachToElement() sets muted=false whenever a track
+    // (re)attaches -- e.g. after a renegotiation mid-session.
+    act(() => { audioEl.muted = false; audioEl.dispatchEvent(new Event("volumechange")); });
+    expect(audioEl.muted).toBe(true);
+  });
+
+  it("clears Simli's audio buffer when the candidate interrupts while the avatar is live", async () => {
+    mocks.consumePendingAvatarSession.mockReturnValue(simliAvatarSession());
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+
+    await waitFor(() => expect(MockSimliClient.instances).toHaveLength(1));
+    const client = MockSimliClient.instances[0];
+    act(() => { client.emit("start"); });
+    // Simli is the audible source and already has the interviewer's audio.
+    act(() => { MockWebSocket.instances[0].emit({ type: "interviewer_audio_delta", audio_base64: "AAABAA==" }); });
+    expect(client.sendAudioData).toHaveBeenCalled();
+
+    act(() => { MockWebSocket.instances[0].emit({ type: "interviewer_interrupted" }); });
+    expect(client.ClearBuffer).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not touch Simli's buffer on interruption before the avatar is live (playDelta is the audible source)", async () => {
+    mocks.consumePendingAvatarSession.mockReturnValue(simliAvatarSession());
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+
+    await waitFor(() => expect(MockSimliClient.instances).toHaveLength(1));
+    const client = MockSimliClient.instances[0];
+    act(() => { MockWebSocket.instances[0].emit({ type: "interviewer_interrupted" }); });
+    expect(client.ClearBuffer).not.toHaveBeenCalled();
   });
 
   it("stops the Simli client on unmount", async () => {

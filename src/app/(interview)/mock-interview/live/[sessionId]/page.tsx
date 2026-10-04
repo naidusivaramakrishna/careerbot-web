@@ -519,8 +519,11 @@ export default function LiveInterviewSessionPage() {
     // window before "start". Re-assert muted on every change until Simli's own
     // audio becomes the single audible source.
     audioEl.muted = true;
+    // After "start" the same applies to the candidate's own mute toggle: a
+    // later re-attach (renegotiation) would otherwise un-mute a muted candidate.
     audioEl.addEventListener("volumechange", () => {
-      if (!simliAudioLiveRef.current) audioEl.muted = true;
+      const wanted = simliAudioLiveRef.current ? isAudioMutedRef.current : true;
+      if (audioEl.muted !== wanted) audioEl.muted = wanted;
     });
 
     const client = new SimliClientCtor(
@@ -632,6 +635,9 @@ export default function LiveInterviewSessionPage() {
   // already manage it directly for that case.
   useEffect(() => {
     if (avatarConnection === "live" && simliAudioElRef.current) {
+      // Update the ref first: the element's volumechange listener (joinAvatar)
+      // re-applies isAudioMutedRef, and must never see the previous value.
+      isAudioMutedRef.current = isAudioMuted;
       simliAudioElRef.current.muted = isAudioMuted;
     }
   }, [isAudioMuted, avatarConnection]);
@@ -1129,6 +1135,10 @@ export default function LiveInterviewSessionPage() {
       case "interviewer_interrupted": {
         const player = interviewerAudioPlayerRef.current;
         if (player) stopInterviewerAudio(player);
+        // Once Simli is live its own rendered audio is what the candidate
+        // hears (the local queue is empty -- flushed at "start"), so the
+        // interruption has to cut Simli's buffered speech too.
+        if (simliAudioLiveRef.current) simliClientRef.current?.ClearBuffer();
         break;
       }
       case "question_next": {
@@ -1309,7 +1319,10 @@ export default function LiveInterviewSessionPage() {
       // AI_SESSION_UNAVAILABLE: the AI provider itself was unreachable when
       // the server tried to connect — no interview ever started, nothing to
       // report. Go straight back to set up a fresh one.
-      if (event.code === 1011) {
+      // Only before session_ready: 1011 is also the generic server "internal
+      // error" code, and after session_ready it is a mid-interview drop that
+      // ends like any other (terminal path below).
+      if (event.code === 1011 && !sessionReadyRef.current) {
         routerRef.current.replace('/mock-interview/live');
         return;
       }
@@ -1339,8 +1352,11 @@ export default function LiveInterviewSessionPage() {
       // interview_complete normally stops the avatar; on a bare drop it never
       // arrived, so stop it here or Simli keeps streaming on the completed screen.
       disconnectAvatar();
+      // Never reset completedReportId here: it starts null and only
+      // interview_complete sets it. phaseRef syncs in an effect after commit,
+      // so a close handled in the same burst as interview_complete still sees
+      // a stale phase and would otherwise wipe the real report_id.
       if (phaseRef.current !== "completed") {
-        setCompletedReportId(null);
         setPhase("completed");
       }
     };
