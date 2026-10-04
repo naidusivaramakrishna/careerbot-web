@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { computePreviewScore } from "@/app/(resume)/builder/creation/_lib/computePreviewScore";
 import type { ResumeResponse } from "@/api/resumeApi";
 
@@ -137,6 +138,71 @@ describe("computePreviewScore", () => {
     expect(result.suggestions.some(s => s.id.includes("contact"))).toBe(true);
   });
 
+  it("scores the persisted builder payload the same as editor-shaped data", () => {
+    const editorResume: ResumeResponse = {
+      id: "parity-1",
+      personalInfo: {
+        fullname: "Avery Builder",
+        email: "avery@example.com",
+        phone: "+911234567890",
+        location: "Hyderabad",
+        linkedinUrl: "https://linkedin.com/in/avery",
+      },
+      professionalSummary: {
+        summary: "Full-stack developer delivering measurable customer and platform improvements.",
+        targetRole: "Full Stack Developer",
+      },
+      workExperience: [{
+        company: "CareerBOT",
+        role: "Full Stack Developer",
+        location: "Hyderabad",
+        startDate: "2022",
+        endDate: "2026",
+        currentlyWorking: false,
+        description: "Improved conversion by 40% for job seekers.",
+      }],
+      skills: ["TypeScript", "React", "Node.js", "FastAPI", "PostgreSQL", "Redis", "Docker", "AWS", "Leadership"],
+      categorizedSkills: {
+        programming_languages: ["TypeScript", "Node.js"],
+        frameworks: ["React", "FastAPI"],
+        soft_skills: ["Communication"],
+        project_management: [],
+        marketing_sales: [],
+      },
+      certifications: [{ name: "AWS", issuer: "Amazon", issueDate: "2025" }],
+      languages: [{ name: "English", proficiency: "Fluent" }],
+      updatedAt: "2026-01-01",
+      createdAt: "2026-01-01",
+    };
+    // Deliberately the persisted server shape, not ResumeResponse: snake_case
+    // keys and a categorized `skills` OBJECT where ResumeResponse has a string
+    // array. Typed as unknown so the cast below is legal rather than a
+    // not-sufficiently-overlapping conversion.
+    const persistedBuilderPayload: unknown = {
+      id: "parity-1",
+      personalInfo: editorResume.personalInfo,
+      professional_summary: {
+        summary: "Full-stack developer delivering measurable customer and platform improvements.",
+        target_role: "Full Stack Developer",
+      },
+      work_experience: editorResume.workExperience,
+      skills: {
+        programmingLanguages: [{ name: "TypeScript" }, { name: "Node.js" }],
+        frameworks: [{ name: "React" }, { name: "FastAPI" }],
+        softSkills: [{ name: "Communication" }, { name: "Leadership" }],
+        projectManagement: [{ name: "Docker" }, { name: "AWS" }, { name: "PostgreSQL" }],
+        // Category-deletion state must never count as a tenth resume skill.
+        deletedCategories: ["marketingSales"],
+      },
+      certifications: [{ name: "AWS", issued_by: "Amazon", year: "2025" }],
+      languages: [{ language: "English", proficiency: "Fluent" }],
+      updatedAt: "2026-01-01",
+      createdAt: "2026-01-01",
+    };
+
+    expect(computePreviewScore(persistedBuilderPayload as ResumeResponse).score)
+      .toBe(computePreviewScore(editorResume).score);
+  });
   it("increases score when skills are added", () => {
     const baseResume: ResumeResponse = {
       id: "skills-1",

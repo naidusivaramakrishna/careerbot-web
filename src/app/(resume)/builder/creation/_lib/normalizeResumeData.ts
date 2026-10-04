@@ -1,5 +1,55 @@
 import type { ResumeResponse } from "@/api/resumeApi";
 
+type UnknownRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): UnknownRecord =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
+
+const asArray = (value: unknown): UnknownRecord[] =>
+  Array.isArray(value) ? value.map(asRecord) : [];
+
+const text = (value: unknown): string => typeof value === "string" ? value : "";
+
+const hasText = (value: unknown): boolean => text(value).trim().length > 0;
+
+// These values describe the skills editor state; they are not resume skills.
+// The editor loader explicitly excludes them when it creates its flat list.
+const SKILL_METADATA_KEYS = new Set([
+  "id",
+  "_id",
+  "deletedCategories",
+  "deleted_categories",
+  "hiddenCategories",
+  "hidden_categories",
+  "hidden_predefined_categories",
+  "skill_id_map",
+]);
+
+/**
+ * The editor expands the persisted categorized-skills payload into a flat
+ * list before preview scoring. The list view receives that persisted payload
+ * directly, so it needs the same expansion to avoid losing the skills points.
+ */
+const flattenSkillNames = (value: unknown, names: string[] = []): string[] => {
+  if (typeof value === "string") {
+    if (value.trim()) names.push(value);
+    return names;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(item => flattenSkillNames(item, names));
+    return names;
+  }
+  const item = asRecord(value);
+  if (hasText(item.name)) {
+    names.push(text(item.name));
+    return names;
+  }
+  Object.entries(item).forEach(([key, child]) => {
+    if (!SKILL_METADATA_KEYS.has(key)) flattenSkillNames(child, names);
+  });
+  return names;
+};
+
 export interface NormalizedResumeData {
   contact: {
     name: boolean;
@@ -50,59 +100,88 @@ export interface NormalizedResumeData {
 }
 
 export const normalizeResumeData = (resume: ResumeResponse): NormalizedResumeData => {
-  const personalInfo = resume.personalInfo || {};
-  const summary = resume.professionalSummary;
+  const raw = resume as unknown as UnknownRecord;
+  const collection = (...keys: string[]): UnknownRecord[] => {
+    for (const key of keys) {
+      if (Array.isArray(raw[key])) return asArray(raw[key]);
+    }
+    return [];
+  };
+
+  const personalInfo = asRecord(raw.personalInfo ?? raw.personal_info);
+  const summary = raw.professionalSummary ?? raw.professional_summary;
+  const summarySource = asRecord(summary);
   const summaryObj = typeof summary === "string"
     ? { summary, targetRole: "" }
-    : summary || { summary: "", targetRole: "" };
+    : {
+      summary: text(summarySource.summary),
+      targetRole: text(summarySource.targetRole ?? summarySource.target_role),
+    };
 
-  const workExperience = (resume.workExperience || []).filter(e => Boolean(e.company?.trim() || e.role?.trim()));
-  const internships = (resume.internships || []).filter(e => Boolean(e.company?.trim() || e.role?.trim()));
-  const projects = (resume.projects || []).filter(e => Boolean(e.title?.trim()));
-  const education = (resume.education || []).filter(e => Boolean(e.school?.trim() || e.degree?.trim()));
-  const skills = resume.skills || [];
-  const categorizedSkills = resume.categorizedSkills;
-  const certifications = (resume.certifications || []).filter(e => Boolean(e.name?.trim()));
-  const achievements = (resume.achievements || []).filter(e => Boolean(e.title?.trim()));
-  const awards = (resume.awards || []).filter(e => Boolean(e.title?.trim()));
-  const languages = (resume.languages || []).filter(e => Boolean(e.name?.trim()));
-  const volunteering = (resume.volunteering || []).filter(e => Boolean(e.organization?.trim() || e.role?.trim()));
-  const hobbies = (resume.hobbies || []).filter(e => Boolean(e.name?.trim()));
-  const interests = (resume.interests || []).filter(e => Boolean(e.name?.trim()));
-  const publications = (resume.publications || []).filter(e => Boolean(e.title?.trim()));
+  const workExperience = collection("workExperience", "work_experience")
+    .filter(e => hasText(e.company) || hasText(e.role));
+  const internships = collection("internships")
+    .filter(e => hasText(e.company) || hasText(e.role));
+  const projects = collection("projects")
+    .filter(e => hasText(e.title));
+  const education = collection("education")
+    .filter(e => hasText(e.school) || hasText(e.degree));
+  const rawSkills = raw.skills;
+  const skills = Array.isArray(rawSkills)
+    ? rawSkills.filter((skill): skill is string => typeof skill === "string" && Boolean(skill.trim()))
+    : flattenSkillNames(rawSkills);
+  const categorizedSkills = asRecord(raw.categorizedSkills ?? raw.categorized_skills ?? (
+    rawSkills && typeof rawSkills === "object" && !Array.isArray(rawSkills) ? rawSkills : undefined
+  ));
+  // The editor initializes the five standard categories when it receives the
+  // persisted skills object. Treat that representation as categorized here too.
+  const categorizedSkillCount = rawSkills && typeof rawSkills === "object" && !Array.isArray(rawSkills)
+    ? Math.max(3, Object.keys(categorizedSkills).length)
+    : Object.keys(categorizedSkills).length;
+  const certifications = collection("certifications")
+    .filter(e => hasText(e.name));
+  const achievements = collection("achievements")
+    .filter(e => hasText(e.title));
+  const awards = collection("awards")
+    .filter(e => hasText(e.title));
+  const languages = collection("languages")
+    .filter(e => hasText(e.name) || hasText(e.language));
+  const volunteering = collection("volunteering")
+    .filter(e => hasText(e.organization) || hasText(e.role));
+  const hobbies = collection("hobbies")
+    .filter(e => hasText(e.name));
+  const interests = collection("interests")
+    .filter(e => hasText(e.name));
+  const publications = collection("publications")
+    .filter(e => hasText(e.title));
 
   const isFresher = workExperience.length === 0 && education.length > 0;
 
-  const countQuantifiedResults = (items: Array<{ description?: string }>) => {
-    if (!items) return 0;
-    return items.filter(item => {
-      const desc = item.description || "";
-      return /\d+%?|\d+[xX+]|\b(increased|improved|reduced|achieved)\b/i.test(desc);
-    }).length;
-  };
+  const countQuantifiedResults = (items: UnknownRecord[]) =>
+    items.filter(item => /\d+%?|\d+[xX+]|\b(increased|improved|reduced|achieved)\b/i.test(text(item.description))).length;
 
   return {
     contact: {
-      name: Boolean(personalInfo.fullname?.trim()),
-      email: Boolean(personalInfo.email?.trim()),
-      phone: Boolean(personalInfo.phone?.trim()),
-      location: Boolean(personalInfo.location?.trim()),
-      links: [personalInfo.linkedinUrl, personalInfo.githubUrl, personalInfo.portfolioUrl].filter(Boolean).length,
+      name: hasText(personalInfo.fullname ?? personalInfo.name ?? personalInfo.full_name),
+      email: hasText(personalInfo.email),
+      phone: hasText(personalInfo.phone),
+      location: hasText(personalInfo.location),
+      links: [personalInfo.linkedinUrl ?? personalInfo.linkedin_url, personalInfo.githubUrl ?? personalInfo.github_url, personalInfo.portfolioUrl ?? personalInfo.portfolio_url].filter(hasText).length,
     },
     summary: {
-      exists: Boolean(summaryObj.summary?.trim()),
+      exists: hasText(summaryObj.summary),
       length: (summaryObj.summary || "").trim().length,
-      hasTargetRole: Boolean(summaryObj.targetRole?.trim()),
+      hasTargetRole: hasText(summaryObj.targetRole),
     },
     education: {
       count: education.length,
-      hasGPA: education.some(e => Boolean(e.scoreValue?.trim())),
+      hasGPA: education.some(e => hasText(e.scoreValue ?? e.score_value)),
       hasCompleteDates: education.filter(e => e.startDate && e.endDate).length > 0,
     },
     skills: {
       total: skills.length,
-      categorized: Boolean(categorizedSkills && Object.keys(categorizedSkills).length > 0),
-      categories: categorizedSkills ? Object.keys(categorizedSkills).length : 0,
+      categorized: categorizedSkillCount > 0,
+      categories: categorizedSkillCount,
     },
     experience: {
       workCount: workExperience.length,
@@ -112,7 +191,7 @@ export const normalizeResumeData = (resume: ResumeResponse): NormalizedResumeDat
     },
     certifications: {
       count: certifications.length,
-      hasIssuer: certifications.some(c => Boolean(c.issuer?.trim())),
+      hasIssuer: certifications.some(c => hasText(c.issuer ?? c.issuedBy ?? c.issued_by)),
     },
     achievements: {
       count: achievements.length,

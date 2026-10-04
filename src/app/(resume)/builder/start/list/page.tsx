@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, useCallback, Suspense } from 'react'
 import { toast } from 'sonner';
-import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, ResumeResponse } from '@/api/resumeApi';
+import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, getResumeById, ResumeResponse } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import { downloadEnhancedResume } from '@/api/enhancerApi';
 import type { ATSScore, EnhancedResumeSummary } from '@/types/api.types';
@@ -15,6 +15,7 @@ import UploadResumeModal from '../_components/UploadResumeModal';
 import { useRouter, useSearchParams } from 'next/navigation';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
+import { computePreviewScore } from '../../creation/_lib/computePreviewScore';
 
 export interface Resume {
   id: string;
@@ -93,7 +94,12 @@ const ResumeListContent = () => {
         initials: getInitials(name),
         name: name,
         job: targetRole,
-        score: 0,
+        // `builder_score` is attached only after this component verifies its
+        // calculation timestamp against updatedAt. Raw API payload scores are
+        // stripped before this mapper runs.
+        score: typeof item.builder_score?.score === 'number'
+          ? item.builder_score.score
+          : computePreviewScore(item).score,
         modified: formatDateResume(item.updatedAt),
         created: formatDateResume(item.createdAt),
         createdAt: item.createdAt, // ✅ Store raw timestamp
@@ -101,6 +107,14 @@ const ResumeListContent = () => {
         primary: false,
       };
     });
+  };
+
+  // A builder_score attached to a list/detail payload carries no calculation
+  // timestamp. It is therefore unverified until getBuilderScore confirms it
+  // was calculated after the resume's updatedAt.
+  const withoutUnverifiedBuilderScore = (resume: ResumeResponse): ResumeResponse => {
+    const { builder_score: _builderScore, ...withoutScore } = resume;
+    return withoutScore as ResumeResponse;
   };
 
   const fetchResumes = useCallback(async () => {
@@ -127,9 +141,13 @@ const ResumeListContent = () => {
         // preview panel and the v2 editor header use, so one enhanced resume
         // shows one number everywhere instead of a per-surface reading of
         // whichever headline field the backend happened to send.
-        const score = typeof item.ats_score === 'number'
-          ? item.ats_score
-          : Math.round(getEnhancedCurrentScore(item.ats_score as ATSScore | undefined));
+        // Math.round wraps BOTH arms: getEnhancedCurrentScore returns a clamped
+        // float, and ResumeTableRow renders `{displayScore}%` verbatim.
+        const score = Math.round(
+          typeof item.ats_score === 'number'
+            ? item.ats_score
+            : getEnhancedCurrentScore(item.ats_score as ATSScore | undefined),
+        );
         return {
           id: item.id,
           initials: name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2),
@@ -145,25 +163,59 @@ const ResumeListContent = () => {
         };
       });
 
-      // Transform builder resumes and show list immediately
-      const transformedData = transformResumeData(builder_resumes as unknown as ResumeResponse[], profileName);
-      const merged = [...transformedData, ...transformedEnhanced];
-      setResumes(merged);
+      // The unified list response is compact, so each row gets scored twice:
+      // once from the compact payload right away, then again from the full
+      // record. Paint the list from the compact payload FIRST -- hydrating
+      // every builder resume before the first paint puts 2 requests per
+      // resume behind the loading spinner, which is what the background pass
+      // below exists to avoid (the pre-existing behaviour this replaced
+      // showed the list immediately and filled scores in afterwards).
+      const builderList = builder_resumes as unknown as ResumeResponse[];
+      setResumes([...transformResumeData(builderList.map(withoutUnverifiedBuilderScore), profileName), ...transformedEnhanced]);
       setLoading(false);
 
-      // Load scores in the background — update each card as its score arrives
-      transformedData.forEach(async (resume) => {
-        try {
-          const scoreData = await getBuilderScore(resume.id);
-          if (scoreData.score > 0) {
-            setResumes(prev =>
-              prev.map(r => r.id === resume.id ? { ...r, score: scoreData.score } : r)
+      // Then hydrate every builder resume and re-score it against the same
+      // complete data the editor loads, in ONE batched update. Kept in its own
+      // try: the list is already on screen by now, so a failure here must leave
+      // the compact scores in place, not fall through to the outer catch and
+      // raise "Failed to fetch resumes" over an already-populated table (the
+      // pre-existing per-row background fetch swallowed its own errors).
+      try {
+        const fullBuilderResumes = await Promise.all(
+          builderList.map(async (resume) => {
+            const [resumeResult, scoreResult] = await Promise.allSettled([
+              getResumeById(resume.id),
+              getBuilderScore(resume.id),
+            ]);
+            const fullResume = withoutUnverifiedBuilderScore(
+              resumeResult.status === 'fulfilled' ? resumeResult.value : resume,
             );
-          }
-        } catch {
-          // leave score as 0
-        }
-      });
+            if (scoreResult.status !== 'fulfilled' || scoreResult.value.score <= 0) return fullResume;
+
+            const calculatedAt = Date.parse(scoreResult.value.calculated_at);
+            const modifiedAt = Date.parse(fullResume.updatedAt);
+            const scoreIsFresh = Number.isFinite(calculatedAt)
+              && (!Number.isFinite(modifiedAt) || calculatedAt >= modifiedAt);
+            return scoreIsFresh
+              ? { ...fullResume, builder_score: { score: scoreResult.value.score } }
+              : fullResume;
+          }),
+        );
+        const scored = new Map(
+          transformResumeData(fullBuilderResumes, profileName).map(row => [row.id, row] as const),
+        );
+        // MERGE into current state; do NOT replace the array. The list has been
+        // interactive since the paint above, so a row can be deleted while these
+        // requests are in flight -- rebuilding from the pre-delete `builderList`
+        // snapshot puts the deleted row back on screen. Mapping over current
+        // state can only update rows that are still present, which is the
+        // property develop2's per-row `setResumes(prev => prev.map(...))` had and
+        // the wholesale replacement lost. Enhanced rows are absent from `scored`,
+        // so they pass through untouched.
+        setResumes(prev => prev.map(row => scored.get(row.id) ?? row));
+      } catch (hydrationErr) {
+        logger.warn('Builder resume hydration failed; keeping the compact preview scores', hydrationErr);
+      }
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {
@@ -190,8 +242,10 @@ const ResumeListContent = () => {
 
       // ✅ No manual token check needed - httpClient sends cookies automatically
       await deleteResumeApi(resumeId);
-      const updatedResumes = resumes.filter(r => r.id !== resumeId);
-      setResumes(updatedResumes);
+      // Functional update: `resumes` is the render-time snapshot, and the
+      // background hydration above can commit between this click and the
+      // delete request resolving.
+      setResumes(prev => prev.filter(r => r.id !== resumeId));
       toast.success("Resume deleted successfully");
       setDeleteConfirmId(null);
 
