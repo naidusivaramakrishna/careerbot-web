@@ -474,6 +474,7 @@ export default function HistoryPage() {
             <div className="py-14 text-center px-4">
               <p className="text-sm text-gray-500 mb-3">{historyError}</p>
               <button
+                type="button"
                 onClick={() => { setHistoryError(null); setHistoryLoading(true); getLiveHistory(50).then((d) => { const cache = readReportCache(); setSessions(d.sessions.map((s) => mapLiveSession(s, cache))); }).catch(() => setHistoryError("Could not load session history. Please try again.")).finally(() => setHistoryLoading(false)); }}
                 className="text-xs text-[#2557a7] underline-offset-2 hover:underline"
               >

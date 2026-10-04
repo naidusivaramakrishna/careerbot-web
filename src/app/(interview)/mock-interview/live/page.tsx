@@ -172,7 +172,7 @@ function InfoScreen({ onContinue }: { onContinue: () => void }) {
     "Use specific examples with context, action, and result.",
     "Finish your thought before pressing Done Speaking.",
     "Stay on this tab until the session completes or the report opens.",
-    "If connection drops, reconnect and continue from the saved room state.",
+    "Keep a stable connection — if it drops, the session ends and a report is built from the answers captured so far.",
   ];
 
   return (

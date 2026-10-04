@@ -8,6 +8,10 @@ Supersedes: MOCK_INTERVIEW_DEVELOPER_BLUEPRINT.txt (V1), _V2.txt, V3.0
 Purpose: Single source of truth. Developer follows this TOP TO BOTTOM.
          Share this document. Do NOT refer to V1, V2, or V3.0 documents.
 
+NOTE (2026-10): every reconnect / reconnect_token / session_paused-resume /
+can_reconnect item below is SUPERSEDED -- reconnect was removed in
+careerbot-web #154. Each affected passage is marked [SUPERSEDED].
+
 CHANGELOG V3.0 -> V3.1 (ChatGPT Review Round 2, 12 of 15 findings accepted):
   FIX-1: Part 1.2  - Corrected misleading latency claim. End-to-end is 4-8s.
   FIX-2: Part 4.3  - Added WS rate limits, 45-min session cap, max 3 sessions/user.
@@ -766,6 +770,7 @@ PART 5: WEBSOCKET PROTOCOL (Live AI Interview)
   6. Timeout:          If no message for 60s, Backend sends keepalive ping.
   7. Hard limit:       After 45 minutes of session age, Backend sends SESSION_EXPIRED error
                        and closes WS gracefully (saves partial results first).
+  [SUPERSEDED 2026-10: WS reconnect was removed (careerbot-web #154 + the matching careerbot-api change). Any abnormal close during an active interview is terminal: the backend builds the report from what was captured. No reconnect_token, no session_resumed, no can_reconnect / "Continue Interview".]
   8. Disconnect:       On disconnect, session saved to Redis. User can reconnect within 3h.
   9. Reconnect:        Frontend reopens WS with same session_id + reconnect_token (see 5.4).
                        Backend verifies reconnect_token before resuming session.
@@ -832,6 +837,7 @@ PART 5: WEBSOCKET PROTOCOL (Live AI Interview)
 
   RECOVERY: If client disconnects in LISTENING or PROCESSING:
     - Save current question index to Redis (TTL=3h)
+    [SUPERSEDED 2026-10: WS reconnect was removed (careerbot-web #154 + the matching careerbot-api change). Any abnormal close during an active interview is terminal: the backend builds the report from what was captured. No reconnect_token, no session_resumed, no can_reconnect / "Continue Interview".]
     - Generate a short-lived reconnect_token: secrets.token_urlsafe(16), TTL=5 minutes
     - Store in Redis: mock:reconnect:{session_id} = reconnect_token  TTL=300s
     - Return reconnect_token to client in the LAST WS message before close:
@@ -1351,6 +1357,7 @@ DAY 14: REPORT GENERATION + SESSION RECOVERY
     4. Delete live session from Redis
     5. Send "interview_complete" message via WebSocket
 
+  [SUPERSEDED 2026-10: WS reconnect was removed (careerbot-web #154 + the matching careerbot-api change). Any abnormal close during an active interview is terminal: the backend builds the report from what was captured. No reconnect_token, no session_resumed, no can_reconnect / "Continue Interview".]
   Add endpoint: GET /mock-interview/live/{session_id}/state
     Returns: { status, current_index, can_reconnect: bool }
     Used by Frontend: if can_reconnect, show "Continue Interview" button
@@ -1914,6 +1921,7 @@ V1 WEBSOCKET TESTS (Day 15):
   [ ] Send audio_chunk -> transcript_partial messages received
   [ ] Send end_answer -> transcript_final + answer_scored received
   [ ] Send end_interview -> interview_complete with report received
+  [SUPERSEDED 2026-10: WS reconnect was removed (careerbot-web #154 + the matching careerbot-api change). Any abnormal close during an active interview is terminal: the backend builds the report from what was captured. No reconnect_token, no session_resumed, no can_reconnect / "Continue Interview".]
   [ ] Disconnect + reconnect -> session resumes from correct question
   [ ] STT returns empty transcript -> error message + "please repeat" sent
   [ ] 120s timeout (no message) -> timeout error + graceful close
@@ -2103,6 +2111,7 @@ CRITICAL RULES (NEVER VIOLATE):
   6. Audio deleted immediately after transcription. Never persist audio.
   7. Check consent_given before any practice or mock endpoint.
   8. DO NOT start V2 Day 19 (video) until video_analyzer.py regression is confirmed fixed.
+  [SUPERSEDED 2026-10: WS reconnect was removed (careerbot-web #154 + the matching careerbot-api change). Any abnormal close during an active interview is terminal: the backend builds the report from what was captured. No reconnect_token, no session_resumed, no can_reconnect / "Continue Interview".]
   9. On WS connect: reject if JWT expires within 30 minutes. Store reconnect_token in Redis.
      Verify reconnect_token on reconnect. A session_id alone is NOT sufficient to reconnect.
  10. Enforce audio_buffer size cap (5MB per answer). Cap total session audio at 50MB.

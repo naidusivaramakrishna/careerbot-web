@@ -34,7 +34,7 @@ export function mintIdempotencyKey(userId: string): string {
  * RFC-4122 v4 UUID by hand — covers any pre-2022 browser without
  * pulling in a dependency.
  */
-function randomUuid(): string {
+export function randomUuid(): string {
   const c =
     typeof globalThis !== "undefined" && "crypto" in globalThis
       ? (globalThis as { crypto?: Crypto }).crypto

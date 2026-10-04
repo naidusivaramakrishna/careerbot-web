@@ -218,6 +218,7 @@ export default function FeedbackCard({
             <div className="flex items-center gap-1.5 mt-2">
               <span className="text-[10px] text-gray-400 font-medium">Helpful?</span>
               <button
+                type="button"
                 onClick={() => handleRate(true)}
                 aria-label="Mark feedback helpful"
                 className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
@@ -229,6 +230,7 @@ export default function FeedbackCard({
                 <ThumbsUp size={11} />
               </button>
               <button
+                type="button"
                 onClick={() => handleRate(false)}
                 aria-label="Mark feedback not helpful"
                 className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
@@ -411,6 +413,7 @@ export default function FeedbackCard({
         {/* ── Improved version ── */}
         <div className="bg-[#2557a7]/5 border border-[#2557a7]/15 rounded-xl overflow-hidden">
           <button
+            type="button"
             onClick={() => setShowImproved((s) => !s)}
             className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#2557a7]/10 transition-colors"
           >
@@ -450,6 +453,7 @@ export default function FeedbackCard({
         {/* ── Try Again ── */}
         {onTryAgain && (
           <button
+            type="button"
             onClick={onTryAgain}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all"
           >

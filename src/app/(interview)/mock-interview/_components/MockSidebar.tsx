@@ -75,12 +75,14 @@ export default function MockSidebar() {
           </p>
           <div className="mt-5 flex gap-2">
             <button
+              type="button"
               onClick={() => setShowExitConfirm(false)}
               className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
             >
               Stay
             </button>
             <button
+              type="button"
               onClick={() => {
                 if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
                 router.push("/dashboard");
@@ -96,6 +98,7 @@ export default function MockSidebar() {
     <aside className="hidden h-full w-[72px] shrink-0 flex-col items-center border-r border-gray-200 bg-white lg:flex">
       <div className="flex h-[72px] w-full items-center justify-center border-b border-gray-100">
         <button
+          type="button"
           onClick={() => router.push("/mock-interview/live")}
           className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 bg-white shadow-sm transition-colors hover:bg-gray-50"
           aria-label="CareerBot mock interview"
@@ -115,6 +118,7 @@ export default function MockSidebar() {
           return (
             <div key={stage.id} className="group relative w-full">
               <button
+                type="button"
                 onClick={() => { if (!stage.locked) router.push(stage.href); }}
                 disabled={stage.locked}
                 aria-label={`${String(index + 1).padStart(2, "0")} ${stage.label}`}
@@ -155,6 +159,7 @@ export default function MockSidebar() {
       <div className="flex w-full flex-col items-center gap-3 border-t border-gray-100 px-3 py-5">
         <div className="group relative w-full">
           <button
+            type="button"
             onClick={() => router.push("/notes/generate")}
             className="flex h-11 w-full items-center justify-center rounded-lg border border-[#2557a7]/20 bg-[#2557a7]/5 text-[#2557a7] transition-colors hover:bg-[#2557a7]/10"
             aria-label="Optional prep notes and practice"
@@ -166,6 +171,7 @@ export default function MockSidebar() {
 
         <div className="group relative w-full">
           <button
+            type="button"
             onClick={() => setShowExitConfirm(true)}
             className="flex h-11 w-full items-center justify-center rounded-lg border border-transparent text-gray-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
             aria-label="Exit mock interview"

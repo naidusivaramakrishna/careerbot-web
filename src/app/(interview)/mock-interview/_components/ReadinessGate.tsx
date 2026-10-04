@@ -46,12 +46,14 @@ export default function ReadinessGate({
 
           <div className="px-5 pb-5 space-y-2">
             <button
+              type="button"
               onClick={() => router.push("/mock-interview/live")}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm"
             >
               Start Live Interview <ArrowRight size={14} />
             </button>
             <button
+              type="button"
               onClick={onPracticeMore}
               className="w-full py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
             >
@@ -106,12 +108,14 @@ export default function ReadinessGate({
 
           <div className="space-y-2">
             <button
+              type="button"
               onClick={() => router.push("/mock-interview/live")}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm"
             >
               Start Live Interview <ArrowRight size={14} />
             </button>
             <button
+              type="button"
               onClick={onPracticeMore}
               className="w-full flex items-center justify-center gap-2 py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all"
             >

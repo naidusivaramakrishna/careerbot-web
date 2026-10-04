@@ -309,16 +309,6 @@ export interface LiveCreateResponse {
   avatar: SimliAvatarSession | null;
 }
 
-export interface LiveSessionState {
-  session_id: string;
-  status: 'active' | 'completed' | 'abandoned' | 'expired' | 'recovering';
-  current_question: number;
-  questions_asked: number;
-  time_elapsed_s: number;
-  can_reconnect: boolean;
-  reconnect_token?: string;
-}
-
 export interface LiveSession {
   session_id: string;
   type: string;
@@ -359,7 +349,6 @@ export type WsClientMessage =
 
 export type WsServerMessage =
   | { type: 'session_ready' }
-  | { type: 'session_resumed'; questions_asked: number; current_question?: string; resumed_from_event_id?: number; pending_answer?: boolean }
   | { type: 'interviewer_audio_delta'; audio_base64: string; mime_type: string }
   | { type: 'interviewer_transcript_delta'; text: string }
   | { type: 'interviewer_transcript_final'; text: string }
@@ -389,7 +378,10 @@ export type WsServerMessage =
   | { type: 'answer_scored'; question_id: string; evaluation: AnswerEvaluation }
   | { type: 'session_closing' }
   | { type: 'interview_complete'; report_id: string; overall_score: number }
-  | { type: 'session_paused'; reason: string; reconnect_token: string | null }
+  // live-interview-reconnect-and-simli-avatar.txt: reconnect is removed —
+  // this is informational only now. interview_complete always follows
+  // within the same message burst, then the socket closes for good.
+  | { type: 'session_paused'; reason: string }
   | { type: 'heartbeat'; ts_ms?: number }
   | { type: 'error'; code: string; message: string; recoverable?: boolean }
   | { type: 'pong' }
@@ -435,15 +427,6 @@ export const evaluateLiveSessionVideo = async (
       timeout: 15 * 60 * 1000,
     },
   );
-};
-
-/**
- * Get current state of a live session (for recovery/polling)
- * GET /api/v1/mock-interview/live/{session_id}/state
- */
-export const getLiveSessionState = async (sessionId: string): Promise<LiveSessionState> => {
-  const response = await httpClient.get<LiveSessionState>(`/mock-interview/live/${sessionId}/state`);
-  return response.data;
 };
 
 /**

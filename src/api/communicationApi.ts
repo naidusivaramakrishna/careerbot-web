@@ -391,7 +391,7 @@ const extractSimpleQuestionId = (fullQuestionId: string): string => {
   // If it starts with Q, remove leading zeros from the number part
   if (lastPart.startsWith('Q')) {
     const numberPart = lastPart.substring(1); // "01"
-    const normalizedNumber = parseInt(numberPart, 10); // 1
+    const normalizedNumber = Number.parseInt(numberPart, 10); // 1
     return `Q${normalizedNumber}`; // "Q1"
   }
 
