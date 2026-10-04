@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useResume } from "../_context/ResumeContext";
 import { useScore } from "../_context/ScoreContext";
+import type { CanonicalScoreStatus } from "./score/FullAtsScoreCard";
 import { useResumeScorePreview } from "../_hooks/useResumeScorePreview";
 import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
@@ -81,6 +82,17 @@ const isFormattingFix = (section: string, suggestionId: string): boolean => {
     || /^(format|formatting)[_-]/i.test(suggestionId);
 };
 
+export const selectPreviewScore = (
+  previewScore: number,
+  canonicalScore: number | null,
+  canonicalStatus: CanonicalScoreStatus,
+  enhancedScore?: number,
+): number => enhancedScore ?? (
+  (canonicalStatus === "ready" || canonicalStatus === "stale")
+    ? (canonicalScore ?? previewScore)
+    : previewScore
+);
+
 
 const PreviewPanel: React.FC<PreviewPanelProps> = ({
   isTemplateSidebarOpen,
@@ -94,7 +106,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   pageScrollPreview = false,
 }) => {
   const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey } = useResume();
-  const { canonicalScore, setCanonicalScore } = useScore();
+  const { canonicalScore, canonicalStatus, setCanonicalScore, markScoreStale } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
   const { getCataloguesMap } = useCatalogues();
 
@@ -106,9 +118,27 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
   }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
 
-  const displayScore = isEnhancedResume && enhancedAtsScore
-    ? Math.round(getEnhancedCurrentScore(enhancedAtsScore))
-    : (canonicalScore ?? previewScore.score);
+  // ScoreTab is mounted only while its tab is open. Keep canonical-score
+  // freshness here instead because the preview remains mounted while users
+  // edit on the Editor tab. A ref avoids marking a just-calculated score stale
+  // merely because its own status changed; only a resume-data change does it.
+  const previousResumeDataRef = useRef(resumeData);
+  useEffect(() => {
+    if (previousResumeDataRef.current === resumeData) return;
+    previousResumeDataRef.current = resumeData;
+    if (!isEnhancedResume && canonicalScore !== null && canonicalStatus === "ready") {
+      markScoreStale();
+    }
+  }, [resumeData, isEnhancedResume, canonicalScore, canonicalStatus, markScoreStale]);
+
+  const displayScore = selectPreviewScore(
+    previewScore.score,
+    canonicalScore,
+    canonicalStatus,
+    isEnhancedResume && enhancedAtsScore
+      ? Math.round(getEnhancedCurrentScore(enhancedAtsScore))
+      : undefined,
+  );
   const scoreLabel = "Score";
   const fixedPreviewSections = React.useMemo(() => {
     const sections = new Set<string>();

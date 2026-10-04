@@ -315,7 +315,7 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
 }
 export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIndex?: number) => void; compact?: boolean } = {}) {
   const { resumeData, resumeId: activeResumeId, resumeSource, completionStatus } = useResume();
-  const { canonicalScore, canonicalStatus, lastCalculatedAt, setCanonicalScore, setCanonicalStatus, markScoreStale } = useScore();
+  const { canonicalScore, canonicalStatus, lastCalculatedAt, setCanonicalScore, setCanonicalStatus } = useScore();
 
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -325,10 +325,6 @@ export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: strin
   const previewScore  = useResumeScorePreview(resumeData as unknown as import("@/api/resumeApi").ResumeResponse);
   const isEnhanced    = resumeSource === "enhanced";
   const completedCount = Object.values(completionStatus).filter(Boolean).length;
-
-  useEffect(() => {
-    if (!isEnhanced && canonicalScore !== null && canonicalStatus === "ready") markScoreStale();
-  }, [resumeData, canonicalScore, canonicalStatus, markScoreStale, isEnhanced]);
 
   useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
 
@@ -399,15 +395,10 @@ export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: strin
 
   if (isEnhanced) return <EnhancedScorePanel onFixNow={onFixNow} />;
 
-  // "ready" survives exactly one commit: the first effect in this component
-  // calls markScoreStale() as soon as canonicalStatus is "ready" with a
-  // non-null score, so "stale" is the steady state for EVERY server
-  // calculation. Gating the full score on "ready" alone therefore hides the
-  // result of Calculate ATS Score permanently and leaves the client-side
-  // preview as the only number the user can ever see. Keep showing the server
-  // score while it is stale -- the "Score may be outdated / Recalculate" pill
-  // below is the signal that it predates the latest edits -- and fall back to
-  // the preview only when there is no server score at all.
+  // PreviewPanel marks a canonical score stale when resume data changes, even
+  // while this tab is unmounted. Keep showing that server score here with the
+  // stale pill as its recalculate signal; use the live preview only when no
+  // server score exists.
   const showFullScore  = canonicalScore !== null
     && (canonicalStatus === "ready" || canonicalStatus === "stale");
   const isCalcRunning  = isCalculating || canonicalStatus === "calculating";

@@ -32,8 +32,9 @@ vi.mock('@/app/(resume)/builder/creation/_hooks/useValidation', () => ({
   useValidation: () => ({ errors: {} }),
 }));
 
+const search: { source: string | null } = { source: null };
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => ({ get: () => null }),
+  useSearchParams: () => ({ get: (key: string) => (key === 'source' ? search.source : null) }),
 }));
 
 vi.mock('@/app/(resume)/builder/creation/_components/editor/SectionTipsPanel', () => ({
@@ -81,9 +82,10 @@ vi.mock('@/api/resumeApi', () => ({
   deleteSkillCategory: vi.fn().mockResolvedValue(undefined),
   deleteSkillById: (...args: unknown[]) => mockDeleteSkillById(...args),
 }));
+const mockDeleteSkillFromEnhanced = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/api/enhancerApi', () => ({
   addSkillToEnhancedResume: vi.fn(),
-  deleteSkillFromEnhancedResume: vi.fn(),
+  deleteSkillFromEnhancedResume: (...args: unknown[]) => mockDeleteSkillFromEnhanced(...args),
   deleteSkillCategoryFromEnhancedResume: vi.fn(),
 }));
 // Template storage is scoped by the logged-in account's email (getProfile).
@@ -103,7 +105,7 @@ function Harness({ initial }: { initial: AnyData }) {
   const [resumeData, setResumeData] = React.useState<AnyData>(initial);
   latest.data = resumeData;
   setExternal = setResumeData;
-  ctx.value = { resumeData, setResumeData };
+  ctx.value = { resumeData, setResumeData, bumpResumeSavedVersion: vi.fn(), resolveSkillRemovedSuggestions: vi.fn() };
   return <Skills />;
 }
 
@@ -133,6 +135,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
   latest.data = null;
+  search.source = null;
 });
 
 describe('Skills editor — general domain (no stored domain)', () => {
@@ -237,5 +240,38 @@ describe('Skills editor — switching domain away and back', () => {
       (filterSkillsByDomain(latest.data!.categorizedSkills as never, 'software_engineering') as Record<string, unknown>)
         .programming_languages,
     ).toEqual(['Python', 'Go']);
+  });
+});
+
+// PR #148 ai-review (ebe5ea2e) P2: a skill with no stored id. The builder's
+// delete route (delete_skill_from_resume) falls back to a case-insensitive
+// name match, so builder resumes must still send the name; the enhanced
+// route matches ids only, so enhanced resumes must reject and keep the chip.
+describe('Skills editor — removing a skill that has no stored id', () => {
+  const noIdSkills = () => ({
+    ...baseSkills(),
+    custom_categories: [{ id: 'c1', name: 'DevOps Tools', skills: ['Docker'] }],
+  });
+
+  it('builder resume: deletes a custom-category skill by name', async () => {
+    render(<Harness initial={{ resume_id: 'r1', categorizedSkills: noIdSkills() }} />);
+    fireEvent.click(screen.getByTestId('remove-Add DevOps Tools skills...'));
+    await waitFor(() => expect(mockDeleteSkillById).toHaveBeenCalledWith('r1', 'DevOps Tools', 'Docker'));
+  });
+
+  it('builder resume: deletes a predefined-category skill by name', async () => {
+    render(<Harness initial={{ resume_id: 'r1', categorizedSkills: noIdSkills() }} />);
+    fireEvent.click(screen.getByTestId('remove-Programming Languages'));
+    await waitFor(() => expect(mockDeleteSkillById).toHaveBeenCalledWith('r1', expect.any(String), 'Python'));
+  });
+
+  it('control: enhanced resume never sends the name as an id', async () => {
+    search.source = 'enhanced';
+    const { toast } = await import('sonner');
+    render(<Harness initial={{ resume_id: 'r1', categorizedSkills: noIdSkills() }} />);
+    fireEvent.click(screen.getByTestId('remove-Add DevOps Tools skills...'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(mockDeleteSkillFromEnhanced).not.toHaveBeenCalled();
+    expect(mockDeleteSkillById).not.toHaveBeenCalled();
   });
 });

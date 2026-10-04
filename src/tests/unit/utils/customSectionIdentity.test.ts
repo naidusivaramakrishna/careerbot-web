@@ -4,6 +4,7 @@ import {
   hasRenderableCustomSectionContent,
   isRedundantCustomSectionFieldLabel,
   normalizeCustomSectionName,
+  splitCompetencyLabel,
 } from "@/app/(resume)/builder/creation/_utils/customSectionIdentity";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 
@@ -111,4 +112,21 @@ describe("hasRenderableCustomSectionContent — the templates' render guard", ()
   ])("is %s -> %s", (_label, values, expected) => {
     expect(hasRenderableCustomSectionContent(section((values as unknown[]).map(field)))).toBe(expected);
   });
+});
+
+describe("splitCompetencyLabel", () => {
+  it.each([
+    ["Improved latency 3.5x. Cut cost by 20%.", { label: "Improved latency 3.5x.", rest: "Cut cost by 20%." }],
+    ["Stakeholder Management.", { label: "Stakeholder Management.", rest: "" }],
+    ["ASP.NET Core APIs. Built three services.", { label: "ASP.NET Core APIs.", rest: "Built three services." }],
+  ])("ends the label at a real sentence boundary: %s", (point, expected) => {
+    expect(splitCompetencyLabel(point)).toEqual(expected);
+  });
+
+  it.each(["Expert in Node.js and React", "Grew revenue in the U.S.", "Mentoring"])(
+    "returns null when there is no label boundary: %s",
+    point => {
+      expect(splitCompetencyLabel(point)).toBeNull();
+    },
+  );
 });

@@ -1,16 +1,9 @@
 /**
  * Regression test for the builder (non-enhanced) score panel.
  *
- * ScoreTab marks a freshly calculated canonical score stale on the very next
- * commit: its first effect runs on [resumeData, canonicalScore, canonicalStatus]
- * and calls markScoreStale() as soon as canonicalStatus becomes "ready" with a
- * non-null score. "ready" therefore only ever survives a single render, and
- * "stale" is the steady state for every server-calculated score.
- *
- * So the panel MUST keep rendering the canonical server score while the status
- * is "stale" (with the existing "Score may be outdated / Recalculate" pill as
- * the signal), otherwise the result of the Calculate ATS Score flow is never
- * visible at all and the user only ever sees the client-side preview number.
+ * PreviewPanel, rather than this conditionally mounted tab, marks a score stale
+ * when resume data changes. A freshly calculated server score remains ready
+ * until the user edits the resume.
  */
 import { describe, it, expect, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
@@ -60,13 +53,11 @@ describe("ScoreTab — canonical builder score display", () => {
 
     await act(async () => { scoreApi.setCanonicalScore(88, "1 Jan 2026, 10:00"); });
 
-    // ScoreTab's own effect has already flipped this to "stale" by now.
-    expect(scoreApi.canonicalStatus).toBe("stale");
+    expect(scoreApi.canonicalStatus).toBe("ready");
     expect(screen.getByText("ATS Score")).toBeInTheDocument();
     expect(screen.getByText("1 Jan 2026, 10:00")).toBeInTheDocument();
     expect(screen.queryByText("Preview Score")).not.toBeInTheDocument();
-    // The stale pill stays, so the user is still told to recalculate.
-    expect(screen.getByText(/Score may be outdated/)).toBeInTheDocument();
+    expect(screen.queryByText(/Score may be outdated/)).not.toBeInTheDocument();
   });
 
   it("falls back to the preview score while no server score exists", async () => {

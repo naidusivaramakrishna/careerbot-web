@@ -56,4 +56,36 @@ describe("enhanced custom-section persistence", () => {
     });
     expect(autoSaveEnhancedResume).not.toHaveBeenCalled();
   });
+
+  // PR #148: deleting the synthesized Core Competencies section records
+  // coreCompetenciesDismissed, which the backend flattens into enhanced_data
+  // and resumeMappers reads so the section is not synthesized again on reload.
+  it("sends coreCompetenciesDismissed with the full-replace snapshot when given", async () => {
+    updateEnhancedResume.mockResolvedValueOnce({ enhanced_data: { customSections: [] } });
+
+    await persistEnhancedCustomSections("enhanced-1", [], true);
+
+    expect(updateEnhancedResume).toHaveBeenCalledWith("enhanced-1", {
+      enhanced_sections: { customSections: [], coreCompetenciesDismissed: true },
+    });
+  });
+
+  it("preserves the source tag that marks the synthesized section", async () => {
+    updateEnhancedResume.mockResolvedValueOnce({ enhanced_data: { customSections: [] } });
+    const section = {
+      id: "server-cc",
+      sectionName: "Core Competencies",
+      fields: [],
+      source: "core_competencies" as const,
+    };
+
+    await persistEnhancedCustomSections("enhanced-1", [section], false);
+
+    expect(updateEnhancedResume).toHaveBeenCalledWith("enhanced-1", {
+      enhanced_sections: {
+        customSections: [{ ...section, icon: "custom", items: [] }],
+        coreCompetenciesDismissed: false,
+      },
+    });
+  });
 });

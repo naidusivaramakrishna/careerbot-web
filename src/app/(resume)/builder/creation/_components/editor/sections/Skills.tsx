@@ -19,7 +19,7 @@ function uid(): string {
 }
 
 const Skills: React.FC = () => {
-  const { resumeData, setResumeData, resolveSkillRemovedSuggestions } = useResume();
+  const { resumeData, setResumeData, resolveSkillRemovedSuggestions, bumpResumeSavedVersion } = useResume();
   const { errors } = useValidation();
   const searchParams = useSearchParams();
   const isEnhancedResume = searchParams.get("source") === "enhanced";
@@ -169,6 +169,11 @@ const Skills: React.FC = () => {
       [categoryKey]: [],
       hidden_predefined_categories: [...hiddenPredefined, categoryKey],
     });
+    // The delete already landed on the backend above -- bump so the preview
+    // panel's server-rendered image (keyed on resumeSavedVersion, not live
+    // resumeData; see PreviewPanel.tsx) refetches now instead of staying on
+    // its pre-delete snapshot until the next unrelated save or a refresh.
+    bumpResumeSavedVersion();
     toast.success("Category deleted successfully.");
   };
 
@@ -236,6 +241,7 @@ const Skills: React.FC = () => {
     updateSkills({
       custom_categories: allCustomCategories.filter((c) => c.id !== id),
     });
+    bumpResumeSavedVersion();
     toast.success("Category deleted successfully.");
   };
 
@@ -292,6 +298,13 @@ const Skills: React.FC = () => {
                                 },
                               }));
                             }
+                            // Bump now, not just on the Skills modal's "Save" click: the
+                            // add already landed on the backend above, and the preview
+                            // panel's server-rendered image only refetches on this signal
+                            // (see PreviewPanel.tsx's resumeSavedVersion comment) -- without
+                            // it, a newly added skill stayed invisible in the preview until
+                            // an unrelated save or a full page refresh.
+                            bumpResumeSavedVersion();
                             toast.success("Skill added successfully.");
                           } catch (err) {
                             const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
@@ -301,14 +314,22 @@ const Skills: React.FC = () => {
                         } : undefined}
                         onRemoveSkill={resumeData.resume_id ? async (skill) => {
                           const storedSkillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`];
-                          if (!storedSkillId && !isEnhancedResume) return;
-                          // Both the enhanced and builder delete-by-id endpoints
-                          // (delete_skill_from_enhanced_category / delete_skill_from_resume)
-                          // require the skill's real backend id and reject a plain
-                          // name with "Skill with ID '<name>' not found in <category>" --
-                          // this previously sent the name for enhanced resumes based on
-                          // a stale comment describing a *different* backend function.
-                          const skillIdentifier = storedSkillId ?? skill;
+                          // The enhanced delete endpoint (delete_skill_from_enhanced_category)
+                          // matches the skill's real backend id only and rejects a plain
+                          // name with "Skill with ID '<name>' not found in <category>"
+                          // (resumeMappers.ts backfills ids for parser-extracted skills;
+                          // this is the safety net for whatever it still misses). The
+                          // builder endpoint (delete_skill_from_resume) falls back to a
+                          // case-insensitive name match, so a builder skill with no stored
+                          // id is still deleted by its name. With no usable identifier,
+                          // REJECT, do not return: TechnologyChipsInput.handleRemove drops
+                          // the chip only when this promise resolves, so resolving would
+                          // hide a skill that is still on the server.
+                          const skillIdentifier = storedSkillId ?? (isEnhancedResume ? undefined : skill);
+                          if (!skillIdentifier) {
+                            toast.error("Could not remove this skill. Please refresh the page and try again.");
+                            throw new Error("api_failed");
+                          }
                           try {
                             const apiCategory = skillCategoryApiName(cat.key);
                             if (isEnhancedResume) {
@@ -337,6 +358,7 @@ const Skills: React.FC = () => {
                                 },
                               };
                             });
+                            bumpResumeSavedVersion();
                             toast.success("Skill removed successfully.");
                           } catch (err) {
                             const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
@@ -410,6 +432,10 @@ const Skills: React.FC = () => {
                               },
                             }));
                           }
+                          // See the predefined-category handler above: the add already
+                          // landed on the backend, so bump now instead of waiting on an
+                          // unrelated save or a page refresh for the preview to catch up.
+                          bumpResumeSavedVersion();
                           toast.success("Skill added successfully.");
                         } catch (err) {
                           const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
@@ -419,10 +445,14 @@ const Skills: React.FC = () => {
                       } : undefined}
                       onRemoveSkill={resumeData.resume_id && custom.name ? async (skill) => {
                         const storedSkillId = categorizedSkills.skill_id_map?.[`${custom.name}:${skill}`];
-                        if (!storedSkillId && !isEnhancedResume) return;
-                        // See the predefined-category handler above: the delete-by-id
-                        // endpoints require the real backend id, not the skill name.
-                        const skillIdentifier = storedSkillId ?? skill;
+                        // See the predefined-category handler above: builder resumes can
+                        // delete by name, enhanced resumes need the real backend id, and
+                        // with neither we reject so the chip stays put.
+                        const skillIdentifier = storedSkillId ?? (isEnhancedResume ? undefined : skill);
+                        if (!skillIdentifier) {
+                          toast.error("Could not remove this skill. Please refresh the page and try again.");
+                          throw new Error("api_failed");
+                        }
                         try {
                           if (isEnhancedResume) {
                             await deleteSkillFromEnhancedResume(resumeData.resume_id!, custom.name, skillIdentifier);
@@ -446,6 +476,7 @@ const Skills: React.FC = () => {
                               },
                             };
                           });
+                          bumpResumeSavedVersion();
                           toast.success("Skill removed successfully.");
                         } catch (err) {
                           const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";

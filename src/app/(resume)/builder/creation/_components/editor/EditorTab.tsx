@@ -84,10 +84,15 @@ import logger from "@/lib/logger";
 export async function persistEnhancedCustomSections(
   enhancedId: string,
   sections: CustomSection[],
+  coreCompetenciesDismissed?: boolean,
 ): Promise<CustomSection[] | undefined> {
   const response = await updateEnhancedResume(enhancedId, {
     enhanced_sections: {
       customSections: transformCustomSectionsForBackend(sections || []),
+      // The backend flattens enhanced_sections into enhanced_data, where
+      // resumeMappers reads this flag so a deleted Core Competencies section
+      // is not synthesized again on the next load.
+      ...(coreCompetenciesDismissed === undefined ? {} : { coreCompetenciesDismissed }),
     },
   } as Parameters<typeof updateEnhancedResume>[1]);
   const enhancedData = response?.enhanced_data as Record<string, unknown> | undefined;
@@ -1653,10 +1658,29 @@ const EditorTab: React.FC<Props> = ({
     resumeId: string,
     updatedSections: typeof resumeData.customSections,
   ): Promise<typeof resumeData.customSections | undefined> => {
-    if (isEnhancedResume) {
-      return persistEnhancedCustomSections(resumeId, updatedSections || []);
+    const previousSections = resumeDataRef.current.customSections || [];
+    const hadGeneratedCoreCompetencies = previousSections.some(
+      section => section.source === "core_competencies",
+    );
+    const retainsGeneratedCoreCompetencies = (updatedSections || []).some(
+      section => section.source === "core_competencies",
+    );
+    const coreCompetenciesDismissed = resumeDataRef.current.coreCompetenciesDismissed === true
+      || (hadGeneratedCoreCompetencies && !retainsGeneratedCoreCompetencies);
+    if (coreCompetenciesDismissed && !resumeDataRef.current.coreCompetenciesDismissed) {
+      resumeDataRef.current = {
+        ...resumeDataRef.current,
+        coreCompetenciesDismissed: true,
+      };
+      setResumeData(previous => ({ ...previous, coreCompetenciesDismissed: true }));
     }
-    const response = await updateResume(resumeId, { customSections: updatedSections } as Parameters<typeof updateResume>[1]);
+    if (isEnhancedResume) {
+      return persistEnhancedCustomSections(resumeId, updatedSections || [], coreCompetenciesDismissed);
+    }
+    const response = await updateResume(resumeId, {
+      customSections: updatedSections,
+      coreCompetenciesDismissed,
+    } as Parameters<typeof updateResume>[1]);
     return response.customSections;
   };
 

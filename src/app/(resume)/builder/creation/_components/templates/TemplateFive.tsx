@@ -2,7 +2,7 @@
 import React from "react";
 import { ResumeData, ResumeStyle } from "../../_context/ResumeContext";
 import { useResume } from "../../_context/ResumeContext";
-import { hasRenderableCustomSectionContent } from "../../_utils/customSectionIdentity";
+import { hasRenderableCustomSectionContent, isRedundantCustomSectionFieldLabel } from "../../_utils/customSectionIdentity";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
 
@@ -498,7 +498,9 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                   if (!hasValue) return null;
                   return (
                     <div key={field.id}>
-                      <span className="font-semibold" style={baseTextStyle}>{field.fieldName}: </span>
+                      {!isRedundantCustomSectionFieldLabel(customSection, field) && (
+                        <span className="font-semibold" style={baseTextStyle}>{field.fieldName}: </span>
+                      )}
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[]).filter(v => v.trim() !== "").map((item, i) => (

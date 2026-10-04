@@ -17,6 +17,32 @@ interface ScoreContextType {
 
 const ScoreContext = createContext<ScoreContextType | undefined>(undefined);
 
+type CachedScore = { score: number; calculatedAt: number | null };
+
+const parseCachedScore = (value: string | null): CachedScore | null => {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      parsed && typeof parsed === "object" &&
+      typeof (parsed as { score?: unknown }).score === "number" &&
+      Number.isFinite((parsed as { score: number }).score)
+    ) {
+      const calculatedAt = (parsed as { calculatedAt?: unknown }).calculatedAt;
+      return {
+        score: (parsed as { score: number }).score,
+        calculatedAt: typeof calculatedAt === "number" && Number.isFinite(calculatedAt)
+          ? calculatedAt
+          : null,
+      };
+    }
+  } catch {
+    // Legacy score-only cache values are accepted below but never trusted as ready.
+  }
+  const legacyScore = Number(value);
+  return Number.isFinite(legacyScore) ? { score: legacyScore, calculatedAt: null } : null;
+};
+
 export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [canonicalScore, setCanonicalScoreState] = useState<number | null>(null);
   const [canonicalStatus, setCanonicalStatusState] = useState<CanonicalScoreStatus>("not_calculated");
@@ -36,6 +62,22 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return resumeId ? `resume_score_${resumeId}` : "resume_overall_score";
   }, []);
 
+  const restoreCachedScore = useCallback((resumeId: string): boolean => {
+    const cached = parseCachedScore(localStorage.getItem(getScoreKey(resumeId)));
+    if (!cached) return false;
+    setOverallScoreState(cached.score);
+    setCanonicalScoreState(cached.score);
+    // A browser cache has no authoritative resume revision, so it is restored
+    // as "stale", never "ready". PreviewPanel and ScoreTab both still show it
+    // (ScoreTab with its "may be outdated" pill) until a recalculation.
+    setCanonicalStatusState("stale");
+    setScoreStaleState(true);
+    setLastCalculatedAtState(
+      cached.calculatedAt ? new Date(cached.calculatedAt).toLocaleString() : null,
+    );
+    return true;
+  }, [getScoreKey]);
+
   // Initialize on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -44,18 +86,9 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCurrentResumeId(resumeId);
 
     if (resumeId) {
-      const scoreKey = getScoreKey(resumeId);
-      const stored = localStorage.getItem(scoreKey);
-
-      if (stored) {
-        const parsed = parseFloat(stored);
-        const score = isNaN(parsed) ? 0 : parsed;
-        setOverallScoreState(score);
-        setCanonicalScoreState(score);
-        setCanonicalStatusState("ready");
-      }
+      restoreCachedScore(resumeId);
     }
-  }, [getCurrentResumeId, getScoreKey]);
+  }, [getCurrentResumeId, restoreCachedScore]);
 
   const setCanonicalScore = useCallback((score: number, calculatedAt?: string) => {
     setCanonicalScoreState(score);
@@ -67,7 +100,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const resumeId = localStorage.getItem("current_resume_id");
       if (resumeId) {
         const scoreKey = getScoreKey(resumeId);
-        localStorage.setItem(scoreKey, score.toString());
+        localStorage.setItem(scoreKey, JSON.stringify({ score, calculatedAt: Date.now() }));
       }
     }
   }, [getScoreKey]);
@@ -111,16 +144,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setCurrentResumeId(newResumeId);
 
         if (newResumeId) {
-          const scoreKey = getScoreKey(newResumeId);
-          const stored = localStorage.getItem(scoreKey);
-
-          if (stored) {
-            const parsed = parseFloat(stored);
-            const newScore = isNaN(parsed) ? 0 : parsed;
-            setOverallScoreState(newScore);
-            setCanonicalScoreState(newScore);
-            setCanonicalStatusState("ready");
-          } else {
+          if (!restoreCachedScore(newResumeId)) {
             resetCanonicalScore();
           }
         } else {
@@ -131,7 +155,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [getScoreKey, resetCanonicalScore]);
+  }, [resetCanonicalScore, restoreCachedScore]);
 
   return (
     <ScoreContext.Provider

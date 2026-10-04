@@ -63,3 +63,28 @@ export function extractNamedCustomSection(
   const rest = sections ? sections.filter((section) => section !== match) : [];
   return { match, rest };
 }
+
+/**
+ * True when the period at `index` ends a single-capital-letter abbreviation
+ * ("U.S.", "J. Smith") rather than a sentence. resumeMappers splits Core
+ * Competencies points with this rule and the templates bold each point's
+ * "Label." lead-in with it, so both must use this one definition.
+ */
+export function isAbbreviationPeriod(text: string, index: number): boolean {
+  return /\p{Lu}/u.test(text[index - 1] ?? "") && (index < 2 || /[\s.]/.test(text[index - 2]));
+}
+
+/**
+ * Splits a Core Competencies point into its bold "Label." lead-in and the
+ * rest. The label ends at the first period followed by whitespace or the end
+ * of the point, so "Node.js" or "3.5x" never end it, and an abbreviation
+ * ("U.S.") is skipped. Null when the point has no such period.
+ */
+export function splitCompetencyLabel(point: string): { label: string; rest: string } | null {
+  const boundary = /\.(?=\s|$)/g;
+  for (let match = boundary.exec(point); match; match = boundary.exec(point)) {
+    if (isAbbreviationPeriod(point, match.index)) continue;
+    return { label: point.slice(0, match.index + 1), rest: point.slice(match.index + 1).trim() };
+  }
+  return null;
+}

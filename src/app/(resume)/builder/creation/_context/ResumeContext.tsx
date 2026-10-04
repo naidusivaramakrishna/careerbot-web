@@ -714,6 +714,7 @@ export interface CustomSection {
   id: string;
   sectionName: string;
   fields: CustomField[];
+  source?: "core_competencies";
 }
 
 // Resume data structure
@@ -968,6 +969,7 @@ export interface ResumeData {
   declarationDate?: string;
   declarationPlace?: string;
   customSections?: CustomSection[];
+  coreCompetenciesDismissed?: boolean;
   templateDomain?: string; // Domain from template (healthcare, legal, government, etc.)
 }
 
@@ -1876,6 +1878,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           editorialActivities: normalizeId(((data.editorial_activities || data.editorialActivities) || []) as Record<string, unknown>[]) as ResumeData["editorialActivities"],
           conferencePresentations: normalizeId(((data.conference_presentations || data.conferencePresentations) || []) as Record<string, unknown>[]) as ResumeData["conferencePresentations"],
           customSections: data.customSections || [],
+          coreCompetenciesDismissed: data.coreCompetenciesDismissed === true
+            || (data as Record<string, unknown>).core_competencies_dismissed === true,
           // Restore templateDomain from localStorage (set when template was applied)
           templateDomain: typeof window !== 'undefined' ? localStorage.getItem(`templateDomain_${resumeId}`) || undefined : undefined,
         };
