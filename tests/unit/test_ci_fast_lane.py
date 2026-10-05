@@ -29,6 +29,7 @@ DRAFT, READY, PUSH = pr_event("synchronize", True), pr_event("synchronize", Fals
     ["scripts/ai_review/ai_pr_review.py", "tests/unit/test_ai_review_incremental_ledger.py"],
     ["scripts/ai_review/ai_pr_review.py", "tests/unit/test_pr_size_gate.py"],
     ["scripts/ai_review/pr_size_gate.py", "scripts/ai_review/review_config.json"],
+    ["scripts/ai_review/RUNNER_SETUP.txt", "scripts/ai_review/NOTES.md"],
     ["docs/ci/fast-lane.md"],
 ])
 def test_allow_listed_changes_take_the_fast_lane(paths):
@@ -44,6 +45,10 @@ def test_allow_listed_changes_take_the_fast_lane(paths):
     ["scripts/ci/fast_lane.py"],                     # the classifier itself
     ["scripts/ci/new-lint-errors.mjs"],
     ["scripts/ai_review_helper.py"],                 # prefix without the slash
+    ["scripts/ai_review/x.ts"],                      # tsconfig type-checks it
+    ["scripts/ai_review/x.tsx"],
+    ["scripts/ai_review/x.d.ts"],
+    ["scripts/ai_review/sub/helper.py"],             # flat directory only
     ["tests/unit/conftest.py"],
     ["tests/unit/helpers/test_x.py"],
     ["docs/CompanyLogo.tsx"],                        # tsconfig type-checks it
@@ -56,6 +61,14 @@ def test_allow_listed_changes_take_the_fast_lane(paths):
 ])
 def test_everything_else_takes_the_full_lane(paths):
     assert fast_lane.classify(paths)[0] == "full"
+
+
+@pytest.mark.parametrize("ext", ["ts", "tsx", "d.ts", "js", "jsx", "mjs"])
+def test_no_allow_list_entry_admits_a_script_or_typescript_file(ext):
+    # tsconfig type-checks *.ts/*.tsx (and allowJs); the fast lane has no tsc.
+    for d in ("scripts/ai_review/", "tests/unit/", "docs/"):
+        for name in (f"x.{ext}", f"test_x.{ext}", f"a/x.{ext}"):
+            assert fast_lane.classify([d + name])[0] == "full", d + name
 
 
 def _git(cwd, *args):
@@ -169,7 +182,15 @@ def test_nothing_else_is_gated_on_the_lane(frontend_ci):
     gated = [s["name"] for s in _steps(frontend_ci) if "steps.lane" in str(s.get("if", ""))]
     assert sorted(gated) == sorted(["Upgrade npm to match lockfile generator",
                                     "Install dependencies", "Build",
+                                    "Build deferred (draft PR)",
                                     "Build skipped (FAST LANE)"])
+
+
+def test_draft_fast_lane_pr_gets_one_notice_not_a_misleading_deferral(frontend_ci):
+    deferred = _step(frontend_ci, "Build deferred (draft PR)")
+    assert _runs(deferred, DRAFT, None) and _runs(deferred, DRAFT, "full")
+    assert not _runs(deferred, DRAFT, "fast") and not _runs(deferred, READY, None)
+    assert _runs(_step(frontend_ci, "Build skipped (FAST LANE)"), DRAFT, "fast")
 
 
 def test_fast_lane_says_so_and_still_runs_the_gates(frontend_ci):

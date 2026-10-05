@@ -166,8 +166,8 @@ jobs:
       # Fails closed: only an explicit lane=fast skips anything. Pushes, a
       # classifier error, a base without the classifier, or any other path
       # (.github/** included) leave the output empty and run the full job.
-      # The BASE branch's copy of the classifier decides, so a PR cannot
-      # widen the allow-list for itself.
+      # The BASE branch's copy of the classifier decides, so a PR that does
+      # not edit this workflow cannot widen the allow-list for itself.
       - name: Classify changed paths (fast lane)
         id: lane
         if: github.event_name == 'pull_request'
@@ -327,7 +327,9 @@ jobs:
       # job can fail on code. Say so, rather than let a green `Lint and Build`
       # read as "built clean".
       - name: Build deferred (draft PR)
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+        if: >-
+          github.event_name == 'pull_request' && github.event.pull_request.draft == true
+          && steps.lane.outputs.lane != 'fast'
         run: echo "::notice title=Build deferred::Draft PR - production build skipped. Mark the PR ready for review to run it."
 
       - name: Build skipped (FAST LANE)

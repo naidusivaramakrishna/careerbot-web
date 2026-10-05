@@ -3,18 +3,19 @@
 
 The required "Lint and Build" job takes 13-23 min, almost all of it npm ci and
 the Next.js production build. A PR that only touches the AI reviewer / PR-size
-gate (scripts/ai_review/**), the Python CI tests (tests/unit/test_*.py) or
-Markdown under docs/ changes nothing that build compiles. In the fast lane the
-job still runs, still reports under its required name and still runs the
-new-error lint/type gates; it skips only npm ci and the build. The Python tests
-for those paths run in gate-self-test, on every PR, as before.
+gate (scripts/ai_review/*.{py,json,txt,md}, not subdirectories), the Python CI
+tests (tests/unit/test_*.py) or Markdown under docs/ changes nothing that build
+compiles. In the fast lane the job still runs, still reports under its required
+name and still runs the new-error lint/type gates; it skips only npm ci and the
+build. The Python tests for those paths run in gate-self-test, on every PR, as
+before.
 
 FAIL CLOSED. Anything other than a clean "every changed path is on the
 allow-list" answer is the full lane: a push event, a checkout that is not the
 PR merge commit for the expected head, a git error, an empty diff, a path
 with a control character, any path off the list -- .github/** and this file
 included. The workflow runs the BASE branch's copy of this script, so a PR
-cannot widen the list for itself.
+that does not edit the workflow cannot widen the list for itself.
 
 Paths come from `git diff --no-renames` between the merge commit and its first
 parent: exactly what the PR merges, both sides of a rename, no API page cap.
@@ -36,7 +37,9 @@ import sys
 # these, and .dockerignore drops *.md. Python test modules only -- a
 # conftest.py would change how gate-self-test collects the whole directory.
 ALLOW = (
-    re.compile(r"scripts/ai_review/.+"),
+    # Flat, and only the file types there today: a .ts/.tsx here would be
+    # type-checked by tsc, which the fast lane cannot run without npm ci.
+    re.compile(r"scripts/ai_review/[^/]+\.(?:py|json|txt|md)"),
     re.compile(r"tests/unit/test_\w+\.py"),
     re.compile(r"docs/.+\.md"),
 )
