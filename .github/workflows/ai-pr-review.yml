@@ -191,7 +191,8 @@ jobs:
 
       - name: Checkout (full history for merge-base + at-SHA reads)
         uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        # No token in .git/config: T2 runs the PR's npm install/build (ai#398).
+        with: { fetch-depth: 0, persist-credentials: false }
 
       - name: Decide target
         id: t
@@ -246,6 +247,8 @@ jobs:
           exit 1
 
       - uses: actions/checkout@v4
+        # This job inherits pull-requests/issues: write and runs the PR's tests.
+        with: { persist-credentials: false }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

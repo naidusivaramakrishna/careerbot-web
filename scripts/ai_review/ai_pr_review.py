@@ -90,6 +90,9 @@ HERE = Path(__file__).resolve().parent
 
 # Only the workflow's own comments are reviews: a human comment quoting a
 # review marker must never be counted by the skip path or start an increment.
+# This stops other commenters only: anything holding the job's GITHUB_TOKEN
+# posts as this login too (see PR_CODE_SECRET_ENV for what is closed and what
+# stays open).
 _BOT_ONLY = '.[] | select(.user.login == "github-actions[bot]")'
 
 
@@ -112,7 +115,37 @@ def _last(regex, text):
     return ms[-1] if ms else None
 
 
+# Secrets this script uses for its own gh/model calls. They are kept OUT of the
+# environment of every subprocess that runs the PR's code (T2 install / build /
+# checks / tests / server, T3 live): a test, a package.json script or an npm
+# dependency's install script could otherwise post a comment as
+# github-actions[bot] with GH_TOKEN, i.e. forge a review (ai#398). The workflow
+# also checks out with persist-credentials: false, so .git/config holds no
+# token either; the one fetch that needs auth uses GIT_GH_AUTH. Still open:
+# PR code runs as the runner's user, so it can read the token from
+# /proc/<pid>/environ of this process or the step's shell and use any
+# credential stored for that user (a gh login); PR code from an earlier job on
+# the same runner can plant code that the token-bearing step runs (PATH, user
+# site-packages, npm/git config); and on pull_request events the PR's own copy
+# of this script runs. This narrows the path; it is no sandbox -- closing it
+# needs PR code in a separate job or user without the token.
+GITHUB_TOKEN_ENV = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+PR_CODE_SECRET_ENV = GITHUB_TOKEN_ENV + ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY")
+# The model CLIs run in the PR checkout, where they may load its project
+# settings (hooks, allowed commands): they get no GitHub token either, but keep
+# their own keys. Applied in run(), so every model call site is covered.
+MODEL_CLIS = ("claude", "codex")
+GIT_GH_AUTH = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
+
+
+def pr_code_env(drop=PR_CODE_SECRET_ENV):
+    """os.environ without `drop`: the env for a subprocess running PR code."""
+    return {k: v for k, v in os.environ.items() if k not in drop}
+
+
 def run(cmd, check=False, stdin=None, timeout=None, env=None, cwd=None):
+    if env is None and cmd and cmd[0] in MODEL_CLIS:
+        env = pr_code_env(GITHUB_TOKEN_ENV)
     r = subprocess.run(cmd, input=stdin, text=True, capture_output=True,
                        check=False, timeout=timeout, env=env, cwd=cwd)
     if check and r.returncode != 0:
@@ -1289,7 +1322,7 @@ def boot_server(server):
     cmd = server["cmd"]; health = server["health"]; wait = int(server.get("boot_wait", 30))
     logf = tempfile.NamedTemporaryFile("w+", suffix=".log", delete=False)
     proc = subprocess.Popen(cmd, shell=True, stdout=logf, stderr=subprocess.STDOUT,
-                            text=True, preexec_fn=os.setsid)
+                            text=True, preexec_fn=os.setsid, env=pr_code_env())
     try:
         deadline = time.time() + wait
         while time.time() < deadline:
@@ -1323,7 +1356,7 @@ def dynamic_python(cfg, base, head):
     # 1) import smoke
     if cfg.get("import_smoke"):
         smoke = run([py, "-c", f"import importlib; importlib.import_module('{cfg['import_smoke']}')"],
-                    timeout=180)
+                    timeout=180, env=pr_code_env())
         res["smoke_ok"] = smoke.returncode == 0
         res["smoke_tail"] = (smoke.stderr or smoke.stdout or "").strip().splitlines()[-8:]
 
@@ -1333,10 +1366,12 @@ def dynamic_python(cfg, base, head):
                if l.endswith(".py") and l.startswith(prefixes)]
     stems = {Path(c).stem for c in changed}
     glob = cfg.get("test_glob", "tests/**/test_*.py")
-    all_tests = out(["bash", "-lc", f"git ls-files '{glob}' 2>/dev/null"]).splitlines()
+    # test_glob comes from the PR's review_config.json and goes through a shell.
+    all_tests = out(["bash", "-lc", f"git ls-files '{glob}' 2>/dev/null"], env=pr_code_env()).splitlines()
     picked = sorted({t for t in all_tests for s in stems if s and s in Path(t).name})[:25]
     if picked:
-        r = run([py, "-m", "pytest", *picked, "-q", "--no-header", "-p", "no:cacheprovider"], timeout=1200)
+        r = run([py, "-m", "pytest", *picked, "-q", "--no-header", "-p", "no:cacheprovider"], timeout=1200,
+                env=pr_code_env())
         res["tests"] = picked
         res["tests_passed"] = r.returncode == 0
         res["tests_tail"] = (r.stdout + "\n" + r.stderr).strip().splitlines()[-25:]
@@ -1356,17 +1391,17 @@ def dynamic_python(cfg, base, head):
 def dynamic_node(cfg):
     n = cfg.get("node") or {}
     res = {"stack": "node"}
-    inst = run(["bash", "-lc", n.get("install", "npm ci || npm install")], timeout=900)
+    inst = run(["bash", "-lc", n.get("install", "npm ci || npm install")], timeout=900, env=pr_code_env())
     res["install_ok"] = inst.returncode == 0
     if not res["install_ok"]:
         res["install_tail"] = (inst.stdout + inst.stderr).strip().splitlines()[-12:]
         return res
-    b = run(["bash", "-lc", n.get("build", "npm run build")], timeout=1200)
+    b = run(["bash", "-lc", n.get("build", "npm run build")], timeout=1200, env=pr_code_env())
     res["build_ok"] = b.returncode == 0
     res["build_tail"] = (b.stdout + b.stderr).strip().splitlines()[-20:]
     res["checks"] = []
     for c in n.get("checks", []):
-        cr = run(["bash", "-lc", c], timeout=600)
+        cr = run(["bash", "-lc", c], timeout=600, env=pr_code_env())
         res["checks"].append({"cmd": c, "ok": cr.returncode == 0,
                               "tail": (cr.stdout + cr.stderr).strip().splitlines()[-12:]})
     return res
@@ -1384,7 +1419,7 @@ def run_live_llm(cfg):
     py = ".venv/bin/python" if Path(".venv/bin/python").exists() else "python3"
     cmd = live["cmd"]
     r = run(["bash", "-lc", (cmd.replace("python3", py) if cmd.startswith("python") else cmd)],
-            timeout=1800)
+            timeout=1800, env=pr_code_env())
     return {"configured": True, "ok": r.returncode == 0, "note": live.get("note", "real LLM call"),
             "tail": (r.stdout + "\n" + r.stderr).strip().splitlines()[-30:]}
 
@@ -2142,7 +2177,7 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
             # this check run sits on a commit that no longer gates anything.
             print(f"::error::{superseded_message(pr, event_sha, state['headRefOid'])}")
             return 1
-    run(["git", "fetch", "origin", base, f"refs/pull/{pr}/head"], timeout=300)
+    run([*GIT_GH_AUTH, "fetch", "origin", base, f"refs/pull/{pr}/head"], timeout=300)
 
     _, reviewed_sha = existing_review_sha(repo, pr)
     if (label_event() is not None or event_was_draft()) and not force and not live:
