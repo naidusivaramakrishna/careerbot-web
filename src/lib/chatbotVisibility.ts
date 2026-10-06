@@ -7,9 +7,8 @@
  */
 
 // Routes with their own dedicated chat UI, or that have no room for a
-// floating widget (admin/recruiter tooling). /jobslogin already has its own
-// "Nancy" AI career-assistant chat panel, so the CareerBot launcher would
-// just overlap it.
+// floating widget (admin/recruiter tooling).
+// /jobslogin has Nancy chat widget that would overlap with floating CareerBot launcher.
 const EXCLUDED_PATH_PREFIXES = ['/chatbot', '/admin', '/recruiter', '/jobslogin'];
 
 // /mock-test/<segment> sub-paths that are browsing/results pages, not the

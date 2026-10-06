@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   saveSessionToStorage,
   capSessionsPerOwner,
@@ -90,5 +90,38 @@ describe('capSessionsPerOwner', () => {
 
     expect(capped.filter((s) => s.userEmail === 'alice@example.com')).toHaveLength(2);
     expect(capped.filter((s) => s.userEmail === 'bob@example.com')).toHaveLength(1);
+  });
+});
+
+describe('saveSessionToStorage — a failed write must not blank the History list', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('still returns the saving user\'s visible sessions when localStorage.setItem throws', () => {
+    // One session already persisted successfully.
+    saveSessionToStorage(session({ id: 'a-1', userEmail: 'alice@example.com' }), 'alice@example.com');
+
+    // The next write fails (quota exceeded / storage blocked in private mode).
+    // Spy on the localStorage INSTANCE, not Storage.prototype: jsdom's
+    // localStorage does not delegate to the prototype method, so a
+    // Storage.prototype spy is never invoked and the test would be inert.
+    const setItemSpy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('exceeded the quota', 'QuotaExceededError');
+    });
+
+    const visible = saveSessionToStorage(
+      session({ id: 'a-2', userEmail: 'alice@example.com' }),
+      'alice@example.com',
+    );
+
+    // Returning [] here would be assigned straight into chatSessions state and
+    // wipe the user's History tab even though a-1 is still on disk.
+    expect(setItemSpy).toHaveBeenCalled(); // the failure path really ran
+
+    const ids = visible.map((s) => s.id);
+    expect(ids).toContain('a-1');
+    expect(ids).toContain('a-2');
+    expect(visible.every((s) => s.userEmail === 'alice@example.com')).toBe(true);
   });
 });
