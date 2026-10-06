@@ -966,18 +966,87 @@ def pr_comments(repo, pr):
         return None
 
 
-def last_real_review(comments):
+def last_real_review(comments, need_ledger=True):
     """(sha, body) of the newest review comment by REVIEW_BOT that reviewed
     something. A human or another app quoting a marker must not pick the
-    increment's start. Scope-guard refusals and failed tiers reviewed nothing."""
+    increment's start. Scope-guard refusals and failed tiers reviewed nothing.
+
+    The newest such review WITH a usable ledger wins (need_ledger=False: the
+    newest review, ledger or not). A `/ai-review` comment runs the default
+    branch's (master's) copy of this script until master is synced, and that
+    copy writes no ledger: as the newest review it made the next push a full
+    review that carried nothing, so an open earlier P0/P1 left the count.
+    review_one carries the older ledger and still reviews in full (see
+    newer_ledgerless_review). With no usable ledger anywhere: the newest review."""
+    newest = None
     for c in reversed(comments or []):
         b = c.get("body") or ""
         m = _last(MARKER_RE, b)
         tail = b[m.end():] if m else ""     # status markers follow the review marker
         if c.get("bot") and c.get("login") == REVIEW_BOT and m \
                 and TIER_FAILURE_MARKER not in tail and SCOPE_GUARD_MARKER not in tail:
-            return m.group(1), b
-    return None, None
+            if not need_ledger or read_ledger(b) is not None:
+                return m.group(1), b
+            newest = newest or (m.group(1), b)
+    return newest or (None, None)
+
+
+def newer_ledgerless_reviews(comments):
+    """[(sha, body)], newest first, of the bot's reviews newer than the one
+    whose ledger is carried; [] when no usable ledger exists anywhere (that run
+    is a full review already). A failed tier counts: a same-head re-run
+    (--force/--live) PATCHes the comment that held the newest ledger into one
+    (careerbot-ai #402). A scope-guard refusal reviewed nothing."""
+    carried = last_real_review(comments)
+    if read_ledger(carried[1]) is None:
+        return []
+    newer = []
+    for c in reversed(comments or []):
+        b = c.get("body") or ""
+        if b == carried[1]:
+            break
+        m = _last(MARKER_RE, b)
+        if c.get("bot") and c.get("login") == REVIEW_BOT and m \
+                and SCOPE_GUARD_MARKER not in b[m.end():]:
+            newer.append((m.group(1), b))
+    return newer
+
+
+def newer_ledgerless_review(comments):
+    """Full-review reason when a review newer than the one whose ledger is
+    carried has no ledger, else None. Its findings are not in that ledger, and
+    a focused review would not re-read code it flagged that has not changed
+    since, so the run reviews in full, carries the older ledger and recounts
+    those reviews' own findings (carry_with_ledgerless)."""
+    newer = newer_ledgerless_reviews(comments)
+    return f"the newest review (`{newer[0][0][:8]}`) carries no finding ledger" if newer else None
+
+
+def _earlier_ledger_needs_review(repo, pr):
+    """The skip path's question for a ledgerless review at the head: does an
+    earlier usable ledger exist (newer_ledgerless_review)? Unreadable comments
+    fail closed: counting only the ledgerless review is the false green (#183)."""
+    comments = pr_comments(repo, pr)
+    if comments is None:
+        raise RuntimeError(f"#{pr}: could not read the PR's comments, so an earlier review's "
+                           f"ledger cannot be checked; refusing to count only the ledgerless "
+                           f"review at the head")
+    return bool(newer_ledgerless_review(comments))
+
+
+def carry_with_ledgerless(prior, comments):
+    """`prior` plus the findings of the ledgerless reviews newer than it,
+    recounted from their bodies (as prior_findings does for foreign tiers): a
+    finding only such a review raised stays counted until it is answered."""
+    if prior is None:
+        return None
+    known = {_ident(f) for f in prior}
+    for _sha, body in newer_ledgerless_reviews(comments):
+        for f in finding_ledger(body):
+            if _ident(f) not in known and not _RECOUNT_SKIP_RE.match(f.get("title") or ""):
+                prior.append(f)
+                known.add(_ident(f))
+    return prior
 
 
 def plan_increment(prior_sha, prior_known, head, base, full_reason=None):
@@ -2264,6 +2333,14 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
                   f"does not retry it; "
                   f"push, re-run the push's review run, or apply `{WAIVER_LABEL}`.")
             return 1
+        elif read_ledger(prior) is None and TIER_FAILURE_MARKER not in prior \
+                and _earlier_ledger_needs_review(repo, pr):
+            # This head's review has no ledger (master's script, via /ai-review)
+            # but an earlier review's ledger exists: counting only this comment
+            # dropped that ledger's open findings (#183). Review in full, which
+            # carries them; the report replaces this comment in place.
+            print(f"#{pr}: the review at {head[:8]} carries no finding ledger — re-reviewing "
+                  f"in full and carrying the earlier ledger")
         elif TIER_FAILURE_MARKER in prior:
             # A failed tier left no verdict to carry forward either -- but unlike
             # the scope guard, re-reviewing CAN succeed once the tier is healthy.
@@ -2338,17 +2415,21 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
     # finding_ledger). Every lookup here fails toward MORE review and toward
     # counting: an unreadable comment list or prior ledger means a full review.
     comments = pr_comments(repo, pr)
-    if comments is None and reviewed_sha and not head.startswith(reviewed_sha):
+    if comments is None and reviewed_sha:
         # An earlier review exists and its findings cannot be read: reviewing
         # anyway could let a still-open one drop out of the count. Fail closed.
+        # The same head too (a ledgerless or failed-tier review, --force/--live):
+        # that comment is PATCHed in place, so a carry-less report would replace
+        # it and become the newest ledger (#183; as careerbot-ai does).
         raise RuntimeError(f"#{pr}: could not read the PR's comments, so the earlier review's "
                            f"findings cannot be carried; refusing to review without them")
     labels = {(lb or {}).get("name") for lb in (meta.get("labels") or [])}
     full_reason = ("`AI_REVIEW_FULL=1`" if os.environ.get("AI_REVIEW_FULL") == "1" else
                    f"label `{FULL_REVIEW_LABEL}`" if FULL_REVIEW_LABEL in labels else
-                   "could not read the PR's comments" if comments is None else None)
+                   "could not read the PR's comments" if comments is None else
+                   newer_ledgerless_review(comments))
     since, since_body = last_real_review(comments)
-    prior = prior_findings(since_body)
+    prior = carry_with_ledgerless(prior_findings(since_body), comments)
     plan = plan_increment(since, prior is not None, head, base, full_reason)
     stat = ""
     if plan["mode"] == "incremental":

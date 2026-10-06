@@ -470,6 +470,55 @@ def test_ai_review_command_restricted_to_trusted_commenters(ai_review, associati
                  comment_event(association=association)) is allowed
 
 
+# Runs GitHub starts from the default branch (a trusted /ai-review comment, a
+# dispatch) hold write tokens, so their checkout must be a protected branch,
+# never PR code. develop2 (not master, whose scripts/ai_review/ lags it) is the
+# harness every PR is reviewed against.
+TRUSTED_HARNESS_REF = "develop2"
+_PR_CODE_REFS = ("pull_request.head", "head_ref", "head.sha", "head.ref",
+                 "refs/pull", "merge_commit_sha", "issue.number")
+
+
+def _checkouts(wf, job="ai-review"):
+    return [s for s in wf["jobs"][job]["steps"]
+            if str(s.get("uses", "")).startswith("actions/checkout@")]
+
+
+def dispatch_event(ref="refs/heads/master"):
+    return {"event_name": "workflow_dispatch", "ref": ref, "event": {"inputs": {"pr": str(PR)}}}
+
+
+@pytest.mark.parametrize("ctx", [comment_event(), dispatch_event(),
+                                 dispatch_event("refs/heads/develop2")])
+def test_default_branch_runs_check_out_the_trusted_develop2_harness(ai_review, ctx):
+    steps = _checkouts(ai_review)
+    assert steps, "the ai-review job checks the harness out"
+    for step in steps:
+        ref = str((step.get("with") or {}).get("ref", ""))
+        assert _render(ref, ctx) == TRUSTED_HARNESS_REF
+
+
+def test_a_comments_payload_cannot_move_the_checkout(ai_review):
+    for step in _checkouts(ai_review):
+        ref = str((step.get("with") or {}).get("ref", ""))
+        assert _render(ref, comment_event(body="/ai-review refs/pull/1/head",
+                                          association="MEMBER")) == TRUSTED_HARNESS_REF
+
+
+@pytest.mark.parametrize("ctx", [pr_event("synchronize", False), pr_event("opened", True)])
+def test_pull_request_review_keeps_its_default_checkout(ai_review, ctx):
+    for step in _checkouts(ai_review):
+        assert _render(str((step.get("with") or {}).get("ref", "")), ctx) == ""
+
+
+def test_no_checkout_can_select_pr_code(ai_review):
+    for job in ai_review["jobs"]:
+        for step in _checkouts(ai_review, job) if "steps" in ai_review["jobs"][job] else []:
+            with_ = step.get("with") or {}
+            for key in ("ref", "repository"):
+                assert not any(r in str(with_.get(key, "")) for r in _PR_CODE_REFS), (job, key)
+
+
 def test_comments_do_not_start_gate_self_test(ai_review):
     """Every comment on every issue/PR fires issue_comment; the self-test has
     nothing to test there."""

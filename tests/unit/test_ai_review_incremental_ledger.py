@@ -226,6 +226,78 @@ def _prior_body(claude=PRIOR_CLAUDE, codex=CODEX_MISSED, partial=False):
     return gate.build_report(PRIOR, stats, claude, codex, None, None, partial=partial)
 
 
+MID = "c3" * 20
+
+
+def _ledgerless(sha, claude="No issues."):
+    """A review by the default branch's (master's) older script, which a
+    `/ai-review` comment runs until master is synced: it writes no ledger."""
+    body = gate.LEDGER_RE.sub("", _review_body(sha, claude))
+    assert gate.MARKER_RE.search(body).group(1) == sha and gate.read_ledger(body) is None
+    return body
+
+
+class TestALedgerlessReviewDoesNotBreakTheChain:
+    """As the newest review, a ledgerless one made the next push a full review
+    with nothing carried, so an open earlier P0/P1 dropped out of the count.
+    The increment starts from the newest review WITH a usable ledger; with none
+    at all, from the newest review (full, nothing to carry). Same rule as
+    careerbot-ai's port (#399)."""
+
+    def test_an_older_ledger_is_used(self):
+        sha, body = gate.last_real_review([_bot(_prior_body()), _bot(_ledgerless(MID))])
+        assert sha == PRIOR and len(gate.read_ledger(body)) == 4
+
+    def test_control_newest_ledger_still_wins(self):
+        newer = _review_body(MID, "- [P2] x | `src/a.ts:1` | y\n")
+        assert gate.last_real_review([_bot(_prior_body()), _bot(newer)])[0] == MID
+
+    def test_control_no_ledger_anywhere_is_the_newest_review(self):
+        comments = [_bot(_ledgerless(PRIOR)), _bot(_ledgerless(MID))]
+        assert gate.last_real_review(comments)[0] == MID
+
+    def test_a_partial_ledger_is_not_usable_either(self):
+        partial = _prior_body(partial=True)
+        assert gate.read_ledger(partial) is None
+        comments = [_bot(_prior_body()), _bot(partial)]
+        assert gate.last_real_review(comments)[0] == PRIOR
+
+    def test_only_the_bots_ledger_counts(self):
+        forged = {"login": "mallory", "bot": False, "assoc": "NONE", "body": _prior_body()}
+        comments = [forged, _bot(_ledgerless(MID))]
+        assert gate.last_real_review(comments)[0] == MID
+
+    def test_a_newer_ledgerless_review_forces_a_full_review(self):
+        """Its own findings are not in the carried ledger; a focused review
+        would not re-read unchanged code it flagged (codex review)."""
+        why = gate.newer_ledgerless_review([_bot(_prior_body()), _bot(_ledgerless(MID))])
+        assert why and MID[:8] in why
+
+    def test_own_failed_tier_over_the_newest_ledger_forces_a_full_review(self):
+        """Sibling of careerbot-ai #402's review: a same-head re-run (--force /
+        --live) whose Claude tier dies PATCHes the comment that held the newest
+        ledger into a tier-failed body (partial ledger, stamped)."""
+        stats = {"files": 1, "added": 1, "removed": 0, "commits": 1, "authors": 1}
+        failed = (gate.build_report(MID, stats, "died", "ok", None, None, partial=True)
+                  + f"\n<sub>{gate.TIER_FAILURE_MARKER}</sub>")
+        assert gate.LEDGER_RE.search(failed) and gate.read_ledger(failed) is None
+        why = gate.newer_ledgerless_review([_bot(_prior_body()), _bot(failed)])
+        assert why and MID[:8] in why
+
+    def test_control_own_scope_guard_refusal_changes_nothing(self):
+        refused = f"SCOPE GUARD {gate.MARKER.format(sha=MID)} {gate.SCOPE_GUARD_MARKER}"
+        assert gate.newer_ledgerless_review([_bot(_prior_body()), _bot(refused)]) is None
+
+    @pytest.mark.parametrize("comments", [
+        [_bot(_prior_body())],                                    # newest has the ledger
+        [_bot(_ledgerless(MID)), _bot(_prior_body())],            # ledgerless is OLDER
+        [_bot(_ledgerless(PRIOR)), _bot(_ledgerless(MID))],       # no ledger anywhere
+        [], None,
+    ])
+    def test_control_no_reason_otherwise(self, comments):
+        assert gate.newer_ledgerless_review(comments) is None
+
+
 class TestQuotedMarkersCannotSpoof:
     """#168 review: a model quoting LEDGER_MARKER, a fixture ledger or a review
     marker hid the real ledger (first match won) -> earlier findings dropped."""
@@ -699,7 +771,8 @@ class TestDecisionsAreDataNotInstructions:
 
 class TestReviewOneWiring:
     def _run(self, monkeypatch, claude_text, comments, plan, diff_rc=0, keep_sha=False,
-             codex="ok", force=False, verdict="", verdict_rc=0, calls=None, claude_ok=True):
+             codex="ok", force=False, verdict="", verdict_rc=0, calls=None, claude_ok=True,
+             plan_args=None):
         posted, prompts = [], []
         calls = [] if calls is None else calls
         monkeypatch.setattr(gate, "pr_meta", lambda *a, **k: {
@@ -711,8 +784,10 @@ class TestReviewOneWiring:
             "files": 1, "added": 1, "removed": 0, "commits": 1, "authors": 1}))
         monkeypatch.setattr(gate, "lockfile_check", lambda *a, **k: None)
         monkeypatch.setattr(gate, "pr_context", lambda *a, **k: "")
-        monkeypatch.setattr(gate, "pr_comments", lambda *a, **k: comments)
-        monkeypatch.setattr(gate, "plan_increment", lambda *a, **k: plan)
+        monkeypatch.setattr(gate, "pr_comments",
+                            comments if callable(comments) else (lambda *a, **k: comments))
+        plan_args = [] if plan_args is None else plan_args
+        monkeypatch.setattr(gate, "plan_increment", lambda *a, **k: plan_args.append(a) or plan)
 
         def fake_run(cmd, **kw):
             if cmd[:2] == ["git", "diff"]:
@@ -780,6 +855,18 @@ class TestReviewOneWiring:
         assert "Review mode:** full (`a1a1a1a1` is not an ancestor" in body
         assert "4 of 4 still open" in body and rc == 2, "MOOT on a P1 needs the cross-check"
 
+    def test_ledgerless_newest_review_still_carries_the_older_ledger(self, monkeypatch):
+        """End to end: a `/ai-review` by master's script reviewed MID and wrote no
+        ledger. The next run must still carry (and count) PRIOR's open P1s."""
+        comments = [_bot(_prior_body()), _bot(_ledgerless(MID))]
+        plan, args = {"mode": "full", "why": "stub"}, []
+        rc, body, prompt = self._run(monkeypatch, "Nothing new.\n", comments, plan,
+                                     plan_args=args)
+        assert "<<<PRIOR_FINDINGS" in prompt and "4 of 4 still open" in body
+        assert rc == 2, "both earlier P1s, unanswered, still block"
+        since, known, _h, _b, full_reason = args[0]
+        assert since == PRIOR and known and "no finding ledger" in full_reason
+
     def test_untrusted_description_ledger_never_reaches_the_prompt_as_text(self, monkeypatch):
         def fake_out(cmd, **kw):
             if cmd[:3] == ["gh", "pr", "view"]:
@@ -795,6 +882,84 @@ class TestReviewOneWiring:
         monkeypatch.setattr(gate, "existing_review_sha", lambda *a, **k: (1, PRIOR))
         with pytest.raises(RuntimeError, match="cannot be carried"):
             self._run(monkeypatch, "ok\n", None, plan, keep_sha=True)
+
+    def test_same_head_rerun_over_a_ledgerless_review_still_counts_the_older_ledger(
+            self, monkeypatch):
+        """#183 review (P1): master's `/ai-review` reviewed HEAD with no ledger; a
+        re-run or label run at HEAD took the skip path and counted only that
+        comment (0 here), so PRIOR's two open P1s never reached the gate. It
+        now falls through to a full review that carries PRIOR's ledger."""
+        comments = [_bot(_prior_body()), _bot(_ledgerless(HEAD))]
+        monkeypatch.setattr(gate, "existing_review_sha", lambda *a, **k: (2, HEAD))
+        monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: _ledgerless(HEAD))
+        plan, args = {"mode": "full", "why": "stub"}, []
+        rc, body, prompt = self._run(monkeypatch, "Nothing new.\n", comments, plan,
+                                     keep_sha=True, plan_args=args)
+        assert "<<<PRIOR_FINDINGS" in prompt and "4 of 4 still open" in body and rc == 2
+        assert "no finding ledger" in (args[0][4] or "")
+
+    def test_same_head_rerun_fails_closed_when_comments_are_unreadable(self, monkeypatch):
+        """#183 review (P2): with the comment list unreadable, the skip path
+        could not see the earlier ledger and counted only the ledgerless review
+        at HEAD (0): the false green again. It fails closed instead."""
+        monkeypatch.setattr(gate, "existing_review_sha", lambda *a, **k: (2, HEAD))
+        monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: _ledgerless(HEAD))
+        with pytest.raises(RuntimeError, match="could not read the PR's comments"):
+            self._run(monkeypatch, "Nothing new.\n", None, {"mode": "full", "why": "x"},
+                      keep_sha=True)
+
+    @pytest.mark.parametrize("prior_at_head, force", [
+        ("ledgerless", False),   # the skip path's own check read them, the second read failed
+        ("failed-tier", False),  # a failed-tier retry PATCHes that comment in place
+        ("ledgered", True),      # --force/--live: the same PATCH
+    ])
+    def test_same_head_review_fails_closed_when_the_second_comment_read_fails(
+            self, monkeypatch, prior_at_head, force):
+        """#183 review on b728dd3d (P2): the review itself reads the comments
+        again. When that read failed at a reviewed head, it went on with no
+        carry and its ledgered report replaced the head's comment: PRIOR's open
+        P1s were gone from every later count. It fails closed, as in ai."""
+        at_head = {"ledgerless": _ledgerless(HEAD),
+                   "failed-tier": _review_body(HEAD, "died")
+                   + f"\n<sub>{gate.TIER_FAILURE_MARKER}</sub>",
+                   "ledgered": _review_body(HEAD, "- [P3] nit | `src/a.ts:1` | x\n")}[prior_at_head]
+        # Only the ledgerless skip branch reads them first (and succeeds); every
+        # path's review read returns None.
+        reads = [[_bot(_prior_body()), _bot(at_head)]] if prior_at_head == "ledgerless" else []
+        monkeypatch.setattr(gate, "existing_review_sha", lambda *a, **k: (2, HEAD))
+        monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: at_head)
+        with pytest.raises(RuntimeError, match="cannot be carried"):
+            self._run(monkeypatch, "Nothing new.\n", lambda *a, **k: reads.pop() if reads else None,
+                      {"mode": "full", "why": "x"}, keep_sha=True, force=force)
+
+    def test_control_first_review_with_unreadable_comments_still_reviews(self, monkeypatch):
+        rc, body, prompt = self._run(monkeypatch, "Nothing new.\n", None,
+                                     {"mode": "full", "why": "x"})
+        assert rc == 0 and "<<<PRIOR_FINDINGS" not in prompt
+
+    def test_control_same_head_rerun_over_a_ledgered_review_is_still_a_skip(self, monkeypatch):
+        same = _review_body(HEAD, "- [P1] kept | `src/a.ts:1` | x\n")
+        posted = []
+        monkeypatch.setattr(gate, "existing_review_sha", lambda *a, **k: (2, HEAD))
+        monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: same)
+        monkeypatch.setattr(gate, "pr_comments", lambda *a, **k: [_bot(_prior_body()), _bot(same)])
+        monkeypatch.setattr(gate, "pr_meta", lambda *a, **k: {
+            "baseRefOid": "b" * 40, "headRefOid": HEAD, "labels": [],
+            "author": {"login": "author"}})
+        monkeypatch.setattr(gate, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "", ""))
+        monkeypatch.setattr(gate, "upsert_comment", lambda r, p, b: posted.append(b))
+        monkeypatch.setattr(gate, "claude_pass", lambda *a, **k: pytest.fail("re-reviewed"))
+        assert gate.review_one("o/r", 1, {}, False, False, False, False) == 1 and not posted
+
+    def test_ledgerless_reviews_own_findings_are_carried_too(self, monkeypatch):
+        """#183 review (P2): a P1 that only the ledgerless review raised is
+        carried (recounted from its body) until answered, not left to chance."""
+        mid = _ledgerless(MID, "**[P1] Only master saw this** | `src/m.ts:9` | x\n")
+        comments = [_bot(_prior_body()), _bot(mid)]
+        rc, body, prompt = self._run(monkeypatch, "Nothing new.\n", comments,
+                                     {"mode": "full", "why": "stub"})
+        assert "Only master saw this" in prompt and "5 of 5 still open" in body
+        assert rc == 3, "PRIOR's two P1s plus the ledgerless review's P1"
 
     def test_same_head_rereview_keeps_the_carry(self, monkeypatch):
         """--force/--live at a reviewed head PATCHes that comment in place, so

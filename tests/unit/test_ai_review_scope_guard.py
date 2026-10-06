@@ -300,6 +300,9 @@ class _Harness:
         monkeypatch.setattr(gate, "existing_review_sha",
                             lambda *a, **k: (1, HEAD) if prior else (None, None))
         monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: prior)
+        # A readable comment list with no earlier ledger: an unreadable one at a
+        # reviewed head fails closed (#183).
+        monkeypatch.setattr(gate, "pr_comments", lambda *a, **k: [])
         _fake_git(monkeypatch, rows)
         monkeypatch.setattr(gate, "upsert_comment",
                             lambda repo, pr, body: self.posted.append(body))

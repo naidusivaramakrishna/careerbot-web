@@ -28,7 +28,8 @@ on:
     # `schedule: cron "47 * * * *"` sweep keeps running. Removing `schedule:`
     # here and the author_association gate below do nothing until then.
     #
-    # Security invariant: this privileged trigger checks out the default branch.
+    # Security invariant: this privileged trigger checks out a TRUSTED branch,
+    # develop2 (protected; see `ref:` on the ai-review checkout), never the PR.
     # The review script may fetch the PR ref for git diff/show, but must never
     # check it out or execute PR-authored code. Dynamic commands run only from
     # this trusted checkout. Keep this true if the review harness is changed.
@@ -191,8 +192,18 @@ jobs:
 
       - name: Checkout (full history for merge-base + at-SHA reads)
         uses: actions/checkout@v4
-        # No token in .git/config: T2 runs the PR's npm install/build (ai#398).
-        with: { fetch-depth: 0, persist-credentials: false }
+        with:
+          fetch-depth: 0
+          # No token in .git/config: T2 runs the PR's npm install/build (ai#398).
+          persist-credentials: false
+          # Runs GitHub starts from the DEFAULT branch -- a trusted `/ai-review`
+          # (issue_comment), a dispatch from master -- run the develop2 harness:
+          # the protected branch every PR targets, not master, whose
+          # scripts/ai_review/ lags it (no findings ledger: its review made the
+          # next push carry nothing). Never the PR head: these runs have write
+          # tokens. pull_request runs keep the default (the PR's merge ref).
+          # Live for comments only once master carries this file (see `on:`).
+          ref: ${{ github.event_name != 'pull_request' && 'develop2' || '' }}
 
       - name: Decide target
         id: t
