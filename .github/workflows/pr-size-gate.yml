@@ -43,8 +43,17 @@ name: PR Size gate
 # (then by SHA), never from `origin/<head_ref>`, which does not exist for a
 # fork's branch (pr_size_gate.py --fetch, ensure_commits).
 #
-# TRUST: on pull_request this file and the script come from the PR's merge
-# ref, so a PR can change its own limits. The gate is a hygiene check, not a
+# TRUST: on pull_request this file comes from the PR's merge ref, but the
+# gate script (and ai_pr_review.py, which it imports) is origin/develop2's,
+# the protected branch: the step holds a write GH_TOKEN (labels, comment), so
+# a PR that edits the script must not run its edit with it (careerbot-ai#398).
+# Not the base commit's copy: the PR author picks the base, and can push a
+# branch carrying their own gate and open a PR into it. So a PR that changes
+# the limits is measured by develop2's until it merges, and a new CLI flag
+# needs two PRs (script first, then this invocation). An empty BASE_SHA, no
+# develop2 in the checkout, a missing ai_pr_review.py or an older CLI fails
+# the check: closed, never another copy. A PR can still
+# change this workflow file itself; the gate is a hygiene check, not a
 # security boundary (the ai-review job runs PR-authored scripts too).
 #
 # Size labels are set only by the caller that passes `publish: true`
@@ -90,6 +99,16 @@ jobs:
           PUBLISH: ${{ inputs.publish && '--publish' || '' }}
         # --fetch: refs/pull/<N>/head, then by SHA, and fail closed if either
         # commit is still missing -- works for fork PRs (see FORK PRs above).
+        # A trusted copy of the gate runs, never the PR's (see TRUST above).
         run: |
-          python3 scripts/ai_review/pr_size_gate.py --repo "$REPO" --pr "$PR" \
+          : "${BASE_SHA:?BASE_SHA is required}"
+          # Full ref name: a short origin/develop2 would resolve a TAG of that
+          # name first, and anyone who can push can push a tag.
+          trusted=refs/remotes/origin/develop2
+          gate_dir="$RUNNER_TEMP/pr-size-gate"
+          rm -rf "$gate_dir" && mkdir -p "$gate_dir"
+          for f in pr_size_gate.py ai_pr_review.py; do
+            git show "$trusted:scripts/ai_review/$f" > "$gate_dir/$f"
+          done
+          python3 "$gate_dir/pr_size_gate.py" --repo "$REPO" --pr "$PR" \
             --base "$BASE_SHA" --head "$HEAD_SHA" --fetch $PUBLISH

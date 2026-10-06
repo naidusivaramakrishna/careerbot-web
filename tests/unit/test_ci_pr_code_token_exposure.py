@@ -1,16 +1,19 @@
 """PR code must not get a token that can post as github-actions[bot] (ai#398).
 
-Two paths let the PR's own code (a test, a package.json script, an npm
+Three paths let the PR's own code (a test, a package.json script, an npm
 dependency's install script) post a comment as the review bot and forge a
 review:
   * actions/checkout's default persist-credentials: true leaves the job's
     GITHUB_TOKEN in .git/config, readable by every later step;
+  * a later step of a job with a write token (checkout's post step gets it
+    as an input) runs after the PR's code, which can rewrite it first;
   * ai_pr_review.py ran the T2/T3 subprocesses with GH_TOKEN in their env.
 The workflow test parses the YAML (permissions are resolved per job, called
 workflows inherit their caller's); the script tests run the real functions.
 """
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -25,8 +28,9 @@ SCRIPT = ROOT / "scripts" / "ai_review" / "ai_pr_review.py"
 # A job here runs a PR-controlled script that is GIVEN the token on purpose,
 # so a token in .git/config adds nothing. Each entry needs its reason.
 PERSISTED_TOKEN_OK = {
-    # pr_size_gate.py (the PR's copy) runs with GH_TOKEN = github.token to
-    # label/comment; see TRUST in pr-size-gate.yml.
+    # Runs no PR code: the gate script is origin/develop2's copy, else the
+    # step fails (see TRUST in pr-size-gate.yml and the tests below) -- and
+    # its --fetch needs the token.
     ("pr-size-gate.yml", "size"),
 }
 
@@ -89,14 +93,161 @@ def test_every_write_token_job_checks_out_without_persisting_the_token():
 def test_the_review_jobs_are_covered_by_the_check():
     jobs = _job_writes()
     for key in [("ai-pr-review.yml", "ai-review"), ("ai-pr-review.yml", "gate-self-test")]:
-        writes, job = jobs[key]
-        assert writes and _checkouts(job), key
+        assert _checkouts(jobs[key][1]) and _runs_pr_code(jobs[key][1]), key
+
+
+# A job that runs PR code AND gets a write token. Each entry needs its reason.
+WRITE_TOKEN_WITH_PR_CODE_OK = {
+    # Runs the PR's T2 tier, then posts the review with GH_TOKEN; see "Still
+    # open" at PR_CODE_SECRET_ENV in the review script.
+    ("ai-pr-review.yml", "ai-review"),
+    # Its `run:` step runs origin/develop2's copy of the gate, not the PR's
+    # or the base's (see the pr-size-gate.yml tests below).
+    ("pr-size-gate.yml", "size"),
+}
+
+
+def _runs_pr_code(job):
+    """A checkout followed by any `run:` step: the step runs the checked-out
+    tree's code, or code the tree's install/test steps planted for it."""
+    steps = job["steps"]
+    first = next((i for i, s in enumerate(steps)
+                  if str(s.get("uses", "")).startswith("actions/checkout@")), None)
+    return first is not None and any("run" in s for s in steps[first + 1:])
+
+
+def test_no_job_that_runs_pr_code_gets_a_write_token():
+    """Even without a persisted token, a later step of the same job that holds
+    the token (actions/checkout's post step gets it as an input) runs after the
+    PR's code, which can rewrite that action or the job's env first (ai#398)."""
+    bad = [f"{n}:{j}" for (n, j), (writes, job) in _job_writes().items()
+           if writes and _runs_pr_code(job) and (n, j) not in WRITE_TOKEN_WITH_PR_CODE_OK]
+    assert bad == []
 
 
 def test_allow_list_entries_still_exist():
     jobs = _job_writes()
-    for key in PERSISTED_TOKEN_OK:
+    for key in PERSISTED_TOKEN_OK | WRITE_TOKEN_WITH_PR_CODE_OK:
         assert key in jobs, key
+
+
+# --------------------------------------------------------------------------
+# pr-size-gate.yml: the step that holds a write token runs develop2's gate
+# --------------------------------------------------------------------------
+
+def _git(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def _gate_repo(tmp_path, base_has_gate=True):
+    """A base commit (any branch the PR author can push), origin/develop2 on
+    top of it, then a PR commit that edits the gate script. Returns (repo,
+    base sha). The stub gate prints which copy ran and its argv."""
+    repo = tmp_path / "repo"
+    gate = repo / "scripts" / "ai_review"
+    gate.mkdir(parents=True)
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "README").write_text("x\n")
+    if base_has_gate:
+        (gate / "ai_pr_review.py").write_text('WHO = "base"\n')
+        # Like the real gate: it imports ai_pr_review from its own directory.
+        (gate / "pr_size_gate.py").write_text(
+            'import sys, ai_pr_review; print("GATE=base", ai_pr_review.WHO, *sys.argv[1:])\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    # origin/develop2, the protected branch: the only copy that may run.
+    _git(repo, "checkout", "-q", "-b", "d2", base)
+    gate.mkdir(parents=True, exist_ok=True)  # checkout drops it if the base has no gate
+    (gate / "ai_pr_review.py").write_text('WHO = "develop2"\n')
+    (gate / "pr_size_gate.py").write_text(
+        'import sys, ai_pr_review; print("GATE=develop2", ai_pr_review.WHO, *sys.argv[1:])\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "develop2")
+    _git(repo, "update-ref", "refs/remotes/origin/develop2", "HEAD")
+    _git(repo, "checkout", "-q", "-b", "pr", base)
+    gate.mkdir(parents=True, exist_ok=True)  # checkout drops it if the base has no gate
+    (gate / "ai_pr_review.py").write_text('WHO = "pr"\n')
+    (gate / "pr_size_gate.py").write_text('print("GATE=pr")\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pr edits the gate")
+    return repo, base
+
+
+def _run_gate_step(repo, base, tmp_path):
+    job = _load(WORKFLOWS / "pr-size-gate.yml")["jobs"]["size"]
+    step = next(s for s in job["steps"] if "pr_size_gate.py" in s.get("run", ""))
+    (tmp_path / "runner-temp").mkdir()
+    env = {**os.environ, "RUNNER_TEMP": str(tmp_path / "runner-temp"), "BASE_SHA": base,
+           "HEAD_SHA": "h" * 40, "REPO": "o/r", "PR": "7", "PUBLISH": ""}
+    # GitHub's default `run:` shell.
+    return subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
+                          cwd=repo, env=env, capture_output=True, text=True)
+
+
+def test_the_size_gate_runs_develop2s_copy_not_the_bases_or_the_prs(tmp_path):
+    """The PR author picks the base: any branch they can push, with their own
+    gate on it, then a PR into it. Only the protected branch's copy runs."""
+    repo, base = _gate_repo(tmp_path)
+    r = _run_gate_step(repo, base, tmp_path)
+    assert r.returncode == 0, r.stderr
+    # develop2's gate, with develop2's ai_pr_review, measuring the PR's base.
+    assert f"GATE=develop2 develop2 --repo o/r --pr 7 --base {base}" in r.stdout
+    assert "GATE=base" not in r.stdout and "GATE=pr" not in r.stdout
+
+
+def test_a_base_without_the_gate_runs_develop2s_copy(tmp_path):
+    """master and other branches that predate the gate."""
+    repo, base = _gate_repo(tmp_path, base_has_gate=False)
+    r = _run_gate_step(repo, base, tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "GATE=develop2 develop2 --repo o/r" in r.stdout
+    assert "GATE=pr" not in r.stdout
+
+
+@pytest.mark.parametrize("base_has_gate", [True, False])
+def test_a_tag_named_origin_develop2_cannot_stand_in_for_the_branch(tmp_path, base_has_gate):
+    """A short `origin/develop2` resolves refs/tags/ before refs/remotes/, and
+    anyone who can push can push a tag."""
+    repo, base = _gate_repo(tmp_path, base_has_gate=base_has_gate)
+    _git(repo, "tag", "origin/develop2", "pr")
+    r = _run_gate_step(repo, base, tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "GATE=develop2 develop2" in r.stdout
+    assert "GATE=pr" not in r.stdout
+
+
+def test_develop2_without_the_gates_import_fails_closed(tmp_path):
+    repo, base = _gate_repo(tmp_path)
+    _git(repo, "checkout", "-q", "d2")
+    _git(repo, "rm", "-q", "scripts/ai_review/ai_pr_review.py")
+    _git(repo, "commit", "-qm", "develop2 without ai_pr_review")
+    _git(repo, "update-ref", "refs/remotes/origin/develop2", "HEAD")
+    _git(repo, "checkout", "-q", "pr")
+    r = _run_gate_step(repo, base, tmp_path)
+    assert r.returncode != 0
+    assert "GATE=" not in r.stdout
+
+
+@pytest.mark.parametrize("base_has_gate", [True, False])
+def test_no_develop2_fails_closed(tmp_path, base_has_gate):
+    repo, base = _gate_repo(tmp_path, base_has_gate=base_has_gate)
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/develop2")
+    r = _run_gate_step(repo, base, tmp_path)
+    assert r.returncode != 0
+    assert "GATE=" not in r.stdout
+
+
+def test_an_empty_base_fails_closed(tmp_path):
+    """The gate measures the PR against BASE_SHA. (A base commit missing from
+    the checkout is the gate's own --fetch: by SHA, else it fails closed.)"""
+    repo, _ = _gate_repo(tmp_path)
+    r = _run_gate_step(repo, "", tmp_path)
+    assert r.returncode != 0
+    assert "GATE=" not in r.stdout
 
 
 # --------------------------------------------------------------------------

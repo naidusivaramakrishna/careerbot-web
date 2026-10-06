@@ -243,6 +243,11 @@ jobs:
     needs: pr-size
     if: ${{ !cancelled() && github.event_name != 'issue_comment' }}
     runs-on: [self-hosted, ai-review]
+    # Read-only: it runs the PR's tests, which could take a write token, or
+    # plant code for a later step that holds one, such as checkout's post
+    # step (careerbot-ai#398). Nothing in this job posts.
+    permissions:
+      contents: read
     steps:
       # FIRST step, before anything heavy -- keep it first. Fails this job when
       # the PR Size gate did not pass, so the job reports FAILURE instead of a
@@ -258,7 +263,7 @@ jobs:
           exit 1
 
       - uses: actions/checkout@v4
-        # This job inherits pull-requests/issues: write and runs the PR's tests.
+        # Runs the PR's tests: no token in .git/config (careerbot-ai#398).
         with: { persist-credentials: false }
       - uses: actions/setup-python@v5
         with:

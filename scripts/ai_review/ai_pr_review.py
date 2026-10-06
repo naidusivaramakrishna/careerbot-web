@@ -127,8 +127,10 @@ def _last(regex, text):
 # credential stored for that user (a gh login); PR code from an earlier job on
 # the same runner can plant code that the token-bearing step runs (PATH, user
 # site-packages, npm/git config); and on pull_request events the PR's own copy
-# of this script runs. This narrows the path; it is no sandbox -- closing it
-# needs PR code in a separate job or user without the token.
+# of this script and of the workflow files run (pr_size_gate.py runs a trusted
+# copy -- see TRUST in pr-size-gate.yml). This narrows the path; it is
+# no sandbox -- closing it needs PR code in a separate job or user without the
+# token.
 GITHUB_TOKEN_ENV = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 PR_CODE_SECRET_ENV = GITHUB_TOKEN_ENV + ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY")
 # The model CLIs run in the PR checkout, where they may load its project
