@@ -8,6 +8,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 // import "@/app/(jobs)/jobmatch/_components/_styles/docx-preview.css";
 import ClientLayout from "./ClientLayout";
+import ClientErrorReporter from "@/components/ClientErrorReporter";
 
 export const metadata: Metadata = {
   title: "Careerbot",
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#ffffff" />
       </head>
       <body className="min-h-screen bg-white antialiased" style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
+        <ClientErrorReporter />
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

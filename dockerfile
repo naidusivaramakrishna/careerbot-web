@@ -73,6 +73,12 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Runtime-only build metadata for web_build_info{version,commit}
+# (src/lib/observability/registry.ts). Set in the RUNNER stage only, so it is
+# never inlined into .next/static. version comes from npm_package_version.
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=$GIT_COMMIT
+
 # Copy only required files from builder
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next

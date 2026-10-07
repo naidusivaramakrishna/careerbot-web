@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sanitiseCookie } from '@/lib/cookieUtils';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const isSecureRequest =
       request.nextUrl.protocol === 'https:' ||
@@ -60,3 +61,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Auth service unavailable' }, { status: 502 });
   }
 }
+
+export const POST = withApiMetrics('/api/v1/auth/refresh', 'POST', handlePOST);

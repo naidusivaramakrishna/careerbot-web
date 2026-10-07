@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sanitiseCookie } from '@/lib/cookieUtils';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 export const maxDuration = 60; // auth can be slow on cold backend starts
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
     const tenantId = request.headers.get('X-Tenant-Id') || 'public';
@@ -85,3 +86,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = withApiMetrics('/api/backend/auth/signin', 'POST', handlePOST);

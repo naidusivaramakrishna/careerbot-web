@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clearAuthCookies } from '@/app/api/_lib/clearAuthCookies';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   // Forward to backend so the token gets blacklisted server-side.
   // Ignore errors — even if the backend call fails we still clear cookies.
   // Best-effort: blacklist the token on the backend. 3 s timeout so a slow/hung
@@ -24,3 +25,5 @@ export async function POST(request: NextRequest) {
   clearAuthCookies(res);
   return res;
 }
+
+export const POST = withApiMetrics('/api/backend/auth/signout', 'POST', handlePOST);

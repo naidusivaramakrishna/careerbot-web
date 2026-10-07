@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file');
@@ -40,3 +41,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Request failed' }, { status: 500 });
   }
 }
+
+export const POST = withApiMetrics('/api/backend/extract', 'POST', handlePOST);

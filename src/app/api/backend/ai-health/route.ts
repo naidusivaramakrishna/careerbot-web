@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { evaluateAiServiceStatus } from '@/lib/aiHealthCheck';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+async function handleGET() {
   const checks: Record<string, { ok: boolean; status?: number; latencyMs: number; error?: string }> = {};
 
   // Check if backend at port 8000 is reachable (use a lightweight GET endpoint)
@@ -43,3 +44,5 @@ export async function GET() {
     { status: allOk ? 200 : 503 }
   );
 }
+
+export const GET = withApiMetrics('/api/backend/ai-health', 'GET', handleGET);

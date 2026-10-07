@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sanitiseCookie } from '@/lib/cookieUtils';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
 
@@ -51,3 +52,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
+
+export const POST = withApiMetrics('/api/backend/auth/login', 'POST', handlePOST);

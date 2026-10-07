@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   let body: { email?: string };
   try {
     body = await req.json();
@@ -52,3 +53,5 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const POST = withApiMetrics('/api/newsletter/subscribe', 'POST', handlePOST);
