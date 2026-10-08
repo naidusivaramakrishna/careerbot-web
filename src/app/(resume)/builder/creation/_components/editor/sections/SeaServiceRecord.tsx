@@ -247,7 +247,7 @@ const SeaServiceRecord: React.FC = () => {
                 {/* Current Rank & Status */}
                 <div className="flex gap-4">
                   <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-sm font-semibold text-[#3b3b3b]">Current Rank</label>
+                    <label className="text-sm font-semibold text-[#3b3b3b]">Current Rank <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       placeholder="e.g., Captain, Chief Officer"
@@ -294,7 +294,7 @@ const SeaServiceRecord: React.FC = () => {
 
                 {/* Rank Progression */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-semibold text-[#3b3b3b]">Rank Progression</label>
+                  <label className="text-sm font-semibold text-[#3b3b3b]">Rank Progression <span className="text-red-500">*</span></label>
                   <textarea
                     placeholder="e.g., Officer Cadet → 3rd Officer → 2nd Officer → Chief Officer → Captain"
                     value={record.rankProgression}

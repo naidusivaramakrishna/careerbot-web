@@ -236,8 +236,8 @@ const ConferencePresentations: React.FC = () => {
               <div key={editIndex} className="flex flex-col gap-3 pb-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Presentation Type *
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                      Presentation Type
                     </label>
                     <select
                       value={presentation.presentationType}
@@ -254,8 +254,8 @@ const ConferencePresentations: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Year *
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                      Year
                     </label>
                     <input
                       type="text"
@@ -269,8 +269,8 @@ const ConferencePresentations: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Presentation Title *
+                  <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                    Presentation Title <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -283,8 +283,8 @@ const ConferencePresentations: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Conference/Symposium Name *
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                      Conference/Symposium Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -295,7 +295,7 @@ const ConferencePresentations: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       Location
                     </label>
                     <input

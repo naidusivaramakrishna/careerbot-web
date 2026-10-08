@@ -16,8 +16,16 @@ import {
   FaUndoAlt,
   FaRedoAlt,
 } from "react-icons/fa";
+import { toast } from "sonner";
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
+import {
+  SUMMARY_MAX_LENGTH,
+  SUMMARY_MAX_STORED_LENGTH,
+  SUMMARY_WARN_AT,
+  clipTextToRoom,
+  summaryVisibleLength,
+} from '../../../_lib/summaryLimit';
 
 
 // Reusable Toolbar Button Component
@@ -41,6 +49,9 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
   </button>
 );
 
+
+const TOO_MUCH_FORMATTING_MESSAGE =
+  "Too much formatting for this summary — remove some bullets or bold and try again.";
 
 const ProfessionalSummary: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
@@ -89,9 +100,59 @@ const ProfessionalSummary: React.FC = () => {
   const summaryRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
 
+  // Last editor content that was within the limit. When an edit (typing, a
+  // paste, an AI suggestion) would push the summary past SUMMARY_MAX_LENGTH
+  // visible characters the editor goes back to it, so the box never holds text
+  // the API would silently cut off. Formatting adds no visible characters, so
+  // bullets, numbering and bold keep working on a full summary.
+  const lastAcceptedRef = useRef<string>(draftSummary);
+  const [limitHit, setLimitHit] = useState(false);
+
+  const moveCaretToEnd = (el: HTMLElement) => {
+    el.focus();
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  };
+
   const handleChange = (value: string) => {
     setDraftSummary(value);
     clearError("", 0, "summary");
+  };
+
+  // Applies editor content `content`, or rejects it when it would grow the
+  // summary beyond the limit. Shrinking is always allowed, so a summary that
+  // is already over the limit (older data) can still be edited down.
+  const acceptEditorContent = (
+    el: HTMLElement,
+    content: string,
+    source: "input" | "format" = "input",
+  ): boolean => {
+    const previous = lastAcceptedRef.current;
+    const length = summaryVisibleLength(content);
+    const previousLength = summaryVisibleLength(previous);
+    const overVisible = length > SUMMARY_MAX_LENGTH && length > previousLength;
+    // The stored HTML (text plus markup) has its own, much larger ceiling.
+    const overStored = content.length > SUMMARY_MAX_STORED_LENGTH && content.length > previous.length;
+    if (overVisible || overStored) {
+      el.innerHTML = lastAcceptedRef.current;
+      moveCaretToEnd(el);
+      setLimitHit(true);
+      if (source === "format" || overStored) {
+        // Only the markup was refused, so typing feels fine while the button
+        // seems dead -- and the counter line can be scrolled out of sight. Say
+        // why, where it cannot be missed.
+        toast.error(TOO_MUCH_FORMATTING_MESSAGE, { id: "summary-limit" });
+      }
+      return false;
+    }
+    lastAcceptedRef.current = content;
+    setLimitHit(length >= SUMMARY_MAX_LENGTH);
+    handleChange(content);
+    return true;
   };
 
   const handleTargetRoleChange = (value: string) => {
@@ -141,8 +202,7 @@ const ProfessionalSummary: React.FC = () => {
     document.execCommand(command, false, value);
 
     setTimeout(() => {
-      const content = cleanHtmlContent(editor.innerHTML);
-      handleChange(content);
+      acceptEditorContent(editor, cleanHtmlContent(editor.innerHTML), "format");
     }, 0);
   };
 
@@ -150,8 +210,22 @@ const ProfessionalSummary: React.FC = () => {
   const onEditorInput = () => {
     const el = editorRef.current;
     if (!el) return;
-    const content = cleanHtmlContent(el.innerHTML);
-    handleChange(content);
+    acceptEditorContent(el, cleanHtmlContent(el.innerHTML));
+  };
+
+  // A paste that does not fit is trimmed to the room left (as plain text),
+  // instead of being dropped whole or cut off later by the API. Pastes that
+  // fit keep the browser's normal behavior (and so their formatting).
+  const onEditorPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const el = editorRef.current;
+    if (!el) return;
+    const text = e.clipboardData.getData("text/plain");
+    const room = SUMMARY_MAX_LENGTH - summaryVisibleLength(lastAcceptedRef.current);
+    const clipped = clipTextToRoom(text, room);
+    if (clipped.length === text.length) return;
+    e.preventDefault();
+    if (clipped) document.execCommand("insertText", false, clipped);
+    setLimitHit(true);
   };
 
 
@@ -239,9 +313,17 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
       // replaces the first"). Clearing first, then appending onto the
       // now-empty editor, reuses appendSuggestionBullet's own
       // bullet-creation logic instead of duplicating it here.
+      const before = el.innerHTML;
       el.innerHTML = '';
       appendSuggestionBullet(el, suggestion);
-      handleChange(el.innerHTML);
+      if (summaryVisibleLength(cleanHtmlContent(el.innerHTML)) > SUMMARY_MAX_LENGTH) {
+        // Too long to fit: keep what the user had rather than saving a cut-off suggestion.
+        el.innerHTML = before;
+        setLimitHit(true);
+        toast.error("That suggestion is too long for the 2,000-character summary limit.", { id: "summary-limit" });
+        return;
+      }
+      acceptEditorContent(el, cleanHtmlContent(el.innerHTML));
 
       setTimeout(() => {
         el.focus();
@@ -359,10 +441,35 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
                   contentEditable
                   suppressContentEditableWarning
                   onInput={onEditorInput}
+                  onPaste={onEditorPaste}
                   className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                   spellCheck={spellCheckEnabled}
                 />
               </div>
+              {(() => {
+                const used = summaryVisibleLength(draftSummary);
+                const atLimit = used >= SUMMARY_MAX_LENGTH;
+                const nearLimit = used >= SUMMARY_WARN_AT;
+                return (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    data-testid="summary-counter"
+                    className={`flex justify-between gap-3 text-xs ${
+                      atLimit ? "text-red-600" : nearLimit ? "text-amber-600" : "text-gray-500"
+                    }`}
+                  >
+                    <span>
+                      {limitHit || atLimit
+                        ? `Limit reached — text beyond ${SUMMARY_MAX_LENGTH.toLocaleString()} characters is not saved.`
+                        : ""}
+                    </span>
+                    <span>
+                      {used.toLocaleString()} / {SUMMARY_MAX_LENGTH.toLocaleString()}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

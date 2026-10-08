@@ -463,6 +463,30 @@ export async function deleteSkillCategoryFromEnhancedResume(
 }
 
 /**
+ * Rename a custom skill category of an enhanced resume
+ * PATCH /api/v1/resume/enhance/{enhanced_id}/skills/{category}/rename
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Current custom category name
+ * @param newName - New category name (2-50 chars)
+ */
+export async function renameSkillCategoryInEnhancedResume(
+  enhanced_id: string,
+  category: string,
+  newName: string
+): Promise<void> {
+  const path = `/resume/enhance/${enhanced_id}/skills/${encodeCategoryPath(category)}/rename`;
+  try {
+    logApiRequest('PATCH', path, { new_name: newName });
+    const response = await httpClient.patch(path, { new_name: newName });
+    logApiResponse('PATCH', path, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('PATCH', path, err);
+    throw err;
+  }
+}
+
+/**
  * Get Enhancement History
  * GET /api/v1/resume/enhance/history/list
  *

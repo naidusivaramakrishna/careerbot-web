@@ -281,8 +281,8 @@ function reconcileServerSuggestions(
 // reconciliation). Dropping the two sections from this list instead swaps
 // that for the opposite bug: an achievement the user has typed but not saved
 // yet is silently discarded by the next unrelated sync. So both stay listed
-// and mergeSectionPreservingLocalIdLess compares content -- see the
-// contentKey() note there.
+// and mergeSectionPreservingLocalIdLess compares content while ignoring
+// backend identity -- see its note below.
 const ID_KEYED_ARRAY_SECTIONS = [
   "education", "workExperience", "projects", "certifications", "achievements",
   "volunteering", "references", "internships", "awards", "hobbies",
@@ -312,25 +312,48 @@ const ID_KEYED_ARRAY_SECTIONS = [
  * need not preserve the local object's key order. Sections whose entries
  * carry a backend id never reach this test; it exists for achievements and
  * languages, which arrive as plain strings and so are mapped to id-less
- * objects whether or not they are already saved. If two entries differ in
- * any field the comparison fails and the local copy is kept -- erring toward
- * the duplicate, never toward discarding something the user typed. */
-function contentKey(item: unknown): string {
+ * objects whether or not they are already saved. Identity fields are omitted
+ * because a server response can add an id to an otherwise identical entry. */
+function contentKeyWithoutIdentity(item: unknown): string {
   if (!item || typeof item !== "object") return JSON.stringify(item ?? null);
   const record = item as Record<string, unknown>;
-  return JSON.stringify(Object.keys(record).sort().map((key) => [key, record[key]]));
+  return JSON.stringify(
+    Object.keys(record)
+      .filter((key) => key !== "id" && key !== "_id")
+      .sort()
+      .map((key) => [key, record[key]]),
+  );
 }
 
-function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
+function isLikelyRewordedDuplicate(serverItem: unknown, localItem: unknown): boolean {
+  if (!serverItem || !localItem || typeof serverItem !== "object" || typeof localItem !== "object") {
+    return false;
+  }
+
+  const serverTitle = (serverItem as Record<string, unknown>).title;
+  const localTitle = (localItem as Record<string, unknown>).title;
+  if (typeof serverTitle !== "string" || typeof localTitle !== "string") return false;
+
+  const words = (value: string) => new Set((value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []));
+  const serverWords = words(serverTitle);
+  const localWords = words(localTitle);
+  if (serverWords.size < 3 || localWords.size < 3) return false;
+
+  return [...serverWords].every((word) => localWords.has(word))
+    || [...localWords].every((word) => serverWords.has(word));
+}
+
+export function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
   serverItems: unknown,
   localItems: unknown,
 ): unknown {
   if (!Array.isArray(serverItems)) return serverItems;
   if (!Array.isArray(localItems)) return serverItems;
-  const serverContent = new Set((serverItems as unknown[]).map(contentKey));
+  const serverContent = new Set((serverItems as unknown[]).map(contentKeyWithoutIdentity));
   const localIdLess = (localItems as T[]).filter(
     (item) => item && typeof item === "object" && !item.id && !item._id
-      && !serverContent.has(contentKey(item)),
+      && !serverContent.has(contentKeyWithoutIdentity(item))
+      && !(serverItems as unknown[]).some((serverItem) => isLikelyRewordedDuplicate(serverItem, item)),
   );
   return localIdLess.length > 0 ? [...serverItems, ...localIdLess] : serverItems;
 }

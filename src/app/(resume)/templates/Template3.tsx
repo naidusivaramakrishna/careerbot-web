@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { markPreviewSection } from "./_utils/previewSectionMarker";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
@@ -1277,13 +1278,13 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
   return (
     <div style={{ ...baseTextStyle, padding: "32px", maxWidth: "900px", minHeight: "100vh", width: "100%" }}>
       {/* Header */}
-      {renderHeader()}
+      {markPreviewSection("Personal Info", renderHeader())}
 
       {/* Render sections in order — Declaration is excluded here and rendered after PERSONAL DETAILS */}
       {sectionOrder && sectionOrder.length > 0 ? (() => {
         const items = sectionOrder
           .filter(s => s !== "Personal Info" && s !== "Declaration")
-          .map(section => ({ section, rendered: renderSection(section) }))
+          .map(section => ({ section, rendered: markPreviewSection(section, renderSection(section)) }))
           .filter(({ rendered }) => rendered !== null);
         const coreCompetenciesRendered = renderCoreCompetencies();
         if (coreCompetenciesRendered) {

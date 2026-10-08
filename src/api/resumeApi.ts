@@ -818,6 +818,29 @@ export const deleteSkillCategory = async (
   }
 };
 
+// ==================== RENAME SKILL CATEGORY ====================
+/**
+ * PATCH /api/v1/resumes/{resume_id}/skills/{category}/rename
+ * Moves every skill of a custom category to `newName`. Built-in categories
+ * cannot be renamed (the API answers 400).
+ */
+export const renameSkillCategory = async (
+  resumeId: string,
+  category: string,
+  newName: string
+): Promise<void> => {
+  try {
+    logger.debug("✏️ Renaming skill category:", { category, newName });
+    await httpClient.patch(`/resumes/${resumeId}/skills/${encodeCategoryPath(category)}/rename`, {
+      new_name: newName,
+    });
+    logger.info("✅ Skill category renamed successfully");
+  } catch (error) {
+    logger.error("❌ Error renaming skill category:", error);
+    throw error;
+  }
+};
+
 // ==================== TRIGGER SCORE CALCULATION ====================
 export const triggerScoreCalculation = async (resumeId: string): Promise<void> => {
 
