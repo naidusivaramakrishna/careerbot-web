@@ -7,12 +7,13 @@
  */
 
 import React from "react";
-import { AlertCircle, ArrowLeft, CreditCard, Loader, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowLeft, CreditCard, History, Loader, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useCurrentSubscription } from "@/hooks/useCurrentSubscription";
 import { CurrentPlanCard } from "./_components/CurrentPlanCard";
 import { UsageHistoryTable } from "./_components/UsageHistoryTable";
 import { BillingHistory } from "./_components/BillingHistory";
+import { CreditHistory } from "./_components/CreditHistory";
 
 const SubscriptionPage: React.FC = () => {
   const { subscription, loading, error } = useCurrentSubscription();
@@ -74,6 +75,13 @@ const SubscriptionPage: React.FC = () => {
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
                 Review your current CareerBot plan, monitor credit usage, and access billing records without leaving settings.
               </p>
+              <a
+                href="#credit-history"
+                className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-black text-[#2557a7] transition hover:bg-[#eef4ff]"
+              >
+                <History className="h-4 w-4" />
+                View credit history
+              </a>
             </div>
 
             <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-2 sm:min-w-[330px]">
@@ -109,6 +117,7 @@ const SubscriptionPage: React.FC = () => {
 
           <div className="space-y-5">
             <UsageHistoryTable />
+            <CreditHistory />
             <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-[0_18px_55px_rgba(15,23,42,0.04)] sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
