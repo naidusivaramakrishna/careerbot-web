@@ -2,22 +2,302 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, ChevronRight, Target } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import {
+  LayoutDashboard, Code2, Zap, BarChart3, MessageSquare,
+  Bell, Search, ChevronRight, Flame, Target, Trophy, Clock, BookOpen,
+} from 'lucide-react';
 import { fetchProblems } from './_lib/api';
 import { fetchProblemsAnnotated, fetchQuota } from './_lib/gradingApi';
 import type { CodingTestLanguage, ProblemWithStatus, QuotaResponse } from './_lib/types';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
 
 const ONBOARDING_KEY = 'coding_test_onboarded';
+const DAILY_GOAL = 3;
+
+// ── Nav Config ────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { label: 'Dashboard',    icon: LayoutDashboard, href: '/coding-test',           exact: true  },
+  { label: 'Problems',     icon: Code2,            href: '/coding-test/problems'               },
+  { label: 'Practice',     icon: Zap,              href: '/coding-test/playground'             },
+  { label: 'History',      icon: Clock,            href: '/coding-test/history'                },
+  { label: 'Leaderboard',  icon: BarChart3,        href: null                                  },
+  { label: 'Discussions',  icon: MessageSquare,    href: null                                  },
+];
 
 const LANG_CONFIG: { value: CodingTestLanguage; label: string; icon: React.ReactNode }[] = [
   { value: 'python', label: 'Python', icon: <PythonIcon /> },
-  { value: 'java',   label: 'Java',   icon: <JavaIcon /> },
-  { value: 'c',      label: 'C',      icon: <CIcon /> },
-  { value: 'cpp',    label: 'C++',    icon: <CppIcon /> },
+  { value: 'java',   label: 'Java',   icon: <JavaIcon />   },
+  { value: 'c',      label: 'C',      icon: <CIcon />      },
+  { value: 'cpp',    label: 'C++',    icon: <CppIcon />    },
 ];
 
-// ── Compact glowing donut (3 rings: easy / medium / hard) ─────────────────────
+const QUICK_ACTIONS = [
+  { label: 'Browse Problems',     icon: Code2,    href: '/coding-test/problems',   color: 'bg-blue-50 text-blue-600'    },
+  { label: 'Topic-wise Practice', icon: BookOpen, href: '/coding-test/problems',   color: 'bg-violet-50 text-violet-600'},
+  { label: 'Code Playground',     icon: Zap,      href: '/coding-test/playground', color: 'bg-teal-50 text-teal-600'   },
+  { label: 'View History',        icon: Clock,    href: '/coding-test/history',    color: 'bg-orange-50 text-orange-500'},
+];
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+
+function Sidebar() {
+  const pathname = usePathname();
+
+  return (
+    <aside
+      className="flex w-56 shrink-0 flex-col"
+      style={{ background: 'linear-gradient(180deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)' }}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-5 py-5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
+          <Code2 className="h-4 w-4 text-white" />
+        </div>
+        <span className="text-sm font-bold tracking-tight text-white">CareerBOT</span>
+      </div>
+
+      {/* Nav items */}
+      <nav className="flex-1 space-y-0.5 px-3 py-2">
+        {NAV_ITEMS.map((item) => {
+          const isActive = item.exact
+            ? pathname === item.href
+            : item.href !== null && pathname.startsWith(item.href);
+          const isDisabled = item.href === null;
+          const Icon = item.icon;
+
+          const cls = [
+            'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+            isActive
+              ? 'bg-white/20 text-white shadow-sm'
+              : isDisabled
+                ? 'cursor-not-allowed text-white/30'
+                : 'text-white/60 hover:bg-white/10 hover:text-white',
+          ].join(' ');
+
+          if (isDisabled) {
+            return (
+              <div key={item.label} className={cls}>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
+                <span className="ml-auto rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/40">Soon</span>
+              </div>
+            );
+          }
+
+          return (
+            <Link key={item.label} href={item.href!} className={cls}>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Back to main */}
+      <div className="border-t border-white/10 px-3 py-3">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-white/40 transition-all hover:bg-white/10 hover:text-white/70"
+        >
+          <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+          Main Dashboard
+        </Link>
+      </div>
+    </aside>
+  );
+}
+
+// ── Topbar ────────────────────────────────────────────────────────────────────
+
+function Topbar({ quota }: { quota: QuotaResponse | null }) {
+  return (
+    <div className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3">
+      {/* Search */}
+      <div className="relative w-72">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search problems, topics, tags…"
+          className="w-full rounded-full border border-slate-200 bg-slate-50 py-1.5 pl-9 pr-4 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+        />
+      </div>
+
+      <div className="ml-auto flex items-center gap-3">
+        <button className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100">
+          <Bell className="h-4 w-4" />
+        </button>
+        {quota && (
+          <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold">
+            <span className="text-indigo-600">{quota.submissions_remaining}</span>
+            <span className="text-slate-400"> AI credits</span>
+          </div>
+        )}
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white select-none">
+          C
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Hero Banner ───────────────────────────────────────────────────────────────
+
+function CelebrationCharacter() {
+  return (
+    <svg width="140" height="150" viewBox="0 0 140 150" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      {/* Plants / leaves */}
+      <ellipse cx="18" cy="130" rx="16" ry="8" fill="#22c55e" opacity="0.7" />
+      <ellipse cx="22" cy="118" rx="10" ry="5" fill="#16a34a" opacity="0.8" transform="rotate(-30 22 118)" />
+      <ellipse cx="10" cy="122" rx="10" ry="5" fill="#22c55e" opacity="0.6" transform="rotate(20 10 122)" />
+      <ellipse cx="122" cy="132" rx="14" ry="7" fill="#22c55e" opacity="0.6" />
+      <ellipse cx="130" cy="120" rx="9" ry="5" fill="#16a34a" opacity="0.7" transform="rotate(25 130 120)" />
+
+      {/* Trophy */}
+      <g transform="translate(72, 18)">
+        <rect x="10" y="42" width="12" height="6" rx="2" fill="#fbbf24" />
+        <rect x="6" y="48" width="20" height="5" rx="2" fill="#f59e0b" />
+        <path d="M5 8 Q5 36 16 36 Q27 36 27 8 Z" fill="#fbbf24" />
+        <path d="M5 8 Q0 8 0 16 Q0 26 8 26" stroke="#f59e0b" strokeWidth="2" fill="none" />
+        <path d="M27 8 Q32 8 32 16 Q32 26 24 26" stroke="#f59e0b" strokeWidth="2" fill="none" />
+        <rect x="11" y="36" width="10" height="6" rx="1" fill="#f59e0b" />
+        <path d="M8 18 L16 26 L28 12" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
+      </g>
+
+      {/* Body — shirt */}
+      <path d="M48 95 Q48 130 55 138 Q70 143 85 138 Q92 130 92 95 Z" fill="#ef4444" />
+      {/* Collar */}
+      <path d="M60 95 L70 108 L80 95" fill="#dc2626" />
+
+      {/* Left arm — raised */}
+      <path d="M52 98 Q38 80 50 62" stroke="#fde68a" strokeWidth="12" strokeLinecap="round" fill="none" />
+      {/* Left hand holding trophy base */}
+      <circle cx="51" cy="60" r="7" fill="#fde68a" />
+
+      {/* Right arm */}
+      <path d="M88 98 Q102 86 98 72" stroke="#fde68a" strokeWidth="12" strokeLinecap="round" fill="none" />
+      <circle cx="97" cy="70" r="7" fill="#fde68a" />
+
+      {/* Head */}
+      <circle cx="70" cy="72" r="22" fill="#fde68a" />
+      {/* Hair */}
+      <path d="M50 66 Q52 48 70 46 Q88 48 90 66" fill="#1c1917" />
+      <path d="M50 66 Q48 58 54 54" fill="#1c1917" />
+      {/* Eyes */}
+      <ellipse cx="63" cy="72" rx="3" ry="3.5" fill="#1c1917" />
+      <ellipse cx="77" cy="72" rx="3" ry="3.5" fill="#1c1917" />
+      <circle cx="64" cy="71" r="1" fill="white" />
+      <circle cx="78" cy="71" r="1" fill="white" />
+      {/* Smile */}
+      <path d="M63 80 Q70 86 77 80" stroke="#c2410c" strokeWidth="2" strokeLinecap="round" fill="none" />
+      {/* Cheeks */}
+      <ellipse cx="59" cy="78" rx="4" ry="2.5" fill="#fca5a5" opacity="0.6" />
+      <ellipse cx="81" cy="78" rx="4" ry="2.5" fill="#fca5a5" opacity="0.6" />
+
+      {/* Legs */}
+      <path d="M60 138 L57 150" stroke="#1d4ed8" strokeWidth="10" strokeLinecap="round" />
+      <path d="M80 138 L83 150" stroke="#1d4ed8" strokeWidth="10" strokeLinecap="round" />
+      {/* Shoes */}
+      <ellipse cx="54" cy="150" rx="8" ry="4" fill="#1c1917" />
+      <ellipse cx="86" cy="150" rx="8" ry="4" fill="#1c1917" />
+
+      {/* Sparkles */}
+      <text x="100" y="48" fontSize="14" fill="#fbbf24" opacity="0.9">✦</text>
+      <text x="112" y="70" fontSize="10" fill="#fbbf24" opacity="0.7">✦</text>
+      <text x="20" y="60" fontSize="12" fill="#fbbf24" opacity="0.8">✦</text>
+      <text x="32" y="42" fontSize="8" fill="#fff" opacity="0.6">✦</text>
+    </svg>
+  );
+}
+
+function HeroBanner() {
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl px-8 py-7"
+      style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #2d2a7a 30%, #4338ca 60%, #6d28d9 100%)' }}
+    >
+      {/* Dot pattern overlay */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-10"
+        style={{
+          backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        }}
+      />
+
+      {/* Glow blobs */}
+      <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-purple-400/20 blur-2xl" />
+      <div className="pointer-events-none absolute right-24 bottom-0 h-32 w-32 rounded-full bg-indigo-400/15 blur-xl" />
+
+      {/* Text content */}
+      <div className="relative z-10 max-w-[58%]">
+        <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Keep Going, Coder! 🚀</h1>
+        <p className="mt-1.5 text-sm text-indigo-200">Small steps every day lead to big results.</p>
+      </div>
+
+      {/* Boy character illustration */}
+      <div className="absolute bottom-0 right-6 z-10">
+        <CelebrationCharacter />
+      </div>
+    </div>
+  );
+}
+
+// ── Stat Cards ────────────────────────────────────────────────────────────────
+
+function TotalSolvedCard({ solved, total }: { solved: number; total: number | null }) {
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+        <Trophy className="h-6 w-6 text-amber-500" />
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total Solved</p>
+        <p className="mt-0.5 text-2xl font-extrabold tabular-nums text-slate-800">
+          {solved}
+          <span className="ml-1 text-sm font-normal text-slate-400">/ {total ?? '—'}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DailyGoalStatCard({ progress, goal }: { progress: number; goal: number }) {
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50">
+        <Target className="h-6 w-6 text-purple-500" />
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Daily Goal</p>
+        <p className="mt-0.5 text-2xl font-extrabold tabular-nums text-slate-800">
+          {progress}
+          <span className="ml-1 text-sm font-normal text-slate-400">/ {goal}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StreakCard() {
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-orange-100 bg-orange-50 p-4 shadow-sm">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-100">
+        <Flame className="h-6 w-6 text-orange-500" />
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-orange-400">Streak</p>
+        <p className="mt-0.5 text-2xl font-extrabold tabular-nums text-orange-600">
+          0
+          <span className="ml-1 text-sm font-normal text-orange-400">days</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Progress Donut ────────────────────────────────────────────────────────────
 
 interface RingSpec {
   pct: number;
@@ -29,24 +309,18 @@ interface RingSpec {
 function GlowDonut({
   rings,
   totalSolved,
-  overallPct,
+  grandTotal,
 }: {
   rings: RingSpec[];
   totalSolved: number;
-  overallPct: number;
+  grandTotal: number;
 }) {
-  const SIZE = 168;
-  const CX = 84;
-  const CY = 84;
+  const SIZE = 160;
+  const CX = 80;
+  const CY = 80;
 
   return (
-    <svg
-      width={SIZE}
-      height={SIZE}
-      viewBox={`0 0 ${SIZE} ${SIZE}`}
-      className="shrink-0"
-      aria-hidden
-    >
+    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0" aria-hidden>
       {rings.map((ring, i) => {
         const circ = 2 * Math.PI * ring.r;
         const clampedPct = Math.max(ring.pct, 0.5);
@@ -73,96 +347,81 @@ function GlowDonut({
         );
       })}
 
-      <text x={CX} y={CY - 13} textAnchor="middle" fontSize="10" fill="#94a3b8" letterSpacing="0.5">SOLVED</text>
-      <text x={CX} y={CY + 11} textAnchor="middle" fontSize="30" fontWeight="800" fill="#0d9488">{totalSolved}</text>
-      <text x={CX} y={CY + 27} textAnchor="middle" fontSize="10" fill="#0d9488" opacity="0.75">{overallPct}% done</text>
+      <text x={CX} y={CY + 8} textAnchor="middle" fontSize="30" fontWeight="800" fill="#1e293b">{totalSolved}</text>
+      <text x={CX} y={CY + 23} textAnchor="middle" fontSize="10" fill="#94a3b8">/ {grandTotal}</text>
+      <text x={CX} y={CY + 37} textAnchor="middle" fontSize="9" fill="#94a3b8">{grandTotal > 0 ? Math.round((totalSolved / grandTotal) * 100) : 0}%</text>
     </svg>
   );
 }
 
-// ── Stats Center ──────────────────────────────────────────────────────────────
+// ── Your Progress Card ────────────────────────────────────────────────────────
 
-function StatsCenterCard({
+function YourProgressCard({
   stats,
 }: {
   stats: {
     easySolved: number; easyTotal: number;
     mediumSolved: number; mediumTotal: number;
     hardSolved: number; hardTotal: number;
-    totalSolved: number; overallPct: number;
+    totalSolved: number;
   };
 }) {
+  const grandTotal = stats.easyTotal + stats.mediumTotal + stats.hardTotal;
+
   const rings: RingSpec[] = [
-    {
-      pct: stats.easyTotal   > 0 ? (stats.easySolved   / stats.easyTotal)   * 100 : 0,
-      r: 66, color: '#0d9488', trackColor: 'rgba(13,148,136,0.12)',
-    },
-    {
-      pct: stats.mediumTotal > 0 ? (stats.mediumSolved / stats.mediumTotal) * 100 : 0,
-      r: 51, color: '#d97706', trackColor: 'rgba(217,119,6,0.12)',
-    },
-    {
-      pct: stats.hardTotal   > 0 ? (stats.hardSolved   / stats.hardTotal)   * 100 : 0,
-      r: 36, color: '#6366f1', trackColor: 'rgba(99,102,241,0.12)',
-    },
+    { pct: stats.easyTotal   > 0 ? (stats.easySolved   / stats.easyTotal)   * 100 : 0, r: 62, color: '#22c55e', trackColor: 'rgba(34,197,94,0.18)'  },
+    { pct: stats.mediumTotal > 0 ? (stats.mediumSolved / stats.mediumTotal) * 100 : 0, r: 48, color: '#f59e0b', trackColor: 'rgba(245,158,11,0.18)' },
+    { pct: stats.hardTotal   > 0 ? (stats.hardSolved   / stats.hardTotal)   * 100 : 0, r: 34, color: '#a855f7', trackColor: 'rgba(168,85,247,0.18)' },
   ];
 
   const DIFF_ROWS = [
-    { label: 'Easy',   color: '#0d9488', solved: stats.easySolved,   total: stats.easyTotal },
-    { label: 'Medium', color: '#d97706', solved: stats.mediumSolved, total: stats.mediumTotal },
-    { label: 'Hard',   color: '#6366f1', solved: stats.hardSolved,   total: stats.hardTotal },
+    { label: 'Easy',   color: '#22c55e', solved: stats.easySolved,   total: stats.easyTotal   },
+    { label: 'Medium', color: '#f59e0b', solved: stats.mediumSolved, total: stats.mediumTotal },
+    { label: 'Hard',   color: '#a855f7', solved: stats.hardSolved,   total: stats.hardTotal   },
   ];
 
-  const grandTotal = stats.easyTotal + stats.mediumTotal + stats.hardTotal;
-
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="relative flex h-full flex-col p-5">
-        {/* Card header */}
-        <div className="mb-4">
-          <p className="text-sm font-bold text-slate-800">Stats Center</p>
-          <p className="text-[11px] text-slate-400">Your overall progress across all problems</p>
-        </div>
+    <div className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <p className="text-sm font-bold text-slate-800">Your Progress</p>
+        <p className="text-[11px] text-slate-400">Overall completion across all problems</p>
+      </div>
 
-        {/* Donut + breakdown side-by-side */}
-        <div className="flex flex-1 items-center gap-6">
-          <GlowDonut rings={rings} totalSolved={stats.totalSolved} overallPct={stats.overallPct} />
+      <div className="flex items-center gap-6">
+        <GlowDonut rings={rings} totalSolved={stats.totalSolved} grandTotal={grandTotal} />
 
-          {/* Difficulty breakdown */}
-          <div className="flex-1 space-y-4">
-            {DIFF_ROWS.map((row) => {
-              const pct = row.total > 0 ? Math.round((row.solved / row.total) * 100) : 0;
-              return (
-                <div key={row.label}>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full" style={{ background: row.color }} />
-                      <span className="text-xs font-semibold text-slate-600">{row.label}</span>
-                    </div>
-                    <span className="text-xs tabular-nums">
-                      <span className="font-bold text-slate-800">{row.solved}</span>
-                      <span className="text-slate-400">/{row.total}</span>
-                      <span className="ml-1.5 text-slate-400">{pct}%</span>
-                    </span>
+        <div className="flex-1 space-y-4">
+          {DIFF_ROWS.map((row) => {
+            const pct = row.total > 0 ? Math.round((row.solved / row.total) * 100) : 0;
+            return (
+              <div key={row.label}>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full" style={{ background: row.color }} />
+                    <span className="text-xs font-semibold text-slate-600">{row.label}</span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%`, background: row.color }}
-                    />
-                  </div>
+                  <span className="text-xs tabular-nums">
+                    <span className="font-bold text-slate-800">{row.solved}</span>
+                    <span className="text-slate-400">/{row.total}</span>
+                    <span className="ml-1.5 text-slate-400">{pct}%</span>
+                  </span>
                 </div>
-              );
-            })}
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${pct}%`, background: row.color }}
+                  />
+                </div>
+              </div>
+            );
+          })}
 
-            {/* Total summary row */}
-            <div className="mt-1 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-              <span className="text-[11px] text-slate-500">Total solved</span>
-              <span className="text-[11px] font-bold tabular-nums text-teal-600">
-                {stats.totalSolved}
-                <span className="font-normal text-slate-400">/{grandTotal}</span>
-              </span>
-            </div>
+          <div className="mt-1 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+            <span className="text-[11px] text-slate-500">Total solved</span>
+            <span className="text-[11px] font-bold tabular-nums text-indigo-600">
+              {stats.totalSolved}
+              <span className="font-normal text-slate-400">/{grandTotal}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -170,181 +429,35 @@ function StatsCenterCard({
   );
 }
 
-// ── Daily Goal ────────────────────────────────────────────────────────────────
+// ── Quick Actions Card ────────────────────────────────────────────────────────
 
-function DailyGoalCard({ progress, goal }: { progress: number; goal: number }) {
-  const pct = goal > 0 ? Math.min((progress / goal) * 100, 100) : 0;
-  const complete = progress >= goal;
-
+function QuickActionsCard() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50">
-            <Target className="h-3.5 w-3.5 text-amber-500" />
-          </div>
-          <p className="text-sm font-bold text-slate-800">Problems Solved</p>
-        </div>
-        <Link
-          href="/coding-test/problems"
-          className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:opacity-90"
-          style={{ background: 'linear-gradient(90deg, #3b82f6, #06b6d4)' }}
-        >
-          Practice Now
-        </Link>
-      </div>
-
-      <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${pct}%`,
-            background: complete
-              ? 'linear-gradient(90deg, #059669, #10b981)'
-              : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-          }}
-        />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-slate-500">
-          {complete ? `${progress}/${goal} target reached! ` : `${progress}/${goal} solved`}
-          {complete && <span className="font-medium text-emerald-600">Nice work!</span>}
-        </p>
-        <div className="flex items-center gap-1">
-          {Array.from({ length: goal }).map((_, i) => (
-            <CheckCircle2
-              key={i}
-              className={`h-3.5 w-3.5 transition-colors ${i < progress ? 'text-teal-500' : 'text-slate-300'}`}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Advanced Practice ─────────────────────────────────────────────────────────
-
-function AdvancedPracticeCard() {
-  return (
-    <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="mb-3 text-sm font-bold text-slate-800">Advanced Practice</p>
-      <div className="grid grid-cols-2 gap-3">
-
-        {/* Code Playground */}
-        <Link
-          href="/coding-test/playground"
-          className="group relative flex flex-col justify-end overflow-hidden rounded-xl border border-slate-200 transition-all hover:border-teal-300 hover:shadow-md hover:shadow-teal-100"
-          style={{ minHeight: 116, background: '#0c1a2e' }}
-        >
-          {/* Background code lines decoration */}
-          <div className="absolute inset-0 overflow-hidden opacity-30 select-none pointer-events-none">
-            {[
-              { t: 10, l: 8, w: 54, c: '#7dd3fc' },
-              { t: 20, l: 8, w: 36, c: '#a5f3fc' },
-              { t: 30, l: 8, w: 66, c: '#86efac' },
-              { t: 40, l: 8, w: 28, c: '#fde68a' },
-              { t: 50, l: 8, w: 48, c: '#c4b5fd' },
-              { t: 60, l: 8, w: 40, c: '#7dd3fc' },
-              { t: 70, l: 8, w: 58, c: '#86efac' },
-            ].map((line, i) => (
-              <div
-                key={i}
-                className="absolute h-[2px] rounded-full"
-                style={{ top: line.t, left: line.l, width: line.w, background: line.c }}
-              />
-            ))}
-          </div>
-
-          {/* Center icon */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-transform group-hover:scale-110"
-              style={{ background: 'linear-gradient(135deg, #0d9488, #0ea5e9)' }}
+    <div className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="mb-3 text-sm font-bold text-slate-800">Quick Actions</p>
+      <div className="space-y-1">
+        {QUICK_ACTIONS.map((action) => {
+          const Icon = action.icon;
+          return (
+            <Link
+              key={action.label}
+              href={action.href}
+              className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-all hover:bg-slate-50"
             >
-              <span className="font-mono text-sm font-bold leading-none text-white">&gt;_</span>
-            </div>
-          </div>
-
-          {/* Label bar */}
-          <div className="relative z-10 border-t border-white/10 bg-black/50 px-3 py-2 backdrop-blur-sm">
-            <p className="text-[11px] font-bold text-white">
-              <span className="text-teal-400">&gt;</span> Code Playground
-            </p>
-          </div>
-        </Link>
-
-        {/* Mock Interview */}
-        <Link
-          href="/mock-interview"
-          className="group relative flex flex-col justify-end overflow-hidden rounded-xl border border-slate-200 transition-all hover:border-violet-300 hover:shadow-md hover:shadow-violet-100"
-          style={{ minHeight: 116, background: '#100820' }}
-        >
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{ background: 'radial-gradient(ellipse at 50% 40%, rgba(139,92,246,0.25) 0%, transparent 70%)' }}
-          />
-
-          {/* Center content */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
-            <div className="flex h-4 items-end gap-[2px]">
-              {[2, 4, 8, 12, 8, 4, 2, 4, 8, 12, 8, 4, 2].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-[2.5px] rounded-full"
-                  style={{ height: h, background: 'linear-gradient(to top, #7c3aed, #c4b5fd)' }}
-                />
-              ))}
-            </div>
-
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-transform group-hover:scale-110"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)' }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="2" width="6" height="11" rx="3" />
-                <path d="M5 10a7 7 0 0014 0" />
-                <line x1="12" y1="21" x2="12" y2="17" />
-                <line x1="9" y1="21" x2="15" y2="21" />
-              </svg>
-            </div>
-          </div>
-
-          <div className="relative z-10 border-t border-white/10 bg-black/50 px-3 py-2 backdrop-blur-sm">
-            <p className="text-[11px] font-bold text-white">Mock Interview</p>
-          </div>
-        </Link>
-
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${action.color}`}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <span className="flex-1 text-sm font-medium text-slate-700">{action.label}</span>
+              <ChevronRight className="h-4 w-4 text-slate-300" />
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ── AI Credits badge ──────────────────────────────────────────────────────────
-
-function CreditsBadge({ quota }: { quota: QuotaResponse }) {
-  const color =
-    quota.submissions_remaining === 0 ? 'text-rose-600'
-    : quota.submissions_remaining <= 5 ? 'text-amber-600'
-    : 'text-teal-600';
-
-  return (
-    <div className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-right shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">AI Credits</p>
-      <div className="mt-0.5 flex items-baseline justify-end gap-1">
-        <span className={`text-lg font-extrabold tabular-nums ${color}`}>
-          {quota.submissions_remaining}
-        </span>
-        <span className="text-[11px] text-slate-400">remaining</span>
-      </div>
-      <p className="text-[10px] capitalize text-slate-400">{quota.plan} plan</p>
-    </div>
-  );
-}
-
-// ── Language card ─────────────────────────────────────────────────────────────
+// ── Language Card ─────────────────────────────────────────────────────────────
 
 function LanguageCard({
   lang,
@@ -360,19 +473,16 @@ function LanguageCard({
   return (
     <Link
       href={`/coding-test/problems?language=${lang.value}`}
-      className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-300 hover:shadow-md hover:shadow-teal-50"
+      className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-50"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="shrink-0">{lang.icon}</div>
-          <div>
-            <p className="text-sm font-semibold leading-tight text-slate-800">{lang.label}</p>
-            <p className="text-[11px] text-slate-400">
-              {total !== null ? `${total} problems` : 'Loading…'}
-            </p>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="shrink-0">{lang.icon}</div>
+        <div>
+          <p className="text-sm font-semibold text-slate-800">{lang.label}</p>
+          <p className="text-[11px] text-slate-400">
+            {total !== null ? `${total} problems` : 'Loading…'}
+          </p>
         </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover:text-teal-500" />
       </div>
 
       {total !== null ? (
@@ -380,7 +490,7 @@ function LanguageCard({
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #0d9488, #059669)' }}
+              style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }}
             />
           </div>
           <p className="text-[10px] tabular-nums text-slate-400">
@@ -394,13 +504,13 @@ function LanguageCard({
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CodingPracticeHub() {
-  const [total, setTotal]             = useState<number | null>(null);
-  const [allProblems, setAllProblems] = useState<ProblemWithStatus[]>([]);
-  const [quota, setQuota]             = useState<QuotaResponse | null>(null);
-  const [ready, setReady]             = useState(false);
+  const [total, setTotal]                   = useState<number | null>(null);
+  const [allProblems, setAllProblems]       = useState<ProblemWithStatus[]>([]);
+  const [quota, setQuota]                   = useState<QuotaResponse | null>(null);
+  const [ready, setReady]                   = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -439,104 +549,77 @@ export default function CodingPracticeHub() {
     const mediumSolved = allProblems.filter((p) => p.difficulty === 'medium' && p.user_status === 'accepted').length;
     const hardSolved   = allProblems.filter((p) => p.difficulty === 'hard'   && p.user_status === 'accepted').length;
     const totalSolved  = easySolved + mediumSolved + hardSolved;
-    const grandTotal   = easyTotal + mediumTotal + hardTotal;
-    const overallPct   = grandTotal > 0 ? Math.round((totalSolved / grandTotal) * 100) : 0;
-    return { easySolved, easyTotal, mediumSolved, mediumTotal, hardSolved, hardTotal, totalSolved, overallPct };
+    return { easySolved, easyTotal, mediumSolved, mediumTotal, hardSolved, hardTotal, totalSolved };
   }, [allProblems]);
 
-  // daily progress: falls back to total accepted (no timestamp on user_status)
   const todaySolved = useMemo(
     () => allProblems.filter((p) => p.user_status === 'accepted').length,
     [allProblems],
   );
-  const DAILY_GOAL = 3;
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex h-screen overflow-hidden bg-[#eef2ff]">
       {showOnboarding && <OnboardingModal onDismiss={dismissOnboarding} />}
 
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+      <Sidebar />
 
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <Link
-              href="/dashboard"
-              className="mb-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-teal-600"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-              Back to Dashboard
-            </Link>
-            <div className="flex items-baseline gap-2.5">
-              <span className="font-mono text-xs font-semibold tracking-wider text-teal-600">
-                &lt;/&gt; PRACTICE
-              </span>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Topbar quota={quota} />
+
+        <main className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="mx-auto max-w-5xl space-y-5">
+
+            {/* Hero */}
+            <HeroBanner />
+
+            {/* 3 Stat Cards */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <TotalSolvedCard solved={stats.totalSolved} total={total} />
+              <DailyGoalStatCard progress={Math.min(todaySolved, DAILY_GOAL)} goal={DAILY_GOAL} />
+              <StreakCard />
             </div>
-            <h1 className="mt-0.5 text-2xl font-extrabold text-slate-900 sm:text-3xl">
-              Coding Problems
-            </h1>
-            <p className="mt-1 max-w-md text-xs text-slate-500">
-              Choose a language to start practicing. Curated problems from easy to hard, graded by AI.
-            </p>
-          </div>
 
-          {/* AI Credits — top-right badge */}
-          {quota && <CreditsBadge quota={quota} />}
-        </div>
-
-        {/* ── Primary grid: Stats (3/5) + Right column (2/5) ─────────────── */}
-        <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-5 lg:items-stretch">
-
-          <div className="lg:col-span-3">
-            <StatsCenterCard stats={stats} />
-          </div>
-
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <DailyGoalCard progress={Math.min(todaySolved, DAILY_GOAL)} goal={DAILY_GOAL} />
-            <AdvancedPracticeCard />
-          </div>
-        </div>
-
-        {/* ── Language section ─────────────────────────────────────────────── */}
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-800">Select a Language</h2>
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                All problems include starter code in every language.{' '}
-                <Link href="/coding-test/problems" className="text-teal-600 hover:underline">
-                  Browse all problems
-                </Link>{' '}
-                and filter by difficulty or topic.
-              </p>
+            {/* Your Progress + Quick Actions */}
+            <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-5">
+              <div className="lg:col-span-3">
+                <YourProgressCard stats={stats} />
+              </div>
+              <div className="lg:col-span-2">
+                <QuickActionsCard />
+              </div>
             </div>
-            <Link
-              href="/coding-test/problems"
-              className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
-            >
-              Browse all →
-            </Link>
-          </div>
 
-          {/* 4-column on desktop, 2-column on tablet, 1-column on mobile */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {LANG_CONFIG.map((lang) => (
-              <LanguageCard
-                key={lang.value}
-                lang={lang}
-                total={ready ? total : null}
-                solved={stats.totalSolved}
-              />
-            ))}
-          </div>
-        </section>
+            {/* Language Section */}
+            <section className="pb-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-800">Select a Language</h2>
+                <Link
+                  href="/coding-test/problems"
+                  className="text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-800"
+                >
+                  Browse all →
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {LANG_CONFIG.map((lang) => (
+                  <LanguageCard
+                    key={lang.value}
+                    lang={lang}
+                    total={ready ? total : null}
+                    solved={stats.totalSolved}
+                  />
+                ))}
+              </div>
+            </section>
 
+          </div>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
 
-// ── Language icons ────────────────────────────────────────────────────────────
+// ── Language Icons ────────────────────────────────────────────────────────────
 
 function PythonIcon() {
   return (
@@ -609,7 +692,6 @@ function CppIcon() {
   return (
     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50">
       <svg width="28" height="24" viewBox="0 0 36 28" fill="none">
-        {/* C arc */}
         <path
           d="M14 4A9 9 0 1 0 14 22"
           stroke="#4f46e5"
@@ -617,7 +699,6 @@ function CppIcon() {
           strokeLinecap="round"
           fill="none"
         />
-        {/* First + */}
         <line x1="27" y1="10" x2="27" y2="18" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" />
         <line x1="23" y1="14" x2="31" y2="14" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" />
       </svg>

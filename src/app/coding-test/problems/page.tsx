@@ -895,15 +895,28 @@ function CodingProblemsListContent() {
                           Previous
                         </button>
                         <div className="flex items-center gap-1">
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            const p = i + 1;
-                            return (
-                              <button key={p} type="button" onClick={() => setPage(p)}
-                                className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors ${page === p ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700'}`}>
-                                {p}
-                              </button>
+                          {(() => {
+                            const pages: (number | null)[] = [];
+                            if (totalPages <= 7) {
+                              for (let i = 1; i <= totalPages; i++) pages.push(i);
+                            } else if (page <= 4) {
+                              pages.push(1, 2, 3, 4, 5, null, totalPages);
+                            } else if (page >= totalPages - 3) {
+                              pages.push(1, null, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+                            } else {
+                              pages.push(1, null, page - 1, page, page + 1, null, totalPages);
+                            }
+                            return pages.map((p, i) =>
+                              p === null ? (
+                                <span key={`ellipsis-${i}`} className="flex h-8 w-8 items-center justify-center text-sm text-slate-400">…</span>
+                              ) : (
+                                <button key={p} type="button" onClick={() => setPage(p)}
+                                  className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors ${page === p ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700'}`}>
+                                  {p}
+                                </button>
+                              )
                             );
-                          })}
+                          })()}
                         </div>
                         <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors disabled:cursor-not-allowed disabled:opacity-40 hover:enabled:border-indigo-300 hover:enabled:text-indigo-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
