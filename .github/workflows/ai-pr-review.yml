@@ -205,11 +205,62 @@ jobs:
           # Live for comments only once master carries this file (see `on:`).
           ref: ${{ github.event_name != 'pull_request' && 'develop2' || '' }}
 
+      # FAST LANE for T2, the same rule and the same classifier as frontend-ci's
+      # "Lint and Build". T2 here is npm install + next build + npm run lint:
+      # 13.6 of 16.9 min on #195 (install 227s, build 484s, lint 106s), on a PR
+      # whose every path Lint and Build itself classifies as changing nothing
+      # `next build` compiles. One allow-list (scripts/ci/fast_lane.py), so the
+      # two jobs can never disagree about what is "non-app".
+      # Fails closed exactly like Lint and Build: pull_request runs only, the
+      # BASE branch's copy of the classifier (HEAD^1 of the merge ref), and
+      # anything but an explicit lane=fast -- lane=full from a classifier
+      # error or an unexpected head, no output from a base without the
+      # classifier or a crashed step -- runs T2.
+      - name: Classify changed paths (fast lane)
+        id: lane
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git show HEAD^1:scripts/ci/fast_lane.py > "$RUNNER_TEMP/fast_lane.py"; then
+            python3 "$RUNNER_TEMP/fast_lane.py" --expect-head "$PR_HEAD_SHA" \
+              --github-output "$GITHUB_OUTPUT"
+          else
+            echo "FULL LANE: the base branch has no scripts/ci/fast_lane.py"
+          fi
+
+      # The fast-lane allow-list was written for next build / tsc / eslint, and
+      # it includes T2's OWN inputs (T2_OWN_INPUTS: the review config holding
+      # T2's install/build/check commands, and the harness holding
+      # dynamic_node). A PR changing either must run T2, or a broken T2 merges
+      # unseen and the next UI PR reports a false Install/Build failure. They
+      # are matched as exact tokens of the classifier's ", "-joined `changed`
+      # list; a fast lane with an empty list keeps T2. (The paths live in env:
+      # tests locate the review step as the one whose run: names the harness.)
       - name: Decide target
         id: t
+        env:
+          LANE: ${{ steps.lane.outputs.lane }}
+          CHANGED: ${{ steps.lane.outputs.changed }}
+          T2_OWN_INPUTS: scripts/ai_review/review_config.json scripts/ai_review/ai_pr_review.py
         run: |
+          if [ "$LANE" = "fast" ] && [ -z "$CHANGED" ]; then
+            LANE="full (fast lane without a changed list)"
+          fi
+          for own in $T2_OWN_INPUTS; do
+            case ", $CHANGED, " in
+              *", $own, "*) LANE="full ($own changed: T2 must test itself)" ;;
+            esac
+          done
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "args=--pr ${{ github.event.pull_request.number }} --dynamic" >> "$GITHUB_OUTPUT"
+            if [ "$LANE" = "fast" ]; then
+              echo "FAST LANE: no path next build compiles changed; T2 (install/build/lint) skipped."
+              echo "args=--pr ${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+              echo "t2_skipped=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "args=--pr ${{ github.event.pull_request.number }} --dynamic" >> "$GITHUB_OUTPUT"
+            fi
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
             echo "args=--pr ${{ github.event.issue.number }} --dynamic" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pr }}" ]; then
@@ -228,6 +279,11 @@ jobs:
           # payload; the script compares them with the PR's live state.
           AI_REVIEW_EVENT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
           AI_REVIEW_EVENT_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'true' || 'false' }}
+          # Shown in the report's T2 section when the fast lane skipped it.
+          AI_REVIEW_T2_SKIP_REASON: >-
+            ${{ steps.t.outputs.t2_skipped == 'true' &&
+                'fast lane: only paths that next build does not compile changed (scripts/ci/fast_lane.py, the same rule as Lint and Build)' ||
+                '' }}
         run: |
           python3 scripts/ai_review/ai_pr_review.py \
             --repo "${{ github.repository }}" \

@@ -1560,6 +1560,11 @@ def _ok(b): return "✅" if b else "❌"
 
 def dyn_section(dyn):
     if dyn is None:
+        # Set by the workflow when the fast lane skipped T2 on purpose, so the
+        # report says why instead of implying someone forgot the flag.
+        reason = os.environ.get("AI_REVIEW_T2_SKIP_REASON", "").strip()
+        if reason:
+            return f"_dynamic tier skipped: {_inert(reason)}_"
         return "_dynamic tier skipped (run with --dynamic)_"
     if dyn.get("stack") == "node":
         lines = [f"- Install: {_ok(dyn.get('install_ok'))}"]
