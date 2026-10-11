@@ -159,6 +159,62 @@ def out(cmd, **kw):
     return run(cmd, **kw).stdout.strip()
 
 
+# ── phase timings (job log + job summary only, never the PR comment) ────────
+# The whole review is ONE workflow step ("Run review (T1 static + T2
+# build/lint)"), 12-35 min with no breakdown, so nobody could say whether
+# npm, next build or the model calls cost the time. Each phase prints a
+# ::notice:: line and appends a row to $GITHUB_STEP_SUMMARY the moment it
+# ends -- written as it goes, so a crash or an early return still leaves the
+# phases that did run. Purely observational: a failure to write is ignored.
+_TIMING_HEADER_WRITTEN = False
+
+
+class _phase:
+    """`with _phase("#12 claude"):` -- times the block, pass or fail."""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __enter__(self):
+        self.t0 = time.monotonic()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        record_phase(self.name, time.monotonic() - self.t0,
+                     "ok" if exc_type is None else f"raised {exc_type.__name__}")
+        return False
+
+
+def _clean_phase(name):
+    """A phase name can carry PR-controlled text (a check command from the
+    PR's review_config.json). One line, no control characters, bounded --
+    so it cannot start a new workflow command (`::error::...` on its own
+    line), break the summary table, or bloat the log."""
+    name = re.sub(r"[\x00-\x1f\x7f]+", " ", str(name))
+    name = re.sub(r"\s+", " ", name).strip()
+    return name[:120] + ("…" if len(name) > 120 else "")
+
+
+def record_phase(name, seconds, outcome="ok"):
+    global _TIMING_HEADER_WRITTEN
+    name = _clean_phase(name)
+    # Workflow-command data escaping (GitHub: % then CR/LF; the latter are
+    # already gone).
+    print(f"::notice title=ai-review timing::{name.replace('%', '%25')}: "
+          f"{seconds:.0f}s ({outcome})", flush=True)
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            if not _TIMING_HEADER_WRITTEN:
+                f.write("\n### ai-review phase timings\n\n| Phase | Seconds | Outcome |\n|---|---:|---|\n")
+                _TIMING_HEADER_WRITTEN = True
+            f.write(f"| {name.replace('|', chr(92) + '|')} | {seconds:.0f} | {outcome} |\n")
+    except OSError:
+        pass
+
+
 # ── per-repo config ──────────────────────────────────────────────────────────
 def load_config():
     """Read scripts/ai_review/review_config.json; fall back to api-style python."""
@@ -1462,17 +1518,20 @@ def dynamic_python(cfg, base, head):
 def dynamic_node(cfg):
     n = cfg.get("node") or {}
     res = {"stack": "node"}
-    inst = run(["bash", "-lc", n.get("install", "npm ci || npm install")], timeout=900, env=pr_code_env())
+    with _phase("T2 install"):
+        inst = run(["bash", "-lc", n.get("install", "npm ci || npm install")], timeout=900, env=pr_code_env())
     res["install_ok"] = inst.returncode == 0
     if not res["install_ok"]:
         res["install_tail"] = (inst.stdout + inst.stderr).strip().splitlines()[-12:]
         return res
-    b = run(["bash", "-lc", n.get("build", "npm run build")], timeout=1200, env=pr_code_env())
+    with _phase("T2 build"):
+        b = run(["bash", "-lc", n.get("build", "npm run build")], timeout=1200, env=pr_code_env())
     res["build_ok"] = b.returncode == 0
     res["build_tail"] = (b.stdout + b.stderr).strip().splitlines()[-20:]
     res["checks"] = []
     for c in n.get("checks", []):
-        cr = run(["bash", "-lc", c], timeout=600, env=pr_code_env())
+        with _phase(f"T2 check: {c}"):
+            cr = run(["bash", "-lc", c], timeout=600, env=pr_code_env())
         res["checks"].append({"cmd": c, "ok": cr.returncode == 0,
                               "tail": (cr.stdout + cr.stderr).strip().splitlines()[-12:]})
     return res
@@ -2456,10 +2515,15 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
     # ledger already holds what it carried.
     carry = prior if since else None
     note_c, note_x = review_extras(plan, carry, entries, base, head, stat)
-    claude, claude_ok = claude_pass(base, head, context, generated=gen + note_c)
-    codex = codex_pass(base, head, claude, context, generated=gen + note_x)
+    with _phase(f"#{pr} T1 claude"):
+        claude, claude_ok = claude_pass(base, head, context, generated=gen + note_c)
+    with _phase(f"#{pr} T1 codex"):
+        codex = codex_pass(base, head, claude, context, generated=gen + note_x)
     asked = blockers_to_verify(carry, claude) if claude_ok else []
-    verdict = codex_verdicts(carry, asked, plan, base, head) if asked else None
+    verdict = None
+    if asked:
+        with _phase(f"#{pr} T1 codex verdicts ({len(asked)} asked)"):
+            verdict = codex_verdicts(carry, asked, plan, base, head)
     if claude_ok and carry is not None:
         claude += carry_forward(carry, claude, since, codex, verdict)
     claude, sup, kept = apply_decisions(claude, entries)
@@ -2477,8 +2541,13 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
     if sup:
         print(f"::warning::#{pr}: the decisions ledger suppressed {len(sup)} finding(s) ("
               + ", ".join(sorted({s_ for s_, _e, _t in sup})) + "); listed in the report.")
-    dyn = run_dynamic(cfg, base, head) if dynamic else None
-    live_res = run_live_llm(cfg) if live else None
+    dyn = live_res = None
+    if dynamic:
+        with _phase(f"#{pr} T2 total"):
+            dyn = run_dynamic(cfg, base, head)
+    if live:
+        with _phase(f"#{pr} T3 live"):
+            live_res = run_live_llm(cfg)
     body = build_report(head, stats, claude, codex, dyn, live_res, partial=not claude_ok)
     if since and not head.startswith(since):
         # api's "since the last review" block. DISPLAY ONLY: nothing is
