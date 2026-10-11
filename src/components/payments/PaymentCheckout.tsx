@@ -40,7 +40,7 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
   const [couponError, setCouponError] = useState<string | null>(null);
 
   const baseAmount = billingCycle === 'yearly' ? plan.price_inr_yearly : plan.price_inr_monthly;
-  const displayAmount = couponResult?.is_valid ? couponResult.final_amount_inr : baseAmount;
+  const displayAmount = couponResult?.is_valid ? couponResult.final_amount : baseAmount;
 
   useEffect(() => {
     if (window.Razorpay) { setScriptLoaded(true); return; }
@@ -106,7 +106,8 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
         amount_inr: baseAmount,
         purpose: billingCycle === 'yearly' ? 'subscription_yearly' : 'subscription_monthly',
         plan_id: plan.id,
-        coupon_code: couponResult?.is_valid ? couponInput.trim() : undefined,
+        // The server-normalised code the discount was validated for.
+        coupon_code: couponResult?.is_valid ? couponResult.code : undefined,
       });
 
       const options = {
@@ -210,7 +211,7 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
             <div className="flex justify-between text-sm text-green-700">
               <span className="flex items-center gap-1">
                 <Tag className="w-3.5 h-3.5" />
-                Coupon ({couponResult.coupon_code})
+                Coupon ({couponResult.code})
               </span>
               <span className="font-semibold">−₹{couponResult.discount_amount.toLocaleString()}</span>
             </div>
@@ -266,7 +267,7 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
             <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
               <span className="flex items-center gap-2 text-green-800 text-sm">
                 <Tag className="w-4 h-4" />
-                <span className="font-mono font-bold">{couponResult.coupon_code}</span>
+                <span className="font-mono font-bold">{couponResult.code}</span>
                 <span>— saving ₹{couponResult.discount_amount.toLocaleString()}</span>
               </span>
               <button onClick={handleRemoveCoupon} className="text-green-600 hover:text-green-900 ml-2">

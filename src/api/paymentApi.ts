@@ -112,14 +112,20 @@ export interface PaymentHistoryResponse {
 
 // ─── Coupon ───────────────────────────────────────────────────────────────────
 
+// Mirrors careerbot-api CouponValidationResult.to_dict()
+// (app/services/payment_service/coupon_service.py). Field names are the
+// backend's: `final_amount` / `code` — NOT final_amount_inr / coupon_code.
+// Amounts are rupees. On is_valid=false, discount_type is "" and the amounts
+// equal the requested amount.
 export interface CouponValidationResponse {
   is_valid: boolean;
-  message: string;
+  code: string;
+  original_amount: number;
   discount_amount: number;
+  final_amount: number;
   discount_type: string;
   discount_value: number;
-  final_amount_inr: number;
-  coupon_code: string;
+  message: string;
 }
 
 // ─── Subscription ─────────────────────────────────────────────────────────────
