@@ -1,18 +1,19 @@
 "use client";
 import React, { useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useResume, type CustomCategory } from "../../../_context/ResumeContext";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { useValidation } from "../../../_hooks/useValidation";
 import TechnologyChipsInput, { type TechnologyChipsInputHandle } from "../TechnologyChipsInput";
-import { addSkillToCategory, deleteSkillCategory, deleteSkillById } from "@/api/resumeApi";
-import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCategoryFromEnhancedResume } from "@/api/enhancerApi";
+import { addSkillToCategory, deleteSkillCategory, deleteSkillById, renameSkillCategory } from "@/api/resumeApi";
+import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCategoryFromEnhancedResume, renameSkillCategoryInEnhancedResume } from "@/api/enhancerApi";
 import { toast } from "sonner";
 import { findSkillCategory, getSkillsForDomain, skillCategoryApiName, type SkillCategory, type SkillDomain } from "@/config/domainSkills";
 import { printedSkillKeysForDomain, templateSkillCategoryLabel } from "@/app/(resume)/templates/skillsFilterByDomain";
 import { getSkillsEditorDomain, useAccountEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 import logger from "@/lib/logger";
+import { isBuiltInCategoryName, renameCategoryErrorMessage } from "../../../_utils/skillCategoryName";
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -29,6 +30,9 @@ const Skills: React.FC = () => {
   const nameInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const skillsInputRefs = useRef<Record<string, TechnologyChipsInputHandle | null>>({});
   const latestCustomIdRef = useRef<string | null>(null);
+  // Name each custom category had when its name box gained focus -- the name the
+  // backend knows it by, which the rename call must address.
+  const nameOnFocusRef = useRef<Record<string, string>>({});
 
   // Resolve the domain exactly as PreviewPanel does (applied career-level
   // template), so the editor never offers categories the preview, PDF and DOCX
@@ -196,24 +200,96 @@ const Skills: React.FC = () => {
     });
   };
 
-  const handleCustomCategoryNameBlur = (id: string, name: string) => {
+  // Set one custom category's name (and re-key its skill ids, which are keyed by
+  // "<category name>:<skill>") on the LATEST state -- safe to call after an await.
+  const applyCustomCategoryName = (id: string, name: string, previousName?: string) => {
+    setResumeData(prev => {
+      const current = (prev.categorizedSkills || {}) as unknown as Record<string, unknown>;
+      const customs = ((current.custom_categories || []) as CustomCategory[]).map((c) =>
+        c.id === id ? { ...c, name } : c,
+      );
+      const idMap = { ...((current.skill_id_map || {}) as Record<string, string>) };
+      if (previousName && previousName !== name) {
+        Object.keys(idMap).forEach((key) => {
+          if (key.startsWith(`${previousName}:`)) {
+            idMap[`${name}:${key.slice(previousName.length + 1)}`] = idMap[key];
+            delete idMap[key];
+          }
+        });
+      }
+      return {
+        ...prev,
+        categorizedSkills: { ...current, custom_categories: customs, skill_id_map: idMap } as unknown as typeof prev.categorizedSkills,
+      };
+    });
+  };
+
+  // A built-in category the API already stores (it refuses to rename those) is
+  // locked. Judge by the name the box had when it gained focus, not the text
+  // being typed: a draft such as "Framework", on the way to "Frameworks &
+  // Libraries", slugifies to a built-in name and would freeze the box mid-word.
+  const isLockedBuiltIn = (custom: CustomCategory) =>
+    custom.skills.length > 0 && isBuiltInCategoryName(nameOnFocusRef.current[custom.id] ?? custom.name);
+
+  const handleCustomCategoryNameBlur = async (id: string, name: string) => {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    const savedName = (nameOnFocusRef.current[id] ?? "").trim();
+    delete nameOnFocusRef.current[id];
+    if (!trimmed) {
+      // An emptied name would orphan the saved skills (add/remove need a name).
+      if (savedName) applyCustomCategoryName(id, savedName);
+      return;
+    }
     // For enhanced resumes the predefined categories are hidden, so they are not
     // "existing" from the user's perspective and should not block custom category names.
+    // Likewise a predefined category the user deleted is no longer on screen, so
+    // its label must be free to use again (the API maps it back to that bucket).
     const predefinedLabels = isEnhancedResume
       ? []
-      : EDITOR_CATEGORIES.map((c) => c.label.toLowerCase());
+      : EDITOR_CATEGORIES.filter((c) => !hiddenPredefined.includes(c.key)).map((c) => c.label.toLowerCase());
     const otherCustomNames = customCategories
       .filter((c) => c.id !== id)
       .map((c) => c.name.toLowerCase());
     const allExisting = [...predefinedLabels, ...otherCustomNames];
     if (allExisting.includes(trimmed.toLowerCase())) {
       toast.error(`"${trimmed}" category already exists`);
-      updateSkills({
-        custom_categories: allCustomCategories.map((c) => (c.id === id ? { ...c, name: "" } : c)),
-      });
+      applyCustomCategoryName(id, savedName);
       nameInputRefs.current[id]?.focus();
+      // focus() ran onFocus with this render's refused name; the category is
+      // still stored under savedName, which the next rename must address.
+      nameOnFocusRef.current[id] = savedName;
+      return;
+    }
+
+    // Rename on the server only for a category that exists there: it was saved
+    // under a name (savedName) and holds at least one skill. A brand-new or empty
+    // category has nothing stored, so the new name is simply used from now on.
+    const custom = customCategories.find((c) => c.id === id);
+    const resumeId = resumeData.resume_id;
+    const renamesSavedCategory = Boolean(
+      resumeId && savedName && savedName !== trimmed && custom && custom.skills.length > 0,
+    );
+    // The API routes a built-in name to that built-in bucket and refuses to
+    // rename onto it, so say so now instead of after a round trip.
+    if (renamesSavedCategory && isBuiltInCategoryName(trimmed)) {
+      toast.error(`"${trimmed}" is a built-in category name. Please choose a different name.`);
+      applyCustomCategoryName(id, savedName);
+      return;
+    }
+    if (trimmed !== name) applyCustomCategoryName(id, trimmed);
+    if (!renamesSavedCategory || !resumeId) return;
+    try {
+      if (isEnhancedResume) {
+        await renameSkillCategoryInEnhancedResume(resumeId, savedName, trimmed);
+      } else {
+        await renameSkillCategory(resumeId, savedName, trimmed);
+      }
+      applyCustomCategoryName(id, trimmed, savedName);
+      bumpResumeSavedVersion();
+      toast.success("Category renamed successfully.");
+    } catch (err) {
+      applyCustomCategoryName(id, savedName);
+      toast.error(renameCategoryErrorMessage(err, trimmed));
     }
   };
 
@@ -394,7 +470,10 @@ const Skills: React.FC = () => {
                       type="text"
                       value={custom.name}
                       onChange={(e) => handleCustomCategoryNameChange(custom.id, e.target.value)}
-                      onBlur={(e) => handleCustomCategoryNameBlur(custom.id, e.target.value)}
+                      readOnly={isLockedBuiltIn(custom)}
+                      title={isLockedBuiltIn(custom) ? "Built-in category — it cannot be renamed" : undefined}
+                      onFocus={() => { nameOnFocusRef.current[custom.id] = custom.name; }}
+                      onBlur={(e) => { void handleCustomCategoryNameBlur(custom.id, e.target.value); }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
@@ -403,8 +482,9 @@ const Skills: React.FC = () => {
                       }}
                       ref={(el) => { nameInputRefs.current[custom.id] = el; }}
                       placeholder="Category name (e.g. Architecture Patterns)"
-                      maxLength={80}
-                      className="text-sm font-semibold text-[#3b3b3b] bg-transparent border-none outline-none w-full placeholder:text-gray-400 mb-1"
+                      // The skills API accepts category names of at most 50 characters.
+                      maxLength={50}
+                      className="text-sm font-semibold text-[#3b3b3b] bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-[#2b78bc] outline-none w-full placeholder:text-gray-400 mb-1 pb-0.5 transition-colors"
                     />
                     <TechnologyChipsInput
                       ref={(el) => { skillsInputRefs.current[custom.id] = el; }}
@@ -486,14 +566,32 @@ const Skills: React.FC = () => {
                       } : undefined}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCustomCategory(custom.id)}
-                    className="mt-6 p-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                    title="Remove category"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="mt-6 flex items-center">
+                    {!isLockedBuiltIn(custom) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = nameInputRefs.current[custom.id];
+                        input?.focus();
+                        input?.select();
+                      }}
+                      className="p-1.5 text-gray-300 hover:text-[#2b78bc] focus-visible:text-[#2b78bc] transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      title="Rename category"
+                      aria-label={`Rename ${custom.name || "category"}`}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCustomCategory(custom.id)}
+                      className="p-1.5 text-gray-300 hover:text-red-500 focus-visible:text-red-500 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      title="Remove category"
+                      aria-label={`Remove ${custom.name || "category"}`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

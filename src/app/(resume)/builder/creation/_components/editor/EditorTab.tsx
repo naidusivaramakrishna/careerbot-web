@@ -62,15 +62,16 @@ import AddNewSection from "./AddNewSection";
 import CircularProgress from "./CircularProgress";
 import CustomSectionEditor from "./CustomSectionEditor";
 import { sectionIcons } from "../../_utils/sectionsConfig";
-import { buildBuilderSectionPayload, SECTION_STATE_KEYS } from "../../_utils/sectionPayloadKeys";
+import { buildBuilderSectionPayload, isSectionKnownEmpty, sectionHasSavedData, SECTION_STATE_KEYS } from "../../_utils/sectionPayloadKeys";
 import { findCustomSectionByName, normalizeCustomSectionName } from "../../_utils/customSectionIdentity";
 import { prepareEducationForPersistence } from "@/utils/educationPersistence";
 import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
 import { useResume, CustomSection } from "../../_context/ResumeContext";
 import { useModalMountVersion } from "../../_hooks/useModalMountVersion";
+import { useSavedResumeSnapshot } from "../../_hooks/useSavedResumeSnapshot";
 import { updateResume, getAllResumes, autoSaveResume, transformCustomSectionsForBackend } from "@/api/resumeApi";
 import { autoSaveEnhancedResume, updateEnhancedResume } from "@/api/enhancerApi";
-import { SUGGESTION_SECTION_MAP, getSectionValue, isStructuralSuggestionSatisfied, toSuggestionSectionKey } from "../../_utils/suggestionSection";
+import { getSectionValue, suggestionsToConfirm, toSuggestionSectionKey } from "../../_utils/suggestionSection";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 
@@ -166,14 +167,15 @@ function isRequiredField(key: string): boolean {
 }
 
 /**
- * isRequiredField() above treats "location" as optional everywhere, since
- * it's genuinely optional on Work Experience, Education, etc. Personal
- * Info's location field is the one exception -- required there. Exported
- * (and pulled out of the component) so this section-specific override is
- * directly testable without rendering EditorTab.
+ * Whether `key` must be filled to Save the open section. Location is optional
+ * everywhere, Personal Info included: the Personal Info form declares it
+ * `required: false` (no asterisk), and it has to stay removable so a user can
+ * undo an ATS-driven addition without Save being refused. Exported (and pulled
+ * out of the component) so the rule is directly testable without rendering
+ * EditorTab.
  */
-export function isFieldRequiredForSection(key: string, openModalSection: string | null): boolean {
-  return isRequiredField(key) || (openModalSection === "Personal Info" && key.toLowerCase() === "location");
+export function isFieldRequiredForSection(key: string, _openModalSection: string | null): boolean {
+  return isRequiredField(key);
 }
 
 /**
@@ -448,7 +450,11 @@ const EditorTab: React.FC<Props> = ({
     enhancedSuggestions,
     applyManualFix,
     bumpResumeSavedVersion,
+    resumeSavedVersion,
+    isLoadingResume,
   } = useResume();
+  // Saved content only: drafts typed into an open editor must not tick a section.
+  const savedResumeData = useSavedResumeSnapshot(resumeData, isLoadingResume, resumeSavedVersion, enhancedDataVersion);
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
 
@@ -837,30 +843,19 @@ const EditorTab: React.FC<Props> = ({
    */
   const confirmSavedManualFixes = useCallback(async (sectionName: string, savedResume: typeof resumeData) => {
     if (!isEnhancedResume) return;
-    const mappedSections = SUGGESTION_SECTION_MAP[toSuggestionSectionKey(sectionName)] ?? [];
-    const candidates = enhancedSuggestionsRef.current.filter((suggestion) =>
-      suggestion.status !== "fixed"
-      && suggestion.fix_type === "manual"
-      && mappedSections.includes(suggestion.section),
+    const confirmable = suggestionsToConfirm(
+      savedResume,
+      enhancedSuggestionsRef.current,
+      sectionName,
+      pendingManualSuggestionRef.current,
     );
-
-    for (const suggestion of candidates) {
-      const value = getSectionValue(savedResume, suggestion.section, suggestion, sectionName).trim();
-      const manualTarget = pendingManualSuggestionRef.current;
-      const wasExplicitlyTargeted = manualTarget?.id === suggestion.id;
-      // Semantic findings must be explicitly selected AND changed before any
-      // request is sent. Opening an editor or an unrelated autosave can never
-      // paint a card green on its own.
-      const changedSinceManualTarget = wasExplicitlyTargeted && value !== manualTarget?.initialValue;
-      if (!value || (wasExplicitlyTargeted
-        ? !changedSinceManualTarget
-        : !isStructuralSuggestionSatisfied(savedResume, suggestion))) continue;
-      // "autosave" origin: this runs right after this section's own autosave
-      // PATCH, while its editor modal may still be open. Skip the resumeData
-      // replacement applyManualFix would otherwise do -- it would overwrite
-      // anything typed in the few seconds since that PATCH was sent.
+    for (const { suggestion, value, explicitlyTargeted } of confirmable) {
+      // "autosave" origin: this runs right after this section's own save, while its
+      // editor modal may still be open. Skip the resumeData replacement
+      // applyManualFix would otherwise do -- it would overwrite anything typed in
+      // the few seconds since that save was sent.
       await applyManualFixRef.current(suggestion.id, value, "autosave");
-      if (wasExplicitlyTargeted) pendingManualSuggestionRef.current = null;
+      if (explicitlyTargeted) pendingManualSuggestionRef.current = null;
     }
   }, [isEnhancedResume]);
 
@@ -1612,10 +1607,17 @@ const EditorTab: React.FC<Props> = ({
       });
     }
 
-    // Score updates now happen purely server-side: the Save call above
-    // (bulk_update_enhanced) triggers a real AI rescore, so there is no
-    // separate client-side "guess which suggestions are now satisfied and
-    // call /enhance/apply" step here anymore.
+    // The Save call above (bulk_update_enhanced) asks the server to rescore, which
+    // refreshes the cards. That rescore is best-effort -- if the AI scorer is
+    // unavailable the server keeps the previous score, and a card the Save just
+    // satisfied (e.g. Contact "Missing location") stayed on screen for good. So also
+    // confirm the objectively satisfied Manual Fix cards through /enhance/apply, as
+    // the autosave already does. An already-applied card answers "already_applied",
+    // so this is safe when the server rescore did work; any failure is non-fatal
+    // because the data itself is already saved.
+    if (isEnhancedResume && openModalSection) {
+      void confirmSavedManualFixes(openModalSection, resumeDataRef.current).catch(() => undefined);
+    }
 
     // ✅ Step 6: Mark section complete + clear all validation
     // For custom sections: only mark green when all fields have values
@@ -1799,7 +1801,11 @@ const EditorTab: React.FC<Props> = ({
 
   // sections[] is the live main list — count grows when user adds a section, shrinks when they delete one
   const totalSections = sections.length;
-  const completedCount = sections.filter((s) => completionStatus[s.name]).length;
+  // A section counts as complete when it was Saved OR its saved data is filled in, so the
+  // counter matches what the preview renders even for data that arrived via autosave/load.
+  const isSectionComplete = (name: string) =>
+    Boolean(completionStatus[name]) || sectionHasSavedData(savedResumeData as never, name);
+  const completedCount = sections.filter((s) => isSectionComplete(s.name)).length;
   const completionPercentage = totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
 
 
@@ -1839,6 +1845,8 @@ const EditorTab: React.FC<Props> = ({
                   activeSection !== null ? activeSection : idx;
                 const Icon = sectionIcons[s.name] || LayoutGrid;
                 const id = `${s.name}-${originalIndex}`;
+                // Saved content only: an unsaved draft never reached the server preview.
+                const hadContentBeforeDelete = !isSectionKnownEmpty(savedResumeData as never, s.name);
 
 
                 return (
@@ -1917,7 +1925,21 @@ const EditorTab: React.FC<Props> = ({
                             const customSection = !SECTION_KEY_MAP[s.name]
                               ? findCustomSectionByName(liveCustomSections, s.name)
                               : undefined;
-                            if (!customSection) return undefined;
+                            // Only fixed sections use the generic DELETE route. A tile
+                            // that is not a fixed section but has no customSections
+                            // entry must not fall through to it: the API answers 400
+                            // "Unknown section".
+                            if (!customSection && SECTION_KEY_MAP[s.name]) return undefined;
+                            // No custom section has this name (e.g. a legacy ghost tile
+                            // kept by the stored section order), so nothing is saved for
+                            // it: remove the tile only. Sending the local list as the
+                            // full replacement could only overwrite newer server sections.
+                            if (!customSection) {
+                              return async () => {
+                                setSectionOrder(prev => prev.filter(n => n !== s.name));
+                                handleDeleteSection(originalIndex);
+                              };
+                            }
                             return async () => {
                               const rid = getActiveResumeId();
                               // Filter by NAME, not just this one match's id. The
@@ -1957,13 +1979,22 @@ const EditorTab: React.FC<Props> = ({
                                 // already landed, so bump now rather than leaving
                                 // the preview panel's image on its pre-delete
                                 // snapshot until an unrelated save or a refresh.
-                                bumpResumeSavedVersion();
+                                // Builder resumes bump via SectionItem's onDeleted,
+                                // and only when the section had content.
+                                if (isEnhancedResume) bumpResumeSavedVersion();
                               }
                             };
                           })()}
                           disableDelete={nonDeletableSections.includes(s.name)}
-                          isComplete={completionStatus[s.name] || false}
+                          isComplete={isSectionComplete(s.name)}
                           resumeId={getActiveResumeId() ?? undefined}
+                          // Refresh the (server-rendered) preview once the delete has
+                          // landed, but only when the section had content: an empty
+                          // section renders nothing, so re-rendering is pure flicker.
+                          // Enhanced resumes always bump: their preview does not use
+                          // it, but the saved snapshot behind the progress ticks must
+                          // drop the deleted section (no other version bumps there).
+                          onDeleted={isEnhancedResume || hadContentBeforeDelete ? bumpResumeSavedVersion : undefined}
                           sectionKey={SECTION_KEY_MAP[s.name] || s.name.toLowerCase().replace(/\s+/g, "_")}
                         />
                       </div>

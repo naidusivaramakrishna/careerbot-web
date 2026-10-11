@@ -1178,3 +1178,12 @@ section.docx {
   }
 }
 
+/* ATS Scan: the text an applied Auto/Manual Fix wrote, marked in the screen
+   preview only. PreviewPanel registers the ranges with the CSS Custom
+   Highlight API under this name; without this rule they paint nothing.
+   Same emerald pair as the Score tab's "fixed" cards. The text colour is set
+   too, so the mark stays readable on any template, light or dark. */
+::highlight(ats-fixed-text) {
+  background-color: var(--color-emerald-100);
+  color: var(--color-emerald-900);
+}

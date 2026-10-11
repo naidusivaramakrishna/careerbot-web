@@ -281,8 +281,8 @@ function reconcileServerSuggestions(
 // reconciliation). Dropping the two sections from this list instead swaps
 // that for the opposite bug: an achievement the user has typed but not saved
 // yet is silently discarded by the next unrelated sync. So both stay listed
-// and mergeSectionPreservingLocalIdLess compares content -- see the
-// contentKey() note there.
+// and mergeSectionPreservingLocalIdLess compares content while ignoring
+// backend identity -- see its note below.
 const ID_KEYED_ARRAY_SECTIONS = [
   "education", "workExperience", "projects", "certifications", "achievements",
   "volunteering", "references", "internships", "awards", "hobbies",
@@ -312,25 +312,66 @@ const ID_KEYED_ARRAY_SECTIONS = [
  * need not preserve the local object's key order. Sections whose entries
  * carry a backend id never reach this test; it exists for achievements and
  * languages, which arrive as plain strings and so are mapped to id-less
- * objects whether or not they are already saved. If two entries differ in
- * any field the comparison fails and the local copy is kept -- erring toward
- * the duplicate, never toward discarding something the user typed. */
-function contentKey(item: unknown): string {
+ * objects whether or not they are already saved. Identity fields are omitted
+ * because a server response can add an id to an otherwise identical entry. */
+function contentKeyWithoutIdentity(item: unknown): string {
   if (!item || typeof item !== "object") return JSON.stringify(item ?? null);
   const record = item as Record<string, unknown>;
-  return JSON.stringify(Object.keys(record).sort().map((key) => [key, record[key]]));
+  return JSON.stringify(
+    Object.keys(record)
+      .filter((key) => key !== "id" && key !== "_id")
+      .sort()
+      .map((key) => [key, record[key]]),
+  );
 }
 
-function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
+function isLikelyRewordedDuplicate(serverItem: unknown, localItem: unknown): boolean {
+  if (!serverItem || !localItem || typeof serverItem !== "object" || typeof localItem !== "object") {
+    return false;
+  }
+
+  const serverTitle = (serverItem as Record<string, unknown>).title;
+  const localTitle = (localItem as Record<string, unknown>).title;
+  if (typeof serverTitle !== "string" || typeof localTitle !== "string") return false;
+
+  const words = (value: string) => new Set((value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []));
+  const serverWords = words(serverTitle);
+  const localWords = words(localTitle);
+  if (serverWords.size < 3 || localWords.size < 3) return false;
+
+  return [...serverWords].every((word) => localWords.has(word))
+    || [...localWords].every((word) => serverWords.has(word));
+}
+
+export function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
   serverItems: unknown,
   localItems: unknown,
+  dropRewordedCopies = false,
 ): unknown {
   if (!Array.isArray(serverItems)) return serverItems;
   if (!Array.isArray(localItems)) return serverItems;
-  const serverContent = new Set((serverItems as unknown[]).map(contentKey));
+  const serverContent = new Set((serverItems as unknown[]).map(contentKeyWithoutIdentity));
+  // A local entry is dropped as the stale original of a reworded server entry
+  // only on a fix/undo response (dropRewordedCopies), where the server has just
+  // rewritten content. On any other sync a changed id-less entry is more likely
+  // the user's own unsaved edit, and title matching would discard it. Even then
+  // only an id-less server entry the local list does not already hold can be a
+  // rewording (id-less sections such as achievements cannot be matched by id):
+  // a saved entry with an id, or one the user still has unchanged, is not one --
+  // matching against those dropped new input such as "Inventory Management
+  // System Mobile App" next to a saved "Inventory Management System". When
+  // unsure, keep the possible duplicate.
+  const localContent = new Set((localItems as unknown[]).map(contentKeyWithoutIdentity));
+  const rewordedServerItems = dropRewordedCopies
+    ? (serverItems as T[]).filter(
+      (item) => item && typeof item === "object" && !item.id && !item._id
+        && !localContent.has(contentKeyWithoutIdentity(item)),
+    )
+    : [];
   const localIdLess = (localItems as T[]).filter(
     (item) => item && typeof item === "object" && !item.id && !item._id
-      && !serverContent.has(contentKey(item)),
+      && !serverContent.has(contentKeyWithoutIdentity(item))
+      && !rewordedServerItems.some((serverItem) => isLikelyRewordedDuplicate(serverItem, item)),
   );
   return localIdLess.length > 0 ? [...serverItems, ...localIdLess] : serverItems;
 }
@@ -2310,6 +2351,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       // copies (mergeSectionPreservingLocalIdLess) would show each new entry
       // twice and the next Save would persist the copy as a duplicate.
       savedSections?: readonly string[];
+      // The response of an apply-fix or undo: the server just rewrote content,
+      // so a local id-less entry may be the stale original of a reworded one
+      // (see mergeSectionPreservingLocalIdLess).
+      fixResponse?: boolean;
     },
   ): boolean => {
     if (!payload || typeof payload !== "object") return false;
@@ -2396,6 +2441,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           mergedArraySections[key] = mergeSectionPreservingLocalIdLess(
             mappedRecord[key],
             previousRecord[key],
+            options?.fixResponse === true,
           );
         }
       }
@@ -2698,7 +2744,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // Apply and Undo must consume the same canonical resume shape.  The old
     // auto-fix-only mapper read enhancer_state.resume and could retain stale
     // values when the API also supplied enhanced_data.
-    syncEnhancedResumeData(response);
+    syncEnhancedResumeData(response, { fixResponse: true });
     const nextScore = scoreStateFromFixResponse(response, enhancedAtsScore);
     setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
     // Replace all cards only when the server explicitly sends its suggestion
@@ -2806,7 +2852,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // the exact overwrite the "autosave" origin tag on the sync event already
     // prevents for the autosave response itself. Score/suggestions still
     // sync below; only the resumeData replacement is skipped.
-    if (origin !== "autosave") syncEnhancedResumeData(response);
+    if (origin !== "autosave") syncEnhancedResumeData(response, { fixResponse: true });
     {
       setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
       const freshSuggestions = suggestionsFromFixResponse(response);
@@ -3025,7 +3071,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     if (didUndo) {
       // Undo returns a complete server snapshot. Use the same canonical mapper
       // as apply/delete so an old enhancer_state cannot restore a deleted item.
-      syncEnhancedResumeData(response);
+      syncEnhancedResumeData(response, { fixResponse: true });
       setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
       // Rebuild suggestions — the deleted fix's suggestion should reappear in the fresh list
       const freshSuggestions = suggestionsFromFixResponse(response);
