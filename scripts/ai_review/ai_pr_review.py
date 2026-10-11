@@ -1560,8 +1560,8 @@ def _ok(b): return "✅" if b else "❌"
 
 def dyn_section(dyn):
     if dyn is None:
-        # Set by the workflow when the fast lane skipped T2 on purpose, so the
-        # report says why instead of implying someone forgot the flag.
+        # Set by the workflow when it skips T2 on purpose, so the report says
+        # why (and where build/lint did run) instead of implying a forgotten flag.
         reason = os.environ.get("AI_REVIEW_T2_SKIP_REASON", "").strip()
         if reason:
             return f"_dynamic tier skipped: {_inert(reason)}_"
