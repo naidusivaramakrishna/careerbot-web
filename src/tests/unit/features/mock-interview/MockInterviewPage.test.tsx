@@ -829,6 +829,65 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByText("Interview Complete!")).toBeInTheDocument();
   });
 
+  it("sends an abnormal close that happens BEFORE session_ready back to setup — never the completed screen", async () => {
+    // The socket never came up (server down / proxy reset gives a bare 1006,
+    // not one of the 4001-4003 codes). No interview started, so there are no
+    // saved answers and no report — claiming "Interview Complete!" here would
+    // be false and "View My Report" would resolve to a sessionId with no report.
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.onclose?.({ code: 1006 } as CloseEvent);
+    });
+
+    expect(screen.queryByText("Interview Complete!")).not.toBeInTheDocument();
+    expect(mocks.replace).toHaveBeenCalledWith("/mock-interview/live");
+  });
+
+  it("treats a 1011 close AFTER session_ready as a terminal drop — completed screen, not back to setup", async () => {
+    // 1011 is the generic server "internal error" code. Before session_ready it
+    // means the AI provider was unreachable (nothing started -> setup). After
+    // session_ready the interview was under way, so it ends like any other drop.
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+    });
+    act(() => { ws.onclose?.({ code: 1011 } as CloseEvent); });
+
+    expect(mocks.replace).not.toHaveBeenCalledWith("/mock-interview/live");
+    expect(screen.getByText("Interview Complete!")).toBeInTheDocument();
+  });
+
+  it("still sends a 1011 close BEFORE session_ready back to setup", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].onclose?.({ code: 1011 } as CloseEvent); });
+    expect(mocks.replace).toHaveBeenCalledWith("/mock-interview/live");
+  });
+
+  it("keeps the backend report_id when an abnormal close lands in the same burst as interview_complete", async () => {
+    // phaseRef is only synced in an effect after commit, so a close handled in
+    // the same tick as interview_complete still sees a stale phase.
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+    });
+    act(() => {
+      ws.emit({ type: "interview_complete", report_id: "report-from-backend", overall_score: 8.4 });
+      ws.onclose?.({ code: 1006 } as CloseEvent);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /view my report/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/report/report-from-backend");
+  });
+
   it("shows and dismisses backend error messages without ending the room", async () => {
     const LiveSessionPage = await importLiveSessionPage();
     render(<LiveSessionPage />);
