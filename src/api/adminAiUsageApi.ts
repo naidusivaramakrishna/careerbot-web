@@ -78,7 +78,7 @@ export const getUserAiUsage = async (
 ): Promise<UserAiUsage> => {
   try {
     const { data } = await httpClient.get<UserAiUsage>(
-      `/api/v1/admin/users/${encodeURIComponent(userId)}/ai-usage`,
+      `/admin/users/${encodeURIComponent(userId)}/ai-usage`,
       { params: { days } },
     );
     return data;
@@ -94,7 +94,7 @@ export const getInstitutionAiUsage = async (
 ): Promise<InstitutionAiUsage> => {
   try {
     const { data } = await httpClient.get<InstitutionAiUsage>(
-      `/api/v1/admin/institutions/${encodeURIComponent(institutionId)}/ai-usage`,
+      `/admin/institutions/${encodeURIComponent(institutionId)}/ai-usage`,
       { params: { days, limit } },
     );
     return data;
