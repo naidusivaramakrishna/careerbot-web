@@ -357,7 +357,7 @@ describe("LiveSetupPage", () => {
   it("runs device checks, then opens the role-confirmation modal", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
-    expect(screen.getByRole("heading", { name: /room setup workflow/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /get ready for your next interview/i })).toBeInTheDocument();
     await completePreflight();
 
     expect(screen.getByRole("heading", { name: "Choose your interview role" })).toBeInTheDocument();
