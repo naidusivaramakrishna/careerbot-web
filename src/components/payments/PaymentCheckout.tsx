@@ -8,6 +8,7 @@ import {
   validateCoupon,
   Plan,
   CouponValidationResponse,
+  CreatePaymentOrderResponse,
 } from '@/api/paymentApi';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { AlertCircle, CheckCircle, Tag, X } from 'lucide-react';
@@ -16,6 +17,16 @@ import { COMPANY_CONFIG, ROUTES, API_CONFIG } from '@/config';
 interface PaymentCheckoutProps {
   plan: Plan;
   billingCycle: 'monthly' | 'yearly';
+}
+
+// The Razorpay checkout callback fields this component reads.
+interface RazorpaySuccessResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+interface RazorpayFailureResponse {
+  error?: { description?: string; reason?: string };
 }
 
 declare global {
@@ -38,9 +49,35 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
   const [couponValidating, setCouponValidating] = useState(false);
   const [couponResult, setCouponResult] = useState<CouponValidationResponse | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
+  // Bumped on every validate request and on plan/cycle change, so a response
+  // for a previous plan or cycle can never be displayed.
+  const couponRequestRef = useRef(0);
+  // An order whose server amount differs from what was displayed; Razorpay is
+  // only opened for it after the user explicitly confirms the server amount.
+  const [pendingOrder, setPendingOrder] = useState<CreatePaymentOrderResponse | null>(null);
+  // Bumped on plan/cycle change and unmount: an order created for a previous
+  // plan/cycle is discarded instead of being opened or offered.
+  const checkoutGenRef = useRef(0);
 
-  const baseAmount = billingCycle === 'yearly' ? plan.price_inr_yearly : plan.price_inr_monthly;
-  const displayAmount = couponResult?.is_valid ? couponResult.final_amount : baseAmount;
+  // Before a coupon: the /plans price (backend derives it from the same catalog
+  // it charges from). With a coupon: the server-computed original/final amounts.
+  const listAmount = billingCycle === 'yearly' ? plan.price_inr_yearly : plan.price_inr_monthly;
+  const originalAmount = couponResult?.is_valid ? couponResult.original_amount : listAmount;
+  const displayAmount = couponResult?.is_valid ? couponResult.final_amount : listAmount;
+  // Server amounts are whole paise / 100, so this recovers the exact integer.
+  const displayAmountPaise = Math.round(displayAmount * 100);
+
+  // A coupon quote is for one plan + cycle: drop it when either changes.
+  useEffect(() => {
+    couponRequestRef.current += 1;
+    checkoutGenRef.current += 1;
+    isPaymentInProgress.current = false;
+    setLoading(false);
+    setCouponResult(null);
+    setCouponError(null);
+    setCouponValidating(false);
+    setPendingOrder(null);
+  }, [plan.id, billingCycle]);
 
   useEffect(() => {
     if (window.Razorpay) { setScriptLoaded(true); return; }
@@ -51,6 +88,7 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
     script.onerror = () => setError('Failed to load payment gateway. Please refresh.');
     document.body.appendChild(script);
     return () => {
+      checkoutGenRef.current += 1;
       if (razorpayInstanceRef.current) {
         razorpayInstanceRef.current.close();
         razorpayInstanceRef.current = null;
@@ -60,32 +98,44 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
 
   const handleValidateCoupon = async () => {
     if (!couponInput.trim()) return;
+    const requestId = ++couponRequestRef.current;
     try {
       setCouponValidating(true);
       setCouponError(null);
       setCouponResult(null);
-      const result = await validateCoupon(couponInput.trim(), baseAmount, plan.id);
+      setPendingOrder(null);
+      const result = await validateCoupon(couponInput.trim(), listAmount, plan.id, billingCycle);
+      if (requestId !== couponRequestRef.current) return; // plan/cycle changed meanwhile
       if (result.is_valid) {
         setCouponResult(result);
       } else {
         setCouponError(result.message || 'Invalid coupon code');
       }
     } catch {
+      if (requestId !== couponRequestRef.current) return;
       setCouponError('Could not validate coupon. Please try again.');
     } finally {
-      setCouponValidating(false);
+      if (requestId === couponRequestRef.current) setCouponValidating(false);
     }
   };
 
   const handleRemoveCoupon = () => {
+    couponRequestRef.current += 1;
+    // An order requested with this coupon must not open once it is gone.
+    // Fallback only: the X is disabled while an order is in flight, so this
+    // matters if that guard is ever lost (same reset as a plan/cycle change).
+    checkoutGenRef.current += 1;
+    isPaymentInProgress.current = false;
+    setLoading(false);
     setCouponResult(null);
     setCouponInput('');
     setCouponError(null);
+    setPendingOrder(null);
   };
 
   const handlePayment = async () => {
     if (!agreedToTerms) { setError('Please agree to the Terms of Service'); return; }
-    if (isPaymentInProgress.current || loading) return;
+    if (isPaymentInProgress.current || loading || couponValidating) return;
     if (!scriptLoaded || !window.Razorpay) {
       setError('Payment gateway not ready. Please wait and try again.');
       return;
@@ -95,81 +145,41 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
       razorpayInstanceRef.current = null;
     }
 
+    const generation = checkoutGenRef.current;
     try {
       isPaymentInProgress.current = true;
       setLoading(true);
       setError(null);
+      setPendingOrder(null);
 
       // Backend computes the authoritative amount server-side for subscriptions.
       // We still send amount_inr so non-subscription purposes work correctly.
       const orderResponse = await createPaymentOrder({
-        amount_inr: baseAmount,
+        amount_inr: listAmount,
         purpose: billingCycle === 'yearly' ? 'subscription_yearly' : 'subscription_monthly',
         plan_id: plan.id,
         // The server-normalised code the discount was validated for.
         coupon_code: couponResult?.is_valid ? couponResult.code : undefined,
       });
 
-      const options = {
-        key: orderResponse.key_id,
-        amount: orderResponse.amount,   // server-authoritative paise
-        currency: 'INR',
-        name: COMPANY_CONFIG.name,
-        description: `${plan.name} Plan — ${billingCycle} Subscription`,
-        order_id: orderResponse.order_id,
-        handler: async (response: any) => {
-          try {
-            // Field names must match backend VerifyPaymentRequest exactly
-            const verifyResponse = await verifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            if (verifyResponse.success) {
-              window.location.href = `/payments/success?order_id=${response.razorpay_order_id}`;
-            } else {
-              isPaymentInProgress.current = false;
-              setLoading(false);
-              setError(verifyResponse.message || 'Payment verification failed. Please contact support.');
-            }
-          } catch (err) {
-            isPaymentInProgress.current = false;
-            setLoading(false);
-            const msg = err instanceof Error ? err.message : '';
-            if (msg.includes('timeout') || msg.includes('Network Error') || msg.includes('network')) {
-              setError('Payment verification timed out. Your payment may have been processed — please check your email or contact support before retrying.');
-            } else {
-              setError('Payment verification failed. Please contact support with your payment ID.');
-            }
-          }
-        },
-        prefill: { email: '', contact: '' },
-        theme: { color: '#2563eb' },
-        modal: {
-          ondismiss: () => {
-            isPaymentInProgress.current = false;
-            setLoading(false);
-            razorpayInstanceRef.current = null;
-            setError(null);
-          },
-          escape: true,
-          backdropclose: false,
-        },
-      };
+      // Plan or cycle changed while the order was being created: this order
+      // is for something no longer on screen. Drop it (the reset effect has
+      // already cleared loading / in-progress state).
+      if (generation !== checkoutGenRef.current) return;
 
-      razorpayInstanceRef.current = new window.Razorpay(options);
-      razorpayInstanceRef.current.on('payment.failed', (response: any) => {
+      // Mismatch guard: never open Razorpay silently for an amount the user
+      // was not shown (stale /plans page, idempotent replay of an older order,
+      // coupon changed server-side). Show the server amount and ask.
+      if (orderResponse.amount !== displayAmountPaise) {
         isPaymentInProgress.current = false;
         setLoading(false);
-        razorpayInstanceRef.current = null;
-        const desc =
-          response?.error?.description ||
-          response?.error?.reason ||
-          'Payment could not be processed';
-        setError(`Payment failed: ${desc}. Please try again or use a different payment method.`);
-      });
-      razorpayInstanceRef.current.open();
+        setPendingOrder(orderResponse);
+        return;
+      }
+
+      openRazorpay(orderResponse);
     } catch (err) {
+      if (generation !== checkoutGenRef.current) return;
       isPaymentInProgress.current = false;
       setLoading(false);
       const msg = err instanceof Error ? err.message : '';
@@ -183,7 +193,95 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
     }
   };
 
-  const canPay = !loading && scriptLoaded && agreedToTerms;
+  const handleConfirmServerAmount = () => {
+    const order = pendingOrder;
+    if (!order || isPaymentInProgress.current) return;
+    if (!agreedToTerms) { setError('Please agree to the Terms of Service'); return; }
+    if (!window.Razorpay) {
+      setError('Payment gateway not ready. Please wait and try again.');
+      return;
+    }
+    setPendingOrder(null);
+    isPaymentInProgress.current = true;
+    setLoading(true);
+    setError(null);
+    try {
+      openRazorpay(order);
+    } catch {
+      isPaymentInProgress.current = false;
+      setLoading(false);
+      setError('Failed to initiate payment. Please try again.');
+    }
+  };
+
+  const handleRefreshPrice = () => {
+    window.location.reload();
+  };
+
+  // Opens Razorpay for an order whose server amount the user has seen.
+  const openRazorpay = (orderResponse: CreatePaymentOrderResponse) => {
+    const options = {
+      key: orderResponse.key_id,
+      amount: orderResponse.amount,   // server-authoritative paise
+      currency: 'INR',
+      name: COMPANY_CONFIG.name,
+      description: `${plan.name} Plan — ${billingCycle} Subscription`,
+      order_id: orderResponse.order_id,
+      handler: async (response: RazorpaySuccessResponse) => {
+        try {
+          // Field names must match backend VerifyPaymentRequest exactly
+          const verifyResponse = await verifyPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          if (verifyResponse.success) {
+            window.location.href = `/payments/success?order_id=${response.razorpay_order_id}`;
+          } else {
+            isPaymentInProgress.current = false;
+            setLoading(false);
+            setError(verifyResponse.message || 'Payment verification failed. Please contact support.');
+          }
+        } catch (err) {
+          isPaymentInProgress.current = false;
+          setLoading(false);
+          const msg = err instanceof Error ? err.message : '';
+          if (msg.includes('timeout') || msg.includes('Network Error') || msg.includes('network')) {
+            setError('Payment verification timed out. Your payment may have been processed — please check your email or contact support before retrying.');
+          } else {
+            setError('Payment verification failed. Please contact support with your payment ID.');
+          }
+        }
+      },
+      prefill: { email: '', contact: '' },
+      theme: { color: '#2563eb' },
+      modal: {
+        ondismiss: () => {
+          isPaymentInProgress.current = false;
+          setLoading(false);
+          razorpayInstanceRef.current = null;
+          setError(null);
+        },
+        escape: true,
+        backdropclose: false,
+      },
+    };
+
+    razorpayInstanceRef.current = new window.Razorpay(options);
+    razorpayInstanceRef.current.on('payment.failed', (response: RazorpayFailureResponse) => {
+      isPaymentInProgress.current = false;
+      setLoading(false);
+      razorpayInstanceRef.current = null;
+      const desc =
+        response?.error?.description ||
+        response?.error?.reason ||
+        'Payment could not be processed';
+      setError(`Payment failed: ${desc}. Please try again or use a different payment method.`);
+    });
+    razorpayInstanceRef.current.open();
+  };
+
+  const canPay = !loading && scriptLoaded && agreedToTerms && !pendingOrder && !couponValidating;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -197,7 +295,7 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
               <p className="font-semibold text-gray-900">{plan.name} Plan</p>
               <p className="text-sm text-gray-500 capitalize">{billingCycle} billing</p>
             </div>
-            <p className="font-semibold text-gray-900">₹{baseAmount.toLocaleString()}</p>
+            <p className="font-semibold text-gray-900">₹{originalAmount.toLocaleString()}</p>
           </div>
 
           <div className="flex justify-between text-sm text-gray-600">
@@ -223,7 +321,7 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
           <p className="text-lg font-semibold text-gray-900">Total</p>
           <div className="text-right">
             {couponResult?.is_valid && (
-              <p className="text-sm text-gray-400 line-through">₹{baseAmount.toLocaleString()}</p>
+              <p className="text-sm text-gray-400 line-through">₹{originalAmount.toLocaleString()}</p>
             )}
             <p className="text-2xl font-bold text-blue-600">₹{displayAmount.toLocaleString()}</p>
           </div>
@@ -270,13 +368,39 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
                 <span className="font-mono font-bold">{couponResult.code}</span>
                 <span>— saving ₹{couponResult.discount_amount.toLocaleString()}</span>
               </span>
-              <button onClick={handleRemoveCoupon} className="text-green-600 hover:text-green-900 ml-2">
+              <button onClick={handleRemoveCoupon} disabled={loading} aria-label="Remove coupon" className="text-green-600 hover:text-green-900 ml-2">
                 <X className="w-4 h-4" />
               </button>
             </div>
           )}
           {couponError && <p className="mt-1.5 text-red-600 text-xs">{couponError}</p>}
         </div>
+
+        {/* Server amount differs from what was shown: confirm before paying */}
+        {pendingOrder && (
+          <div role="alert" className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+            <p className="text-amber-900 text-sm font-semibold mb-1">The price has changed</p>
+            <p className="text-amber-800 text-sm mb-3">
+              The amount to pay is{' '}
+              <strong>₹{(pendingOrder.amount / 100).toLocaleString()}</strong>, not the ₹
+              {displayAmount.toLocaleString()} shown above.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleConfirmServerAmount}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
+              >
+                Pay ₹{(pendingOrder.amount / 100).toLocaleString()}
+              </button>
+              <button
+                onClick={handleRefreshPrice}
+                className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 text-sm font-semibold rounded-lg"
+              >
+                Refresh price
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
