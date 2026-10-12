@@ -88,13 +88,7 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
   } else if (Array.isArray(apiNotes.common_answers?.answers)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     hrAnswers = (apiNotes.common_answers.answers as any[]).map((a) => ({
-<<<<<<< HEAD
       question_id: a.question_id ?? crypto.randomUUID(),
-=======
-      // randomUuid() falls back to getRandomValues where crypto.randomUUID is
-      // missing (non-secure contexts, i.e. a plain-HTTP deployment).
-      question_id: a.question_id ?? randomUuid(),
->>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
       question_text: a.question_text ?? a.question ?? "",
       why_asked: a.why_asked ?? "",
       answer_script: a.answer_script ?? a.model_answer ?? "",
