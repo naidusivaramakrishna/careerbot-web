@@ -34,7 +34,7 @@ export default function MockSidebar() {
   if (pathname === "/mock-interview") return null;
   const items = [
     { href: "/mock-interview/live", label: "Mock Interview", detail: "Your next practice session", Icon: Play },
-    { href: "/mock-interview/history", label: "History & Reports", detail: stageState.history_count > 0 ? `${stageState.history_count} sessions` : "Your progress, in one place", Icon: History },
+    { href: "/mock-interview/history", label: "History & Reports", detail: stageState.history_count > 0 ? `${stageState.history_count} session${stageState.history_count === 1 ? "" : "s"}` : "Your progress, in one place", Icon: History },
   ];
 
   return <>

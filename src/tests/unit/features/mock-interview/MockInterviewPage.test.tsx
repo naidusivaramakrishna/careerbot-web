@@ -1082,7 +1082,11 @@ describe("ReportPage", () => {
     // Redo list keeps each question's REAL number (Q1 and Q3, not Q1 and Q2) and its note.
     expect(screen.getByText("Q1:").parentElement).toHaveTextContent("Q1: Tell me about yourself.");
     expect(screen.getByText("Q3:").parentElement).toHaveTextContent("Q3: Describe a time you collaborated.");
-    expect(screen.queryByText("Q2: Which projects sparked your interest?")).not.toBeInTheDocument();
+    // Q2 (6.5/10) is not a redo item. Search inside the redo region, because
+    // the number and the text are separate nodes there.
+    const redo = screen.getByRole("region", { name: "Questions to redo" });
+    expect(within(redo).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(redo).queryByText(/Which projects sparked your interest/)).not.toBeInTheDocument();
     expect(screen.getByText("Lacked detail and connection to the role.")).toBeInTheDocument();
 
     // Values the backend did not send are not invented.

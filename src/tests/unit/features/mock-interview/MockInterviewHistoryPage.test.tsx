@@ -418,6 +418,29 @@ describe("MockInterview HistoryPage", () => {
     expect(screen.getAllByText("HR Mock Interview")).toHaveLength(2);
   });
 
+  it("labels the page's session count in the singular when one session is left", async () => {
+    const sessions = Array.from({ length: 11 }, (_, i) =>
+      liveSession({ session_id: `session-${i + 1}`, created_at: `2026-07-${(i % 28) + 1}T09:00:00Z` })
+    );
+    mocks.getLiveHistory.mockResolvedValue({ sessions });
+    mocks.getReport.mockImplementation((id: string) => Promise.resolve(report({ session_id: id, overall_score: 50 })));
+
+    const HistoryPage = await importHistoryPage();
+    render(<HistoryPage />);
+
+    await waitFor(() => expect(screen.getByText("Page 1 of 2 \u00b7 10 sessions")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    await waitFor(() => expect(screen.getByText("Page 2 of 2 \u00b7 1 session")).toBeInTheDocument());
+  });
+
+  it("labels the list's session count in the singular for one completed session", async () => {
+    const HistoryPage = await importHistoryPage();
+    render(<HistoryPage />);
+
+    expect(await screen.findByText("1 session", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("1 sessions")).not.toBeInTheDocument();
+  });
+
   it("does not render the removed back, export, or filter controls", async () => {
     const HistoryPage = await importHistoryPage();
     render(<HistoryPage />);
