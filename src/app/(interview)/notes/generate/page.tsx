@@ -88,7 +88,7 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
   } else if (Array.isArray(apiNotes.common_answers?.answers)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     hrAnswers = (apiNotes.common_answers.answers as any[]).map((a) => ({
-      question_id: a.question_id ?? crypto.randomUUID(),
+      question_id: a.question_id ?? randomUuid(),
       question_text: a.question_text ?? a.question ?? "",
       why_asked: a.why_asked ?? "",
       answer_script: a.answer_script ?? a.model_answer ?? "",

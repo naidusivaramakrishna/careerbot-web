@@ -367,7 +367,7 @@ describe("LiveSetupPage", () => {
     expect(dialog).toHaveTextContent("Frontend Developer");
     // Start Interview stays disabled until an interview type is chosen.
     expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeDisabled();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
+    fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
     expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeEnabled();
   }, 15_000);
 
@@ -378,7 +378,7 @@ describe("LiveSetupPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
+    fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
     fireEvent.click(within(dialog).getByRole("button", { name: /start interview/i }));
 
     expect(mocks.createLiveSession).not.toHaveBeenCalled();
@@ -1080,8 +1080,8 @@ describe("ReportPage", () => {
     expect(screen.getByText("Focus area")).toBeInTheDocument();
 
     // Redo list keeps each question's REAL number (Q1 and Q3, not Q1 and Q2) and its note.
-    expect(screen.getByText("Q1: Tell me about yourself.")).toBeInTheDocument();
-    expect(screen.getByText("Q3: Describe a time you collaborated.")).toBeInTheDocument();
+    expect(screen.getByText("Q1:").parentElement).toHaveTextContent("Q1: Tell me about yourself.");
+    expect(screen.getByText("Q3:").parentElement).toHaveTextContent("Q3: Describe a time you collaborated.");
     expect(screen.queryByText("Q2: Which projects sparked your interest?")).not.toBeInTheDocument();
     expect(screen.getByText("Lacked detail and connection to the role.")).toBeInTheDocument();
 

@@ -31,8 +31,8 @@ vi.mock('@/components/VerificationRecovery', () => ({
   VerificationRecovery: () => null,
 }));
 
-vi.mock('@/components/chatbot', () => ({
-  ChatbotWidget: () => <div data-testid="chatbot-widget-marker" />,
+vi.mock('@/components/chatbot/ChatbotWidget', () => ({
+  default: () => <div data-testid="chatbot-widget-marker" />,
 }));
 
 beforeEach(() => {
@@ -62,15 +62,15 @@ describe('ClientLayout — chatbot widget mount gate', () => {
     expect(screen.queryByTestId('chatbot-widget-marker')).not.toBeInTheDocument();
   });
 
-  it('mounts the chatbot widget on an ordinary page', () => {
+  it('mounts the chatbot widget on an ordinary page', async () => {
     mockPathname = '/dashboard';
     render(<ClientLayout>{null}</ClientLayout>);
-    expect(screen.getByTestId('chatbot-widget-marker')).toBeInTheDocument();
+    expect(await screen.findByTestId('chatbot-widget-marker')).toBeInTheDocument();
   });
 
-  it('mounts the chatbot widget on mock-test pages that are not the live attempt', () => {
+  it('mounts the chatbot widget on mock-test pages that are not the live attempt', async () => {
     mockPathname = '/mock-test/results/1';
     render(<ClientLayout>{null}</ClientLayout>);
-    expect(screen.getByTestId('chatbot-widget-marker')).toBeInTheDocument();
+    expect(await screen.findByTestId('chatbot-widget-marker')).toBeInTheDocument();
   });
 });

@@ -325,7 +325,7 @@ describe("MockInterview HistoryPage", () => {
 
     await waitFor(() => expect(screen.getByTestId("progress-chart")).toHaveAttribute("data-scores", "[30,50,70]"));
     // "Latest change" compares the newest two scored sessions: 70 - 50.
-    expect(screen.getByText("Latest change").parentElement).toHaveTextContent("+20");
+    expect(screen.getByText("Latest change").closest(".mi-stat-card")).toHaveTextContent("+20");
   });
 
   it("excludes a row whose report fetch fails from the score badge and the stats/chart, instead of scoring it 0", async () => {
