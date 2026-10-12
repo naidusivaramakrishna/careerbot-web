@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import { useResume } from "../_context/ResumeContext";
 import { useScore } from "../_context/ScoreContext";
+import type { CanonicalScoreStatus } from "./score/FullAtsScoreCard";
 import { useResumeScorePreview } from "../_hooks/useResumeScorePreview";
+import { useFixedTextHighlights } from "../_hooks/useFixedTextHighlights";
+import { findHighlightRanges } from "../_utils/fixedTextHighlight";
 import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
@@ -24,6 +27,8 @@ import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
+import { isSectionKnownEmpty } from "../_utils/sectionPayloadKeys";
+import { useSavedResumeSnapshot } from "../_hooks/useSavedResumeSnapshot";
 import { getEnhancedCurrentScore } from "../_utils/enhancedScore";
 import { useCatalogues } from "@/hooks/useCatalogues";
 import { getAppliedCareerTemplate, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
@@ -48,30 +53,6 @@ const tabs = [
   { label: "Score", icon: BarChart2 },
   { label: "Job Match", icon: Shuffle },
 ];
-const PREVIEW_SECTION_ALIASES: Record<string, string[]> = {
-  contact: ["personal-info"],
-  personalinfo: ["personal-info"],
-  summary: ["summary"],
-  professionalsummary: ["summary"],
-  skills: ["skills"],
-  keywords: ["skills"],
-  education: ["education"],
-  projects: ["projects"],
-  internships: ["internships"],
-  workexperience: ["work-experience"],
-  experience: ["work-experience"],
-  certifications: ["certifications"],
-  certificates: ["certifications"],
-  achievements: ["achievements"],
-  awards: ["awards"],
-  languages: ["languages"],
-  hobbies: ["hobbies"],
-  interests: ["interests"],
-  volunteering: ["volunteering"],
-  publications: ["publications"],
-  references: ["references"],
-};
-
 const normalizeFixSection = (value: string): string =>
   value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -80,6 +61,23 @@ const isFormattingFix = (section: string, suggestionId: string): boolean => {
   return normalizedSection === "format" || normalizedSection === "formatting"
     || /^(format|formatting)[_-]/i.test(suggestionId);
 };
+
+const isFormattingSuggestion = (suggestion: { section: string; id: string }): boolean =>
+  isFormattingFix(suggestion.section, suggestion.id);
+
+// Painted by the `::highlight(ats-fixed-text)` rule in src/app/globals.css.
+export const FIXED_TEXT_HIGHLIGHT = "ats-fixed-text";
+
+export const selectPreviewScore = (
+  previewScore: number,
+  canonicalScore: number | null,
+  canonicalStatus: CanonicalScoreStatus,
+  enhancedScore?: number,
+): number => enhancedScore ?? (
+  (canonicalStatus === "ready" || canonicalStatus === "stale")
+    ? (canonicalScore ?? previewScore)
+    : previewScore
+);
 
 
 const PreviewPanel: React.FC<PreviewPanelProps> = ({
@@ -93,8 +91,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   expandPreview = false,
   pageScrollPreview = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey } = useResume();
-  const { canonicalScore, setCanonicalScore } = useScore();
+  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey, isLoadingResume } = useResume();
+  const savedResumeData = useSavedResumeSnapshot(resumeData, isLoadingResume, resumeSavedVersion, enhancedDataVersion);
+  const { canonicalScore, canonicalStatus, setCanonicalScore, markScoreStale } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
   const { getCataloguesMap } = useCatalogues();
 
@@ -106,41 +105,69 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
   }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
 
-  const displayScore = isEnhancedResume && enhancedAtsScore
-    ? Math.round(getEnhancedCurrentScore(enhancedAtsScore))
-    : (canonicalScore ?? previewScore.score);
-  const scoreLabel = "Score";
-  const fixedPreviewSections = React.useMemo(() => {
-    const sections = new Set<string>();
-    for (const suggestion of enhancedSuggestions) {
-      if (suggestion.status !== "fixed" || isFormattingFix(suggestion.section, suggestion.id)) continue;
-      for (const section of PREVIEW_SECTION_ALIASES[normalizeFixSection(suggestion.section)] ?? []) {
-        sections.add(section);
-      }
+  // ScoreTab is mounted only while its tab is open. Keep canonical-score
+  // freshness here instead because the preview remains mounted while users
+  // edit on the Editor tab. A ref avoids marking a just-calculated score stale
+  // merely because its own status changed; only a resume-data change does it.
+  const previousResumeDataRef = useRef(resumeData);
+  useEffect(() => {
+    if (previousResumeDataRef.current === resumeData) return;
+    previousResumeDataRef.current = resumeData;
+    if (!isEnhancedResume && canonicalScore !== null && canonicalStatus === "ready") {
+      markScoreStale();
     }
-    return sections;
-  }, [enhancedSuggestions]);
+  }, [resumeData, isEnhancedResume, canonicalScore, canonicalStatus, markScoreStale]);
+
+  const displayScore = selectPreviewScore(
+    previewScore.score,
+    canonicalScore,
+    canonicalStatus,
+    isEnhancedResume && enhancedAtsScore
+      ? Math.round(getEnhancedCurrentScore(enhancedAtsScore))
+      : undefined,
+  );
+  const scoreLabel = "Score";
+  // Text that applied ATS fixes wrote into the resume (undo removes it again).
+  const fixedTextUnits = useFixedTextHighlights(
+    resumeData,
+    enhancedSuggestions,
+    enhancedDataVersion,
+    isFormattingSuggestion,
+  );
   const hasFixedFormatting = enhancedSuggestions.some(suggestion =>
     suggestion.status === "fixed" && isFormattingFix(suggestion.section, suggestion.id),
   );
 
-  // Every enhanced template exposes its content areas through data-section.
-  // Highlight the affected section in the screen preview only; the actual
+  // Highlight only the text a fix changed, in the screen preview only; the
   // resume data and exported file are never decorated with UI-only state.
+  // Uses the CSS Custom Highlight API (no DOM mutation) and re-applies after
+  // every DOM change, because AutoPaginator rebuilds the page DOM on each
+  // re-measure and would drop anything added to the nodes themselves.
   useEffect(() => {
     const root = contentRef.current;
-    if (!isEnhancedResume || !root) return;
-    const marked = Array.from(root.querySelectorAll<HTMLElement>("[data-section]"));
-    for (const element of marked) {
-      element.classList.toggle(
-        "ats-enhancer-fixed-section",
-        fixedPreviewSections.has(element.dataset.section ?? ""),
-      );
+    const registry = typeof CSS !== "undefined" ? CSS.highlights : undefined;
+    if (!registry || typeof Highlight === "undefined") return;
+    if (!isEnhancedResume || !root || fixedTextUnits.length === 0) {
+      registry.delete(FIXED_TEXT_HIGHLIGHT);
+      return;
     }
-    return () => {
-      for (const element of marked) element.classList.remove("ats-enhancer-fixed-section");
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      registry.set(FIXED_TEXT_HIGHLIGHT, new Highlight(...findHighlightRanges(root, fixedTextUnits)));
     };
-  }, [enhancedDataVersion, fixedPreviewSections, isEnhancedResume, selectedTemplate]);
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    apply();
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => {
+      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+      registry.delete(FIXED_TEXT_HIGHLIGHT);
+    };
+  }, [fixedTextUnits, isEnhancedResume, selectedTemplate]);
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
@@ -330,8 +357,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   // effect's own dependency array. Either changing while every other input
   // stayed the same left the guard below treating it as a no-op: no fetch
   // ran, so a new resume kept showing the previous one's preview image.
+  // Sections known to be empty render nothing, so adding/removing one in the
+  // order must not trigger a re-render. Deleting a section that had content
+  // still refreshes once: its delete bumps resumeSavedVersion after persisting.
+  // Emptiness is read from the SAVED snapshot, not live resumeData: a draft typed
+  // into an empty section would otherwise change this signature and fetch the
+  // old persisted preview -- the same keystroke fetch described above.
+  const renderedSectionOrder = (sectionOrder || []).filter((n) => !isSectionKnownEmpty(savedResumeData as never, n));
   const previewSignature = JSON.stringify({
-    resumeSavedVersion, resumeStyle, sectionOrder, selectedTemplate, resumeIdProp, userEmail,
+    resumeSavedVersion, resumeStyle, sectionOrder: renderedSectionOrder, selectedTemplate, resumeIdProp, userEmail,
   });
   const lastPreviewSignatureRef = useRef<string | null>(null);
   const [previewRetryTick, setPreviewRetryTick] = useState(0);

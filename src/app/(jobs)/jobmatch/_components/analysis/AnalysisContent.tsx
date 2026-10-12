@@ -28,15 +28,15 @@ const ANALYSIS_DRAFT_KEY = "jm_analysisDraft";
 // scoreColor makes, just with a headline label attached.
 function matchBand(score: number): { label: string; color: string; description: string } {
   if (score >= 85) {
-    return { label: "Excellent Match", color: "#16A34A", description: "Your resume is a strong match for this position." };
+    return { label: "Excellent Match", color: "#076b4e", description: "Your resume is a strong match for this position." };
   }
   if (score >= 70) {
-    return { label: "Good Match", color: "#16A34A", description: "Your resume aligns well with the job requirements. A few improvements can make you a stronger candidate." };
+    return { label: "Good Match", color: "#076b4e", description: "Your resume aligns well with the job requirements. A few improvements can make you a stronger candidate." };
   }
   if (score >= 50) {
-    return { label: "Fair Match", color: "#EAB308", description: "Your resume partially matches this role — review the suggestions below to close the gap." };
+    return { label: "Fair Match", color: "#8a5a10", description: "Your resume partially matches this role — review the suggestions below to close the gap." };
   }
-  return { label: "Needs Improvement", color: "#DC2626", description: "Your resume needs several updates to better match this role." };
+  return { label: "Needs Improvement", color: "#b32b47", description: "Your resume needs several updates to better match this role." };
 }
 
 // Contact fields (email/phone/location) can only be written back onto a
@@ -1428,6 +1428,7 @@ export default function AnalysisContent({
                     key={tab.id}
                     type="button"
                     onClick={() => setPreviewTab(tab.id)}
+                    aria-pressed={(compareDocuments ? "resume" : previewTab) === tab.id}
                     className={`flex min-h-11 items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-[14px] font-semibold transition-colors ${
                       (compareDocuments ? "resume" : previewTab) === tab.id
                         ? "border-[#2257A7] text-[#2257A7]"
@@ -1453,6 +1454,7 @@ export default function AnalysisContent({
                 <button
                   type="button"
                   onClick={() => setIsEditMode((v) => !v)}
+                  aria-pressed={isEditMode}
                   className={`flex shrink-0 min-h-9 items-center gap-1.5 px-3.5 py-2 text-[14px] font-bold rounded-lg border transition-all ${isEditMode ? "bg-[#2257A7] text-white border-[#2257A7] hover:bg-[#1A4589]" : "text-[#2257A7] border-[#c7d9f5] hover:bg-blue-50"}`}
                 >
                   <Pencil className="w-4 h-4" />
@@ -1561,7 +1563,7 @@ export default function AnalysisContent({
               <div><h2>Current Match Score</h2><span className={styles.scoreBadge} style={{color: scoreBand.color, background: `color-mix(in srgb, ${scoreBand.color} 12%, white)`}}>{scoreBand.label}</span><p>Based on your current resume</p></div>
             </section>
             <section className={styles.potentialScore}><h2>Potential Match Score</h2><strong>{Math.round(potentialScore)}%</strong><p>Estimated with suggested fixes (+{potentialGain} pts)</p></section>
-            <section className={styles.downloadCard}><h2>{appliedSuggestionIds.length} of {Math.max(fixCounts.all, appliedSuggestionIds.length)} applied</h2><progress aria-label="Applied fixes" value={appliedSuggestionIds.length} max={Math.max(1, fixCounts.all, appliedSuggestionIds.length)}/><button type="button" onClick={handleDownload} disabled={downloadDisabled}>{isDownloading ? <Loader2 className="animate-spin"/> : <Download/>}{isDownloading ? "Downloading..." : "Download Updated Resume"} <span>({appliedSuggestionIds.length} fixes)</span></button><p>{isSavingSection ? "Saving changes..." : "Review your changes before downloading."}</p></section>
+            <section className={styles.downloadCard}><h2>{appliedSuggestionIds.length} of {Math.max(fixCounts.all, appliedSuggestionIds.length)} applied</h2><progress aria-label="Applied fixes" value={appliedSuggestionIds.length} max={Math.max(1, fixCounts.all, appliedSuggestionIds.length)}/><button type="button" className={appliedSuggestionIds.length > 0 ? styles.hasFixes : undefined} onClick={handleDownload} disabled={downloadDisabled}>{isDownloading ? <Loader2 className="animate-spin"/> : <Download/>}{isDownloading ? "Downloading..." : "Download Updated Resume"} <span>({appliedSuggestionIds.length} fixes)</span></button><p>{isSavingSection ? "Saving changes..." : "Review your changes before downloading."}</p></section>
           </div>
         {compareDocuments ? (
           <section className={`${styles.documentColumn} ${styles.comparisonJd}`} aria-label="Job description comparison">

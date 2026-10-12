@@ -448,12 +448,16 @@ export default function MockTestHistoryPage() {
                                 <Eye size={14} style={{ color: '#94A3B8' }} />
                                 View result
                               </button>
-                              {/* Straight to the questions, answers and explanations.
-                                  "View result" lands on the score summary, so the
-                                  per-question review — the part a candidate actually
-                                  learns from — was two clicks further in. */}
+                              {/* The runner's review mode (reviewParentSession) lands in a
+                                  separate stacked PR — this still routes to the results page
+                                  until that merges, so it isn't a dead link in the meantime. */}
                               <button
-                                onClick={() => { router.push(`/mock-test/results/${test.id}${test.sessionId ? `?parentSession=${test.sessionId}&tab=review` : ''}`); setOpenMenu(null); }}
+                                onClick={() => {
+                                  router.push(test.sessionId
+                                    ? `/mock-test/results/${test.id}?parentSession=${test.sessionId}&tab=review`
+                                    : `/mock-test/results/${test.id}`);
+                                  setOpenMenu(null);
+                                }}
                                 className="flex items-center gap-2.5 w-full px-3.5 py-2 text-sm text-left hover:bg-slate-50"
                                 style={{ color: '#475569' }}
                               >

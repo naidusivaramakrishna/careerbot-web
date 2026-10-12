@@ -61,21 +61,20 @@ describe("transformCustomSectionsForBackend", () => {
     expect(persisted.id).toBe("real-backend-id-abc");
   });
 
-  it("drops a section with no fields at all", () => {
+  it("keeps a section with no fields so it can be reopened to add the first field", () => {
     const result = transformCustomSectionsForBackend([section({ fields: [] })]);
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ sectionName: "Patents", items: [], fields: [] });
   });
 
-  it("drops a section whose every field is blank (empty string, empty array, or falsy)", () => {
-    const result = transformCustomSectionsForBackend([
-      section({
-        fields: [
-          { id: "f1", fieldName: "Notes", fieldType: "text", value: "   " },
-          { id: "f2", fieldName: "Tags", fieldType: "list", value: [] },
-        ],
-      }),
-    ]);
-    expect(result).toEqual([]);
+  it("keeps field definitions even while their values are blank", () => {
+    const fields = [
+      { id: "f1", fieldName: "Notes", fieldType: "text" as const, value: "   " },
+      { id: "f2", fieldName: "Tags", fieldType: "list" as const, value: [] },
+    ];
+    const result = transformCustomSectionsForBackend([section({ fields })]);
+    expect(result).toHaveLength(1);
+    expect(result[0].fields).toEqual(fields);
   });
 
   it("keeps a section where at least one field has real content", () => {
@@ -90,7 +89,7 @@ describe("transformCustomSectionsForBackend", () => {
     expect(result).toHaveLength(1);
   });
 
-  it("keeps multiple genuinely populated sections and drops only the empty ones", () => {
+  it("keeps populated and empty editable section definitions", () => {
     const result = transformCustomSectionsForBackend([
       section({ id: "s1", sectionName: "Patents" }),
       section({ id: "s2", sectionName: "Blank Section", fields: [] }),
@@ -98,6 +97,6 @@ describe("transformCustomSectionsForBackend", () => {
         { id: "f1", fieldName: "Event", fieldType: "text", value: "PyCon" },
       ] }),
     ]);
-    expect(result.map((s) => s.sectionName)).toEqual(["Patents", "Speaking"]);
+    expect(result.map((s) => s.sectionName)).toEqual(["Patents", "Blank Section", "Speaking"]);
   });
 });

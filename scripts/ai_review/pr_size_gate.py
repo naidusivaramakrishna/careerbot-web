@@ -21,6 +21,15 @@ tighter than the scope guard's (8,000 / 120 / 40): that one decides whether a
 review is possible at all, this one whether the PR is a reasonable size to ask
 a human and the AI reviewer to read.
 
+This gate ALSO exempts TEST_FILE_PATTERNS, by calling size_stats with
+exempt_tests=True. Tests are not generated and they do get reviewed -- they are
+exempt from the LINE CAP only, because counting them taxes the one thing this
+cap should encourage. Measured across careerbot-web PRs #144-#148, tests were
+18-74% of each diff and no PR exceeded 1,500 lines of PRODUCTION code (largest
+1,007); two PRs failed this gate purely on test volume, and on #144 the cap
+then blocked an 11-line correctness fix. The scope guard keeps counting tests,
+because a 9,000-line diff is unreviewable whatever is in it.
+
 The maintainer-only label SIZE_OVERRIDE_LABEL (`ai-review-large`) lifts the
 failure, exactly as it lifts the scope guard's caps; the size label still says
 how big the PR is, and the job summary names who applied the override.
@@ -50,6 +59,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ai_pr_review import (  # noqa: E402
     GENERATED_FILE_PATTERNS,
     SIZE_OVERRIDE_LABEL,
+    TEST_FILE_PATTERNS,
     label_actor,
     size_stats,
 )
@@ -115,10 +125,11 @@ def split_advice(stats) -> list:
             "then the behaviour change, then follow-up UI/copy. Each must build on its own.",
             "Land shared groundwork first (types, API client, utilities, feature-flagged "
             "components) and stack the feature on top in a second PR.",
-            "Move tests or fixtures for already-merged code, formatting-only changes, and "
-            "stray files (backups, `*.tmp.*`, exported HTML) out of the PR -- or delete them.",
-            "Regenerated files (lockfiles, `*.min.*`, `*.map`, snapshots) do not count "
-            "toward the line limit, but each still counts as a file.",
+            "Move fixtures for already-merged code, formatting-only changes, and stray "
+            "files (backups, `*.tmp.*`, exported HTML) out of the PR -- or delete them.",
+            "Regenerated files (lockfiles, `*.min.*`, `*.map`, snapshots) and test files "
+            "do not count toward the LINE limit, but each still counts as a file. Do not "
+            "delete tests to fit the cap -- they are already free.",
         ]
     if int(stats.get("commits") or 0) > MAX_COMMITS:
         tips.append(
@@ -136,17 +147,30 @@ def _table(stats) -> str:
         rows.append(f"| {label.capitalize()} | {v:,} | {cap:,} | {'❌' if v > cap else '✅'} |")
     rows.append(f"| Excluded generated added lines | {int(stats.get('excluded_added') or 0):,} "
                 f"| not counted | |")
+    rows.append(f"| Excluded test added lines | {int(stats.get('tests_added') or 0):,} "
+                f"| not counted | |")
     return "\n".join(rows)
 
 
+def _file_list(paths, heading, limit=40) -> str:
+    """`heading` + a bulleted path list, or a one-line "none"."""
+    if not paths:
+        return f"_{heading}: none._"
+    lines = [f"- `{p}` (+{n:,})" for p, n in paths[:limit]]
+    if len(paths) > limit:
+        lines.append(f"- …and {len(paths) - limit} more")
+    return f"_{heading} (still counted as files):_\n" + "\n".join(lines)
+
+
 def _excluded_list(stats, limit=40) -> str:
-    excl = stats.get("excluded") or []
-    if not excl:
-        return "_Excluded generated files: none._"
-    lines = [f"- `{p}` (+{n:,})" for p, n in excl[:limit]]
-    if len(excl) > limit:
-        lines.append(f"- …and {len(excl) - limit} more")
-    return "_Excluded generated files (still counted as files):_\n" + "\n".join(lines)
+    """Generated and test exemptions, named separately.
+
+    Deliberately two lists: a hand-written test file is not "generated", and
+    labelling it so in the report would be a false statement about the code.
+    """
+    return (_file_list(stats.get("excluded") or [], "Excluded generated files", limit)
+            + "\n\n"
+            + _file_list(stats.get("tests") or [], "Excluded test files", limit))
 
 
 def summary_markdown(stats, verdict, actor=None) -> str:
@@ -175,7 +199,9 @@ def summary_markdown(stats, verdict, actor=None) -> str:
                      f"maintainer can apply `{SIZE_OVERRIDE_LABEL}`. {RERUN_HINT}")
         parts.append("")
     parts.append(f"<sub>Generated-file patterns (shared with the ai-review scope guard): "
-                 f"{', '.join(f'`{g}`' for g in GENERATED_FILE_PATTERNS)}. Size labels by "
+                 f"{', '.join(f'`{g}`' for g in GENERATED_FILE_PATTERNS)}. "
+                 f"Test patterns exempt from the LINE cap here only: "
+                 f"{', '.join(f'`{t}`' for t in TEST_FILE_PATTERNS)}. Size labels by "
                  f"reviewable added lines: XS <50, S <200, M <500, L <1000, XL ≤1500, "
                  f"XXL >1500.</sub>")
     return "\n".join(parts) + "\n"
@@ -235,7 +261,7 @@ def ensure_commits(pr, base: str, head: str) -> None:
 
 def git_stats(base: str, head: str) -> dict:
     """The ai-review scope guard's numbers: same diff, same split, same commit count."""
-    stats = size_stats(_git("diff", "--numstat", f"{base}...{head}"))
+    stats = size_stats(_git("diff", "--numstat", f"{base}...{head}"), exempt_tests=True)
     stats["commits"] = int(_git("rev-list", "--count", f"{base}..{head}").strip() or 0)
     return stats
 

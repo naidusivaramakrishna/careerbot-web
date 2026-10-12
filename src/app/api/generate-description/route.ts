@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { logger } from "@/lib/logger";
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const AZURE_ENDPOINT = "https://veliv-mgtcnqad-uaenorth.services.ai.azure.com";
 const DEPLOYMENT = "Llama-3.3-70B-Instruct";
@@ -35,7 +36,7 @@ async function readBodyCapped(req: Request, limit: number): Promise<string | nul
   return new TextDecoder().decode(merged);
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   // Require a VERIFIED session — this route spends the server-side Azure API
   // key, so cookie presence is not enough: the JWT signature must check out.
   const cookieStore = await cookies();
@@ -234,3 +235,5 @@ IMPORTANT:
     );
   }
 }
+
+export const POST = withApiMetrics('/api/generate-description', 'POST', handlePOST);

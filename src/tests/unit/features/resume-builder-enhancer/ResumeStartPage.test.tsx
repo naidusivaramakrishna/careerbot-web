@@ -5,8 +5,9 @@ import ResumeStartPage from '@/app/(resume)/builder/start/page';
 import { getAllResumesUnified } from '@/api/resumeApi';
 import { toast } from 'sonner';
 
-const { mockPush } = vi.hoisted(() => ({
+const { mockPush, mockSearchParams } = vi.hoisted(() => ({
   mockPush: vi.fn(),
+  mockSearchParams: vi.fn(),
 }));
 
 const mockRouter = {
@@ -15,6 +16,7 @@ const mockRouter = {
 
 vi.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
+  useSearchParams: () => mockSearchParams(),
 }));
 
 vi.mock('@/api/resumeApi', () => ({
@@ -45,6 +47,7 @@ const mockToast = vi.mocked(toast);
 describe('ResumeStartPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSearchParams.mockReturnValue(new URLSearchParams());
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [],
       enhanced_resumes: [],
@@ -93,6 +96,34 @@ describe('ResumeStartPage', () => {
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/builder/start/list');
     });
+  });
+
+  it('opens the active builder resume directly when returning to Cover Letter', async () => {
+    localStorage.setItem('current_resume_id', 'builder-2');
+    mockSearchParams.mockReturnValue(new URLSearchParams('return_to=/cover-letter/new'));
+    mockGetAllResumesUnified.mockResolvedValue({
+      builder_resumes: [{ id: 'builder-1' }, { id: 'builder-2' }],
+      enhanced_resumes: [],
+    } as never);
+
+    render(<ResumeStartPage />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/builder/creation/builder-2?return_to=%2Fcover-letter%2Fnew');
+    });
+  });
+
+  it('shows creation choices when Cover Letter has no builder resume', async () => {
+    mockSearchParams.mockReturnValue(new URLSearchParams('return_to=/cover-letter/new'));
+    mockGetAllResumesUnified.mockResolvedValue({
+      builder_resumes: [],
+      enhanced_resumes: [{ id: 'enhanced-1' }],
+    } as never);
+
+    render(<ResumeStartPage />);
+
+    expect(await screen.findByTestId('empty-state')).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('keeps empty state visible for auth failures without showing an error toast', async () => {

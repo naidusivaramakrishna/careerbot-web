@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Play, AlertCircle, Wand2 } from 'lucide-react';
 import { checkCredits } from '@/api/creditsApi';
+import { CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
 
 // Only the levels the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES).
 // "Mixed" was offered here but the backend rejects it, so it could never start a test.
@@ -12,11 +13,10 @@ type Difficulty = 'Easy' | 'Medium' | 'Hard';
 const categoryOptions = ['Aptitude', 'Arithmetic', 'Reasoning', 'Technical'] as const;
 type Category = typeof categoryOptions[number];
 
-const difficultyOptions: Difficulty[] = ['Easy', 'Medium', 'Hard'];
+const formatSlug = (slug: string): string =>
+  slug.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-const timePerQuestion: Record<Difficulty, number> = {
-  Easy: 1.5, Medium: 2, Hard: 2.5,
-};
+const difficultyOptions: Difficulty[] = ['Easy', 'Medium', 'Hard'];
 
 
 const diffMeta: Record<Difficulty, { color: string; bg: string; border: string }> = {
@@ -32,15 +32,30 @@ export default function CustomTestPage() {
   // No default: the user must pick explicitly. Pre-selecting 'Medium' let tests
   // start with a level the user never actually chose.
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
-  const [questionCount] = useState(30);
   const [validationError, setValidationError] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [outOfCredits, setOutOfCredits] = useState(false);
 
+  // Subcategory picks, keyed by lowercase category. Narrowing only — a category
+  // with no explicit picks here still runs with its full default subcategory
+  // pool, so this stays fully optional on top of the required category choice.
+  const [subcategoriesByCategory, setSubcategoriesByCategory] = useState<Record<string, string[]>>({});
+
   const toggleCategory = (cat: Category) => {
     setCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
     setValidationError('');
+  };
+
+  const toggleSubcategory = (cat: Category, sub: string) => {
+    // CATEGORY_SUBCATEGORIES is keyed lowercase; this UI's category labels are
+    // capitalized for display, so every lookup into it goes through toLowerCase().
+    const key = cat.toLowerCase();
+    setSubcategoriesByCategory(prev => {
+      const current = prev[key] ?? [];
+      const next = current.includes(sub) ? current.filter(s => s !== sub) : [...current, sub];
+      return { ...prev, [key]: next };
+    });
   };
 
   const handleStartTest = async () => {
@@ -84,8 +99,17 @@ export default function CustomTestPage() {
       parentSessionId,
       categories: categories.map(c => c.toLowerCase()).join(','),
       difficulty: difficulty.toLowerCase(),
-      count: questionCount.toString(),
     });
+
+    // Positional, one '+'-joined segment per category (same order as `categories`);
+    // empty = runner falls back to that category's full default pool.
+    const hasAnySubcategoryPicks = categories.some(cat => (subcategoriesByCategory[cat.toLowerCase()] ?? []).length > 0);
+    if (hasAnySubcategoryPicks) {
+      params.set(
+        'subcategories',
+        categories.map(cat => (subcategoriesByCategory[cat.toLowerCase()] ?? []).join('+')).join('|')
+      );
+    }
     router.push(`/mock-test/custom-test?${params.toString()}`);
   };
 
@@ -96,7 +120,7 @@ export default function CustomTestPage() {
 
         {/* Breadcrumb — same shape as section intro */}
         <div className="mb-6 text-sm flex items-center gap-2">
-          <button onClick={() => router.push('/mock-test')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
+          <button onClick={() => router.push('/mock-test/browse')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
           <span style={{ color: '#CBD5E1' }}>›</span>
           <span className="font-semibold" style={{ color: '#0F172A' }}>Custom Builder</span>
         </div>
@@ -175,6 +199,53 @@ export default function CustomTestPage() {
                     {validationError}
                   </div>
                 )}
+
+                {/* Per-category topic narrowing — optional. Leaving a category's
+                    topics untouched runs it across that category's full pool. */}
+                {categories.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    {categories.map(cat => {
+                      const subs = CATEGORY_SUBCATEGORIES[cat.toLowerCase()] ?? [];
+                      if (subs.length === 0) return null;
+                      const picked = subcategoriesByCategory[cat.toLowerCase()] ?? [];
+                      return (
+                        <div key={cat} className="rounded-xl border p-3" style={{ borderColor: '#E5E7EB', background: '#F8FAFC' }}>
+                          <div className="flex items-baseline justify-between mb-2">
+                            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#475569' }}>
+                              {cat} topics <span className="font-normal normal-case" style={{ color: '#94A3B8' }}>— optional, all included by default</span>
+                            </p>
+                            {picked.length > 0 && (
+                              <span className="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full"
+                                style={{ background: '#dbeafe', color: '#1e3a8a' }}>
+                                {picked.length} selected
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {subs.map(sub => {
+                              const isPicked = picked.includes(sub);
+                              return (
+                                <button
+                                  type="button"
+                                  key={sub}
+                                  onClick={() => toggleSubcategory(cat, sub)}
+                                  aria-pressed={isPicked}
+                                  className="px-3 py-1.5 rounded-full text-xs font-semibold border transition"
+                                  style={isPicked
+                                    ? { borderColor: '#1e3a8a', background: '#1e3a8a', color: '#ffffff' }
+                                    : { borderColor: '#E5E7EB', background: '#ffffff', color: '#475569' }
+                                  }
+                                >
+                                  {formatSlug(sub)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </li>
 
@@ -205,9 +276,6 @@ export default function CustomTestPage() {
                           style={{ color: isSelected ? meta.color : '#0F172A' }}>
                           {level}
                         </span>
-                        <span className="text-[11px]" style={{ color: isSelected ? meta.color : '#94A3B8' }}>
-                          {timePerQuestion[level]} min/Q
-                        </span>
                       </label>
                     );
                   })}
@@ -232,7 +300,7 @@ export default function CustomTestPage() {
         {/* Bottom action row — section-intro DNA */}
         <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
           <button
-            onClick={() => router.push('/mock-test')}
+            onClick={() => router.push('/mock-test/browse')}
             className="text-sm font-medium hover:underline"
             style={{ color: '#475569' }}
           >

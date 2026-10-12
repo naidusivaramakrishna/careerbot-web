@@ -961,6 +961,9 @@ class TestAnUnreviewedPRNeverGoesGreenOnRerun:
             gate, "existing_review_sha",
             lambda *a, **k: (None, "h" * 40, False) if wide else (None, "h" * 40))
         monkeypatch.setattr(gate, "existing_review_body", lambda *a, **k: prior)
+        # A readable comment list with no earlier ledger (careerbot-web reads it
+        # on this path since #183; raising=False keeps this suite shareable).
+        monkeypatch.setattr(gate, "pr_comments", lambda *a, **k: [], raising=False)
         return gate.review_one("o/r", 1, {}, False, False, False, False)
 
     def _scope_guard_body(self):

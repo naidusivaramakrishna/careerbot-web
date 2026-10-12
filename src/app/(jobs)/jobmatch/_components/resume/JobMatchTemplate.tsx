@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Edit3, Trash2 } from "lucide-react";
 import { RESUME_FONTS } from "./ResumeHeader";
 import { getSafeExternalUrl } from "@/utils/validators";
+import { getEducationScore } from "@/utils/resumeMappers";
 
 interface JobMatchTemplateProps {
   data: any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -622,7 +623,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               const branch = toStr(edu.branch || edu.field || edu.specialization);
               const startDate = toStr(edu.startDate || edu.start_date || edu.from);
               const endDate = toStr(edu.endDate || edu.end_date || edu.to || edu.graduation_year || edu.passed_out || edu.year);
-              const grade = toStr(edu.grade || edu.gpa || edu.GPA || edu.cgpa || edu.CGPA || edu.percentage);
+              const grade = getEducationScore(edu).display;
 
               const itemChanged = hlIdx('education', idx);
               return (

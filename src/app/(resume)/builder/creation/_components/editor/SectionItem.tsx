@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { FaCheckCircle } from 'react-icons/fa';
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
 import { RiSparkling2Fill } from 'react-icons/ri';
+import { toast } from "sonner";
 import { deleteResumeSection } from "@/api/resumeApi"; // ✅ Import the delete API
 
 interface Props {
@@ -20,6 +21,8 @@ interface Props {
   isDragging?: boolean;
   resumeId?: string;
   sectionKey?: string;
+  /** Called once the delete has been persisted (after the success toast). */
+  onDeleted?: () => void;
 }
 
 const SectionItem: React.FC<Props> = ({
@@ -36,6 +39,7 @@ const SectionItem: React.FC<Props> = ({
   isDragging,
   resumeId,
   sectionKey,
+  onDeleted,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [deleteHovered, setDeleteHovered] = useState(false);
@@ -63,6 +67,8 @@ const SectionItem: React.FC<Props> = ({
         setIsDeleting(true);
         await onDeleteAsync();
         setShowConfirmModal(false);
+        toast.success("Section deleted successfully.");
+        onDeleted?.();
       } catch {
         alert("Failed to delete section. Please try again.");
       } finally {
@@ -78,6 +84,8 @@ const SectionItem: React.FC<Props> = ({
       await deleteResumeSection(resumeId, sectionKey);
       onDelete();
       setShowConfirmModal(false);
+      toast.success("Section deleted successfully.");
+      onDeleted?.();
     } catch {
       alert("Failed to delete section. Please try again.");
     } finally {

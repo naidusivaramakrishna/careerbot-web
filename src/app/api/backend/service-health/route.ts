@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   // Require authenticated session — prevents unauthenticated info disclosure
   const cookieStore = await cookies();
   const session = cookieStore.get('access_token') ?? cookieStore.get('session');
@@ -29,3 +30,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ status: 'error' }, { status: 503 });
   }
 }
+
+export const GET = withApiMetrics('/api/backend/service-health', 'GET', handleGET);

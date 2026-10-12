@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * decodeJwt, which trusts an unverified payload). JWT_SECRET is the same
  * secret middleware.ts verifies with.
  */
-export async function GET() {
+async function handleGET() {
   const cookieStore = await cookies();
   const token = cookieStore.get('access_token')?.value;
   const secret = process.env.JWT_SECRET;
@@ -44,3 +45,5 @@ export async function GET() {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 }
+
+export const GET = withApiMetrics('/api/auth/stream-token', 'GET', handleGET);

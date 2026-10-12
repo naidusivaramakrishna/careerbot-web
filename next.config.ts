@@ -14,6 +14,11 @@ const _serverRemotePattern = {
 const nextConfig: NextConfig = {
   reactStrictMode: false, // ✅ Make sure this is here
 
+  // prom-client (src/lib/observability) is loaded from node_modules at runtime
+  // instead of being bundled into every route chunk: one copy per process,
+  // and it never ends up in a client or edge bundle.
+  serverExternalPackages: ['prom-client'],
+
   // Dev-server rewrites proxy default is 30s; mock-test/generate routinely
   // takes 30-60s (Azure OpenAI generation + verify chain) so requests get
   // killed mid-flight with ECONNRESET. Raise to 4 minutes.
@@ -49,6 +54,12 @@ const nextConfig: NextConfig = {
       {
         protocol: "http",
         hostname: "localhost",
+        port: "8000",
+        pathname: "/**",
+      },
+      {
+        protocol: "http",
+        hostname: "127.0.0.1",
         port: "8000",
         pathname: "/**",
       },

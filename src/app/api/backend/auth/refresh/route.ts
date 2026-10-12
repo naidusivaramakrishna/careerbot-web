@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sanitiseCookie } from '@/lib/cookieUtils';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 export const maxDuration = 60;
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const tenantId = request.headers.get('X-Tenant-Id') || 'public';
   const controller = new AbortController();
   // Must stay under `maxDuration` above -- an 85s abort under a 60s route
@@ -70,3 +71,5 @@ export async function POST(request: NextRequest) {
     clearTimeout(fetchTimeout);
   }
 }
+
+export const POST = withApiMetrics('/api/backend/auth/refresh', 'POST', handlePOST);

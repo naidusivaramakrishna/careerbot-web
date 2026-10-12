@@ -7,10 +7,15 @@ import { formatDate } from '@/app/admin/_utils/formatDate'
 import { SlidePanel } from '@/app/admin/_components/SlidePanel'
 import { UserProfileSection } from './UserProfileSection'
 import { UserEditForm, type EditFormData } from './UserEditForm'
-import { UserDetailsTabs } from './UserDetailsTabs'
+import { UserDetailsTabs, DEFAULT_USER_DETAILS_TABS } from './UserDetailsTabs'
 import { ActivityTab, PaymentsTab, ResumesTab, SubscriptionTab } from './TabContents'
 import { UserActionButtons } from './UserActionButtons'
 import { DeleteDialog, SuspendDialog } from './ActionDialogs'
+import { UserCreditsSection } from './UserCreditsSection'
+import { CreditHistoryTab } from './CreditHistoryTab'
+import { useAdminAccess } from '@/app/admin/_hooks/useAdminAccess'
+
+const SUPER_ADMIN_TABS = [...DEFAULT_USER_DETAILS_TABS, 'Credit history'] as const
 
 interface Props {
     userId: string
@@ -30,6 +35,15 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
         handleUnsuspendUser,
         handleDeleteUser
     } = useUserDetails(userId)
+
+    // Role is a UI hint only: add-credits and credit-history are enforced
+    // server-side (403 for non-SUPER_ADMIN).
+    const { userRole } = useAdminAccess('user-management')
+    const isSuperAdmin = userRole === 'SUPER_ADMIN'
+    const [creditHistoryVersion, setCreditHistoryVersion] = useState(0)
+    const handleCreditsAdded = useCallback(() => {
+        setCreditHistoryVersion(v => v + 1)
+    }, [])
 
     const [isEditing, setIsEditing] = useState(false)
     const [showSuspendDialog, setShowSuspendDialog] = useState(false)
@@ -122,6 +136,14 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
                     formatDate={formatDate}
                 />
 
+                {/* Credits */}
+                <UserCreditsSection
+                    userId={user.id}
+                    userLabel={user.full_name || user.username || user.email}
+                    canAddCredits={isSuperAdmin}
+                    onCreditsAdded={handleCreditsAdded}
+                />
+
                 {/* Edit Form */}
                 {isEditing && (
                     <UserEditForm
@@ -136,6 +158,7 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
                 <UserDetailsTabs
                     activeTab={activeTab}
                     onTabChange={setActiveTab}
+                    tabs={isSuperAdmin ? SUPER_ADMIN_TABS : DEFAULT_USER_DETAILS_TABS}
                 />
 
                 {/* Tab Content */}
@@ -155,6 +178,13 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
                         <PaymentsTab
                             payments={user.payments || []}
                             formatDate={formatDate}
+                        />
+                    )}
+
+                    {activeTab === 'Credit history' && isSuperAdmin && (
+                        <CreditHistoryTab
+                            userId={user.id}
+                            refreshKey={creditHistoryVersion}
                         />
                     )}
 

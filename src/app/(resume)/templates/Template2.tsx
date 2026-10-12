@@ -1,9 +1,11 @@
 "use client";
 import React from "react";
+import { markPreviewSection } from "./_utils/previewSectionMarker";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
 import { filterSkillsByDomain, hasPrintableSkills } from "./skillsFilterByDomain";
+import { isRedundantCustomSectionFieldLabel, extractNamedCustomSection, splitCompetencyLabel } from "../builder/creation/_utils/customSectionIdentity";
 
 interface Props {
   data: ResumeData;
@@ -59,6 +61,13 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
   // Filter skills by domain
   const filteredCategorizedSkills = filterSkillsByDomain(categorizedSkills, domainFamily);
 
+  // Pulled out so it can be positioned right after the summary and styled on
+  // its own, instead of through the generic trailing custom-sections block.
+  const { match: coreCompetenciesSection, rest: otherCustomSections } = extractNamedCustomSection(
+    customSections,
+    "Core Competencies"
+  );
+
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
       if (careerLevel === "Fresher") return "OBJECTIVE";
@@ -68,7 +77,10 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     if (section === "Skills") {
       const isCorporateDomain = CORPORATE_DOMAINS.includes(domainFamily || '');
       const isSeniorLevel = careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President";
-      return isCorporateDomain && isSeniorLevel ? "CORE COMPETENCIES" : "SKILLS";
+      // A real Core Competencies section (achievement-style phrases from the
+      // resume) always wins that heading -- relabeling Skills to the same
+      // heading here too would print "CORE COMPETENCIES" twice.
+      return isCorporateDomain && isSeniorLevel && !coreCompetenciesSection ? "CORE COMPETENCIES" : "SKILLS";
     }
     if (section === "Projects") {
       return domainFamily === "core_engineering" ? "KEY PROJECTS" : "PROJECTS";
@@ -1165,6 +1177,64 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     return <h2 style={sectionHeadingStyle}>{title}</h2>;
   };
 
+  const renderCoreCompetencies = () => {
+    if (!coreCompetenciesSection) return null;
+    // Render EVERY field, not only fields[0]. A Core Competencies section the
+    // user created in the custom-section editor can hold several fields, and
+    // until this section was pulled out of the generic custom-sections block
+    // below, that block printed all of them. Reading only the first field here
+    // would silently drop the rest from the rendered resume.
+    const body = coreCompetenciesSection.fields.map((field) => {
+      const fieldLabel = isRedundantCustomSectionFieldLabel(coreCompetenciesSection, field)
+        ? null
+        : <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>;
+      if (Array.isArray(field.value)) {
+        const list = field.value.filter(v => v?.trim());
+        if (list.length === 0) return null;
+        return (
+          <div key={field.id}>
+            {fieldLabel}
+            <ul style={{ ...baseTextStyle, margin: 0, paddingLeft: "20px", fontSize: "12px", listStyleType: "disc" }}>
+              {list.map((point, idx) => {
+                const labelMatch = splitCompetencyLabel(point);
+                return (
+                  <li key={idx}>
+                    {labelMatch ? (
+                      <>
+                        <strong>{labelMatch.label}</strong>
+                        {labelMatch.rest ? ` ${labelMatch.rest}` : ""}
+                      </>
+                    ) : point}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      }
+      // A manually-created Core Competencies section (via the custom-section
+      // editor) can be a single text block rather than a list -- fall back to
+      // the same HTML/newline-aware renderer the generic custom sections use,
+      // so a user's own entry never silently disappears here.
+      const text = field.value?.toString().trim();
+      if (!text) return null;
+      return (
+        <div key={field.id} style={{ paddingLeft: "20px" }}>
+          {fieldLabel}
+          {renderHTMLToReact(text)}
+        </div>
+      );
+    }).filter(Boolean);
+    if (body.length === 0) return null;
+    return (
+      <div>
+        {renderSectionHeading("CORE COMPETENCIES")}
+        <div style={sectionBorderStyle("12px")} />
+        {body}
+      </div>
+    );
+  };
+
   const renderDomainPersonalInfo = () => {
     const fields: { label: string; value?: string; isUrl?: boolean }[] = [];
     if (domainFamily === 'healthcare') {
@@ -1550,15 +1620,21 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
   return (
     <div style={{ ...baseTextStyle, padding: "32px", maxWidth: "900px", minHeight: "100vh", width: "100%" }}>
       {/* Header */}
-      {renderHeader()}
+      {markPreviewSection("Personal Info", renderHeader())}
       {renderDomainPersonalInfo()}
 
       {/* Render sections in order */}
       {sectionOrder && sectionOrder.length > 0 ? (() => {
         const items = sectionOrder
           .filter(s => s !== "Personal Info")
-          .map(section => ({ section, rendered: renderSection(section) }))
+          .map(section => ({ section, rendered: markPreviewSection(section, renderSection(section)) }))
           .filter(({ rendered }) => rendered !== null);
+        const coreCompetenciesRendered = renderCoreCompetencies();
+        if (coreCompetenciesRendered) {
+          const summaryIdx = items.findIndex(({ section }) => section === "Professional Summary");
+          const ccItem = { section: "Core Competencies", rendered: coreCompetenciesRendered };
+          items.splice(summaryIdx >= 0 ? summaryIdx + 1 : 0, 0, ccItem);
+        }
         return items.map(({ section, rendered }, idx) => {
           const isLast = idx === items.length - 1;
           if (layoutVariant === "left-right" || layoutVariant === "left-stacked") {
@@ -1587,8 +1663,15 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         });
       })() : null}
 
+      {/* Core Competencies is inserted into the ordered list above, which only
+          runs when there IS an order. With an empty order (the prop's own
+          default) that insertion never happens -- and the section is no longer
+          in otherCustomSections either, because it was extracted out of it. So
+          render it here instead of dropping it from the resume entirely. */}
+      {(!sectionOrder || sectionOrder.length === 0) && renderCoreCompetencies()}
+
       {/* Custom Sections */}
-      {customSections && customSections.map((section, sectionIdx) => (
+      {otherCustomSections.map((section, sectionIdx) => (
         section.fields && section.fields.some(f => f.value && (typeof f.value === 'string' ? f.value.trim() !== '' : Array.isArray(f.value) ? f.value.some(v => v?.trim?.() !== '') : false)) && (
           <div key={sectionIdx} style={{ marginBottom: "16px" }}>
             {renderSectionHeading(section.sectionName.toUpperCase())}
@@ -1603,9 +1686,11 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
 
                 return (
                   <div key={field.id} style={{ marginBottom: "8px" }}>
-                    <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>
+                    {!isRedundantCustomSectionFieldLabel(section, field) && (
+                      <span className="font-semibold" style={titleStyle}>{field.fieldName}: </span>
+                    )}
                     {Array.isArray(field.value) ? (
-                      <ul style={{ ...baseTextStyle, margin: 0, paddingLeft: "20px", fontSize: "12px" }}>
+                      <ul style={{ ...baseTextStyle, margin: 0, paddingLeft: "20px", fontSize: "12px", listStyleType: "disc" }}>
                         {(field.value as string[])
                           .filter(v => v?.trim?.() !== '')
                           .map((item, idx) => (

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
+async function handleGET(
   request: NextRequest,
   { params }: { params: Promise<{ resumeId: string }> }
 ) {
@@ -41,3 +42,5 @@ export async function GET(
     return NextResponse.json({ error: 'Request failed' }, { status: 500 });
   }
 }
+
+export const GET = withApiMetrics('/api/backend/get-keyword-analysis/[resumeId]', 'GET', handleGET);

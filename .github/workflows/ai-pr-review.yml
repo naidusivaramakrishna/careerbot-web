@@ -28,7 +28,8 @@ on:
     # `schedule: cron "47 * * * *"` sweep keeps running. Removing `schedule:`
     # here and the author_association gate below do nothing until then.
     #
-    # Security invariant: this privileged trigger checks out the default branch.
+    # Security invariant: this privileged trigger checks out a TRUSTED branch,
+    # develop2 (protected; see `ref:` on the ai-review checkout), never the PR.
     # The review script may fetch the PR ref for git diff/show, but must never
     # check it out or execute PR-authored code. Dynamic commands run only from
     # this trusted checkout. Keep this true if the review harness is changed.
@@ -191,19 +192,52 @@ jobs:
 
       - name: Checkout (full history for merge-base + at-SHA reads)
         uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+          # No token in .git/config (ai#398). The workflow no longer runs T2
+          # (see "Decide target"), but keep it: the review still reads the
+          # PR's files, and a manual --dynamic run would execute PR code.
+          persist-credentials: false
+          # Runs GitHub starts from the DEFAULT branch -- a trusted `/ai-review`
+          # (issue_comment), a dispatch from master -- run the develop2 harness:
+          # the protected branch every PR targets, not master, whose
+          # scripts/ai_review/ lags it (no findings ledger: its review made the
+          # next push carry nothing). Never the PR head: these runs have write
+          # tokens. pull_request runs keep the default (the PR's merge ref).
+          # Live for comments only once master carries this file (see `on:`).
+          ref: ${{ github.event_name != 'pull_request' && 'develop2' || '' }}
 
+      # No T2 (--dynamic) here, on any event. On web, T2 was npm install +
+      # next build + full `npm run lint` -- 13.6 of 16.9 min on #195 (install
+      # 227s, build 484s, lint 106s). frontend-ci's REQUIRED "Lint and Build"
+      # runs on the same commits (opened / synchronize / reopened /
+      # ready_for_review, all branches, no path filter) and covers them:
+      #  - every non-draft PR commit: the new-error ESLint and tsc gates,
+      #    blocking (advisory on drafts);
+      #  - non-draft commits outside its FAST LANE: npm ci + next build,
+      #    blocking. A pull_request run never reviews a draft (the script
+      #    exits on the PR's live draft state before any model call); a
+      #    trusted /ai-review comment or a dispatch CAN review a draft, and
+      #    Lint and Build's run for a draft defers the build -- the report
+      #    text says so rather than claiming a build ran.
+      #    A fast-lane commit changes nothing next build compiles (its rule).
+      # Not covered anywhere on PRs any more: the FULL-repo `npm run lint`,
+      # which was red on every PR from ~146 pre-existing errors -- Lint and
+      # Build deliberately gates new errors only. The review comment points at
+      # that check instead of building the same tree twice. Comment and
+      # dispatch runs test develop2's tree, not the PR's, so their T2 never
+      # said anything about the PR. (`--dynamic` still works by hand.)
       - name: Decide target
         id: t
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "args=--pr ${{ github.event.pull_request.number }} --dynamic" >> "$GITHUB_OUTPUT"
+            echo "args=--pr ${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "args=--pr ${{ github.event.issue.number }} --dynamic" >> "$GITHUB_OUTPUT"
+            echo "args=--pr ${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pr }}" ]; then
-            echo "args=--pr ${{ github.event.inputs.pr }} --dynamic" >> "$GITHUB_OUTPUT"
+            echo "args=--pr ${{ github.event.inputs.pr }}" >> "$GITHUB_OUTPUT"
           else
-            echo "args=--all --dynamic" >> "$GITHUB_OUTPUT"
+            echo "args=--all" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run review (T1 static + T2 build/lint)
@@ -216,6 +250,14 @@ jobs:
           # payload; the script compares them with the PR's live state.
           AI_REVIEW_EVENT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
           AI_REVIEW_EVENT_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'true' || 'false' }}
+          # Shown in the report's T2 section instead of a second build.
+          AI_REVIEW_T2_SKIP_REASON: >-
+            build, type-check and lint are not repeated here. The required Lint
+            and Build check (frontend-ci) covers this commit: new-error ESLint
+            and tsc gates, and npm ci + next build unless only fast-lane paths
+            (nothing next build compiles) changed. On a DRAFT PR it defers the
+            build and makes the gates advisory until the PR is marked ready
+            for review. See this PR's Checks tab
         run: |
           python3 scripts/ai_review/ai_pr_review.py \
             --repo "${{ github.repository }}" \
@@ -231,6 +273,11 @@ jobs:
     needs: pr-size
     if: ${{ !cancelled() && github.event_name != 'issue_comment' }}
     runs-on: [self-hosted, ai-review]
+    # Read-only: it runs the PR's tests, which could take a write token, or
+    # plant code for a later step that holds one, such as checkout's post
+    # step (careerbot-ai#398). Nothing in this job posts.
+    permissions:
+      contents: read
     steps:
       # FIRST step, before anything heavy -- keep it first. Fails this job when
       # the PR Size gate did not pass, so the job reports FAILURE instead of a
@@ -246,6 +293,8 @@ jobs:
           exit 1
 
       - uses: actions/checkout@v4
+        # Runs the PR's tests: no token in .git/config (careerbot-ai#398).
+        with: { persist-credentials: false }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

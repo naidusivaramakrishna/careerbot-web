@@ -10,6 +10,14 @@
   --font-montserrat: var(--font-sans, system-ui, sans-serif);
 }
 
+/* The mock-test subtree is the one place that wants REAL Montserrat rather than
+   the alias above. Scoped to [data-mock-test], which its layout already sets,
+   so nothing else changes. Loaded by that layout via
+   @fontsource-variable/montserrat -- no build-time network fetch. */
+[data-mock-test] {
+  --font-montserrat: 'Montserrat Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
 /* Base Typography — Inter across the UI (self-hosted via @fontsource-variable) */
 body {
   font-family: var(--font-sans, system-ui, sans-serif);
@@ -1049,3 +1057,12 @@ section.docx {
   }
 }
 
+/* ATS Scan: the text an applied Auto/Manual Fix wrote, marked in the screen
+   preview only. PreviewPanel registers the ranges with the CSS Custom
+   Highlight API under this name; without this rule they paint nothing.
+   Same emerald pair as the Score tab's "fixed" cards. The text colour is set
+   too, so the mark stays readable on any template, light or dark. */
+::highlight(ats-fixed-text) {
+  background-color: var(--color-emerald-100);
+  color: var(--color-emerald-900);
+}

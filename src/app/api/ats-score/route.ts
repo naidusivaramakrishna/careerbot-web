@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   // Require authenticated session
   const cookieStore = await cookies();
   const session = cookieStore.get('access_token') ?? cookieStore.get('session');
@@ -70,3 +71,5 @@ export async function POST(request: NextRequest) {
     });
   }
 }
+
+export const POST = withApiMetrics('/api/ats-score', 'POST', handlePOST);

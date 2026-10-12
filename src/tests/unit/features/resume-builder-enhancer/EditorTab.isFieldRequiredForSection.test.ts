@@ -1,23 +1,14 @@
 /**
- * Regression test for the Personal Info "Location" required-field carve-out
- * (P2).
- *
- * The base branch had:
- *   const isRequired = isRequiredField(key) ||
- *     (openModalSection === "Personal Info" && key.toLowerCase() === "location");
- * with a comment: "location is globally optional (Work Experience etc.) but
- * required for Personal Info". This PR's rewrite of validateSectionFields
- * dropped the Personal-Info carve-out entirely (`isRequiredField(key)` on its
- * own), silently making Location optional everywhere, including Personal
- * Info, and untested. Restored the carve-out and pulled the combined check
- * into isFieldRequiredForSection so it's covered directly.
+ * Location is optional in Personal Info, matching the form (no asterisk,
+ * `required: false`). It used to be a required carve-out in Save validation, so
+ * a user who undid an ATS-added location could not Save with the box empty.
  */
 import { describe, it, expect } from "vitest";
 import { isFieldRequiredForSection } from "@/app/(resume)/builder/creation/_components/editor/EditorTab";
 
-describe("isFieldRequiredForSection (Location required-field carve-out, P2 regression)", () => {
-  it("requires Location in Personal Info", () => {
-    expect(isFieldRequiredForSection("location", "Personal Info")).toBe(true);
+describe("isFieldRequiredForSection (Location is optional everywhere)", () => {
+  it("keeps Location optional in Personal Info", () => {
+    expect(isFieldRequiredForSection("location", "Personal Info")).toBe(false);
   });
 
   it("keeps Location optional in every other section", () => {
@@ -26,8 +17,8 @@ describe("isFieldRequiredForSection (Location required-field carve-out, P2 regre
     expect(isFieldRequiredForSection("location", null)).toBe(false);
   });
 
-  it("is case-insensitive on both the field key and the section name check", () => {
-    expect(isFieldRequiredForSection("Location", "Personal Info")).toBe(true);
+  it("is case-insensitive on the field key", () => {
+    expect(isFieldRequiredForSection("Location", "Personal Info")).toBe(false);
   });
 
   it("still requires an ordinary non-optional field regardless of section", () => {

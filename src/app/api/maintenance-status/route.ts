@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 // Node.js process-level cache — persists across requests within the same server instance.
 // Re-probes the Python backend every 15 s so client-side checks (ClientLayout poll)
@@ -40,7 +41,7 @@ async function fetchMaintenanceFromBackend(): Promise<boolean | null> {
     }
 }
 
-export async function GET() {
+async function handleGET() {
     // Probe when: (a) cold start or stale cache (15 s TTL, both states), AND (b) backoff window has cleared.
     const stale = cache.updatedAt === 0 || Date.now() - cache.updatedAt > CACHE_TTL_MS;
     const backoffClear = Date.now() - lastFailedProbeAt >= FAILED_PROBE_BACKOFF_MS;
@@ -77,7 +78,7 @@ export async function GET() {
 // This is a cookie-presence check only (no role or token validity verification).
 // Low-risk: this route only updates the in-memory UI banner cache; the Python
 // middleware independently enforces real maintenance mode.
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
     const adminToken =
         req.cookies.get('admin_access_token')?.value ||
         req.cookies.get('access_token')?.value;
@@ -94,3 +95,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 }
+
+export const GET = withApiMetrics('/api/maintenance-status', 'GET', handleGET);
+export const POST = withApiMetrics('/api/maintenance-status', 'POST', handlePOST);

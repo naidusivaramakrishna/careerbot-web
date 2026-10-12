@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 export const maxDuration = 60; // signup can be slow on cold backend starts
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const tenantId = request.headers.get('X-Tenant-Id') || 'public';
     const body = await request.json();
@@ -39,3 +40,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = withApiMetrics('/api/backend/auth/signup', 'POST', handlePOST);

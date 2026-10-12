@@ -233,23 +233,37 @@ describe('Template workflow — createResumeWithAuth', () => {
     expect(writtenKeys).toContain('resume_created_new-resume-123');
   });
 
-  it('creates a resume with empty personalInfo when profile fetch fails', async () => {
+  it('creates a resume with no empty personalInfo fields when profile fetch fails', async () => {
     vi.spyOn(httpClient, 'get').mockRejectedValueOnce(new Error('Network error'));
     const postSpy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(axiosOk(resumeData, 201));
 
     const resume = await createResumeWithAuth();
 
-    // Resume is still created despite profile failure
+    // Resume creation does not depend on profile availability, and the API
+    // receives no invalid empty optional values.
     expect(resume.id).toBe('new-resume-123');
-
-    // personalInfo fields must all be empty strings
     const body = postSpy.mock.calls[0][1] as Record<string, Record<string, string>>;
-    expect(body.personalInfo.email).toBe('');
-    expect(body.personalInfo.fullname).toBe('');
-    expect(body.personalInfo.phone).toBe('');
-    expect(body.personalInfo.location).toBe('');
+    expect(body.personalInfo).toEqual({});
   });
 
+  it('omits blank and malformed optional profile values from the create payload', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValueOnce(axiosOk({
+      full_name: '  ',
+      email: 'candidate@example.com',
+      phone_number: 'not-a-phone',
+      location: ' ',
+      linkedin_url: 'candidate.example.com/in/profile',
+    }));
+    const postSpy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(axiosOk(resumeData, 201));
+
+    await createResumeWithAuth();
+
+    const body = postSpy.mock.calls[0][1] as Record<string, Record<string, string>>;
+    expect(body.personalInfo).toEqual({
+      fullname: 'candidate',
+      email: 'candidate@example.com',
+    });
+  });
   it('throws when the resume POST itself fails', async () => {
     vi.spyOn(httpClient, 'get').mockResolvedValueOnce(axiosOk(profileData));
     vi.spyOn(httpClient, 'post').mockRejectedValueOnce(new Error('Server error'));

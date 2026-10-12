@@ -60,3 +60,79 @@ export const SECTION_STATE_KEYS: Record<string, string> = {
   "Editorial Activities": "editorialActivities",
   "Conference Presentations": "conferencePresentations",
 };
+
+const hasValue = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(hasValue);
+  if (value && typeof value === "object") return Object.values(value).some(hasValue);
+  if (typeof value === "string") return value.trim().length > 0;
+  return value !== null && value !== undefined && value !== false;
+};
+
+// Skills hold content only when some category holds a skill. Category metadata
+// (an added but still empty custom category with its id, hidden built-ins, the
+// skill-id map) renders nothing and must not count.
+const hasSkills = (data: Record<string, unknown>): boolean => {
+  const categorized = data.categorizedSkills;
+  const fromCategories = !!categorized && typeof categorized === "object"
+    && Object.entries(categorized as Record<string, unknown>).some(([key, value]) => {
+      if (key === "skill_id_map" || key === "hidden_predefined_categories") return false;
+      if (key === "custom_categories") {
+        return Array.isArray(value) && value.some((c) => hasValue((c as { skills?: unknown } | null)?.skills));
+      }
+      return hasValue(value);
+    });
+  return fromCategories || hasValue(data.skills);
+};
+
+/**
+ * True only when `name` is a section known to hold no content, so rendering the
+ * resume without it changes nothing visible. Anything unrecognised (Personal Info,
+ * Professional Summary, ...) is treated as having content, the safe default for
+ * deciding whether the preview must be re-rendered after a delete.
+ */
+export const isSectionKnownEmpty = (
+  data: { customSections?: Array<{ sectionName: string; fields?: Array<{ value?: unknown }> }> } & Record<string, unknown>,
+  name: string,
+): boolean => {
+  if (name === "Skills") return !hasSkills(data);
+  const stateKey = SECTION_STATE_KEYS[name];
+  if (stateKey) return !hasValue(data[stateKey]);
+  const target = name.trim().replace(/\s+/g, " ").toLowerCase();
+  const custom = (data.customSections || []).filter(
+    (cs) => cs.sectionName.trim().replace(/\s+/g, " ").toLowerCase() === target,
+  );
+  if (custom.length > 0) return !custom.some((cs) => hasValue((cs.fields || []).map((f) => f.value)));
+  return false;
+};
+
+/**
+ * True when `name` is a section whose saved data shows it is filled in. Used so the
+ * "Resume Sections n/m" counter and the sidebar ticks reflect what the preview
+ * renders, not only whether the section's modal was Saved in this session.
+ * Personal Info counts once full name, email and phone (its required fields) are set.
+ */
+export const sectionHasSavedData = (
+  data: { customSections?: Array<{ sectionName: string; fields?: Array<{ value?: unknown }> }> } & Record<string, unknown>,
+  name: string,
+): boolean => {
+  if (name === "Skills") return hasSkills(data);
+  if (name === "Personal Info") {
+    const pi = (data.personalInfo ?? {}) as Record<string, unknown>;
+    return hasValue(pi.fullname) && hasValue(pi.email) && hasValue(pi.phone);
+  }
+  if (name === "Professional Summary") {
+    const ps = data.professionalSummary as { summary?: unknown } | string | undefined;
+    return hasValue(typeof ps === "object" && ps !== null ? ps.summary : ps);
+  }
+  const stateKey = SECTION_STATE_KEYS[name];
+  if (stateKey) return hasValue(data[stateKey]);
+  const target = name.trim().replace(/\s+/g, " ").toLowerCase();
+  const custom = (data.customSections || []).find(
+    (cs) => cs.sectionName.trim().replace(/\s+/g, " ").toLowerCase() === target,
+  );
+  if (custom) {
+    const fields = custom.fields || [];
+    return fields.length > 0 && fields.every((f) => hasValue(f.value));
+  }
+  return false;
+};

@@ -208,6 +208,52 @@ export function getChangedSatisfiedManualSuggestions(
       && currentValue !== originalValues[suggestion.id];
   });
 }
+export interface ConfirmableSuggestion {
+  id: string;
+  section: string;
+  message: string;
+  fix_type: string;
+  status?: string;
+}
+
+/**
+ * Pending Manual Fix cards a just-saved section has objectively satisfied, with the
+ * value to confirm each with (/enhance/apply).
+ *
+ * A card whose data-presence check passes is confirmed. A card that cannot be checked
+ * objectively is confirmed only when it was explicitly targeted (its Manual Fix button was
+ * clicked) and its field changed from the value it started with. Opening an editor or an
+ * unrelated save never confirms a subjective card on its own. Used by both the debounced autosave and the explicit Save button:
+ * the server's own rescore after a Save can be unavailable, and then this is the only
+ * thing that clears the card.
+ */
+export function suggestionsToConfirm<T extends ConfirmableSuggestion>(
+  savedResume: ResumeData,
+  suggestions: T[],
+  sectionName: string,
+  pendingTarget?: { id: string; initialValue: string } | null,
+): Array<{ suggestion: T; value: string; explicitlyTargeted: boolean }> {
+  const mappedSections = SUGGESTION_SECTION_MAP[toSuggestionSectionKey(sectionName)] ?? [];
+  const confirmable: Array<{ suggestion: T; value: string; explicitlyTargeted: boolean }> = [];
+  for (const suggestion of suggestions) {
+    if (suggestion.status === "fixed" || suggestion.fix_type !== "manual" || !mappedSections.includes(suggestion.section)) {
+      continue;
+    }
+    const value = getSectionValue(savedResume, suggestion.section, suggestion, sectionName).trim();
+    const explicitlyTargeted = pendingTarget?.id === suggestion.id;
+    // An objective card (a field that is now present, a section that now has content) is
+    // confirmed whenever the saved data satisfies it, whether or not the value changed:
+    // the card can be stale -- e.g. Location was saved earlier, the card was never
+    // cleared, and re-entering the same text is not a "change". Only a card that cannot be
+    // checked objectively needs the explicit-target rule: the user must have changed it.
+    const satisfied =
+      isStructuralSuggestionSatisfied(savedResume, suggestion)
+      || (explicitlyTargeted && value !== pendingTarget?.initialValue);
+    if (value && satisfied) confirmable.push({ suggestion, value, explicitlyTargeted });
+  }
+  return confirmable;
+}
+
 /** Reads the current value of whatever field a suggestion targets, out of resumeData.
  * `suggestion` narrows generic sections (e.g. "Contact") to a specific field via its message. */
 export function getSectionValue(

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clearAuthCookies } from '@/app/api/_lib/clearAuthCookies';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   // Best-effort: blacklist the token on the backend. 3s timeout so a slow/hung
   // backend never delays the cookie-clear response that the browser is waiting on.
   await fetch(`${BACKEND_URL}/api/v1/admin/auth/logout`, {
@@ -22,3 +23,5 @@ export async function POST(request: NextRequest) {
   clearAuthCookies(res);
   return res;
 }
+
+export const POST = withApiMetrics('/api/admin/auth/logout', 'POST', handlePOST);

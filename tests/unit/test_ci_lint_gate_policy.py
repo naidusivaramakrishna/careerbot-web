@@ -1,4 +1,5 @@
-"""Wiring of the new-error lint/type gate in frontend-ci.yml (`Lint and Build`).
+"""Wiring of the new-error lint/type gate in frontend-ci.yml (`Lint and Build`),
+and of the advisory `Unit Tests (new failures)` job (at the end of this file).
 
 The gate's logic lives in scripts/ci/new-lint-errors.mjs (tested by
 scripts/ci/test_new_lint_errors.mjs, run inside the job itself). These tests
@@ -92,3 +93,78 @@ def test_build_deferral_for_drafts_unchanged(frontend_ci):
     # PR #72's semantics: the gate must not change who builds.
     build = _step(frontend_ci, "Build")["if"]
     assert not _cond(build, DRAFT) and _cond(build, READY) and _cond(build, PUSH)
+
+
+# ── `Unit Tests (new failures)` (advisory; scripts/ci/new-vitest-failures.mjs) ──
+# The FAIL-CLOSED guard, `needs: pr-size` and `!cancelled()` are enforced for
+# this job by the parametrised tests in test_ci_pr_size_policy.py.
+
+UNIT_JOB = "unit-tests"
+UNIT_GUARD, UNIT_PUSH_NOTICE = "PR size gate", "Not a pull request"
+UNIT_GATED = ["Install dependencies", "Unit tests (fail on new failures)"]
+
+
+def _unit_steps(wf):
+    return wf["jobs"][UNIT_JOB]["steps"]
+
+
+def _unit_cond(step, ctx, count):
+    from test_ci_draft_policy import _Expr, _truthy
+    needs = {"pr-size": {"result": "success" if ctx["event_name"] == "pull_request" else "skipped"}}
+    steps = {"affected": {"outputs": {"count": count}}}
+    return _truthy(_Expr(step.get("if", "true")).eval({"github": ctx, "needs": needs, "steps": steps}))
+
+
+def test_unit_job_is_named_and_not_a_required_check(frontend_ci):
+    job = frontend_ci["jobs"][UNIT_JOB]
+    assert job["name"] == "Unit Tests (new failures)"
+    assert job["name"] not in {"ai-review", "Lint and Build"}
+    assert isinstance(job["timeout-minutes"], int) and job["timeout-minutes"] <= 60
+
+
+def test_unit_job_does_work_only_on_pull_requests(frontend_ci):
+    for step in _unit_steps(frontend_ci):
+        name = step.get("name", step.get("uses"))
+        if name in (UNIT_GUARD, UNIT_PUSH_NOTICE):
+            continue
+        assert not _unit_cond(step, PUSH, "3"), name
+        assert _unit_cond(step, READY, "3") and _unit_cond(step, DRAFT, "3"), name
+    notice = next(s for s in _unit_steps(frontend_ci) if s.get("name") == UNIT_PUSH_NOTICE)
+    assert _unit_cond(notice, PUSH, "") and not _unit_cond(notice, READY, "3")
+
+
+@pytest.mark.parametrize("name", UNIT_GATED)
+def test_unit_job_skips_install_and_tests_when_nothing_is_affected(frontend_ci, name):
+    step = next(s for s in _unit_steps(frontend_ci) if s.get("name") == name)
+    assert not _unit_cond(step, READY, "0")
+
+
+def test_unit_gate_is_advisory_only_on_drafts_and_tested_first(frontend_ci):
+    steps = _unit_steps(frontend_ci)
+    gate = next(s for s in steps if s.get("name") == "Unit tests (fail on new failures)")
+    assert _render(gate["env"]["ADVISORY"], DRAFT) == "1"
+    assert _render(gate["env"]["ADVISORY"], READY) == ""
+    assert "${ADVISORY:+--advisory}" in gate["run"] and "pipefail" in gate["run"]
+    assert "|| true" not in gate["run"] and "continue-on-error" not in gate
+    names = [s.get("name") for s in steps]
+    assert names.index("Test the unit-test gate") < names.index("Unit tests (fail on new failures)")
+
+
+def test_unit_scripts_take_event_data_from_env_not_inline(frontend_ci):
+    for step in _unit_steps(frontend_ci):
+        assert "${{" not in step.get("run", ""), step.get("name")
+
+
+def test_unit_gate_script_crashes_are_advisory_on_drafts(frontend_ci):
+    """Every gate invocation (affected, run, compare) gets --advisory on a draft,
+    so a crash in any of them warns instead of failing the draft."""
+    for step in _unit_steps(frontend_ci):
+        calls = [l for l in step.get("run", "").replace("\\\n", " ").splitlines()
+                 if "new-vitest-failures.mjs" in l or '"$gate"' in l]
+        calls = [l for l in calls if not l.strip().startswith("gate=")]
+        if not calls:
+            continue
+        assert _render(step["env"]["ADVISORY"], DRAFT) == "1", step.get("name")
+        assert _render(step["env"]["ADVISORY"], READY) == "", step.get("name")
+        for line in calls:
+            assert "${ADVISORY:+--advisory}" in line, (step.get("name"), line)

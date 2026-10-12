@@ -2,6 +2,8 @@
 // Handles both raw snake_case parser fields AND camelCase enhanced_resume fields.
 
 import type { ResumeData, CategorizedSkills, CustomSection, CustomField, CustomCategory } from "@/app/(resume)/builder/creation/_context/ResumeContext";
+import { mergeEducationDegree } from "@/utils/educationPersistence";
+import { isAbbreviationPeriod, normalizeCustomSectionName } from "@/app/(resume)/builder/creation/_utils/customSectionIdentity";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
@@ -50,6 +52,39 @@ function strArr(v: unknown): string[] {
   }
   if (typeof v === "string") return v.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
   return [];
+}
+
+// Unwraps the {value}/{text} objects some parser records use for scalars.
+function scoreText(v: unknown): string {
+  if (v && typeof v === "object") v = (v as AnyRecord).value ?? (v as AnyRecord).text;
+  return typeof v === "string" || typeof v === "number" ? str(v) : "";
+}
+
+const LEGACY_EDUCATION_SCORE_KEYS = ["grade", "gpa", "GPA", "cgpa", "CGPA", "percentage"];
+
+/**
+ * Education score for views that read the stored resume document directly
+ * (JobMatch preview/editor, ATS preview). The builder persists a score ONLY as
+ * scoreValue/scoreType (stored snake_case as score_value/score_type; the API's
+ * builder Education schema drops every other score key on save); parser-only
+ * records may still carry the legacy aliases. Builder fields win, aliases are
+ * the fallback. `display` restores the "%" the builder stores without (legacy
+ * values are shown as stored).
+ */
+export function getEducationScore(edu: unknown): { type: string; value: string; display: string } {
+  const e: AnyRecord = edu && typeof edu === "object" ? (edu as AnyRecord) : {};
+  const builderValue = scoreText(e.scoreValue) || scoreText(e.score_value);
+  const value = builderValue || LEGACY_EDUCATION_SCORE_KEYS.map((k) => scoreText(e[k])).find(Boolean) || "";
+  const type = [e.scoreType, e.score_type, e.gradeType, e.grade_type].map(scoreText).find(Boolean) || "";
+  const addPercent = Boolean(builderValue) && type === "Percentage" && !value.endsWith("%");
+  return { type, value, display: addPercent ? `${value}%` : value };
+}
+
+/** Writes an edited score where getEducationScore reads it first and drops stale aliases. */
+export function withEducationScoreValue(edu: AnyRecord, value: string): AnyRecord {
+  const next: AnyRecord = { ...edu, scoreValue: value };
+  for (const key of ["score_value", ...LEGACY_EDUCATION_SCORE_KEYS]) delete next[key];
+  return next;
 }
 
 /**
@@ -168,6 +203,28 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
         llmSkillIdMap[`${cat}:${skill}`] = str(s.id);
         llmSkillIdMap[`${displayName}:${skill}`] = str(s.id);
       }
+    }
+  }
+  // llm_data.technical_skills and top-level p.technical_skills start as the
+  // same content, but the enhancer's _ensure_enhanced_item_ids only ever
+  // stamps a stable `id` onto the TOP-LEVEL copy -- it never reaches into
+  // llm_data. llmTechArr above prefers llm_data.technical_skills whenever
+  // present, so a resume that has both ends up reading the id-less copy:
+  // skill_id_map comes out empty for every parser-extracted skill, and
+  // deleting one falls back to sending the skill's own NAME as its "id"
+  // (see onRemoveSkill in Skills.tsx), which the backend's by-id delete
+  // endpoint always 400s on. Backfill ids from the top-level copy, matched
+  // by category+name, for any entry the loop above missed one for.
+  if (llm.technical_skills && Array.isArray(p.technical_skills)) {
+    for (const s of p.technical_skills as AnyRecord[]) {
+      const cat = str(s.category);
+      const skill = str(s.skill) || str(s.name);
+      if (!cat || !skill || !s.id) continue;
+      const displayName = categoryDisplayName(cat);
+      const rawKey = `${cat}:${skill}`;
+      const displayKey = `${displayName}:${skill}`;
+      if (!llmSkillIdMap[rawKey]) llmSkillIdMap[rawKey] = str(s.id);
+      if (!llmSkillIdMap[displayKey]) llmSkillIdMap[displayKey] = str(s.id);
     }
   }
 
@@ -366,23 +423,23 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     return {
       ...mappedId(edu),
       school:
-        str(edu.institution) ||
         str(edu.school) ||
+        str(edu.institution) ||
         str(edu.university) ||
         str(edu.college),
-      // Combine degree + branch so "M.Sc." + "Software Engineering" → "M.Sc. Software Engineering"
-      degree:
-        [
-          str(edu.degree) || str(edu.qualification) || str(edu.program),
-          str(edu.branch) || str(edu.field_of_study) || str(edu.specialization),
-        ]
-          .filter(Boolean)
-          .join(" ") || "",
-      startDate: str(edu.start_date) || str(edu.from) || str(edu.startDate) || startFromDuration,
+      // "M.Sc." + "Software Engineering" -> "M.Sc. Software Engineering".
+      // mergeEducationDegree, not a plain join: once saved back as `degree`,
+      // a reload still carrying the branch alias would append it again
+      // ("M.Sc. Software Engineering Software Engineering").
+      degree: mergeEducationDegree(
+        str(edu.degree) || str(edu.qualification) || str(edu.program),
+        str(edu.branch) || str(edu.field_of_study) || str(edu.specialization),
+      ),
+      startDate: str(edu.startDate) || str(edu.start_date) || str(edu.from) || startFromDuration,
       endDate:
+        str(edu.endDate) ||
         str(edu.end_date) ||
         str(edu.to) ||
-        str(edu.endDate) ||
         endFromDuration,
       scoreType,
       scoreValue,
@@ -465,12 +522,34 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   // llm.soft_skills cover the fresh-parser-output shape. Entries can be plain
   // strings or { skill } objects (skill_dedup.py's normalize_soft_skills_list
   // emits both, see careerbot-ai) — strArr() already handles that shape.
-  const softSkills =
+  const softSkillsSource: unknown =
     strArr(catSkills.soft_skills).length > 0
-      ? strArr(catSkills.soft_skills)
+      ? catSkills.soft_skills
       : strArr(p.soft_skills).length > 0
-      ? strArr(p.soft_skills)
-      : strArr(llm.soft_skills);
+      ? p.soft_skills
+      : llm.soft_skills;
+  const softSkills = strArr(softSkillsSource);
+  // strArr() above only extracts each entry's display name -- any `id` the
+  // AI service's v2.5 evidence-shaped items carry ({name, evidence_count,
+  // evidence_sections}) is silently dropped. Without it, Skills.tsx's
+  // "Soft Skills" custom-category delete handler has nothing to send and
+  // falls back to bailing out entirely (see its onRemoveSkill guard) --
+  // which is exactly the "parser soft skills can't be deleted" bug when
+  // this is the source they come from (there are three: this field,
+  // technical_skills/llm_data.technical_skills, and the categorized skills
+  // dict -- see resumeMappers.test.ts and service.py's
+  // _ensure_enhanced_item_ids for the other two). Read the id from the same
+  // raw source array `softSkills` was just derived from, so the name and id
+  // can never come from two different (and possibly inconsistent) sources.
+  if (Array.isArray(softSkillsSource)) {
+    for (const item of softSkillsSource as AnyRecord[]) {
+      if (typeof item !== "object" || item === null) continue;
+      const name = str(item.name || item.skill);
+      if (name && item.id) {
+        llmSkillIdMap[`Soft Skills:${name}`] = str(item.id);
+      }
+    }
+  }
   // Synthesize a "Soft Skills" custom category whenever there's data for it.
   // The merge below (by category name) makes this safe to always push --
   // if it also already round-tripped into catSkills.custom_categories from
@@ -726,7 +805,8 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     declaration: typeof p.declaration === 'string' ? str(p.declaration) : (typeof p.declaration === 'object' && p.declaration !== null && 'text' in p.declaration ? str((p.declaration as Record<string, unknown>).text) : str(llm.declaration)),
     declarationDate: str(p.declarationDate || p.declaration_date || llm.declarationDate || llm.declaration_date),
     declarationPlace: str(p.declarationPlace || p.declaration_place || llm.declarationPlace || llm.declaration_place),
-    customSections: buildCustomSections(p),
+    customSections: buildCustomSections(p, llm),
+    coreCompetenciesDismissed: p.coreCompetenciesDismissed === true || p.core_competencies_dismissed === true,
   };
 }
 
@@ -803,7 +883,155 @@ function toCustomFields(data: unknown, sectionName: string): CustomField[] {
   return [{ id: uid(), fieldName: sectionName, fieldType: "list", value: texts }];
 }
 
-function buildCustomSections(p: AnyRecord): CustomSection[] {
+// A label sentence in the AI service's "Label. Elaboration." convention
+// (e.g. "Backend Engineering at Scale.", "Event-Driven Messaging.") reads as
+// a short noun/gerund phrase, unlike the elaboration sentence that follows
+// it. Scanning for "starts with capitalized words, then a period" anywhere
+// in the text doesn't work as a boundary marker: a label's OWN final word is
+// itself capitalized and directly precedes that same period (e.g. "...at
+// Scale."), so it matches the same shape and gets misread as a second, new
+// label -- chopping one label into pieces. Word count doesn't have that
+// problem, since it only judges each already-delimited sentence as a whole.
+const MAX_LABEL_WORDS = 6;
+
+// Words that stay lowercase inside an otherwise title-cased label
+// ("Backend Engineering at Scale.", "Design of Distributed Systems.").
+const LABEL_LOWERCASE_WORDS = new Set([
+  "a", "an", "and", "as", "at", "across", "by", "for", "from", "in", "into",
+  "of", "on", "or", "per", "the", "to", "via", "with",
+]);
+
+/**
+ * True when a sentence reads like a Title-Cased label rather than prose: every
+ * word either starts with a capital/digit or is one of the small lowercase
+ * connector words above. "Event-Driven Messaging." passes; "Delivered systems."
+ * does not, because "systems" is lowercase and is not a connector.
+ */
+function looksLikeLabelCase(sentence: string): boolean {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return false;
+  return words.every((word, idx) => {
+    const core = word.replace(/^[^\p{L}\p{N}]+/u, "");
+    if (!core) return true;
+    if (idx > 0 && LABEL_LOWERCASE_WORDS.has(core.replace(/[^\p{L}]/gu, "").toLowerCase())) return true;
+    return /^[\p{Lu}\p{N}]/u.test(core);
+  });
+}
+
+/**
+ * Splits flattened text into sentences on "period + whitespace", re-attaching
+ * the period each split consumed. A period that terminates a single-letter
+ * token is an abbreviation, not a sentence end, so "U.S. Market Expansion."
+ * stays one sentence instead of becoming "U.S." plus "Market Expansion.".
+ */
+function splitIntoSentences(flattened: string): string[] {
+  const sentences: string[] = [];
+  const boundary = /\.\s+/g;
+  let start = 0;
+  let match: RegExpExecArray | null;
+  while ((match = boundary.exec(flattened)) !== null) {
+    if (isAbbreviationPeriod(flattened, match.index)) continue;
+    const sentence = flattened.slice(start, match.index + 1).trim();
+    if (sentence) sentences.push(sentence);
+    start = match.index + match[0].length;
+  }
+  const tail = flattened.slice(start).trim();
+  if (tail) sentences.push(tail);
+  return sentences;
+}
+
+function splitOnRepeatingLabel(text: string): string[] | null {
+  const flattened = text.replace(/\s+/g, " ").trim();
+  if (!flattened) return null;
+  const sentences = splitIntoSentences(flattened);
+  if (sentences.length < 2) return null;
+
+  // Each group is one competency: its label sentence plus the elaboration
+  // sentences that follow it. Word count ALONE cannot decide where the next
+  // label starts -- an elaboration shorter than MAX_LABEL_WORDS
+  // ("Delivered systems.") scores as a label and chops one competency into
+  // two. A short sentence therefore only starts a new group when it also
+  // reads like a label (Title Case), or when the current group already has
+  // its own label plus at least one elaboration sentence.
+  const groups: string[][] = [];
+  for (const sentence of sentences) {
+    const wordCount = sentence.split(/\s+/).filter(Boolean).length;
+    const current = groups[groups.length - 1];
+    const startsNewGroup =
+      !current ||
+      (wordCount <= MAX_LABEL_WORDS && (looksLikeLabelCase(sentence) || current.length >= 2));
+    if (startsNewGroup) groups.push([sentence]);
+    else current.push(sentence);
+  }
+  return groups.length > 1 ? groups.map((group) => group.join(" ")) : null;
+}
+
+/**
+ * Splits a single raw core_competencies string into individual point
+ * strings. Text extracted from a source document (or generated with a fixed
+ * line width) sometimes carries word-wrap line breaks that land mid-sentence
+ * rather than between competencies -- naively splitting on every "\n" turns
+ * one point like "...for high-volume enterprise\nsystems." into two bogus
+ * fragments ("...enterprise" and "systems."), the second of which then gets
+ * misread as its own short label. Prefer the "Label." pattern itself (a
+ * real repeating structure) over raw whitespace as the boundary whenever it
+ * repeats; only fall back to newline/delimiter splitting for resumes that
+ * list competencies as short keyword-style phrases with no such pattern.
+ */
+function splitCompetencyText(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  if (/\n\s*\n/.test(trimmed)) {
+    return trimmed.split(/\n\s*\n/).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean);
+  }
+
+  const labeled = splitOnRepeatingLabel(trimmed);
+  if (labeled) return labeled;
+
+  if (trimmed.includes("\n")) return trimmed.split("\n").map((s) => s.trim()).filter(Boolean);
+  const flattened = trimmed.replace(/\s+/g, " ").trim();
+  if (/\s\|\s/.test(flattened)) return flattened.split(/\s*\|\s*/).map((s) => s.trim()).filter(Boolean);
+  if (flattened.includes(";")) return flattened.split(";").map((s) => s.trim()).filter(Boolean);
+  return [flattened];
+}
+
+/**
+ * Splits raw core_competencies data into individual point strings, always
+ * returning a real array so downstream rendering can show one bullet per
+ * point. Some resumes return this as a single delimited string instead of
+ * a pre-split array (e.g. one achievement-style paragraph, or a "|"/";"
+ * separated line) -- left as one string, it would render as a single blob
+ * instead of separate points.
+ */
+function splitIntoPoints(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return (raw as unknown[]).flatMap((item) => {
+      const text =
+        typeof item === "string"
+          ? item
+          : typeof item === "object" && item !== null
+          ? str(
+              (item as AnyRecord).text ||
+              (item as AnyRecord).competency ||
+              (item as AnyRecord).name ||
+              (item as AnyRecord).title
+            )
+          : "";
+      if (!text.trim()) return [];
+      // Each array entry is trusted as its own point -- only re-split it if
+      // it internally repeats the "Label." pattern (a single entry that's
+      // actually several competencies concatenated together). Otherwise
+      // keep it exactly as given (just whitespace-flattened) so short
+      // keyword-style items with no period are never merged with neighbors.
+      return splitOnRepeatingLabel(text) || [text.replace(/\s+/g, " ").trim()];
+    });
+  }
+  if (typeof raw === "string") return splitCompetencyText(raw);
+  return [];
+}
+
+function buildCustomSections(p: AnyRecord, llm: AnyRecord = {}): CustomSection[] {
   // A saved builder/enhanced resume owns this collection. In particular, an
   // explicit [] means the user deleted every custom section and must not fall
   // back to stale parser metadata on refresh.
@@ -812,8 +1040,19 @@ function buildCustomSections(p: AnyRecord): CustomSection[] {
     : Array.isArray(p.custom_sections)
       ? p.custom_sections
       : undefined;
+
+  // Headings the parser mapped to core_competencies ("Key Competencies", ...).
+  // A section saved under one of them before the source tag existed holds the
+  // same points, so it is tagged and the synthesis below adds no second copy.
+  const coreCompetencyHeadings = new Set(
+    (Array.isArray(p.section_metadata) ? (p.section_metadata as AnyRecord[]) : [])
+      .filter(meta => str(meta?.mapped_to) === "core_competencies")
+      .map(meta => normalizeCustomSectionName(str(meta.original_name))),
+  );
+
+  let sections: CustomSection[];
   if (persistedSections) {
-    return persistedSections.flatMap((rawSection, sectionIndex): CustomSection[] => {
+    sections = persistedSections.flatMap((rawSection, sectionIndex): CustomSection[] => {
       if (!rawSection || typeof rawSection !== "object") return [];
       const section = rawSection as AnyRecord;
       const sectionName = str(section.sectionName || section.section_name);
@@ -828,40 +1067,72 @@ function buildCustomSections(p: AnyRecord): CustomSection[] {
       const fields = persistedFields.length > 0
         ? persistedFields
         : toCustomFields(section.items || section.content, sectionName);
-      if (fields.length === 0) return [];
 
+      // A field-less section is kept, not dropped: resumeApi.ts's
+      // transformCustomSectionsForBackend persists a named section before it
+      // has fields so the editor has a shell to add the first one to, and
+      // dropping it here made that shell unreachable. Only this branch keeps
+      // empties -- the parser fallback below still requires content.
+      const isCoreCompetencies = section.source === "core_competencies"
+        || coreCompetencyHeadings.has(normalizeCustomSectionName(sectionName))
+        || (sectionName.trim().toLowerCase() === "core competencies"
+          && splitIntoPoints(p.core_competencies || llm.core_competencies).length > 0);
       return [{
         id: str(section.id || section._id) || `custom_${sectionIndex}`,
         sectionName,
         fields,
+        ...(isCoreCompetencies ? { source: "core_competencies" as const } : {}),
       }];
+    });
+  } else {
+    // Parser metadata is a compatibility fallback for imported resumes that
+    // predate persisted customSections. It is never allowed to override a saved
+    // custom-section collection above.
+    sections = [];
+    const sectionMeta = Array.isArray(p.section_metadata)
+      ? (p.section_metadata as AnyRecord[])
+      : [];
+
+    for (const meta of sectionMeta) {
+      const originalName = typeof meta.original_name === "string" ? meta.original_name.trim() : "";
+      const mappedTo = typeof meta.mapped_to === "string" ? meta.mapped_to.trim() : "";
+
+      if (!originalName || !mappedTo) continue;
+      if (STANDARD_MAPPED_KEYS.has(mappedTo)) continue;
+      if (SKIP_KEYS.has(mappedTo)) continue;
+
+      const sectionData = p[mappedTo];
+      if (sectionData == null) continue;
+
+      const fields = toCustomFields(sectionData, originalName);
+      if (fields.length === 0) continue;
+
+      // careerbot-ai maps a "Core Competencies" (or "Key Competencies")
+      // heading to core_competencies. Tag it so the synthesis below sees the
+      // section and does not add a second copy of the same points.
+      sections.push({
+        id: uid(),
+        sectionName: originalName,
+        fields,
+        ...(mappedTo === "core_competencies" ? { source: "core_competencies" as const } : {}),
+      });
+    }
+  }
+
+  const coreCompetenciesRaw = p.core_competencies || llm.core_competencies;
+  const coreCompetenciesPoints = splitIntoPoints(coreCompetenciesRaw);
+  const coreCompetenciesDismissed = p.coreCompetenciesDismissed === true
+    || p.core_competencies_dismissed === true;
+  const hasCoreCompetencies = sections.some(section => section.source === "core_competencies");
+  const legacyEmptyCollection = persistedSections !== undefined && persistedSections.length === 0;
+  if (!coreCompetenciesDismissed && !legacyEmptyCollection && !hasCoreCompetencies && coreCompetenciesPoints.length > 0) {
+    sections.push({
+      id: uid(),
+      sectionName: "Core Competencies",
+      fields: [{ id: uid(), fieldName: "Core Competencies", fieldType: "list", value: coreCompetenciesPoints }],
+      source: "core_competencies",
     });
   }
 
-  // Parser metadata is a compatibility fallback for imported resumes that
-  // predate persisted customSections. It is never allowed to override a saved
-  // custom-section collection above.
-  const customSections: CustomSection[] = [];
-  const sectionMeta = Array.isArray(p.section_metadata)
-    ? (p.section_metadata as AnyRecord[])
-    : [];
-
-  for (const meta of sectionMeta) {
-    const originalName = typeof meta.original_name === "string" ? meta.original_name.trim() : "";
-    const mappedTo = typeof meta.mapped_to === "string" ? meta.mapped_to.trim() : "";
-
-    if (!originalName || !mappedTo) continue;
-    if (STANDARD_MAPPED_KEYS.has(mappedTo)) continue;
-    if (SKIP_KEYS.has(mappedTo)) continue;
-
-    const sectionData = p[mappedTo];
-    if (sectionData == null) continue;
-
-    const fields = toCustomFields(sectionData, originalName);
-    if (fields.length === 0) continue;
-
-    customSections.push({ id: uid(), sectionName: originalName, fields });
-  }
-
-  return customSections;
+  return sections;
 }

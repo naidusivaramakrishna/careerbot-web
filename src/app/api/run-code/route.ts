@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -267,7 +268,7 @@ function buildCTestHarness(userCode: string, examples: Example[]): string {
 // Route handler
 // ---------------------------------------------------------------------------
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const contentLength = Number(req.headers.get('content-length') ?? 0);
   if (contentLength > MAX_BODY_BYTES) {
     return NextResponse.json({ error: 'Request too large' }, { status: 413 });
@@ -353,3 +354,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ stdout, stderr, exit_code: exitCode });
 }
+
+export const POST = withApiMetrics('/api/run-code', 'POST', handlePOST);

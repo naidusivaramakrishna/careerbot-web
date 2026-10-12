@@ -236,8 +236,8 @@ const EditorialActivities: React.FC = () => {
           {editingEntries.map((activity, editIndex) => (
               <div key={editIndex} className="flex flex-col gap-3 pb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Activity Type *
+                  <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                    Activity Type <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={activity.activityType}
@@ -256,8 +256,8 @@ const EditorialActivities: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Journal/Organization Name *
+                  <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                    Journal/Organization Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -270,7 +270,7 @@ const EditorialActivities: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       Start Year
                     </label>
                     <input
@@ -283,7 +283,7 @@ const EditorialActivities: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       End Year
                     </label>
                     <input
@@ -297,7 +297,7 @@ const EditorialActivities: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                     Review Count / Frequency
                   </label>
                   <input

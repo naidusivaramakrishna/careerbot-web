@@ -38,7 +38,29 @@ const displayScoreValue = (value: string, scoreType?: ScoreType): string => {
 
 const compactNumber = (value: number): string => Number(value.toFixed(2)).toString();
 
-const scoreAsPercentage = (value: string, scoreType?: ScoreType): number | null => {
+// Valid [min, max] per scale. One definition, so the input's blur handler and
+// the Score Type dropdown cannot disagree. Marks is an unbounded earned/total pair.
+export const SCORE_LIMITS: Record<ScoreType, [number, number]> = {
+  Percentage: [0, 100],
+  CGPA: [0, 10],
+  GPA: [0, 4],
+  Marks: [0, Infinity],
+};
+
+/** The range/parse message for a score value, or null when it is fine. */
+export const validateScoreValue = (value: string, scoreType?: ScoreType): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || !scoreType) return null;
+  // An "earned/total" pair, not a point on a scale: no range to check.
+  if (scoreType === "Marks") return null;
+  const numeric = parseFloat(normalizeScoreValue(trimmed, scoreType));
+  if (Number.isNaN(numeric)) return `Score must be a number for ${scoreType}`;
+  const [min, max] = SCORE_LIMITS[scoreType];
+  if (numeric < min || numeric > max) return `${scoreType} must be between ${min} and ${max}`;
+  return null;
+};
+
+export const scoreAsPercentage = (value: string, scoreType?: ScoreType): number | null => {
   const normalized = normalizeScoreValue(value, scoreType).trim();
   if (!normalized || !scoreType) return null;
   if (scoreType === "Marks") {
@@ -53,16 +75,21 @@ const scoreAsPercentage = (value: string, scoreType?: ScoreType): number | null 
   }
   const numeric = Number(normalized);
   if (!Number.isFinite(numeric)) return null;
-  if (scoreType === "CGPA") return numeric * 10;
+  // CBSE's official factor for the 10-point CGPA scale is 9.5, not a straight
+  // *10 (confirmed against CBSE's circular): 8.6 CGPA is 81.7%, not 86%.
+  if (scoreType === "CGPA") return numeric * 9.5;
   if (scoreType === "GPA") return numeric * 25;
   return numeric;
 };
 
-const convertScoreValue = (value: string, fromType: ScoreType | undefined, toType: ScoreType): string => {
+export const convertScoreValue = (value: string, fromType: ScoreType | undefined, toType: ScoreType): string => {
   if (!value.trim() || !fromType || fromType === toType) return normalizeScoreValue(value, toType);
   const percentage = scoreAsPercentage(value, fromType);
   if (percentage === null) return normalizeScoreValue(value, toType);
-  if (toType === "CGPA") return compactNumber(percentage / 10);
+  // Faithful arithmetic, deliberately NOT clamped: the CBSE factor is defined
+  // only to 10 CGPA = 95%, and clamping collapsed 95.1-100% onto CGPA 10,
+  // reading back as 95%. Off-scale results are reported, then blocked at save.
+  if (toType === "CGPA") return compactNumber(percentage / 9.5);
   if (toType === "GPA") return compactNumber(percentage / 25);
   if (toType === "Marks") return `${compactNumber(percentage)}/100`;
   return compactNumber(percentage);
@@ -147,6 +174,14 @@ const Education: React.FC = () => {
         const endYM = toYearMonth(edu.endDate);
         if (startYM !== null && endYM !== null && endYM < startYM) {
           setFieldError("education", globalIndex, "endDate", "End date can't be before start date");
+          allValid = false;
+        }
+        // Showing a message is not blocking the save, and this listener's
+        // verdict is handleSaveForm's only Education-side input: 100% -> CGPA
+        // 10.53 used to be flagged in red and persisted anyway.
+        const scoreMessage = validateScoreValue(edu.scoreValue || "", edu.scoreType);
+        if (scoreMessage) {
+          setFieldError("education", globalIndex, "scoreValue", scoreMessage);
           allValid = false;
         }
       });
@@ -546,22 +581,12 @@ const Education: React.FC = () => {
                             clearError("education", globalIndex, "scoreValue");
                           }}
                           onBlur={() => {
-                            const val = education.scoreValue?.trim();
-                            if (!val || !education.scoreType || education.scoreType === "Marks") {
-                              clearError("education", globalIndex, "scoreValue");
-                              return;
-                            }
-                            const num = parseFloat(val);
-                            const limits: Record<string, [number, number]> = {
-                              Percentage: [0, 100],
-                              CGPA: [0, 10],
-                              GPA: [0, 4],
-                            };
-                            const [min, max] = limits[education.scoreType] ?? [0, Infinity];
-                            if (isNaN(num)) {
-                              setFieldError("education", globalIndex, "scoreValue", `Score must be a number for ${education.scoreType}`);
-                            } else if (num < min || num > max) {
-                              setFieldError("education", globalIndex, "scoreValue", `${education.scoreType} must be between ${min} and ${max}`);
+                            const message = validateScoreValue(
+                              education.scoreValue || "",
+                              education.scoreType
+                            );
+                            if (message) {
+                              setFieldError("education", globalIndex, "scoreValue", message);
                             } else {
                               clearError("education", globalIndex, "scoreValue");
                             }
@@ -592,7 +617,19 @@ const Education: React.FC = () => {
                                 : updated[editIndex].scoreValue,
                             };
                             setEditingEntries(updated);
-                            clearError("education", globalIndex, "scoreValue");
+                            // Validate the CONVERTED value; clearing the
+                            // error here let an off-scale result (any
+                            // percentage above 95% -> CGPA > 10) be stored
+                            // and exported with nothing flagging it.
+                            const message = validateScoreValue(
+                              updated[editIndex].scoreValue || "",
+                              updated[editIndex].scoreType
+                            );
+                            if (message) {
+                              setFieldError("education", globalIndex, "scoreValue", message);
+                            } else {
+                              clearError("education", globalIndex, "scoreValue");
+                            }
                           }}
                           className="pl-6 pr-3 py-3.5 text-sm bg-transparent text-black outline-none cursor-pointer font-medium appearance-none bg-left bg-no-repeat"
                           style={{

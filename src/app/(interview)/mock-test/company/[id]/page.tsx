@@ -6,16 +6,15 @@ import { AlertTriangle, Play, Lock, CheckCircle, ChevronRight, ChevronDown } fro
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   getMockTestCompanyById,
-  generateMockTest,
   getProgressAnalytics,
-  parseMockTestError,
   ProgressAnalytics,
   MockTestDifficulty,
   MOCK_TEST_DIFFICULTIES,
 } from '@/api/mockTestApi';
+import { checkCredits } from '@/api/creditsApi';
 import LoadingScreen from '../../_components/LoadingScreen';
 import HighlightBox from '../../_components/HighlightBox';
-import { resolveCompanyId, resolveCompanyInfo } from '@/lib/mockTestConstants';
+import { resolveCompanyInfo, sectionConfigFor, STANDARD_TEST_TOTALS } from '@/lib/mockTestConstants';
 
 interface CompanyTemplate {
   name: string;
@@ -38,23 +37,25 @@ interface MockSection {
   description: string;
 }
 
-// IMPORTANT: question_count and duration here must match what the test runner
-// at /mock-test/[id] actually delivers per section — see currentSection in
-// app/(interview)/mock-test/[id]/page.tsx (10 questions each, 20/25/25/20 min).
-// Drift between these and the runner causes the "Total: 55Q / 105min" header
-// to disagree with the "40Q / 90min" stats strip and the test timer.
+// Counts/durations come from SECTION_CONFIG, same as the runner reads — so
+// this page can't drift from what the candidate actually gets.
 const MOCK_SECTIONS: MockSection[] = [
-  { name: 'Arithmetic', questions: 10, duration: 20, description: 'Percentages, P&L, Time-Work, SI/CI' },
-  { name: 'Aptitude',   questions: 10, duration: 20, description: 'Data interpretation, permutations, probability' },
-  { name: 'Reasoning',  questions: 10, duration: 20, description: 'Logical sequences, blood relations, coding' },
-  { name: 'Technical',  questions: 10, duration: 20, description: 'Python · Java · DSA · SQL · OOP' },
+  { name: 'Arithmetic', ...toSectionSize('arithmetic'), description: 'Percentages, P&L, Time-Work, SI/CI' },
+  { name: 'Aptitude',   ...toSectionSize('aptitude'),   description: 'Data interpretation, permutations, probability' },
+  { name: 'Reasoning',  ...toSectionSize('reasoning'),  description: 'Logical sequences, blood relations, coding' },
+  { name: 'Technical',  ...toSectionSize('technical'),  description: 'Python · Java · DSA · SQL · OOP' },
 ];
+
+function toSectionSize(category: string): { questions: number; duration: number } {
+  const { questions, minutes } = sectionConfigFor(category);
+  return { questions, duration: minutes };
+}
 
 // Practice-test totals — the ONE source of truth for what the user actually
 // takes. Everything user-facing (stats strip, section-table total, footer,
 // pre-flight tip) must read these so no two surfaces can disagree.
-const PRACTICE_TOTAL_Q   = MOCK_SECTIONS.reduce((sum, s) => sum + s.questions, 0); // 40
-const PRACTICE_TOTAL_MIN = MOCK_SECTIONS.reduce((sum, s) => sum + s.duration,  0); // 90
+const PRACTICE_TOTAL_Q   = STANDARD_TEST_TOTALS.questions;
+const PRACTICE_TOTAL_MIN = STANDARD_TEST_TOTALS.minutes;
 
 const companyTemplates: Record<string, CompanyTemplate> = {
   '1': {
@@ -62,7 +63,7 @@ const companyTemplates: Record<string, CompanyTemplate> = {
     negativeMarking: true, negativeValue: '-1/3', passing: '50%',
     lastVerified: 'March 2026', confidence: 'approximate',
     rules: ['Section-locked: finish each section before moving on', 'Once submitted, you cannot revisit a section', 'Negative marking (-1/3) applies to Quant, Reasoning, and Programming', 'Unanswered questions score 0'],
-    tips: ['Sectional time limits apply — manage time carefully', 'Skip questions you are unsure about (negative marking)', 'Verbal and Coding sections have no negative marking'],
+    tips: ['Sectional time limits apply — manage time carefully', 'On the real exam, skip questions you are unsure about (negative marking) — this practice test has no penalty for a wrong guess', 'Verbal and Coding sections have no negative marking on the real exam'],
   },
   '2': {
     name: 'IBM Aptitude Test', totalQ: 50, totalMin: 60, navigation: 'locked',
@@ -163,7 +164,7 @@ export default function CompanyDetailPage() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6" style={{ background: '#F8F9FB' }}>
         <p className="text-sm" style={{ color: '#475569' }}>Company not found.</p>
         <button
-          onClick={() => router.push('/mock-test')}
+          onClick={() => router.push('/mock-test/browse')}
           className="text-sm font-medium hover:underline"
           style={{ color: '#1e3a8a' }}
         >
@@ -182,43 +183,37 @@ export default function CompanyDetailPage() {
     }
     setStarting(true);
     try {
-      const backendCompanyId = resolveCompanyId(companyId);
-      const subs = ['percentages', 'time_and_work', 'profit_and_loss', 'ratios', 'number_systems'];
-      const sub  = subs[Math.floor(Math.random() * subs.length)];
-      // 180s to match the other generateMockTest call sites: generation routinely
-      // takes 30-60s (see proxyTimeout in next.config.ts), so the previous 30s
-      // aborted normal runs before the backend could answer.
-      const session = await generateMockTest(backendCompanyId, ['arithmetic'], [sub], difficulty, undefined, 180000);
-      // Forward the level so the runner generates every later section at it too.
-      router.push(`/mock-test/${companyId}?sessionId=${session.session_id}&difficulty=${difficulty}`);
-    } catch (err: unknown) {
-      const backendError = (err as { response?: { data?: { error?: { error_code?: string } } } })?.response?.data?.error;
-      // Shared parser so this page, the custom builder and the test runner all
-      // report the same thing — and so a 402 reads as a credits problem with the
-      // actual balance rather than a bare "Failed to start".
-      const parsed = parseMockTestError(err);
-      if (parsed.insufficientCredits) {
+      // A lightweight credits check, not a real generate — the runner already
+      // creates (and owns) section 0's session itself once "Start Now" is
+      // clicked. An earlier version pre-generated a session here, but the
+      // runner never used it: handleStartSection always generates its own
+      // fresh one, and submits the pre-generated one empty via
+      // ACTIVE_SESSION_EXISTS cleanup. That made every "Begin Exam" click
+      // generate a whole throwaway section for nothing.
+      const credits = await checkCredits('mock_test');
+      if (!credits.can_proceed) {
         setOutOfCredits(true);
-        setStartError(parsed.message);
+        setStartError(
+          `Not enough credits. This test needs ${credits.credit_cost} credits and you have ${credits.credits_remaining}.`
+        );
+        setStarting(false);
         return;
       }
-      if (backendError?.error_code === 'AI_SERVICE_UNAVAILABLE') {
-        setStartError('AI service temporarily unavailable.');
-      } else {
-        setStartError(parsed.message);
-      }
-    } finally {
-      setStarting(false);
+    } catch {
+      // Advisory only — if the pre-check itself fails, continue and let the
+      // runner's own error handling report whatever the real problem is.
     }
+    // Forward the level so the runner generates every section at it.
+    router.push(`/mock-test/${companyId}?difficulty=${difficulty}`);
   };
 
   return (
     <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
-      <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
+      <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16 md:pb-40">
 
         {/* Breadcrumb — same shape as section intro */}
         <div className="mb-6 text-sm flex items-center gap-2">
-          <button onClick={() => router.push('/mock-test')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
+          <button onClick={() => router.push('/mock-test/browse')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
           <span style={{ color: '#CBD5E1' }}>›</span>
           <span className="font-semibold" style={{ color: '#0F172A' }}>{companyName} — Brief</span>
         </div>
@@ -257,8 +252,10 @@ export default function CompanyDetailPage() {
                   {template.name} Recruitment Test
                 </h2>
                 <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
-                  Modeled on the live {template.name} hiring pattern. {totalSections} locked sections, section-locked navigation,{' '}
-                  {template.negativeMarking ? `negative marking ${template.negativeValue}` : 'no negative marking'}.
+                  Modeled on the live {template.name} hiring pattern. {totalSections} locked sections, section-locked navigation.{' '}
+                  {template.negativeMarking
+                    ? `The real exam applies negative marking (${template.negativeValue}) — this practice test doesn't deduct marks for wrong answers.`
+                    : 'The real exam has no negative marking.'}
                 </p>
               </div>
             </div>
@@ -448,7 +445,7 @@ export default function CompanyDetailPage() {
         {/* Bottom action row — section-intro DNA */}
         <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
           <button
-            onClick={() => router.push('/mock-test')}
+            onClick={() => router.push('/mock-test/browse')}
             className="text-sm font-medium hover:underline"
             style={{ color: '#475569' }}
           >

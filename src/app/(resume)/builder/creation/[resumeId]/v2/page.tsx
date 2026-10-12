@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { useResume } from "../../_context/ResumeContext";
+import { getEnhancedCurrentScore } from "../../_utils/enhancedScore";
 
 import { AppBar } from "../_v2/AppBar";
 import { SectionRail } from "../_v2/SectionRail";
@@ -107,11 +108,8 @@ function BuilderV2Page({ resumeId }: { resumeId: string }) {
   useEffect(() => setTitle(initialTitle), [initialTitle]);
 
   /* ── ATS score & top fixes (mapped from enhanced data) ──────────────────── */
-  const atsScore: number | null =
-    typeof enhancedAtsScore === "object" && enhancedAtsScore !== null
-      ? Number((enhancedAtsScore as { overall_score?: number; score?: number }).overall_score ??
-                (enhancedAtsScore as { score?: number }).score ?? null) || null
-      : null;
+  const enhancedScoreValue = getEnhancedCurrentScore(enhancedAtsScore);
+  const atsScore: number | null = enhancedScoreValue > 0 ? Math.round(enhancedScoreValue) : null;
 
   const atsBreakdown = useMemo(() => {
     const obj = enhancedAtsScore as unknown as Record<string, { score?: number } | number> | null;

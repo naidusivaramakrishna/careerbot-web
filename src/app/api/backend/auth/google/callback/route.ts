@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sanitiseCookie } from '@/lib/cookieUtils';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
@@ -14,7 +15,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
  * 4. We sanitize Set-Cookie headers for frontend domain
  * 5. We redirect to /auth/google/success with tokens in URL as backup
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   try {
     const code = request.nextUrl.searchParams.get('code');
     const state = request.nextUrl.searchParams.get('state');
@@ -98,3 +99,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/error?message=server_error', request.url));
   }
 }
+
+export const GET = withApiMetrics('/api/backend/auth/google/callback', 'GET', handleGET);

@@ -157,6 +157,31 @@ jobs:
           # ('0' is quoted: a bare 0 is falsy and `&& 0 || 1` would yield 1.)
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
+      # FAST LANE. A PR whose every changed path is on the allow-list in
+      # scripts/ci/fast_lane.py (the AI reviewer / PR-size gate, the Python CI
+      # tests, Markdown under docs/) changes nothing `next build` compiles, so
+      # this job skips npm ci and the build and still reports under its
+      # required name; the new-error gates below still run (no .ts/.tsx can
+      # be in such a PR), and gate-self-test still runs the Python tests.
+      # Fails closed: only an explicit lane=fast skips anything. Pushes, a
+      # classifier error, a base without the classifier, or any other path
+      # (.github/** included) leave the output empty and run the full job.
+      # The BASE branch's copy of the classifier decides, so a PR that does
+      # not edit this workflow cannot widen the allow-list for itself.
+      - name: Classify changed paths (fast lane)
+        id: lane
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git show HEAD^1:scripts/ci/fast_lane.py > "$RUNNER_TEMP/fast_lane.py"; then
+            python3 "$RUNNER_TEMP/fast_lane.py" --expect-head "$PR_HEAD_SHA" \
+              --github-output "$GITHUB_OUTPUT"
+          else
+            echo "FULL LANE: the base branch has no scripts/ci/fast_lane.py"
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -164,9 +189,11 @@ jobs:
           cache: 'npm'
 
       - name: Upgrade npm to match lockfile generator
+        if: steps.lane.outputs.lane != 'fast'
         run: npm install -g npm@11 || echo "skipping global npm upgrade (no permission on self-hosted runner)"
 
       - name: Install dependencies
+        if: steps.lane.outputs.lane != 'fast'
         run: npm ci
 
       # ---- Pushes (master, develop2): whole-repo lint/type-check, advisory ----
@@ -288,7 +315,9 @@ jobs:
         # Draft PRs get dependency, lint and type-check feedback without using
         # the runner for a production build. Marking ready triggers the build,
         # which then reruns for every later commit on the non-draft PR.
-        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+        if: >-
+          (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+          && steps.lane.outputs.lane != 'fast'
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
@@ -298,8 +327,19 @@ jobs:
       # job can fail on code. Say so, rather than let a green `Lint and Build`
       # read as "built clean".
       - name: Build deferred (draft PR)
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+        if: >-
+          github.event_name == 'pull_request' && github.event.pull_request.draft == true
+          && steps.lane.outputs.lane != 'fast'
         run: echo "::notice title=Build deferred::Draft PR - production build skipped. Mark the PR ready for review to run it."
+
+      - name: Build skipped (FAST LANE)
+        if: steps.lane.outputs.lane == 'fast'
+        env:
+          CHANGED: ${{ steps.lane.outputs.changed }}
+        run: |
+          echo "FAST LANE: only ${CHANGED} changed; ran the new-error lint/type gates; skipped npm ci and next build."
+          echo "::notice title=FAST LANE::Only allow-listed non-app paths changed; next build skipped. gate-self-test runs the Python tests."
+          printf '### FAST LANE\n\nOnly `%s` changed; `next build` skipped.\n' "$CHANGED" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Count console.log usages (advisory)
         run: |
@@ -342,3 +382,86 @@ jobs:
           fi
           echo "::error title=New lint/type errors::This PR adds ESLint and/or TypeScript errors in the code it changes. The job summary lists every one (file:line, rule)."
           exit 1
+
+  # ADVISORY - not a required check (the owner decides). Runs the vitest files
+  # the PR affects on the PR head AND its merge-base and fails only on tests
+  # that fail on head but not on base: the base already has failing tests.
+  # Rules: scripts/ci/new-vitest-failures.mjs. Drafts: warnings. Pushes: no-op.
+  unit-tests:
+    name: Unit Tests (new failures)
+    needs: pr-size
+    if: ${{ !cancelled() }}
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60 # backstop for the script's per-chunk timeouts; fails, never passes
+    steps:
+      # FIRST step -- keep it first. See FAIL-CLOSED in pr-size-gate.yml.
+      - name: PR size gate
+        if: github.event_name == 'pull_request' && needs.pr-size.result != 'success'
+        env:
+          GATE_RESULT: ${{ needs.pr-size.result }}
+        run: |
+          echo "::error title=PR size gate failed::PR Size result: $GATE_RESULT. This job stops here; see the PR Size check for the numbers and how to split the PR."
+          echo "### ❌ PR size gate failed — see PR Size (result: \`$GATE_RESULT\`)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Not a pull request
+        if: github.event_name != 'pull_request'
+        run: echo "::notice title=Unit tests not compared::This job compares a PR with its base; a push has nothing to compare with."
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Test the unit-test gate
+        if: github.event_name == 'pull_request'
+        run: node --test scripts/ci/test_new_vitest_failures.mjs
+
+      - name: Select affected test files
+        id: affected
+        if: github.event_name == 'pull_request'
+        env:
+          ADVISORY: ${{ github.event.pull_request.draft && '1' || '' }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          # HEAD is GitHub's merge of the PR into the base branch.
+          base_sha=$(git merge-base "origin/$BASE_REF" HEAD)
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          git diff --name-status -z -M "$base_sha" HEAD > "$RUNNER_TEMP/vt-changes.z"
+          git ls-files -z > "$RUNNER_TEMP/vt-tracked.z"
+          node scripts/ci/new-vitest-failures.mjs affected --changes "$RUNNER_TEMP/vt-changes.z" \
+            --files "$RUNNER_TEMP/vt-tracked.z" --out "$RUNNER_TEMP/vt-tests.txt" ${ADVISORY:+--advisory}
+          echo "count=$(wc -l < "$RUNNER_TEMP/vt-tests.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: github.event_name == 'pull_request' && steps.affected.outputs.count != '0'
+        run: |
+          npm install -g npm@11 || echo "skipping global npm upgrade (no permission on self-hosted runner)"
+          npm ci
+
+      - name: Unit tests (fail on new failures)
+        if: github.event_name == 'pull_request' && steps.affected.outputs.count != '0'
+        env:
+          ADVISORY: ${{ github.event.pull_request.draft && '1' || '' }}
+          BASE_SHA: ${{ steps.affected.outputs.base_sha }}
+        run: |
+          set -o pipefail # a failed `git archive` must not leave an empty base
+          gate=scripts/ci/new-vitest-failures.mjs
+          base_dir="$RUNNER_TEMP/vt-base"
+          rm -rf "$base_dir" && mkdir -p "$base_dir"
+          git archive "$BASE_SHA" | tar -x -C "$base_dir"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$base_dir/node_modules"
+          # Each run has a 25-min budget (--budget), so compare still runs inside timeout-minutes.
+          node "$gate" run --root . --tests "$RUNNER_TEMP/vt-tests.txt" --out "$RUNNER_TEMP/vt-head.json" ${ADVISORY:+--advisory}
+          node "$gate" run --root "$base_dir" --side base --changes "$RUNNER_TEMP/vt-changes.z" \
+            --tests "$RUNNER_TEMP/vt-tests.txt" --out "$RUNNER_TEMP/vt-base.json" ${ADVISORY:+--advisory}
+          rm -rf "$base_dir"
+          node "$gate" compare --head "$RUNNER_TEMP/vt-head.json" --base "$RUNNER_TEMP/vt-base.json" ${ADVISORY:+--advisory}

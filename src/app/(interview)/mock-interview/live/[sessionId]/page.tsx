@@ -183,15 +183,92 @@ function MicLevelMeter({ level }: { level: number }) {
 
 // ─── End Early modal ──────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 function EndEarlyModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return <div className="mi-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="end-modal-title"><div className="mi-modal mi-modal-small"><button className="mi-modal-close" aria-label="Close end interview confirmation" onClick={onCancel}><X size={20} /></button><span className="mi-icon-tile"><PhoneOff size={25} /></span><h2 id="end-modal-title">End Interview Early?</h2><p>Ending early will generate a partial report. Your scores for completed questions will still be saved.</p><div className="mi-modal-actions"><button className="mi-button" onClick={onCancel}>Continue Interview</button><button className="mi-button mi-button-secondary" onClick={onConfirm}>End</button></div></div></div>;
+=======
+function EndEarlyModal({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="end-modal-title"
+    >
+      <div className="mx-4 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="end-modal-title" className="text-base font-bold text-gray-900">End Interview Early?</h2>
+          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-6">
+          Ending early will generate a partial report. Your scores for completed questions will still be saved.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-lg bg-[#2557a7] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e4a8f]"
+          >
+            Continue Interview
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 rounded-lg border border-gray-200 bg-gray-100 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200"
+          >
+            End
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
 }
 
 // ─── Completed screen ─────────────────────────────────────────────────────────
 
 function CompletedScreen({ sessionId, reportId }: { sessionId: string; reportId?: string | null }) {
   const router = useRouter();
+<<<<<<< HEAD
   return <main className="mi-session-state"><section className="mi-panel mi-state-card"><span className="mi-icon-tile"><CheckCircle2 size={30} /></span><p className="mi-eyebrow">ONE CONVERSATION. ONE STEP FORWARD.</p><h2>Interview Complete!</h2><p>Great effort. Your completed answers are saved and the report is being prepared. Take a moment to reflect, then see what to carry into your next attempt.</p><div className="mi-state-checks"><span><CheckCircle2 size={16} />Answers saved</span><span><CheckCircle2 size={16} />Transcript reviewed</span><span>{reportId ? <CheckCircle2 size={16} /> : <Loader2 size={16} className="animate-spin" />}{reportId ? "Report ready" : "Report being prepared"}</span></div><div className="mi-actions"><button className="mi-button" onClick={() => router.push(`/mock-interview/report/${reportId || sessionId}`)}>View Report <ChevronRight size={17} /></button><button className="mi-button mi-button-secondary" onClick={() => router.push("/mock-interview/history")}>View History</button></div></section></main>;
+=======
+  const steps = ["Answers saved", "Transcript reviewed", reportId ? "Report ready" : "Report being prepared"];
+  const reportTargetId = reportId || sessionId;
+  return (
+    <div className="mx-auto max-w-md px-4 py-16 text-center">
+      <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-lg bg-[#2557a7]/10">
+        <CheckCircle2 size={40} className="text-[#2557a7]" />
+      </div>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">Interview Complete!</h2>
+      <p className="text-gray-500 text-sm mb-5">
+        Great effort. Your completed answers are saved and the report is being prepared.
+      </p>
+      <div className="mb-6 space-y-2 rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center gap-2 text-xs text-gray-600">
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full ${index < 2 ? "bg-[#2557a7]/10 text-[#2557a7]" : "bg-gray-100 text-gray-500"}`}>{index < 2 ? <CheckCircle2 size={12} /> : <Loader2 size={12} className="animate-spin" />}</span>
+            {step}
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => router.push(`/mock-interview/report/${reportTargetId}`)}
+        className="mx-auto flex items-center gap-2 rounded-lg bg-[#2557a7] px-6 py-3 font-semibold text-white shadow-sm transition-all hover:bg-[#1e4a8f]"
+      >
+        View My Report <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
 }
 
 // ─── Interviewer audio playback (streamed PCM16 24 kHz deltas) ──────────────
@@ -403,8 +480,14 @@ export default function LiveInterviewSessionPage() {
   // audio+video stream. Same "one audio rule" the HeyGen/LiveAvatar
   // integration used: once the avatar's own rendered audio is live, it is
   // the single audible source and playDelta is skipped; before that (or if
+<<<<<<< HEAD
   // via ref, not avatarConnection state, to stay dependency-free (same
   // reasoning as isAudioMutedRef elsewhere in this file).
+=======
+  // the avatar errors out) playDelta is the audible source. Tracked via ref,
+  // not avatarConnection state, to stay dependency-free (same reasoning as
+  // isAudioMutedRef elsewhere in this file).
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
   const simliAudioLiveRef = useRef(false);
   const simliClientRef = useRef<SimliClient | null>(null);
   const simliAudioElRef = useRef<HTMLAudioElement | null>(null);
@@ -443,27 +526,66 @@ export default function LiveInterviewSessionPage() {
 
     // Muted by default until "start" fires — before that, playDelta is the
     // audible source and Simli's own rendered audio must stay silent.
+<<<<<<< HEAD
     audioEl.muted = true;
+=======
+    // simli-client's LiveKit transport attaches the incoming audio track via
+    // livekit-client's attachToElement(), which unconditionally sets
+    // `element.muted = false` whenever the stream has an audio track (to make
+    // autoplay work) — that would make both sources audible at once in the
+    // window before "start". Re-assert muted on every change until Simli's own
+    // audio becomes the single audible source.
+    audioEl.muted = true;
+    // After "start" the same applies to the candidate's own mute toggle: a
+    // later re-attach (renegotiation) would otherwise un-mute a muted candidate.
+    audioEl.addEventListener("volumechange", () => {
+      const wanted = simliAudioLiveRef.current ? isAudioMutedRef.current : true;
+      if (audioEl.muted !== wanted) audioEl.muted = wanted;
+    });
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
 
     const client = new SimliClientCtor(avatar.session_token, videoEl, audioEl, null, LogLevel.ERROR, "livekit");
     simliClientRef.current = client;
+<<<<<<< HEAD
+=======
+
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
     client.on("start", () => {
       setAvatarConnection((s) => (s === "connecting" ? "live" : s));
       // Simli's rendered output becomes the single audible source — unmute
       // it (respecting the candidate's own mute toggle) and stop feeding
       // playDelta from here on (same "one audio rule" as HeyGen/LiveAvatar).
       simliAudioLiveRef.current = true;
+<<<<<<< HEAD
+=======
+      // Drop whatever playDelta already queued: if "start" lands
+      // mid-utterance those buffers would keep playing under Simli's voice.
+      const player = interviewerAudioPlayerRef.current;
+      if (player) stopInterviewerAudio(player);
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
       audioEl.muted = isAudioMutedRef.current;
     });
     client.on("speaking", () => setAvatarActivity("talking"));
     client.on("silent", () => setAvatarActivity("idle"));
-    client.on("error", (detail) => {
+    client.on("error", (detail: string) => {
       console.warn("Simli avatar error, continuing audio-only", detail);
       // No reconnect path for Simli (mock-interview-simli-avatar.txt §6/§9) —
       // treat it as gone for the rest of this session. Fall back to playDelta
+<<<<<<< HEAD
       // and make sure Simli's own output can't still be heard.
       simliAudioLiveRef.current = false;
       audioEl.muted = true;
+=======
+      // and make sure Simli's own output can't still be heard. Accepted gap:
+      // audio already sent to Simli but not yet played is lost, so a sentence
+      // in flight at the moment of the error is cut off; playDelta resumes
+      // with the next delta.
+      simliAudioLiveRef.current = false;
+      audioEl.muted = true;
+      // Close Simli's LiveKit connection too -- dropping the ref alone leaves
+      // it open until the page unmounts.
+      client.stop().catch(() => {});
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
       simliClientRef.current = null;
       setAvatarConnection("fallback");
     });
@@ -472,7 +594,17 @@ export default function LiveInterviewSessionPage() {
       await client.start();
     } catch (err) {
       console.warn("Simli avatar failed to connect, continuing audio-only", err);
+<<<<<<< HEAD
       simliAudioLiveRef.current = false;
+=======
+      // Same silent fallback as the "error" path: playDelta stays the audible
+      // source, Simli's element stays muted, the half-open client is closed,
+      // and the "Connecting avatar…" overlay is cleared (it otherwise stayed
+      // up for the rest of the session).
+      simliAudioLiveRef.current = false;
+      audioEl.muted = true;
+      client.stop().catch(() => {});
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
       simliClientRef.current = null;
     }
   }, []);
@@ -488,6 +620,12 @@ export default function LiveInterviewSessionPage() {
   // client.start() is positioned to catch, since it rejects LiveKit's own
   // internal connect-future, not the promise we're awaiting.
   const avatarJoinStartedRef = useRef(false);
+<<<<<<< HEAD
+=======
+  // Cached in a ref (not just re-read from context) so a React StrictMode
+  // double-mount doesn't lose it — same pattern as initialWsUrlRef below.
+  const consumedAvatarRef = useRef<{ done: boolean; avatar: SimliAvatarSession | null }>({ done: false, avatar: null });
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
   useEffect(() => {
     if (!sessionId) return;
     if (!consumedAvatarRef.current.done) {
@@ -526,6 +664,12 @@ export default function LiveInterviewSessionPage() {
   // already manage it directly for that case.
   useEffect(() => {
     if (avatarConnection === "live" && simliAudioElRef.current) {
+<<<<<<< HEAD
+=======
+      // Update the ref first: the element's volumechange listener (joinAvatar)
+      // re-applies isAudioMutedRef, and must never see the previous value.
+      isAudioMutedRef.current = isAudioMuted;
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
       simliAudioElRef.current.muted = isAudioMuted;
     }
   }, [isAudioMuted, avatarConnection]);
@@ -1023,6 +1167,10 @@ export default function LiveInterviewSessionPage() {
       case "interviewer_interrupted": {
         const player = interviewerAudioPlayerRef.current;
         if (player) stopInterviewerAudio(player);
+        // Once Simli is live its own rendered audio is what the candidate
+        // hears (the local queue is empty -- flushed at "start"), so the
+        // interruption has to cut Simli's buffered speech too.
+        if (simliAudioLiveRef.current) simliClientRef.current?.ClearBuffer();
         break;
       }
       case "question_next": {
@@ -1203,7 +1351,14 @@ export default function LiveInterviewSessionPage() {
       // AI_SESSION_UNAVAILABLE: the AI provider itself was unreachable when
       // the server tried to connect — no interview ever started, nothing to
       // report. Go straight back to set up a fresh one.
+<<<<<<< HEAD
       if (event.code === 1011) {
+=======
+      // Only before session_ready: 1011 is also the generic server "internal
+      // error" code, and after session_ready it is a mid-interview drop that
+      // ends like any other (terminal path below).
+      if (event.code === 1011 && !sessionReadyRef.current) {
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
         routerRef.current.replace('/mock-interview/live');
         return;
       }
@@ -1212,8 +1367,17 @@ export default function LiveInterviewSessionPage() {
       // failure (e.g. ticket expired during StrictMode remount or slow
       // navigation), not a mid-interview drop. Same "nothing started yet"
       // case as above: redirect to setup for a fresh ticket.
+<<<<<<< HEAD
       const TERMINAL_CODES = [4001, 4002, 4003];
       if (TERMINAL_CODES.includes(event.code) && !sessionReadyRef.current) {
+=======
+      // Any abnormal close before session_ready (4001/4002/4003, but also a
+      // bare 1006 when the socket never came up at all — server down, network
+      // blocked, proxy reset). No interview started, so there is nothing to
+      // report: sending the candidate to the "Interview Complete!" screen
+      // would claim saved answers that do not exist. Back to setup instead.
+      if (!sessionReadyRef.current) {
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
         routerRef.current.replace('/mock-interview/live');
         return;
       }
@@ -1226,8 +1390,19 @@ export default function LiveInterviewSessionPage() {
       // somehow didn't (a true network failure, nothing received at all),
       // land on the same completed screen directly — CompletedScreen falls
       // back to sessionId when reportId is null.
+<<<<<<< HEAD
       if (phaseRef.current !== "completed") {
         setCompletedReportId(null);
+=======
+      // interview_complete normally stops the avatar; on a bare drop it never
+      // arrived, so stop it here or Simli keeps streaming on the completed screen.
+      disconnectAvatar();
+      // Never reset completedReportId here: it starts null and only
+      // interview_complete sets it. phaseRef syncs in an effect after commit,
+      // so a close handled in the same burst as interview_complete still sees
+      // a stale phase and would otherwise wipe the real report_id.
+      if (phaseRef.current !== "completed") {
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
         setPhase("completed");
       }
     };
@@ -1235,7 +1410,7 @@ export default function LiveInterviewSessionPage() {
     ws.onerror = () => {
       setWsConnected(false);
     };
-  }, [handleWsMessage]);
+  }, [handleWsMessage, disconnectAvatar]);
 
   // On mount: read session data from sessionStorage and open WebSocket.
   // initialWsUrlRef survives StrictMode double-mount: the first mount reads and
@@ -1313,6 +1488,7 @@ export default function LiveInterviewSessionPage() {
   }
 
   return (
+<<<<<<< HEAD
   <>
     {showEndModal && <EndEarlyModal onConfirm={handleEndInterview} onCancel={() => setShowEndModal(false)} />}
     {showCodingTransition && codingRound && <CodingTransition problemTitle={codingRound.problemTitle} timeLimitMin={Math.ceil(codingRound.timeLimitS / 60)} onDone={() => { setShowCodingTransition(false); setPhase("coding"); }} />}
@@ -1347,4 +1523,387 @@ export default function LiveInterviewSessionPage() {
     </main>
   </>
 );
+=======
+    <>
+      {showEndModal && (
+        <EndEarlyModal
+          onConfirm={handleEndInterview}
+          onCancel={() => setShowEndModal(false)}
+        />
+      )}
+
+      {showCodingTransition && codingRound && (
+        <CodingTransition
+          problemTitle={codingRound.problemTitle}
+          timeLimitMin={Math.ceil(codingRound.timeLimitS / 60)}
+          onDone={() => {
+            setShowCodingTransition(false);
+            setPhase("coding");
+          }}
+        />
+      )}
+
+      <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#f6f8fb]">
+
+        {/* Score toast */}
+        {showFullscreenWarning && (
+          <div className="fixed left-1/2 top-4 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 items-center justify-between gap-3 rounded-lg bg-gray-900 px-4 py-2.5 text-white shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
+            <p className="flex items-center gap-2 text-xs font-semibold">
+              <AlertCircle size={14} className="shrink-0 text-yellow-400" />
+              Fullscreen helps simulate the interview environment.
+            </p>
+            <button type="button" onClick={toggleFullscreen} className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-white/20">
+              Enter fullscreen
+            </button>
+          </div>
+        )}
+
+
+        {/* Status bar */}
+        <div className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-5 py-3 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            {wsConnected ? (
+              <span className="flex items-center gap-1.5 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 px-2.5 py-1 text-xs font-semibold text-[#2557a7]">
+                <Wifi size={12} /> Connected
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-400">
+                <WifiOff size={12} /> Disconnected
+              </span>
+            )}
+            <span className="text-xs text-white/55">Session: {sessionId.slice(-8)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-xs text-white/55">
+              <Clock size={11} />
+              {sessionType} Interview
+            </span>
+            {!isFullscreen && (
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white/70 transition-colors hover:bg-white/15"
+                aria-label="Enter full screen"
+              >
+                <Maximize2 size={13} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowEndModal(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/75 transition-colors hover:bg-white/15"
+            >
+              <PhoneOff size={12} /> End
+            </button>
+          </div>
+        </div>
+
+        {serverError && (
+          <div className="bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between gap-3">
+            <p className="text-xs text-white flex items-center gap-2">
+              <AlertCircle size={13} className="text-yellow-300 shrink-0" />
+              {serverError}
+            </p>
+            <button type="button" onClick={() => setServerError(null)} className="text-white/70 hover:text-white">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {micError && (
+          <div className="border-b border-gray-200 bg-white px-4 py-3">
+            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2.5">
+                <Mic size={15} className="mt-0.5 shrink-0 text-gray-500" />
+                <div>
+                  <p className="text-xs font-semibold text-gray-800">Microphone permission needs attention</p>
+                  <p className="mt-0.5 text-xs text-gray-500">Allow microphone access from the browser address bar, then retry. Your completed answers remain saved.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setMicRetryKey((key) => key + 1)} className="shrink-0 rounded-lg bg-[#2557a7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1e4a8f]">
+                Retry mic
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cameraError && (
+          <div className="border-b border-gray-200 bg-white px-4 py-2.5">
+            <div className="mx-auto flex max-w-3xl items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <VideoOff size={15} className="mt-0.5 shrink-0 text-gray-500" />
+              <div>
+                <p className="text-xs font-semibold text-gray-800">Camera preview is unavailable</p>
+                <p className="mt-0.5 text-xs text-gray-500">You can continue if microphone works, but enabling camera creates a closer real interview simulation.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inactivity banner */}
+        {showInactivityBanner && (
+          <div className="bg-[#2557a7]/20 border-b border-[#2557a7]/40 px-4 py-2.5 flex items-center justify-between">
+            <p className="text-xs text-[#2557a7] flex items-center gap-2">
+              <AlertCircle size={13} className="shrink-0" />
+              Are you still there? Keep speaking — the interview will continue automatically.
+            </p>
+            <button type="button" onClick={() => setShowInactivityBanner(false)} className="text-[#2557a7] hover:text-[#1e4a8f]">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* Coding phase — full-height editor */}
+        {phase === "coding" && codingRound && (
+          <div className="flex-1 overflow-hidden">
+            <CodingStep
+              problemSlug={codingRound.problemSlug}
+              timeLimitS={codingRound.timeLimitS}
+              onSubmitted={handleCodingSubmitted}
+              onTimeExpired={handleCodingTimeExpired}
+            />
+          </div>
+        )}
+
+        {/* Main content — verbal interview phases */}
+        {phase !== "coding" && (
+        <div className="min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4">
+          <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-3">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)_280px] lg:overflow-hidden">
+              {/* Interviewer */}
+              <section
+                className="relative min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)] lg:min-h-0"
+              >
+                {/* Live avatar (mock-interview-simli-avatar.txt). Element stays
+                    mounted the whole time so Simli has a target to attach the
+                    track to before it arrives; only shown once video is
+                    actually live. object-top: Simli's face_id output frames
+                    the subject with headroom above, so a centered crop leaves
+                    the face too low — bias the crop upward, same convention
+                    as the static fallback photo below. */}
+                <video
+                  ref={avatarVideoElRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`absolute inset-0 h-full w-full object-cover object-top ${
+                    avatarConnection === "live" ? "block" : "hidden"
+                  }`}
+                />
+                {/* Simli's constructor requires a real, already-mounted <audio>
+                    element to render into (mock-interview-simli-avatar.txt §4).
+                    Starts muted (playDelta is the audible source until the
+                    avatar is live); joinAvatar unmutes it once Simli's own
+                    rendered audio becomes the active source — see the "start"
+                    event handler and the mute-toggle effect above. */}
+                <audio ref={simliAudioElRef} autoPlay muted className="hidden" />
+
+                {/* Fallback shown when there's no avatar at all, or while it's
+                    connecting / down. */}
+                {avatarConnection !== "live" && (
+                  <div className="absolute inset-0 bg-gray-900">
+                    <Image
+                      src={interviewer.src}
+                      alt={`${interviewer.name}, AI interviewer`}
+                      fill
+                      priority
+                      sizes="(min-width: 1024px) 48vw, 100vw"
+                      className="object-cover object-top"
+                    />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
+                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-lg border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
+                  <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
+                  {wsConnected ? "Live interview room" : "Connecting room"}
+                </div>
+
+                {avatarConnection === "connecting" && (
+                  <div className="absolute left-1/2 top-14 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-md sm:flex">
+                    <Loader2 size={11} className="animate-spin" />
+                    Connecting avatar…
+                  </div>
+                )}
+
+
+
+                <div className="absolute bottom-4 left-4 max-w-[min(380px,calc(100%-2rem))] rounded-lg border border-white/15 bg-black/50 px-4 py-3 text-white shadow-xl backdrop-blur-md">
+                  <p className="text-lg font-bold">{interviewer.name}, AI Interviewer</p>
+                  <p className="mt-0.5 text-xs font-medium text-white/75">{interviewer.role} - {sessionType} interview</p>
+                </div>
+              </section>
+
+              {/* Question and transcript */}
+              <section className="flex min-h-0 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="shrink-0 rounded-lg border border-gray-900 bg-gray-950 p-4 text-white">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Current question</p>
+                      <p className="mt-1 text-sm font-bold text-white">Question {questionNumber}</p>
+                    </div>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto pr-1">
+                    <p className="text-base font-semibold leading-relaxed text-white">
+                      {questionTextForDisplay}
+                      {isQuestionBeingSpoken && visibleQuestionText !== currentQuestion?.text && (
+                        <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7] align-[-2px]" aria-hidden="true" />
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="shrink-0 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 px-3 py-2 text-center">
+                  {phase === "connecting" && (
+                    <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#2557a7]">
+                      <Loader2 size={13} className="animate-spin" />
+                      Connecting to {interviewer.name}
+                    </p>
+                  )}
+                  {phase === "ai-talking" && (
+                    <div className="flex items-center justify-center gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">{interviewer.name} is asking</p>
+                      <AIWaveform />
+                    </div>
+                  )}
+                  {phase === "listening" && (
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">{interviewer.name} is listening</p>
+                  )}
+                  {phase === "processing" && (
+                    <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#2557a7]">
+                      <Loader2 size={13} className="animate-spin" />
+                      {isAnswerCaptureFallback ? "Still finishing up" : "Reviewing answer"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex min-h-[220px] flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3">
+                  {phase === "listening" ? (
+                    <div className="flex h-full min-h-0 flex-col" role="log" aria-live="polite" aria-label="Live transcript">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Live transcript</p>
+                        {!micError && (
+                          <div className="flex items-center gap-2 rounded-full bg-gray-50 px-2 py-1" role="status" aria-label={`Microphone input level ${micLevel} percent`}>
+                            <MicLevelMeter level={micLevel} />
+                            <span className="text-[10px] font-semibold text-gray-500">{isCandidateSpeaking || micLevel > 8 ? "Hearing you" : "Waiting"}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-gray-50 px-3 py-3">
+                        {micError ? (
+                          <p className="text-sm text-gray-500">Microphone is unavailable. Use Retry mic above after allowing permission.</p>
+                        ) : partialTranscript || transcript ? (
+                          <p className="text-sm leading-relaxed text-gray-700">
+                            {partialTranscript || transcript}
+                            <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7]" />
+                          </p>
+                        ) : transcriptionError ? (
+                          <p className="text-sm text-gray-500">Transcription unavailable right now. You can keep answering.</p>
+                        ) : (
+                          <p className="text-sm italic text-gray-400">
+                            {micLevel > 8 ? "Transcribing your speech..." : "Start speaking... transcript will appear here."}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : phase === "processing" && (transcript || partialTranscript) ? (
+                    <div className="flex h-full min-h-0 flex-col">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Your answer</p>
+                      <p className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-gray-50 px-3 py-3 text-sm leading-relaxed text-gray-700">{transcript || partialTranscript}</p>
+                    </div>
+                  ) : (
+                    <div className="flex h-full min-h-[160px] items-center justify-center rounded-lg bg-gray-50 px-4 text-center text-sm text-gray-500">
+                      Transcript appears here when it is your turn to answer.
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Interviewee */}
+              <aside className="flex min-h-0 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="rounded-lg border border-gray-200 bg-gray-950 p-2">
+                  <div className="relative aspect-video overflow-hidden rounded-lg bg-gray-900 lg:aspect-[4/3]">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`h-full w-full scale-x-[-1] object-cover transition-opacity ${
+                        !cameraError ? "opacity-100" : "opacity-0"
+                      }`}
+                    />
+                    {cameraError && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
+                        <VideoOff size={24} />
+                        <span className="text-xs font-medium">Camera unavailable</span>
+                      </div>
+                    )}
+                    <span className="absolute bottom-2 left-2 rounded-full bg-black/35 px-2 py-1 text-[10px] font-semibold text-white/90 backdrop-blur-sm">
+                      You
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${micError ? "border-gray-200 bg-gray-100 text-gray-400" : "border-[#2557a7]/30 bg-white text-[#2557a7]"}`}>
+                      <Mic size={15} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700">Mic locked</p>
+                      <p className="text-[10px] text-gray-400">Recording integrity</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${cameraError ? "border-gray-200 bg-gray-100 text-gray-400" : "border-[#2557a7]/30 bg-white text-[#2557a7]"}`}>
+                      <Video size={15} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700">Cam locked</p>
+                      <p className="text-[10px] text-gray-400">Interview mode</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAudioMuted((m) => !m)}
+                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:bg-gray-100"
+                    aria-label={isAudioMuted ? "Unmute interviewer audio" : "Mute interviewer audio"}
+                  >
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
+                      isAudioMuted ? "border-gray-200 bg-gray-100 text-gray-400" : "border-gray-200 bg-white text-gray-600"
+                    }`}>
+                      {isAudioMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700">Speaker</p>
+                      <p className="text-[10px] text-gray-400">Interviewer audio</p>
+                    </div>
+                  </button>
+                </div>
+              </aside>
+            </div>
+
+            <div className="grid shrink-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="rounded-lg border border-gray-200 bg-white px-4 pb-2 shadow-sm">
+                <InterviewTimeline phase={phase} />
+              </div>
+
+              <div className="rounded-lg border border-[#2557a7]/20 bg-white p-3 shadow-sm">
+                {phase === "listening" ? (
+                  <div className="flex min-h-14 items-center justify-center gap-2 rounded-lg bg-[#2557a7]/5 px-4 text-center text-sm font-semibold text-[#2557a7]">
+                    <span className={`h-2 w-2 rounded-full bg-[#2557a7] ${isCandidateSpeaking ? "animate-pulse" : "opacity-40"}`} aria-hidden="true" />
+                    {isCandidateSpeaking ? "Hearing you — keep going" : "Your turn — start speaking"}
+                  </div>
+                ) : (
+                  <div className="flex min-h-14 items-center justify-center rounded-lg bg-gray-50 px-4 text-center text-sm font-semibold text-gray-500">
+                    {getInterviewerStatus(phase, isSessionClosing)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+    </>
+  );
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
 }

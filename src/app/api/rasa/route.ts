@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { withApiMetrics } from '@/lib/observability/withApiMetrics';
 
 const RASA_URL = process.env.CAREERBOT_AI_URL;
 const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL ?? '';
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const cookieStore = await cookies();
   const token = cookieStore.get('access_token')?.value;
   if (!token) {
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
 }
 
 // Handle CORS preflight
-export async function OPTIONS() {
+async function handleOPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {
@@ -56,3 +57,6 @@ export async function OPTIONS() {
     },
   });
 }
+
+export const POST = withApiMetrics('/api/rasa', 'POST', handlePOST);
+export const OPTIONS = withApiMetrics('/api/rasa', 'OPTIONS', handleOPTIONS);

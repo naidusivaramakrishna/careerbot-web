@@ -164,6 +164,22 @@ function DeviceSelect({
 }
 
 function InfoScreen({ onContinue }: { onContinue: () => void }) {
+<<<<<<< HEAD
+=======
+  const flow = [
+    { title: "Question", copy: "The interviewer asks one focused prompt at a time.", Icon: MessageSquareText },
+    { title: "Answer", copy: "Respond naturally while mic and camera stay locked on.", Icon: UserRound },
+    { title: "Report", copy: "Your transcript, timing, and scoring become the final report.", Icon: ShieldCheck },
+  ];
+
+  const expectations = [
+    "Use specific examples with context, action, and result.",
+    "Finish your thought before pressing Done Speaking.",
+    "Stay on this tab until the session completes or the report opens.",
+    "Keep a stable connection — if it drops, the session ends and a report is built from the answers captured so far.",
+  ];
+
+>>>>>>> e98c6a1336ab533982be55baf515e5d4b6d56a6d
   return (
     <main className="mi-page mi-setup-home">
       <div className="mi-intro-grid">
