@@ -114,6 +114,7 @@ function Harness({ initial }: { initial: AnyData }) {
     resumeStyle: {},
     sectionOrder: [],
     previewCatalogueKey: null,
+    bumpResumeSavedVersion: vi.fn(),
   };
   return <Skills />;
 }
