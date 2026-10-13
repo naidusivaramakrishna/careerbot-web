@@ -26,7 +26,6 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  MessageSquare,
   BookOpen,
   ListChecks,
   Loader2,
@@ -503,7 +502,7 @@ export default function ReportPage() {
   return (
     <main className="mi-page mi-report-page">
       <button className="mi-back-link" onClick={() => router.push("/mock-interview/live")}><ChevronLeft size={17} />Back</button>
-      <PageHeading eyebrow="REFLECT. REFINE. REPEAT." title="Mock Interview Report" description="Your conversation, in perspective. Find what worked and what to take into your next attempt." action={<button className="mi-button mi-button-secondary" onClick={handleDownloadPdf} disabled={pdfLoading}>{pdfLoading ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}{pdfLoading ? "Generating?" : "Download PDF"}</button>} />
+      <PageHeading eyebrow="REFLECT. REFINE. REPEAT." title="Mock Interview Report" description="Your conversation, in perspective. Find what worked and what to take into your next attempt." action={<button className="mi-button mi-button-secondary" onClick={handleDownloadPdf} disabled={pdfLoading}>{pdfLoading ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}{pdfLoading ? "Generating…" : "Download PDF"}</button>} />
       <div className="mi-report-meta"><span>{report.interview_label}</span><span>{report.date}</span><span><Clock size={15} />{report.duration_min} min</span><span>{report.question_count} questions</span></div>
       {report.not_scored && <div role="status" className="mi-notice"><AlertCircle size={20} /><p>This interview could not be scored, so the results below are not a reliable measure of performance.</p></div>}
       <section id="mi-report-overview" aria-label="Overall result" className="mi-panel mi-report-result"><div className="mi-report-score"><ScoreRing score={report.overall_score} /><div><p className="mi-eyebrow">OVERALL SCORE</p><h2>{report.performance_level || "Your session results"}</h2>{report.grade && <p>Grade <strong>{report.grade}</strong></p>}</div></div><div className="mi-report-result-copy"><h2>Executive summary</h2><p>{report.summary || "No written summary was provided for this session."}</p>{report.readiness && <div className="mi-report-readiness"><CheckCircle2 size={18} /><strong>{report.readiness.ready ? "Interview ready" : "Not yet interview-ready"}</strong></div>}</div></section>
