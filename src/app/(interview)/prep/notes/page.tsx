@@ -18,7 +18,6 @@ import {
   Check,
   X,
   ArrowRight,
-  RefreshCw,
   Info,
   ChevronDown,
   ChevronUp,
@@ -39,7 +38,7 @@ interface HRAnswer {
   answer_script: string;
   practice_tip: string;
   common_mistake: string;
-  experience_level: "fresher" | "experienced" | "both";
+  experience_level: "fresher" | "mid" | "senior" | "experienced" | "both";
 }
 
 interface ProjectNote {
@@ -364,7 +363,7 @@ export default function NotesPage() {
   const { setNotesGenerated: setContextNotesGenerated, progressLoading } = useMockInterview();
   const [notes, setNotes] = useState<NotesData | null>(null);
   const [activeTab, setActiveTab] = useState("intro");
-  const [experienceLevel, setExperienceLevel] = useState<"fresher" | "experienced">("fresher");
+  const [experienceLevel, setExperienceLevel] = useState<"fresher" | "mid" | "senior">("fresher");
   const [generating, setGenerating] = useState(false);
   const [genStage, setGenStage] = useState(0);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -509,7 +508,7 @@ export default function NotesPage() {
       const result = await generateNotes({
         resume_id: resumeId,
         target_role: targetRole || undefined,
-        experience_level: experienceLevel === "experienced" ? "mid" : "fresher",
+        experience_level: experienceLevel,
       });
       setNotes(mapApiToNotesData(result.notes as Record<string, unknown>));
       setNotesGenerated(true);
@@ -678,13 +677,29 @@ export default function NotesPage() {
                 ))}
               </div>
             )}
+
+            {availableResumes.length > 0 && (
+              <div className="mt-3">
+                <label className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg border border-dashed cursor-pointer transition-all ${uploading ? "border-[#2557a7]/30 bg-[#2557a7]/5" : "border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#2557a7]/5"}`}>
+                  {uploading ? (
+                    <><Loader2 size={13} className="text-[#2557a7] animate-spin" /><span className="text-xs text-[#2557a7] font-medium">Uploading &amp; parsing…</span></>
+                  ) : (
+                    <><Upload size={13} className="text-[#2557a7]" /><span className="text-xs text-[#2557a7] font-medium">Upload another resume</span></>
+                  )}
+                  <input type="file" accept=".pdf,.doc,.docx" className="hidden" disabled={uploading} onChange={handleResumeUpload} />
+                </label>
+                {uploadError && (
+                  <p className="mt-1.5 text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{uploadError}</p>
+                )}
+              </div>
+            )}
           </div>
 
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">
             Experience Level
           </label>
           <div className="flex gap-2 mb-3">
-            {(["fresher", "experienced"] as const).map((lvl) => (
+            {(["fresher", "mid", "senior"] as const).map((lvl) => (
               <button
                 key={lvl}
                 onClick={() => setExperienceLevel(lvl)}
@@ -694,7 +709,7 @@ export default function NotesPage() {
                     : "bg-white text-gray-600 border-gray-200 hover:border-[#2557a7]/40"
                 }`}
               >
-                {lvl === "fresher" ? "Fresher" : "Experienced"}
+                {lvl === "fresher" ? "Fresher" : lvl === "mid" ? "Mid" : "Senior"}
               </button>
             ))}
           </div>
@@ -772,14 +787,6 @@ export default function NotesPage() {
         <div>
           <h1 className="text-lg font-bold text-gray-900 tracking-tight">Interview Notes</h1>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-60"
-        >
-          <RefreshCw size={12} />
-          Regenerate
-        </button>
       </div>
 
       {unfilledCount > 0 && (
@@ -869,7 +876,7 @@ export default function NotesPage() {
         <div className="space-y-3">
           <div className="flex items-center gap-3 mb-1 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-xs font-bold text-gray-500 mr-1">I am a:</span>
-            {(["fresher", "experienced"] as const).map((lvl) => (
+            {(["fresher", "mid", "senior"] as const).map((lvl) => (
               <button
                 key={lvl}
                 onClick={() => setExperienceLevel(lvl)}
@@ -879,16 +886,16 @@ export default function NotesPage() {
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
-                {lvl === "fresher" ? "Fresher / New Graduate" : "Experienced Professional"}
+                {lvl === "fresher" ? "Fresher / New Graduate" : lvl === "mid" ? "Mid-level" : "Senior-level"}
               </button>
             ))}
             <span className="text-xs text-gray-400 ml-auto tabular-nums">
-              {notes.hr_answers.filter((qa) => qa.experience_level === experienceLevel || qa.experience_level === "both").length} questions
+              {notes.hr_answers.filter((qa) => qa.experience_level === experienceLevel || (experienceLevel !== "fresher" && qa.experience_level === "experienced") || qa.experience_level === "both").length} questions
             </span>
           </div>
 
           {notes.hr_answers
-            .filter((qa) => qa.experience_level === experienceLevel || qa.experience_level === "both")
+            .filter((qa) => qa.experience_level === experienceLevel || (experienceLevel !== "fresher" && qa.experience_level === "experienced") || qa.experience_level === "both")
             .map((qa, i) => (
             <Accordion key={qa.question_id} title={qa.question_text} defaultOpen={i === 0}>
               <div className="text-xs text-gray-600 flex items-start gap-2.5 bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-2.5">
