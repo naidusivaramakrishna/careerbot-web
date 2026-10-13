@@ -541,7 +541,7 @@ export default function EnglishPage() {
           Reading done? Move to Stage 3.
         </p>
         <button
-          onClick={() => router.push("/notes/managerial")}
+          onClick={() => router.push("/prep/managerial")}
           className="flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1e4a8f] text-white text-sm font-bold rounded-xl shadow-md shadow-[#2557a7]/20 transition-colors whitespace-nowrap"
         >
           Start Practice Mode

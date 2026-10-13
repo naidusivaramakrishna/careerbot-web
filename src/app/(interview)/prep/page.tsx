@@ -44,31 +44,31 @@ const modules = [
   {
     title: "Interview Notes",
     description: "Self-introduction, project explanations, HR answers, strengths, weaknesses, and role-specific talking points.",
-    href: "/notes/generate",
+    href: "/prep/notes",
     icon: FileText,
   },
   {
     title: "English Essentials",
     description: "Clean openers, transitions, recovery phrases, closing lines, and interview-safe English patterns.",
-    href: "/notes/english",
+    href: "/prep/english",
     icon: BookOpen,
   },
   {
     title: "Managerial Practice",
     description: "Leadership, ownership, conflict, ambiguity, stakeholder decisions, and STAR-style storytelling.",
-    href: "/notes/managerial",
+    href: "/prep/managerial",
     icon: Mic,
   },
   {
     title: "Technical Practice",
     description: "Approach, assumptions, constraints, trade-offs, edge cases, and precise technical explanations.",
-    href: "/notes/technical",
+    href: "/prep/technical",
     icon: Code2,
   },
   {
     title: "HR Practice",
     description: "Recruiter screens, motivation, culture fit, teamwork, salary readiness, and final-fit conversations.",
-    href: "/notes/hr",
+    href: "/prep/hr",
     icon: Users,
   },
 ];
@@ -132,14 +132,14 @@ export default function NotesLandingPage() {
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link
-                  href="/notes/generate"
+                  href="/prep/notes"
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-6 text-sm font-black text-white shadow-[0_18px_38px_rgba(37,87,167,0.24)] transition hover:bg-[#1f4b91]"
                 >
                   Generate my notes
                   <ArrowRight size={17} />
                 </Link>
                 <Link
-                  href="/notes/english"
+                  href="/prep/english"
                   className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-6 text-sm font-black text-gray-800 transition hover:border-[#2557a7]/45 hover:text-[#2557a7]"
                 >
                   View English essentials
@@ -308,7 +308,7 @@ export default function NotesLandingPage() {
               Generate your notes first, then practice until your answers sound clear, specific, and natural.
             </p>
             <Link
-              href="/notes/generate"
+              href="/prep/notes"
               className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-6 text-sm font-black text-white transition hover:bg-[#1f4b91]"
             >
               Generate interview notes

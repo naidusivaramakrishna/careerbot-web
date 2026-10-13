@@ -523,7 +523,7 @@ export default function NotesPage() {
   };
 
   const handleSaveAndContinue = () => {
-    router.push("/notes/english");
+    router.push("/prep/english");
   };
 
   const persistNotes = (updated: NotesData) => {

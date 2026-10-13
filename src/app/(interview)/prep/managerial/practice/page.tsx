@@ -366,7 +366,7 @@ function ManagerialPracticeContent() {
           <h2 className="text-base font-bold text-gray-900 mb-2">Could Not Load Questions</h2>
           <p className="text-sm text-gray-500 mb-4">{sessionError}</p>
           <button
-            onClick={() => router.push("/notes/managerial")}
+            onClick={() => router.push("/prep/managerial")}
             className="px-5 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] transition-all"
           >
             Go Back
@@ -392,7 +392,7 @@ function ManagerialPracticeContent() {
     <main className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
 
       <button
-        onClick={() => router.push("/notes/managerial")}
+        onClick={() => router.push("/prep/managerial")}
         className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-500 shadow-sm transition-colors hover:text-gray-800"
       >
         <ChevronLeft size={14} /> Back
@@ -623,7 +623,7 @@ function ManagerialPracticeContent() {
 
       <div className="mt-6 text-center">
         <button
-          onClick={() => router.push("/notes/english")}
+          onClick={() => router.push("/prep/english")}
           className="text-xs text-[#2557a7] hover:text-[#1e4a8f] underline-offset-2 hover:underline"
         >
           Need help? Review English phrases

@@ -1,6 +1,6 @@
 "use client";
 
-import NotesSidebar from "../_components/NotesSidebar";
+import NotesSidebar from "./_components/NotesSidebar";
 import { MockInterviewProvider } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import Sidebar from "@/components/layout/Sidebar";
@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 
 export default function NotesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLandingPage = pathname === "/notes";
+  const isLandingPage = pathname === "/prep";
 
   return (
     <DashboardProvider>

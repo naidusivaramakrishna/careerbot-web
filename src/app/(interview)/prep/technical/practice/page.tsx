@@ -282,7 +282,7 @@ function TechnicalPracticeContent() {
           <p className="text-sm text-gray-500 mb-4">{sessionError ?? "No questions were returned for this category."}</p>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => router.push("/notes/technical")}
+              onClick={() => router.push("/prep/technical")}
               className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50"
             >
               Back
@@ -315,7 +315,7 @@ function TechnicalPracticeContent() {
     <main className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
 
       <button
-        onClick={() => router.push("/notes/technical")}
+        onClick={() => router.push("/prep/technical")}
         className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-500 shadow-sm transition-colors hover:text-gray-800"
       >
         <ChevronLeft size={14} /> Back
