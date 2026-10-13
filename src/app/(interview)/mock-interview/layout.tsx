@@ -1,7 +1,6 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import "./mock-interview.css";
 import MockSidebar from "./_components/MockSidebar";
 import { MockInterviewProvider } from "./_context/MockInterviewContext";
 import { usePathname } from "next/navigation";

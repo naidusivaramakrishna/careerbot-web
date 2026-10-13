@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./(interview)/mock-interview/mock-interview.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
