@@ -179,7 +179,22 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
       setPrior(null);
       finishImport(fresh);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not scan the original file again.");
+      const message = err instanceof Error ? err.message : "Could not scan the original file again.";
+      // A failed refresh can still have reset the saved record (the enhance
+      // endpoint saves the rescan before it charges credits, then answers 402).
+      // If the record now lists no fixes, "Continue with my changes" would open a
+      // stale copy: drop the browser's fixed state and leave the dialog. Only an
+      // explicit empty list counts; a missing list or a failed GET keeps it as is.
+      const recordId = prior.result.enhanced_resume_id;
+      const record = await getEnhancedResume(recordId).catch(() => null);
+      if (Array.isArray(record?.applied_fixes) && record.applied_fixes.length === 0) {
+        clearStoredFixedSuggestions(recordId);
+        forgetFixedTextFor(recordId);
+        toast.error(`${message} The earlier fixes were already removed from this resume.`);
+        reset();
+        return;
+      }
+      toast.error(message);
       setStartingFresh(false);
     }
   };

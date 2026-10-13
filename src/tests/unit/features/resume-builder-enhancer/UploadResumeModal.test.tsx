@@ -406,6 +406,67 @@ describe('UploadResumeModal', () => {
       expect(mockToast.warning).toHaveBeenCalledWith('Opened the latest scan, but could not verify its saved-fix list.');
     });
 
+    describe('when "Start fresh" fails (e.g. 402 out of credits)', () => {
+      const failFreshScan = () => {
+        withSavedFixes(1);
+        mockEnhanceResume.mockRejectedValueOnce(new Error('Insufficient credits'));
+        uploadPdf();
+      };
+      const confirmStartFresh = async () => {
+        await screen.findByRole('dialog');
+        fireEvent.click(screen.getByText('Start with fresh data'));
+        fireEvent.click(screen.getByText('Yes, start fresh'));
+      };
+
+      it('drops the stale copy when the server already removed the fixes', async () => {
+        failFreshScan();
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(
+          'Insufficient credits The earlier fixes were already removed from this resume.',
+        ));
+        expect(mockGetEnhancedResume).toHaveBeenLastCalledWith('enhanced-resume-1');
+        expect(mockClearStoredFixedSuggestions).toHaveBeenCalledWith('enhanced-resume-1');
+        expect(mockForgetFixedTextFor).toHaveBeenCalledWith('enhanced-resume-1');
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByText('Continue with my changes')).toBeNull();
+        expect(mockPush).not.toHaveBeenCalled();
+      });
+
+      it('keeps the choice open when the saved fixes are still there', async () => {
+        failFreshScan();
+        mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 's0' }] } as never);
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Insufficient credits'));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+        expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+      });
+
+      it('keeps the choice open when the saved record does not say (no applied_fixes field)', async () => {
+        failFreshScan();
+        mockGetEnhancedResume.mockResolvedValueOnce({} as never);
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Insufficient credits'));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+        expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+      });
+
+      it('keeps the choice open when the saved record cannot be read', async () => {
+        failFreshScan();
+        mockGetEnhancedResume.mockRejectedValueOnce(new Error('Temporary read failure'));
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Insufficient credits'));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+        expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+      });
+    });
+
     it('reads the saved record when the response carries no fix list', async () => {
       mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 'a' }] } as never);
       uploadPdf();

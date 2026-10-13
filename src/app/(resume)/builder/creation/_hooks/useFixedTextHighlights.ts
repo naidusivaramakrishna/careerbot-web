@@ -17,12 +17,21 @@ interface ResumeBaselines {
   /** The text each fix added, kept in the browser so it survives a reload. */
   stored: Map<string, TextUnit[]>;
   fixed: Set<string>;
+  /** Unit keys at the last render each suggestion read pending (`before` keeps the first). */
+  lastPending: Map<string, Set<string>>;
+  /** Keys a fix that only removed text took out; its `added` set is empty. */
+  removed: Map<string, Set<string>>;
 }
 
 // Kept outside the component so the "before" survives the preview unmounting
 // (tab switch, mobile panel) while the resume is still open. Keyed by resume
 // because suggestion ids such as "contact_issue_0" repeat across resumes.
 const baselinesByResume = new Map<string, ResumeBaselines>();
+
+/** Keys in the suggestion's section that were there at `previous` and are gone now. */
+const removedFromSection = (previous: Set<string>, currentKeys: Set<string>, section: string): Set<string> =>
+  new Set([...previous].filter((key) => !currentKeys.has(key)
+    && unitBelongsToSuggestionSection({ key: key.slice(0, key.indexOf("\u0000")), text: "" }, section)));
 
 const isTextUnit = (value: unknown): value is TextUnit =>
   !!value && typeof value === "object"
@@ -57,7 +66,10 @@ function writeStored(resumeKey: string, stored: Map<string, TextUnit[]>): void {
 const baselinesFor = (resumeKey: string): ResumeBaselines => {
   let entry = baselinesByResume.get(resumeKey);
   if (!entry) {
-    entry = { before: new Map(), added: new Map(), stored: readStored(resumeKey), fixed: new Set() };
+    entry = {
+      before: new Map(), added: new Map(), stored: readStored(resumeKey), fixed: new Set(),
+      lastPending: new Map(), removed: new Map(),
+    };
     baselinesByResume.set(resumeKey, entry);
   }
   return entry;
@@ -140,6 +152,18 @@ export function useFixedTextHighlights(
         const addedUnits = currentUnits.filter(
           (unit) => !baseline.has(unitKey(unit)) && unitBelongsToSuggestionSection(unit, suggestion.section),
         );
+        // A fix that only removed text (deleting a flagged skill) has landed too:
+        // freeze the empty set, or text typed there later would count as this fix.
+        // Compare with the last pending render, not `before`: text the user deleted
+        // while the card was pending is not this fix landing.
+        const removed = addedUnits.length === 0
+          ? removedFromSection(state.lastPending.get(suggestion.id) ?? baseline, currentKeys, suggestion.section)
+          : new Set<string>();
+        if (removed.size > 0) {
+          state.added.set(suggestion.id, new Set());
+          state.removed.set(suggestion.id, removed);
+          continue;
+        }
         // Keep what this fix added. An empty result is never stored: the card can
         // read fixed a render before the data lands.
         if (addedUnits.length > 0) {
@@ -157,6 +181,7 @@ export function useFixedTextHighlights(
         continue;
       }
 
+      state.lastPending.set(suggestion.id, currentKeys);
       // A card reading as pending is only an Undo if the text it added is gone
       // from the resume. The list is rebuilt from server snapshots whenever
       // another fix lands, and a card can read as pending (or lose its status)
@@ -175,6 +200,12 @@ export function useFixedTextHighlights(
       if (!baseline) {
         state.before.set(suggestion.id, currentKeys);
         continue;
+      }
+      // Undo of a removal-only fix: the text it removed is back, so forget the empty set.
+      const removed = state.removed.get(suggestion.id);
+      if (removed && [...removed].every((key) => currentKeys.has(key))) {
+        state.added.delete(suggestion.id);
+        state.removed.delete(suggestion.id);
       }
       if (state.fixed.has(suggestion.id)) {
         const added = state.added.get(suggestion.id);
@@ -196,7 +227,9 @@ export function useFixedTextHighlights(
       if (suggestion.status !== "fixed" || isIgnored(suggestion)) continue;
       const baseline = state.before.get(suggestion.id);
       const added = state.added.get(suggestion.id);
-      if (added && state.fixed.has(suggestion.id)) {
+      // Once frozen, `added` is the fix's text even after a one-render pending
+      // read: the pre-fix baseline would also count text typed since then.
+      if (added) {
         for (const unit of currentUnits) {
           if (added.has(unitKey(unit))) units.set(unitKey(unit), unit);
         }

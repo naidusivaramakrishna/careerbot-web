@@ -178,9 +178,9 @@ export function reconcileServerSuggestions(
   reopenedSuggestionId?: string,
   // True only for the initial load, when the server sent its applied-fix ledger.
   // A card this browser kept as fixed (localStorage) that the ledger does not list
-  // and the server lists as pending was fixed against a saved record that has since
-  // been replaced (a fresh scan of the original file, a stale record recomputed):
-  // it is not fixed any more. Never set for apply/delete responses, where the
+  // and the server lists as pending (or, if Undo-able, no longer lists) was fixed
+  // against a saved record that has since been replaced (a fresh scan of the
+  // original file, a stale record recomputed): it is not fixed any more. Never set for apply/delete responses, where the
   // "stay green" rule protects a card from an older pending list racing the apply.
   reopenUnbackedFixed = false,
 ): EnhancedSuggestion[] {
@@ -261,7 +261,17 @@ export function reconcileServerSuggestions(
     }
     // A fixed card can be removed only by an explicit authoritative ledger
     // response (for example, an Undo). Legacy responses keep it visible.
-    return hasAppliedFixLedger ? [] : [{ ...suggestion, status: "fixed" as const }];
+    if (hasAppliedFixLedger) return [];
+    // On load, an Undo-able green card the ledger does not list and the server
+    // no longer lists either is a stale browser copy. Section-save cards
+    // (undoAvailable: false) and re-filled deleted sections are never in the
+    // ledger, so they stay. A skill-removal card stays green while the server
+    // still lists its deduction (resolveRemovedSkillDeductions); once it does
+    // not, it is gone like any other card (its Undo data does not survive a reload).
+    if (reopenUnbackedFixed && suggestion.undoAvailable !== false && !suggestion.id.startsWith("section-deleted-")) {
+      return [];
+    }
+    return [{ ...suggestion, status: "fixed" as const }];
   });
   const newlyIntroduced = serverSuggestions
     .filter(suggestion => !previousIds.has(suggestion.id))

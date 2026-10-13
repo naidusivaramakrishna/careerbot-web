@@ -21,7 +21,7 @@ import { server, resetMSWServer, useHandler } from '../../shared/msw-server';
  */
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
-function useInMemoryResumeApi() {
+function installInMemoryResumeApi() {
   const store = new Map<string, Record<string, unknown>>();
   let nextId = 1;
   const handlers = [
@@ -54,13 +54,13 @@ function useInMemoryResumeApi() {
       return found ? HttpResponse.json(found) : HttpResponse.json({ error: 'Not found' }, { status: 404 });
     }),
   ];
-  handlers.forEach((handler) => useHandler(handler));
+  server.use(...handlers);
 }
 
 describe('Resume Builder: Build, Save, and Display Flow', () => {
   beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
   beforeEach(() => {
-    useInMemoryResumeApi();
+    installInMemoryResumeApi();
   });
   afterEach(() => resetMSWServer());
   afterAll(() => server.close());

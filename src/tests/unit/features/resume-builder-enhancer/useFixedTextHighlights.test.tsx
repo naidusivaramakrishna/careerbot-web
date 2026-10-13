@@ -101,6 +101,82 @@ describe('useFixedTextHighlights', () => {
 
     expect(texts(hook.result.current)).toEqual(['Hyderabad']);
   });
+
+  describe('text the user types after a fix is never painted as that fix', () => {
+    // The test setup's localStorage mock is not enumerable, so resetFixedTextBaselines cannot clear it.
+    beforeEach(() => window.localStorage.clear());
+    const WITH_DOCKER = { ...BEFORE, skills: ['React', 'Docker'] };
+    const TYPED = { ...BEFORE, skills: ['React', 'Docker', 'Kubernetes'] };
+    const fixKeywords = () => {
+      const hook = mount(BEFORE, [sug('k', 'Keywords', 'pending')]);
+      hook.rerender({ data: WITH_DOCKER, s: [sug('k', 'Keywords', 'fixed')] });
+      hook.rerender({ data: WITH_DOCKER, s: [sug('k', 'Keywords', 'fixed')] });
+      hook.rerender({ data: TYPED, s: [sug('k', 'Keywords', 'fixed')] });
+      return hook;
+    };
+
+    it('while the card stays fixed', () => {
+      expect(texts(fixKeywords().result.current)).toEqual(['Docker']);
+    });
+
+    it.each([
+      ['pending', 'pending' as const],
+      ['missing status', undefined],
+    ])('after the card reads as %s for one render and is fixed again', (_label, status) => {
+      const hook = fixKeywords();
+      hook.rerender({ data: TYPED, s: [sug('k', 'Keywords', status)] });
+      hook.rerender({ data: TYPED, s: [sug('k', 'Keywords', 'fixed')] });
+
+      expect(texts(hook.result.current)).toEqual(['Docker']);
+      expect(window.localStorage.getItem('ats-fixed-text:r1')).not.toContain('Kubernetes');
+    });
+
+    // "'Docker' is listed but not demonstrated": deleting the skill fixes the card and adds nothing.
+    const REMOVED = { ...BEFORE, skills: [] as string[] };
+    const removeDocker = () => {
+      const hook = mount(WITH_DOCKER, [sug('k', 'Skills', 'pending')]);
+      hook.rerender({ data: REMOVED, s: [sug('k', 'Skills', 'fixed')] });
+      hook.rerender({ data: REMOVED, s: [sug('k', 'Skills', 'fixed')] });
+      return hook;
+    };
+
+    it('after a fix that only removed text', () => {
+      const hook = removeDocker();
+      hook.rerender({ data: { ...REMOVED, skills: ['Kubernetes'] }, s: [sug('k', 'Skills', 'fixed')] });
+      hook.rerender({ data: { ...REMOVED, skills: ['Kubernetes'] }, s: [sug('k', 'Skills', 'fixed')] });
+
+      expect(hook.result.current).toEqual([]);
+      expect(window.localStorage.getItem('ats-fixed-text:r1')).toBeNull();
+    });
+
+    it('highlights a later fix that adds text once a removal-only fix was undone', () => {
+      const hook = removeDocker();
+      hook.rerender({ data: WITH_DOCKER, s: [sug('k', 'Skills', 'pending')] }); // Undo: Docker is back
+      hook.rerender({ data: { ...WITH_DOCKER, skills: ['React', 'Docker', 'Go'] }, s: [sug('k', 'Skills', 'fixed')] });
+
+      expect(texts(hook.result.current)).toEqual(['Go']);
+    });
+
+    it('still highlights a fix whose data lands a render late after the user deleted text while it was pending', () => {
+      const hook = mount({ ...BEFORE, skills: ['React', 'Java'] }, [sug('k', 'Keywords', 'pending')]);
+      hook.rerender({ data: BEFORE, s: [sug('k', 'Keywords', 'pending')] }); // user deletes Java
+      hook.rerender({ data: BEFORE, s: [sug('k', 'Keywords', 'fixed')] }); // fixed before its data
+      hook.rerender({ data: WITH_DOCKER, s: [sug('k', 'Keywords', 'fixed')] });
+      hook.rerender({ data: WITH_DOCKER, s: [sug('k', 'Keywords', 'fixed')] });
+
+      expect(texts(hook.result.current)).toEqual(['Docker']);
+    });
+
+    it('treats only the removed text coming back as the Undo of a removal-only fix', () => {
+      const hook = mount({ ...WITH_DOCKER, skills: ['React', 'Docker', 'Java'] }, [sug('k', 'Skills', 'pending')]);
+      hook.rerender({ data: { ...BEFORE, skills: ['React', 'Java'] }, s: [sug('k', 'Skills', 'fixed')] }); // Docker removed
+      hook.rerender({ data: BEFORE, s: [sug('k', 'Skills', 'fixed')] }); // user deletes Java
+      hook.rerender({ data: WITH_DOCKER, s: [sug('k', 'Skills', 'pending')] }); // Undo: Docker is back
+      hook.rerender({ data: { ...WITH_DOCKER, skills: ['React', 'Docker', 'Go'] }, s: [sug('k', 'Skills', 'fixed')] });
+
+      expect(texts(hook.result.current)).toEqual(['Go']);
+    });
+  });
 });
 
 describe('useFixedTextHighlights after a page reload', () => {

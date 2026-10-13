@@ -44,7 +44,28 @@ describe("initial load reconciles the browser's green cards with the server's le
   });
 
   it("leaves a card fixed by a section save (not listed by the server) alone", () => {
-    const next = onLoad([card("s", "fixed")], [card("c")], []);
+    // A section save marks its card fixed with undoAvailable: false (no ledger entry exists).
+    const next = onLoad([{ ...card("s", "fixed"), undoAvailable: false }], [card("c")], []);
     expect(next.find(c => c.id === "s")?.status).toBe("fixed");
+  });
+
+  it("drops an Undo-able green card that neither the ledger nor the server list has", () => {
+    const next = onLoad([card("contact_issue_3", "fixed"), card("c", "pending")], [card("c")], []);
+    expect(next.map(c => [c.id, c.status])).toEqual([["c", "pending"]]);
+  });
+
+  it("keeps an unlisted Undo-able green card the ledger confirms", () => {
+    const next = onLoad([card("contact_issue_3", "fixed")], [card("c")], ["contact_issue_3"]);
+    expect(next.find(c => c.id === "contact_issue_3")?.status).toBe("fixed");
+  });
+
+  it("keeps a re-filled deleted-section card: it is local-only and never in the ledger", () => {
+    const next = onLoad([card("section-deleted-projects", "fixed")], [card("c")], []);
+    expect(next.find(c => c.id === "section-deleted-projects")?.status).toBe("fixed");
+  });
+
+  it("keeps an unlisted green card when the server sent no ledger (legacy response)", () => {
+    const next = onLoad([card("contact_issue_3", "fixed")], [card("c")], undefined);
+    expect(next.find(c => c.id === "contact_issue_3")?.status).toBe("fixed");
   });
 });
