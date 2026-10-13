@@ -2,15 +2,17 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { RefreshCw, XCircle, X } from "lucide-react";
+import { ChevronDown, RefreshCw, XCircle, X } from "lucide-react";
 import ResumeSide from "@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide";
 import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/TemplatesTab";
-import JobMatchTab from "@/app/(resume)/builder/creation/_components/job/JobMatchTab";
 
-import { ResumeProvider } from "@/app/(resume)/builder/creation/_context/ResumeContext";
+import { ResumeProvider, useResume } from "@/app/(resume)/builder/creation/_context/ResumeContext";
+import { getEnhancedCurrentScore } from "@/app/(resume)/builder/creation/_utils/enhancedScore";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
+import PriorFixesDialog from "@/components/common/PriorFixesDialog";
+import { clearStoredFixedSuggestions, clearStoredFixedText } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
 import { cacheBuilderResume, readEnhancedResumeIds, rememberEnhancedResumeId, writeReportCache } from "./atsReportCache";
 import { readAtsAnalysis } from "@/api/resumeatsapi";
 import type { EnhancedResumeHistoryItem } from "@/types/api.types";
@@ -208,6 +210,32 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
    Handles: JSON strings, objects with various field names, suggested_keywords arrays. */
 
 /* ─── WHY TOOLTIP ─────────────────────────────────────── */
+/* ─── MOBILE FIX BAR ──────────────────────────────────── */
+/** Collapsed-state summary for the small-screen fix drawer: score + fixes left. */
+function MobileFixSummary({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const { enhancedAtsScore, enhancedSuggestions } = useResume();
+  const score = enhancedAtsScore ? Math.round(getEnhancedCurrentScore(enhancedAtsScore)) : null;
+  const pending = enhancedSuggestions.filter((item) => item.status === "pending" && item.fix_type !== "info").length;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-controls="ats-fix-panel"
+      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left lg:hidden"
+    >
+      <span className="flex items-center gap-2.5 text-sm font-bold text-slate-900">
+        {score !== null && (
+          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-[#EFF6FF] px-1.5 text-xs font-bold tabular-nums text-[#2557A7]">{score}</span>
+        )}
+        ATS fixes
+        <span className="text-xs font-medium text-slate-500">{pending > 0 ? `${pending} left` : "all addressed"}</span>
+      </span>
+      <ChevronDown size={18} className={`text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+    </button>
+  );
+}
+
 /* ─── MAIN REPORT ─────────────────────────────────────── */
 /** ATS-only shell: same editor, preview and score model without exposing the full enhancer route. */
 function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
@@ -215,8 +243,11 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
   const searchParams = useSearchParams();
   // Toolbar panels: Templates and Job Match open in the side drawer (as the
   // builder's TemplatesSidebar does); Score switches the ATS sidebar's tab.
-  const [drawerTab, setDrawerTab] = useState<"Templates" | "Job Match" | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"Templates" | null>(null);
   const [sidebarTabRequest, setSidebarTabRequest] = useState<{ tab: string; id: number } | null>(null);
+  // Below the lg breakpoint the fix panel is a sticky, collapsible drawer so the
+  // resume preview keeps the screen; from lg up it is the usual left column.
+  const [mobileFixPanelOpen, setMobileFixPanelOpen] = useState(false);
 
   // The shared item editors use this source marker to select enhanced-resume
   // update/delete APIs. Keep it in the ATS URL as well; otherwise a project or
@@ -245,26 +276,39 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
         </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <ResumeSide
-          isTemplateSidebarOpen={false}
-          resumeId={resumeId}
-          initialTab="Score"
-          defaultOpen={true}
-          tabRequest={sidebarTabRequest}
-        />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <aside className="sticky top-14 z-[45] w-full min-w-0 shrink-0 overflow-hidden border-b border-gray-200 bg-white shadow-sm lg:static lg:z-auto lg:h-screen lg:w-[clamp(340px,32vw,480px)] lg:basis-[clamp(340px,32vw,480px)] lg:border-b-0 lg:border-r lg:shadow-none">
+          <MobileFixSummary open={mobileFixPanelOpen} onToggle={() => setMobileFixPanelOpen((open) => !open)} />
+          <div
+            id="ats-fix-panel"
+            className={`${mobileFixPanelOpen ? "block max-h-[60vh]" : "hidden"} min-w-0 overflow-hidden border-t border-gray-100 lg:block lg:h-full lg:max-h-none lg:border-t-0`}
+          >
+            <ResumeSide
+              isTemplateSidebarOpen={false}
+              resumeId={resumeId}
+              initialTab="Score"
+              defaultOpen={true}
+              tabRequest={sidebarTabRequest}
+              atsFixMode
+              embedded
+            />
+          </div>
+        </aside>
         <main className="min-w-0 flex-1 bg-gray-50">
           <PreviewPanel
             isTemplateSidebarOpen={false}
             onTabClick={(tab) => {
               if (tab === "Score") {
                 setSidebarTabRequest((prev) => ({ tab: "Score", id: (prev?.id ?? 0) + 1 }));
-              } else if (tab === "Templates" || tab === "Job Match") {
+                setMobileFixPanelOpen(true);
+              } else if (tab === "Templates") {
                 setDrawerTab(tab);
               }
             }}
             resumeId={resumeId}
             isEnhancedResume
+            hideJobMatch
+            atsMinimalToolbar
           />
         </main>
       </div>
@@ -274,36 +318,28 @@ function ATSFixWorkspaceInner({ resumeId }: { resumeId: string }) {
           className="fixed inset-0 z-[70] flex justify-end bg-slate-950/35"
           role="dialog"
           aria-modal="true"
-          aria-label={drawerTab === "Templates" ? "Resume templates" : "Job Match"}
+          aria-label="Resume templates"
         >
           <div className="flex h-full w-full max-w-[520px] flex-col border-l border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">{drawerTab}</h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {drawerTab === "Templates"
-                    ? "Choose a layout without leaving ATS Scan."
-                    : "Jobs that match this resume."}
-                </p>
+                <p className="mt-0.5 text-xs text-slate-500">Choose a layout without leaving ATS Scan.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setDrawerTab(null)}
                 className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                aria-label={drawerTab === "Templates" ? "Close templates" : "Close job match"}
+                aria-label="Close templates"
               >
                 <X size={20} />
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              {drawerTab === "Templates" ? (
-                <TemplatesTab
-                  resumeId={resumeId}
-                  onTemplateSelect={() => setDrawerTab(null)}
-                />
-              ) : (
-                <JobMatchTab />
-              )}
+              <TemplatesTab
+                resumeId={resumeId}
+                onTemplateSelect={() => setDrawerTab(null)}
+              />
             </div>
           </div>
         </div>
@@ -324,6 +360,10 @@ function ATSLoginReport() {
   const [reportPayload, setReportPayload] = useState<Record<string, unknown> | null>(null);
   const [atsWorkspaceId, setAtsWorkspaceId] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  // Fixes already on the record this scan returned (see PriorFixesBanner).
+  const [priorFixCount, setPriorFixCount] = useState(0);
+  const [rescanning, setRescanning] = useState(false);
+  const [workspaceVersion, setWorkspaceVersion] = useState(0);
 
   useEffect(() => {
     try {
@@ -404,6 +444,17 @@ function ATSLoginReport() {
       }
     }
 
+    // The report may name a saved record the server has since invalidated (a
+    // re-parse of the same file marks unedited records stale; reading one then
+    // answers "not found", which left an empty editor). Only that answer means
+    // "scan again"; any other failure keeps the old behaviour.
+    let savedFixCount = 0;
+    if (enhancedResumeId) {
+      const saved = await readSavedFixCount(enhancedResumeId);
+      if (saved === "missing") enhancedResumeId = undefined;
+      else savedFixCount = saved;
+    }
+
     if (enhancedResumeId) {
       const sourceData =
         (d.enhanced_resume as Record<string, unknown> | null | undefined) ||
@@ -412,6 +463,9 @@ function ATSLoginReport() {
         (d.resume_data as Record<string, unknown> | null | undefined) || {};
       cacheBuilderResume(enhancedResumeId, sourceData);
       rememberEnhancedResumeId(enhancedResumeId);
+      // A re-scan of a known file arrives here (the report already names its
+      // saved record), so the fix count must be read on this path too.
+      setPriorFixCount(savedFixCount);
       const updated = { ...d, enhanced_resume_id: enhancedResumeId, enhanced_resume: sourceData };
       return { enhancedResumeId, report: updated };
     }
@@ -426,8 +480,69 @@ function ATSLoginReport() {
       || ((response.enhancer_state as { resume?: Record<string, unknown> } | undefined)?.resume) || {};
     cacheBuilderResume(result.enhanced_resume_id, sourceData);
     rememberEnhancedResumeId(result.enhanced_resume_id);
+    setPriorFixCount(await countAppliedFixes(response, result.enhanced_resume_id));
     const updated = { ...d, ...response, enhanced_resume_id: result.enhanced_resume_id, enhanced_resume: sourceData };
     return { enhancedResumeId: result.enhanced_resume_id, report: updated };
+  };
+
+  /** Applied fixes on a saved record, or "missing" when the server no longer has it. */
+  const readSavedFixCount = async (enhancedResumeId: string): Promise<number | "missing"> => {
+    try {
+      const record = await getEnhancedResume(enhancedResumeId);
+      return Array.isArray(record?.applied_fixes) ? record.applied_fixes.length : 0;
+    } catch (error) {
+      const raw = (error as { __raw?: unknown } | null)?.__raw;
+      const text = (() => { try { return JSON.stringify(raw ?? "") + String((error as Error)?.message ?? ""); } catch { return ""; } })();
+      return /enhanced_resume_not_found/i.test(text) ? "missing" : 0;
+    }
+  };
+
+  /** Fixes the returned record already carries: from the response, else the saved record. */
+  const countAppliedFixes = async (response: Record<string, unknown>, enhancedResumeId: string): Promise<number> => {
+    if (Array.isArray(response.applied_fixes)) return response.applied_fixes.length;
+    try {
+      const record = await getEnhancedResume(enhancedResumeId);
+      return Array.isArray(record.applied_fixes) ? record.applied_fixes.length : 0;
+    } catch {
+      return 0; // the note is informational; never block the workspace on it
+    }
+  };
+
+  /** Scan the uploaded file again, discarding the fixes saved on its record. */
+  const rescanOriginal = async () => {
+    const d = reportPayload ?? getStoredReport();
+    const resumeId = d?.resume_id as string | undefined;
+    if (!d || !resumeId || rescanning) return;
+    setRescanning(true);
+    try {
+      const result = await enhanceResume({
+        resume_id: resumeId,
+        force_refresh: true,
+        // Same breakdown the first scan was tied to.
+        ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),
+      });
+      if (!result.enhanced_resume_id) throw new Error("The new scan did not return a resume ID.");
+      const response = result as unknown as Record<string, unknown>;
+      const sourceData = (response.enhanced_resume as Record<string, unknown> | undefined)
+        || ((response.enhancer_state as { resume?: Record<string, unknown> } | undefined)?.resume) || {};
+      cacheBuilderResume(result.enhanced_resume_id, sourceData);
+      rememberEnhancedResumeId(result.enhanced_resume_id);
+      // The fresh record reuses the same ID, and this browser keeps its green
+      // "fixed" cards and highlights under that ID: forget them, or the new
+      // workspace reloads fixes the server no longer has.
+      for (const id of new Set([result.enhanced_resume_id, atsWorkspaceId])) {
+        clearStoredFixedSuggestions(id ?? undefined);
+        clearStoredFixedText(id ?? "current");
+      }
+      persistReport({ ...d, ...response, enhanced_resume_id: result.enhanced_resume_id, enhanced_resume: sourceData });
+      setPriorFixCount(0);
+      setAtsWorkspaceId(result.enhanced_resume_id);
+      setWorkspaceVersion(version => version + 1); // remount the workspace on the fresh record
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Could not scan the original resume again.");
+    } finally {
+      setRescanning(false);
+    }
   };
 
   // ATS fixes happen inside this page. Prepare/reuse the enhanced server state
@@ -509,7 +624,17 @@ function ATSLoginReport() {
     </div>
   );
 
-  return <ATSFixWorkspace resumeId={atsWorkspaceId} />;
+  return (
+    <>
+      <PriorFixesDialog
+        count={priorFixCount}
+        busy={rescanning}
+        onStartFresh={rescanOriginal}
+        onContinue={() => setPriorFixCount(0)}
+      />
+      <ATSFixWorkspace key={workspaceVersion} resumeId={atsWorkspaceId} />
+    </>
+  );
 }
 
 /* ─── EXPORT ──────────────────────────────────────────── */

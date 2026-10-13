@@ -15,7 +15,7 @@ export default function ATSLoginLayout({
         <Header />
         <Sidebar />
         <main
-          className="flex-1 mt-14"
+          className="min-w-0 flex-1 mt-14"
           style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}
         >
           {children}

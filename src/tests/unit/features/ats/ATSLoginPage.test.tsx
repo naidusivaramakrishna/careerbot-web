@@ -51,8 +51,8 @@ function ATSLoginPageWrapper() {
       setError('Invalid file type. Only PDF, DOCX, and DOC are allowed.');
       return;
     }
-    if (f.size > 10 * 1024 * 1024) {
-      setError('File size exceeds 10MB. Please upload a smaller file.');
+    if (f.size > 5 * 1024 * 1024) {
+      setError('File size exceeds 5MB. Please upload a smaller file.');
       return;
     }
     setFile(f);
@@ -177,14 +177,14 @@ describe('ATSLoginPage', () => {
     });
   });
 
-  it('shows error for file larger than 10MB', async () => {
+  it('shows error for file larger than 5MB', async () => {
     render(<ATSLoginPageWrapper />);
     fireEvent.change(screen.getByTestId('file-input'), {
-      target: { files: [createMockFile('resume.pdf', 11 * 1024 * 1024)] },
+      target: { files: [createMockFile('resume.pdf', 6 * 1024 * 1024)] },
     });
     await waitFor(() => {
       expect(screen.getByTestId('error-message')).toHaveTextContent(
-        'File size exceeds 10MB. Please upload a smaller file.'
+        'File size exceeds 5MB. Please upload a smaller file.'
       );
     });
   });

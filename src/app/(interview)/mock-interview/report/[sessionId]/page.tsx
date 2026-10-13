@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeading, PanelHeading } from "../../_components/MockUI";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getReport, downloadReportPdf, ReportResponse, ReportAnswer } from "@/api/mockInterviewApi";
@@ -25,7 +26,6 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  MessageSquare,
   BookOpen,
   ListChecks,
   Loader2,
@@ -499,365 +499,28 @@ export default function ReportPage() {
   const weakest = report.dimensions.length > 1
     ? report.dimensions.reduce((min, d) => (d.score < min.score ? d : min))
     : null;
-  const cardClass = "rounded-lg border border-gray-200 bg-white p-5 shadow-sm";
-  const cardTitle = "text-sm font-semibold text-gray-900";
-
   return (
-    <>
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        {/* Top bar */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/mock-interview/live")}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]"
-          >
-            <ChevronLeft size={16} aria-hidden="true" />
-            Back
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={pdfLoading}
-              className="flex items-center gap-1.5 rounded-lg bg-[#2557a7] px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1e4a8f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2 disabled:opacity-60"
-            >
-              {pdfLoading ? (
-                <><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Generating…</>
-              ) : (
-                <><Download size={14} aria-hidden="true" /> Download PDF</>
-              )}
-            </button>
-          </div>
+    <main className="mi-page mi-report-page">
+      <button className="mi-back-link" onClick={() => router.push("/mock-interview/live")}><ChevronLeft size={17} />Back</button>
+      <PageHeading eyebrow="REFLECT. REFINE. REPEAT." title="Mock Interview Report" description="Your conversation, in perspective. Find what worked and what to take into your next attempt." action={<button className="mi-button mi-button-secondary" onClick={handleDownloadPdf} disabled={pdfLoading}>{pdfLoading ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}{pdfLoading ? "Generating…" : "Download PDF"}</button>} />
+      <div className="mi-report-meta"><span>{report.interview_label}</span><span>{report.date}</span><span><Clock size={15} />{report.duration_min} min</span><span>{report.question_count} questions</span></div>
+      {report.not_scored && <div role="status" className="mi-notice"><AlertCircle size={20} /><p>This interview could not be scored, so the results below are not a reliable measure of performance.</p></div>}
+      <section id="mi-report-overview" aria-label="Overall result" className="mi-panel mi-report-result"><div className="mi-report-score"><ScoreRing score={report.overall_score} /><div><p className="mi-eyebrow">OVERALL SCORE</p><h2>{report.performance_level || "Your session results"}</h2>{report.grade && <p>Grade <strong>{report.grade}</strong></p>}</div></div><div className="mi-report-result-copy"><h2>Executive summary</h2><p>{report.summary || "No written summary was provided for this session."}</p>{report.readiness && <div className="mi-report-readiness"><CheckCircle2 size={18} /><strong>{report.readiness.ready ? "Interview ready" : "Not yet interview-ready"}</strong></div>}</div></section>
+      <nav className="mi-report-nav" aria-label="Report sections"><a href="#mi-report-overview">Overview</a><a href="#mi-report-scores">Score breakdown</a><a href="#mi-report-answers">Your answers</a><a href="#mi-report-next">Next steps</a></nav>
+      <div className="mi-report-workspace">
+        <div className="mi-report-main">
+          <section id="mi-report-scores" aria-label="Score breakdown" className="mi-panel"><PanelHeading title="Score breakdown" description="A closer look at the skills and answers behind your result." /><div className="mi-report-score-columns">{report.dimensions.length > 0 && <div><h3>Competency breakdown</h3><p className="mi-caption">Scores out of 100. The lowest score is flagged as the focus area.</p><ul className="mi-score-meters">{report.dimensions.map(d => <ScoreMeter key={d.key} label={d.label} score={d.score} focus={weakest?.key === d.key} />)}</ul></div>}<div><h3>Score by question</h3><p className="mi-caption">Each bar is the score for one answer, out of 10.</p>{report.practice_avg > 0 && <span className="mi-pill"><TrendingUp size={13} />{report.improvement_pct >= 0 ? "+" : ""}{report.improvement_pct}% vs practice</span>}{barData.length > 0 ? <figure aria-label="Score by question"><figcaption className="sr-only">{barData.map(d => d.name + ": " + d.Score.toFixed(1) + " out of 10").join(". ")}</figcaption><div aria-hidden="true"><ResponsiveContainer width="100%" height={200}><BarChart data={barData} barCategoryGap="35%"><CartesianGrid strokeDasharray="3 5" stroke="rgba(37,87,167,.1)" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} /><YAxis domain={[0, 10]} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} width={24} /><Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid rgba(37,87,167,.14)", fontSize: "12px" }} formatter={(value: number) => [value.toFixed(1), "Score"]} /><Bar dataKey="Score" fill="#2557a7" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></figure> : <p>No answers were scored.</p>}</div></div></section>
+          {(report.strengths.length > 0 || report.areas_to_improve.length > 0) && <section aria-label="Strengths and improvements" className="mi-feedback-grid">{report.strengths.length > 0 && <article className="mi-panel"><span className="mi-icon-tile"><Trophy size={23} /></span><h2>Strengths</h2><ul className="mi-feedback-list">{report.strengths.map((item, index) => <li key={index}><CheckCircle2 size={17} />{item}</li>)}</ul></article>}{report.areas_to_improve.length > 0 && <article className="mi-panel"><span className="mi-icon-tile"><TrendingUp size={23} /></span><h2>Areas to improve</h2><ul className="mi-feedback-list">{report.areas_to_improve.map((item, index) => <li key={index}><ChevronRight size={17} />{item}</li>)}</ul></article>}</section>}
+          <section id="mi-report-answers" aria-label="Question-by-question breakdown" className="mi-panel"><PanelHeading title="Question-by-question breakdown" description="Select a question to see feedback" action={<span className="mi-pill mi-pill-neutral">{report.questions.length} answers</span>} /><div className="mi-question-list">{report.questions.map(question => <QuestionRow key={question.num} q={question} />)}</div></section>
+          {report.coding_round && <CodingPerformanceSection data={report.coding_round} />}
+          {report.hinglish_phrases.length > 0 && <section aria-label="Hinglish phrases" className="mi-panel"><PanelHeading title="Hinglish detected" description={report.hinglish_phrases.length + " phrase" + (report.hinglish_phrases.length > 1 ? "s were" : " was") + " in Hinglish. In your actual interview, try the English alternatives below."} />{report.hinglish_phrases.map((phrase, index) => <div className="mi-language-row" key={index}><span>{phrase.original}</span><ChevronRight size={17} /><strong>{phrase.english}</strong></div>)}</section>}
         </div>
-
-        {/* Header */}
-        <header className="mb-5 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#2557a7]">Performance report</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900">Mock Interview Report</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-            <span>{report.interview_label}</span>
-            <span>{report.date}</span>
-            <span className="flex items-center gap-1">
-              <Clock size={13} aria-hidden="true" />
-              <span>{report.duration_min} min</span>
-            </span>
-            <span>{report.question_count} questions</span>
-          </div>
-          {(report.end_reason_label || report.pressure_affected) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {/* {report.end_reason_label && (
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                  Session ended: {report.end_reason_label}
-                </span>
-              )} */}
-            </div>
-          )}
-        </header>
-
-        {report.not_scored && (
-          <div role="status" className="mb-5 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-            This interview could not be scored, so the results below are not a reliable measure of performance.
-          </div>
-        )}
-
-        {/* Overall result */}
-        <section aria-label="Overall result" className="mb-5 grid gap-5 lg:grid-cols-3">
-          <div className={cardClass}>
-            <h2 className={cardTitle}>Overall score</h2>
-            <div className="mt-4 flex justify-center">
-              <ScoreRing score={report.overall_score} />
-            </div>
-            {(report.grade || report.performance_level) && (
-              <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 text-center">
-                {report.grade && (
-                  <div>
-                    <dt className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Grade</dt>
-                    <dd className="mt-0.5 text-lg font-semibold text-gray-900">{report.grade}</dd>
-                  </div>
-                )}
-                {report.performance_level && (
-                  <div>
-                    <dt className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Level</dt>
-                    <dd className="mt-0.5 text-lg font-semibold text-gray-900">{report.performance_level}</dd>
-                  </div>
-                )}
-              </dl>
-            )}
-          </div>
-
-          <div className={`${cardClass} lg:col-span-2`}>
-            <h2 className={cardTitle}>Executive summary</h2>
-            {report.summary ? (
-              <p className="mt-3 text-sm leading-relaxed text-gray-700">{report.summary}</p>
-            ) : (
-              <p className="mt-3 text-sm text-gray-500">No written summary was provided for this session.</p>
-            )}
-            {report.readiness && (
-              <div
-                className={`mt-4 flex gap-3 rounded-lg border p-4 ${
-                  report.readiness.ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
-                }`}
-              >
-                {report.readiness.ready ? (
-                  <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden="true" />
-                ) : (
-                  <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
-                )}
-                <div>
-                  <p className={`text-sm font-semibold ${report.readiness.ready ? "text-emerald-800" : "text-amber-800"}`}>
-                    {report.readiness.ready ? "Interview ready" : "Not yet interview-ready"}
-                  </p>
-                  {report.readiness.areas.length > 0 && (
-                    <>
-                      <p className="mt-1 text-xs text-gray-600">Recommended practice areas</p>
-                      <ul className="mt-2 flex flex-wrap gap-2">
-                        {report.readiness.areas.map((area) => (
-                          <li key={area} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium capitalize text-gray-700 ring-1 ring-inset ring-gray-200">
-                            {area}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Competencies + per-question scores */}
-        <section aria-label="Score breakdown" className="mb-5 grid gap-5 lg:grid-cols-2">
-          {report.dimensions.length > 0 && (
-            <div className={cardClass}>
-              <h2 className={cardTitle}>Competency breakdown</h2>
-              <p className="mt-1 text-xs text-gray-500">Scores out of 100. The lowest score is flagged as the focus area.</p>
-              <ul className="mt-4 space-y-4">
-                {report.dimensions.map((d) => (
-                  <ScoreMeter key={d.key} label={d.label} score={d.score} focus={weakest?.key === d.key} />
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className={`${cardClass} ${report.dimensions.length === 0 ? "lg:col-span-2" : ""}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className={cardTitle}>Score by question</h2>
-              {report.practice_avg > 0 && (
-                <span
-                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    report.improvement_pct >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  <TrendingUp size={12} aria-hidden="true" />
-                  {report.improvement_pct >= 0 ? "+" : ""}{report.improvement_pct}% vs practice
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-xs text-gray-500">Each bar is the score for one answer, out of 10.</p>
-            {barData.length > 0 ? (
-              <figure className="mt-4" aria-label="Score by question">
-                <figcaption className="sr-only">
-                  {barData.map((d) => `${d.name}: ${d.Score.toFixed(1)} out of 10`).join(". ")}
-                </figcaption>
-                <div aria-hidden="true">
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={barData} barCategoryGap="30%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[0, 10]} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} width={28} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "12px" }}
-                        formatter={(value: number) => [value.toFixed(1), "Score"]}
-                      />
-                      <Bar dataKey="Score" fill="#2557a7" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </figure>
-            ) : (
-              <p className="mt-4 text-sm text-gray-500">No answers were scored.</p>
-            )}
-          </div>
-        </section>
-
-        {/* Strengths & improvements */}
-        {(report.strengths.length > 0 || report.areas_to_improve.length > 0) && (
-          <section aria-label="Strengths and improvements" className="mb-5 grid gap-5 lg:grid-cols-2">
-            {report.strengths.length > 0 && (
-              <div className={cardClass}>
-                <h2 className={`${cardTitle} flex items-center gap-2`}>
-                  <Trophy size={15} className="text-[#2557a7]" aria-hidden="true" />
-                  Strengths
-                </h2>
-                <ul className="mt-3 space-y-2.5">
-                  {report.strengths.map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                      <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden="true" />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {report.areas_to_improve.length > 0 && (
-              <div className={cardClass}>
-                <h2 className={`${cardTitle} flex items-center gap-2`}>
-                  <AlertCircle size={15} className="text-amber-600" aria-hidden="true" />
-                  Areas to improve
-                </h2>
-                <ul className="mt-3 space-y-2.5">
-                  {report.areas_to_improve.map((a, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                      <ChevronRight size={15} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
-                      {a}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Weakest answers */}
-        {report.redo_questions.length > 0 && (
-          <section aria-label="Questions to redo" className={`mb-5 ${cardClass}`}>
-            <h2 className={`${cardTitle} flex items-center gap-2`}>
-              <RotateCcw size={15} className="text-[#2557a7]" aria-hidden="true" />
-              Redo these questions
-            </h2>
-            <ul className="mt-3 space-y-3">
-              {report.redo_questions.map((q) => (
-                <li key={q.num} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900">Q{q.num}: {q.text}</p>
-                    {q.issue && <p className="mt-1 text-sm text-gray-600">{q.issue}</p>}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <ScoreChip score={q.score} />
-                    <button
-                      type="button"
-                      onClick={() => router.push(report.practice_href)}
-                      className="rounded-lg bg-[#2557a7] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#1e4a8f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2"
-                    >
-                      Practice this
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Question breakdown */}
-        <section aria-label="Question-by-question breakdown" className={`mb-5 ${cardClass}`}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className={cardTitle}>Question-by-question breakdown</h2>
-            <span className="text-xs text-gray-400">Select a question to see feedback</span>
-          </div>
-          <div className="mt-4 space-y-2">
-            {report.questions.map((q) => (
-              <QuestionRow key={q.num} q={q} />
-            ))}
-          </div>
-        </section>
-
-        {/* Coding round performance */}
-        {report.coding_round && (
-          <CodingPerformanceSection data={report.coding_round} />
-        )}
-
-        {/* Hinglish Note */}
-        {report.hinglish_phrases.length > 0 && (
-          <section aria-label="Hinglish phrases" className={`mb-5 ${cardClass}`}>
-            <h2 className={`${cardTitle} flex items-center gap-2`}>
-              <MessageSquare size={15} className="text-gray-600" aria-hidden="true" />
-              Hinglish detected
-            </h2>
-            <p className="mb-3 mt-1 text-xs text-gray-500">
-              {report.hinglish_phrases.length} phrase{report.hinglish_phrases.length > 1 ? "s were" : " was"} in Hinglish. In your actual interview, try the English alternatives below.
-            </p>
-            <div className="space-y-2">
-              {report.hinglish_phrases.map((p, i) => (
-                <div key={i} className="flex items-start gap-3 text-xs">
-                  <span className="shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-gray-700">&ldquo;{p.original}&rdquo;</span>
-                  <span className="mt-1 text-gray-400" aria-hidden="true">→</span>
-                  <span className="mt-1 font-medium text-gray-700">&ldquo;{p.english}&rdquo;</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Action plan / reattempt / interviewer perspective (only when the backend provides them) */}
-        {(report.action_plan.length > 0 || report.suggested_reattempt || report.interviewer_perspective) && (
-          <section aria-label="Next steps" className="mb-5 grid gap-5 lg:grid-cols-2">
-            {(report.action_plan.length > 0 || report.suggested_reattempt) && (
-              <div className={cardClass}>
-                <h2 className={`${cardTitle} flex items-center gap-2`}>
-                  <ListChecks size={15} className="text-[#2557a7]" aria-hidden="true" />
-                  Action plan
-                </h2>
-                {report.action_plan.length > 0 && (
-                  <ol className="mt-3 space-y-2.5">
-                    {report.action_plan.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2557a7]/10 text-[11px] font-semibold text-[#2557a7]">
-                          {i + 1}
-                        </span>
-                        {item}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-                {report.suggested_reattempt && (
-                  <p className="mt-4 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 p-3 text-sm text-[#2557a7]">
-                    <strong>Suggested reattempt:</strong> {report.suggested_reattempt}
-                  </p>
-                )}
-              </div>
-            )}
-            {report.interviewer_perspective && (
-              <div className={cardClass}>
-                <h2 className={`${cardTitle} flex items-center gap-2`}>
-                  <BookOpen size={15} className="text-[#2557a7]" aria-hidden="true" />
-                  Interviewer&apos;s perspective
-                </h2>
-                <blockquote className="mt-3 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 p-3 text-sm italic leading-relaxed text-gray-700">
-                  &ldquo;{report.interviewer_perspective}&rdquo;
-                </blockquote>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Footer action buttons */}
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/mock-interview/live")}
-            className="flex items-center gap-2 rounded-lg bg-[#2557a7] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1e4a8f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2"
-          >
-            <RotateCcw size={14} aria-hidden="true" />
-            Take Another Mock Interview
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push(report.practice_href)}
-            className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]"
-          >
-            Practice Weak Questions
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push("/mock-interview/history")}
-            className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]"
-          >
-            View History
-          </button>
-        </div>
+        <aside className="mi-report-aside" id="mi-report-next">
+          <section className="mi-panel mi-report-next-card"><span className="mi-icon-tile"><ListChecks size={24} /></span><p className="mi-eyebrow">MAKE YOUR NEXT ATTEMPT COUNT</p><h2>Your next steps</h2>{report.readiness && report.readiness.areas.length > 0 && <><h3>Recommended practice areas</h3><div className="mi-area-chips">{report.readiness.areas.map(area => <span className="mi-pill" key={area}>{area}</span>)}</div></>}{(report.action_plan.length > 0 || report.suggested_reattempt) && <section aria-label="Next steps"><h3>Action plan</h3><ol className="mi-action-list">{report.action_plan.map((item, index) => <li key={index}><span>{index + 1}</span>{item}</li>)}</ol>{report.suggested_reattempt && <p className="mi-notice"><strong>Suggested reattempt:</strong> {report.suggested_reattempt}</p>}</section>}<div className="mi-stacked-actions"><button className="mi-button" onClick={() => router.push("/mock-interview/live")}><RotateCcw size={16} />Take Another Mock Interview</button><button className="mi-button mi-button-secondary" onClick={() => router.push(report.practice_href)}>Practice Weak Questions</button><button className="mi-text-button" onClick={() => router.push("/mock-interview/history")}>View History <ChevronRight size={16} /></button></div></section>
+          {report.redo_questions.length > 0 && <section aria-label="Questions to redo" className="mi-panel"><h2>Redo these questions</h2><ul className="mi-redo-list">{report.redo_questions.map(question => <li key={question.num}><p><strong>Q{question.num}:</strong> {question.text}</p>{question.issue && <p className="mi-caption">{question.issue}</p>}<div><ScoreChip score={question.score} /><button className="mi-text-button" onClick={() => router.push(report.practice_href)}>Practice this <ChevronRight size={14} /></button></div></li>)}</ul></section>}
+          {report.interviewer_perspective && <section className="mi-panel"><span className="mi-icon-tile"><BookOpen size={22} /></span><h2>Interviewer&apos;s perspective</h2><blockquote>{report.interviewer_perspective}</blockquote></section>}
+        </aside>
       </div>
-    </>
+    </main>
   );
 }
