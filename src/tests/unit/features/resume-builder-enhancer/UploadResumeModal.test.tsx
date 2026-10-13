@@ -318,6 +318,25 @@ describe('UploadResumeModal', () => {
       expect(mockEnhanceResume).toHaveBeenLastCalledWith({ resume_id: 'parsed-resume-1', force_refresh: true });
     });
 
+    it('keeps local fixed-card state when the fresh response still has saved fixes', async () => {
+      withSavedFixes(1);
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-1',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+        applied_fixes: [{ suggestion_id: 's0' }],
+      } as never);
+      uploadPdf();
+      await screen.findByRole('dialog');
+
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith('The saved fixes are still present. Please try again.');
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
     it('reads the saved record when the response carries no fix list', async () => {
       mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 'a' }] } as never);
       uploadPdf();

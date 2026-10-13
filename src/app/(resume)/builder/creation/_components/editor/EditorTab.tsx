@@ -563,9 +563,9 @@ const EditorTab: React.FC<Props> = ({
   const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
   // A soft skill added as a chip answers its "add at least 3 soft skills" card.
   // The chip goes through its own endpoint (no section Save), so nothing else
-  // sends it to /enhance/apply: the card, progress, score and preview highlight
-  // all stayed as they were. The value is the ONE added skill -- the AI service
-  // appends it to soft_skills and recomputes the count (2 -> 3 meets the bar).
+  // confirms its matching card. The skill endpoint already persisted the chip,
+  // so /enhance/apply must receive no value and only re-evaluate the current
+  // state; sending the chip again could append a duplicate on the backend.
   useEffect(() => {
     if (!isEnhancedResume) return;
     const onSkillAdded = (event: Event) => {
@@ -573,8 +573,9 @@ const EditorTab: React.FC<Props> = ({
       if (typeof skill !== "string" || typeof category !== "string" || !skill.trim()) return;
       const target = findSoftSkillSuggestion(enhancedSuggestionsRef.current, category);
       if (!target) return;
-      // Non-fatal: the skill itself is already saved.
-      void applyManualFixRef.current(target.id, skill.trim(), "autosave").catch(() => undefined);
+      // Non-fatal: the skill itself is already saved. Omit its value so this is
+      // a confirmation of the persisted change, never a second skill insert.
+      void applyManualFixRef.current(target.id, undefined, "autosave").catch(() => undefined);
     };
     window.addEventListener(SKILL_ADDED_EVENT, onSkillAdded);
     return () => window.removeEventListener(SKILL_ADDED_EVENT, onSkillAdded);

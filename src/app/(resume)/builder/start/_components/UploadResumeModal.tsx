@@ -31,6 +31,23 @@ async function countAppliedFixes(result: EnhanceResult): Promise<number> {
   }
 }
 
+/** Starting fresh must not clear local state until the API proves fixes are gone. */
+async function verifyFreshResult(result: EnhanceResult): Promise<void> {
+  const inline = (result as unknown as { applied_fixes?: unknown }).applied_fixes;
+  if (Array.isArray(inline)) {
+    if (inline.length === 0) return;
+    throw new Error("The saved fixes are still present. Please try again.");
+  }
+
+  const record = await getEnhancedResume(result.enhanced_resume_id);
+  if (!Array.isArray(record?.applied_fixes)) {
+    throw new Error("Could not verify that the saved fixes were removed. Please try again.");
+  }
+  if (record.applied_fixes.length > 0) {
+    throw new Error("The saved fixes are still present. Please try again.");
+  }
+}
+
 const MAX_FILE_SIZE_MB = 10;
 
 export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModalProps) {
@@ -122,7 +139,7 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
       setStep("enhancing");
       const enhanceResult = await enhanceResume({ resume_id: resumeId });
 
-      // The same file parsed again returns its saved record, fixes included: ask which to use.
+      // Re-uploading the same file returns its saved record, fixes included: ask which to use.
       const fixCount = await countAppliedFixes(enhanceResult);
       if (fixCount > 0) {
         setPrior({ count: fixCount, resumeId, result: enhanceResult });
@@ -149,6 +166,10 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
     setStartingFresh(true);
     try {
       const fresh = await enhanceResume({ resume_id: prior.resumeId, force_refresh: true });
+      // `force_refresh` is an API request, not proof that the server accepted
+      // it. Do not erase browser-side fixed cards/highlights unless the saved
+      // result is confirmed to contain no applied fixes.
+      await verifyFreshResult(fresh);
       // The fresh record reuses the same ID, and this browser keeps its green "fixed"
       // cards and highlights under that ID: forget them or the editor reloads old fixes.
       for (const id of new Set([fresh.enhanced_resume_id, prior.result.enhanced_resume_id])) {

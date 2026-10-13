@@ -129,14 +129,21 @@ export function useFixedTextHighlights(
       const baseline = state.before.get(suggestion.id);
       if (suggestion.status === "fixed") {
         fixedNow.add(suggestion.id);
-        if (!baseline) continue;
+        // Freeze what this card added on its first pending -> fixed transition.
+        // Recomputing against the old pending snapshot on every fixed render
+        // would incorrectly attribute later user edits in the same section to
+        // this fix (and persist them as its green highlight after reload).
+        // Some API responses mark a card fixed one render before their resume
+        // data arrives. Do not freeze an empty set in that transient render;
+        // wait until the fix has actually produced text, then keep that set.
+        if (!baseline || state.added.has(suggestion.id)) continue;
         const addedUnits = currentUnits.filter(
           (unit) => !baseline.has(unitKey(unit)) && unitBelongsToSuggestionSection(unit, suggestion.section),
         );
-        state.added.set(suggestion.id, new Set(addedUnits.map(unitKey)));
         // Keep what this fix added. An empty result is never stored: the card can
         // read fixed a render before the data lands.
         if (addedUnits.length > 0) {
+          state.added.set(suggestion.id, new Set(addedUnits.map(unitKey)));
           // Stored whole (a truncated line would never match the resume again).
           const units = addedUnits
             .filter((unit) => unit.text.length <= MAX_UNIT_LENGTH)
@@ -168,6 +175,7 @@ export function useFixedTextHighlights(
         const added = state.added.get(suggestion.id);
         if (added && [...added].some((key) => !currentKeys.has(key))) {
           state.before.set(suggestion.id, currentKeys);
+          state.added.delete(suggestion.id);
         }
       }
     }
@@ -182,7 +190,14 @@ export function useFixedTextHighlights(
     for (const suggestion of suggestions) {
       if (suggestion.status !== "fixed" || isIgnored(suggestion)) continue;
       const baseline = state.before.get(suggestion.id);
-      if (baseline) {
+      const added = state.added.get(suggestion.id);
+      if (added && state.fixed.has(suggestion.id)) {
+        for (const unit of currentUnits) {
+          if (added.has(unitKey(unit))) units.set(unitKey(unit), unit);
+        }
+      } else if (baseline) {
+        // First fixed render: effects have not frozen `added` yet, so paint
+        // the transition immediately. Later renders use the frozen key set.
         for (const unit of currentUnits) {
           if (!baseline.has(unitKey(unit)) && unitBelongsToSuggestionSection(unit, suggestion.section)) {
             units.set(unitKey(unit), unit);

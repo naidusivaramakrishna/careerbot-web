@@ -208,4 +208,17 @@ describe('useFixedTextHighlights after a page reload', () => {
 
     expect(texts(hook.result.current)).toEqual(['Hyderabad']);
   });
+
+  it("does not paint a later user edit in the same section as an already fixed card", () => {
+    const hook = mount(BEFORE, [sug('k', 'Keywords', 'pending')]);
+    hook.rerender({ data: AFTER_AB, s: [sug('k', 'Keywords', 'fixed')] });
+    expect(texts(hook.result.current)).toEqual(['Docker']);
+
+    hook.rerender({
+      data: { ...AFTER_AB, skills: ['React', 'Docker', 'Kubernetes'] },
+      s: [sug('k', 'Keywords', 'fixed')],
+    });
+
+    expect(texts(hook.result.current)).toEqual(['Docker']);
+  });
 });
