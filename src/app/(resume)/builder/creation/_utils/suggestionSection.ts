@@ -218,11 +218,11 @@ export interface ConfirmableSuggestion {
 
 /**
  * A "add at least 3 soft skills" count card. The AI service's /enhance/apply
- * takes ONE soft skill name for it (it appends the value to the resume's
- * soft_skills list and recomputes the count), so these are confirmed once per
- * added chip, never from a whole-section value. Same id/message test the AI
- * service applies (soft_skills_low, soft_skills_missing, skills_issue_* about
- * soft skills).
+ * takes ONE soft skill name for it. The endpoint owns the canonical
+ * `soft_skills` list, de-duplicates that one name, and recomputes the count;
+ * these cards are therefore confirmed once per added chip, never from a
+ * whole-section value. Same id/message test the AI service applies
+ * (soft_skills_low, soft_skills_missing, skills_issue_* about soft skills).
  */
 export function isSoftSkillSuggestion(suggestion: { id: string; message: string }): boolean {
   const id = suggestion.id.toLowerCase();

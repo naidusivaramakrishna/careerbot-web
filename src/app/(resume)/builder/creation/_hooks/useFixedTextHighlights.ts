@@ -165,6 +165,11 @@ export function useFixedTextHighlights(
       const stored = state.stored.get(suggestion.id);
       if (stored && stored.some((unit) => !currentKeys.has(unitKey(unit)))) {
         state.stored.delete(suggestion.id);
+        // The fix was really undone. Its next application needs a new frozen
+        // key set; keeping the old one makes the new text flash once and then
+        // disappear on the following render.
+        state.added.delete(suggestion.id);
+        state.before.set(suggestion.id, currentKeys);
         storedChanged = true;
       }
       if (!baseline) {

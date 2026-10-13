@@ -9,6 +9,7 @@ import PriorFixesDialog from "@/components/common/PriorFixesDialog";
 import { clearStoredFixedSuggestions } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
 import { forgetFixedTextFor } from "@/app/(resume)/builder/creation/_hooks/useFixedTextHighlights";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import { verifyFreshEnhancement } from "@/utils/verifyEnhancedRefresh";
 
 interface UploadResumeModalProps {
   isOpen: boolean;
@@ -28,23 +29,6 @@ async function countAppliedFixes(result: EnhanceResult): Promise<number> {
     return Array.isArray(record?.applied_fixes) ? record.applied_fixes.length : 0;
   } catch {
     return 0; // informational only: never block opening the editor on it
-  }
-}
-
-/** Starting fresh must not clear local state until the API proves fixes are gone. */
-async function verifyFreshResult(result: EnhanceResult): Promise<void> {
-  const inline = (result as unknown as { applied_fixes?: unknown }).applied_fixes;
-  if (Array.isArray(inline)) {
-    if (inline.length === 0) return;
-    throw new Error("The saved fixes are still present. Please try again.");
-  }
-
-  const record = await getEnhancedResume(result.enhanced_resume_id);
-  if (!Array.isArray(record?.applied_fixes)) {
-    throw new Error("Could not verify that the saved fixes were removed. Please try again.");
-  }
-  if (record.applied_fixes.length > 0) {
-    throw new Error("The saved fixes are still present. Please try again.");
   }
 }
 
@@ -166,15 +150,31 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
     setStartingFresh(true);
     try {
       const fresh = await enhanceResume({ resume_id: prior.resumeId, force_refresh: true });
-      // `force_refresh` is an API request, not proof that the server accepted
-      // it. Do not erase browser-side fixed cards/highlights unless the saved
-      // result is confirmed to contain no applied fixes.
-      await verifyFreshResult(fresh);
+      const verification = await verifyFreshEnhancement(fresh);
+      if (verification === "retained") {
+        // Keep the latest server response, not the pre-refresh browser copy.
+        // If the service declined the refresh, Continue must still open its
+        // current data rather than resurrecting an older cached snapshot.
+        setPrior({
+          count: Math.max(1, await countAppliedFixes(fresh)),
+          resumeId: prior.resumeId,
+          result: fresh,
+        });
+        toast.error("The saved fixes are still present. Please try again.");
+        setStartingFresh(false);
+        return;
+      }
       // The fresh record reuses the same ID, and this browser keeps its green "fixed"
       // cards and highlights under that ID: forget them or the editor reloads old fixes.
+      // If the optional GET check is unavailable, the successful POST is still
+      // newer than the browser cache; clearing that cache is safer than showing
+      // old fixed cards over the latest server response.
       for (const id of new Set([fresh.enhanced_resume_id, prior.result.enhanced_resume_id])) {
         clearStoredFixedSuggestions(id);
         forgetFixedTextFor(id);
+      }
+      if (verification === "unknown") {
+        toast.warning("Opened the latest scan, but could not verify its saved-fix list.");
       }
       setPrior(null);
       finishImport(fresh);

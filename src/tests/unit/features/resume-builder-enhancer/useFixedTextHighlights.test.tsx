@@ -79,6 +79,19 @@ describe('useFixedTextHighlights', () => {
     expect(texts(hook.result.current)).toEqual(['Vijayawada']);
   });
 
+  it('stores and keeps the new text after a fixed card is reopened, removed, and re-applied', () => {
+    const hook = mount(BEFORE, [sug('c', 'Contact', 'pending')]);
+    hook.rerender({ data: AFTER_LOCATION, s: [sug('c', 'Contact', 'fixed')] });
+    hook.rerender({ data: AFTER_LOCATION, s: [sug('c', 'Contact', 'pending')] });
+    hook.rerender({ data: BEFORE, s: [sug('c', 'Contact', 'pending')] });
+    const reapplied = { ...BEFORE, personalInfo: { location: 'Vijayawada' } };
+    hook.rerender({ data: reapplied, s: [sug('c', 'Contact', 'fixed')] });
+    hook.rerender({ data: reapplied, s: [sug('c', 'Contact', 'fixed')] });
+
+    expect(texts(hook.result.current)).toEqual(['Vijayawada']);
+    expect(window.localStorage.getItem('ats-fixed-text:r1')).toContain('Vijayawada');
+  });
+
   it('highlights a re-applied fix even when an Undo left its text in the data', () => {
     const hook = mount(BEFORE, [sug('c', 'Contact', 'pending')]);
     hook.rerender({ data: AFTER_LOCATION, s: [sug('c', 'Contact', 'fixed')] });

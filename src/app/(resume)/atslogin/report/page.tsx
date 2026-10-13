@@ -11,6 +11,7 @@ import { ResumeProvider, useResume } from "@/app/(resume)/builder/creation/_cont
 import { getEnhancedCurrentScore } from "@/app/(resume)/builder/creation/_utils/enhancedScore";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
+import { verifyFreshEnhancement } from "@/utils/verifyEnhancedRefresh";
 import PriorFixesDialog from "@/components/common/PriorFixesDialog";
 import { clearStoredFixedSuggestions, clearStoredFixedText } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
 import { cacheBuilderResume, readEnhancedResumeIds, rememberEnhancedResumeId, writeReportCache } from "./atsReportCache";
@@ -522,6 +523,10 @@ function ATSLoginReport() {
         ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),
       });
       if (!result.enhanced_resume_id) throw new Error("The new scan did not return a resume ID.");
+      const refreshVerification = await verifyFreshEnhancement(result);
+      if (refreshVerification === "retained") {
+        throw new Error("The saved fixes are still present. Please try again.");
+      }
       const response = result as unknown as Record<string, unknown>;
       const sourceData = (response.enhanced_resume as Record<string, unknown> | undefined)
         || ((response.enhancer_state as { resume?: Record<string, unknown> } | undefined)?.resume) || {};

@@ -100,12 +100,12 @@ describe("EditorTab: a soft skill chip answers its ATS card", () => {
     expect(() => mount()).not.toThrow();
   });
 
-  it("confirms the soft-skill card without re-sending the chip already saved by Skills", () => {
+  it("confirms the soft-skill card with the one chip required by the apply endpoint", () => {
     mount();
     act(() => announceSkillAdded("  Good Communication ", "Soft Skills"));
 
     expect(ctx.applyManualFix).toHaveBeenCalledTimes(1);
-    expect(ctx.applyManualFix).toHaveBeenCalledWith("soft_skills_low", undefined, "autosave");
+    expect(ctx.applyManualFix).toHaveBeenCalledWith("soft_skills_low", "Good Communication", "autosave");
   });
 
   it("does nothing for a skill added to another category", () => {
