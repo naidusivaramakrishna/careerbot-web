@@ -18,6 +18,28 @@ function arr<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
+/**
+ * List entries as objects, with the section's main field filled in. The
+ * parser's list sections arrive as plain strings ("Best Paper Award 2024") or
+ * { text } objects as often as the object shapes the editor saves. A string has
+ * no `.title`, so reading it as an object produced a blank entry: the heading
+ * was drawn with nothing under it. Entries that already carry the main field
+ * (or any other key the caller reads) are returned untouched.
+ */
+function entries(v: unknown, mainKey: string): AnyRecord[] {
+  return arr<unknown>(v).flatMap((entry): AnyRecord[] => {
+    if (typeof entry === "string") {
+      const text = entry.trim();
+      return text ? [{ [mainKey]: text }] : [];
+    }
+    if (entry && typeof entry === "object") {
+      const record = entry as AnyRecord;
+      return !str(record[mainKey]) && str(record.text) ? [{ ...record, [mainKey]: str(record.text) }] : [record];
+    }
+    return [];
+  });
+}
+
 // Enhanced-resume history can contain either the public `id` field or a
 // legacy Mongo `_id`. Dropping `_id` makes a later edit look like a brand-new
 // item to the backend's id-based merge and creates a duplicate.
@@ -628,17 +650,17 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   );
 
   const rawCerts: AnyRecord[] =
-    hasCertContent(arr<AnyRecord>(p.certifications))
-      ? arr<AnyRecord>(p.certifications)
-      : hasCertContent(arr<AnyRecord>(p.certificates))
-      ? arr<AnyRecord>(p.certificates)
-      : arr<AnyRecord>(llm.certifications).filter((c) => str(c.full_name) || str(c.name)).length > 0
-      ? arr<AnyRecord>(llm.certifications)
+    hasCertContent(entries(p.certifications, "name"))
+      ? entries(p.certifications, "name")
+      : hasCertContent(entries(p.certificates, "name"))
+      ? entries(p.certificates, "name")
+      : entries(llm.certifications, "name").filter((c) => str(c.full_name) || str(c.name)).length > 0
+      ? entries(llm.certifications, "name")
       : enhancerStateCerts;
 
   // p.certifications may be in builder format (issuer field) — used as cross-source fallback
   // when rawCerts comes from llm_data and is missing issuer/date fields
-  const pCertsArr = arr<AnyRecord>(p.certifications);
+  const pCertsArr = entries(p.certifications, "name");
 
   const certifications = rawCerts.map((cert) => {
     const certName = str(cert.full_name) || str(cert.name) || str(cert.certification) || str(cert.title);
@@ -687,14 +709,16 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     }
     return {
       ...mappedId(ach),
-      title: str(ach.title) || str(ach.achievement) || str(ach.name),
+      // `text` is what the parser's scored-achievement objects use
+      // ({ text, tone, claim_type, star_pattern }).
+      title: str(ach.title) || str(ach.achievement) || str(ach.name) || str(ach.text),
       date: str(ach.date) || str(ach.year),
       description: str(ach.description),
     };
   });
 
   /* ── Volunteering ── */
-  const volunteering = arr<AnyRecord>(p.volunteering || llm.volunteering).map((vol) => ({
+  const volunteering = entries(p.volunteering || llm.volunteering, "organization").map((vol) => ({
     ...mappedId(vol),
     organization: str(vol.organization),
     role: str(vol.role) || str(vol.position),
@@ -703,7 +727,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   }));
 
   /* ── Awards ── */
-  const awards = arr<AnyRecord>(p.awards || llm.awards).map((awd) => ({
+  const awards = entries(p.awards || llm.awards, "title").map((awd) => ({
     ...mappedId(awd),
     title: str(awd.title) || str(awd.name) || str(awd.award),
     issuedBy: str(awd.issued_by) || str(awd.organization) || str(awd.issuer) || str(awd.issuedBy),
@@ -723,14 +747,19 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   );
 
   /* ── Hobbies ── */
-  const hobbies = arr<AnyRecord>(p.hobbies || llm.hobbies).map((h) => ({
+  // An empty list is truthy, so `a || b` would stop at [] and never reach a filled alias.
+  // Prefer the first non-empty LIST (entries() ignores anything else), then any truthy value.
+  const firstFilled = (...candidates: unknown[]): unknown =>
+    candidates.find((value) => Array.isArray(value) && value.length > 0)
+    ?? candidates.find((value) => Boolean(value));
+  const hobbies = entries(firstFilled(p.hobbies, llm.hobbies, p.hobbies_and_interests, llm.hobbies_and_interests), "name").map((h) => ({
     ...mappedId(h),
     name: str(h.name) || str(h.hobby),
     description: str(h.description),
   }));
 
   /* ── Interests ── */
-  const interests = arr<AnyRecord>(p.interests || llm.interests).map((i) => ({
+  const interests = entries(p.interests || llm.interests, "name").map((i) => ({
     ...mappedId(i),
     name: str(i.name) || str(i.interest),
     description: str(i.description),
@@ -738,7 +767,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   }));
 
   /* ── Publications ── */
-  const publications = arr<AnyRecord>(p.publications || llm.publications).map((pub) => ({
+  const publications = entries(p.publications || llm.publications, "title").map((pub) => ({
     ...mappedId(pub),
     title: str(pub.title),
     authors: str(pub.authors),
@@ -754,7 +783,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   }));
 
   /* ── Patents ── */
-  const patents = arr<AnyRecord>(p.patents || llm.patents).map((pat) => ({
+  const patents = entries(p.patents || llm.patents, "title").map((pat) => ({
     ...mappedId(pat),
     title: str(pat.title),
     patentNumber: str(pat.patent_number) || str(pat.patentNumber),
@@ -764,7 +793,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   }));
 
   /* ── References ── */
-  const references = arr<AnyRecord>(p.references || llm.references).map((ref) => ({
+  const references = entries(p.references || llm.references, "name").map((ref) => ({
     ...mappedId(ref),
     name: str(ref.name),
     relation: str(ref.relation) || str(ref.designation) || str(ref.title),
