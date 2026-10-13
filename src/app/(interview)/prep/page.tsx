@@ -1,359 +1,322 @@
-'use client';
+"use client";
 
-import { useRouter } from 'next/navigation';
+import Image from "next/image";
+import Link from "next/link";
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
 import {
-  ArrowLeft, ChevronRight, Mic, BookOpen, Headphones,
-  FileText, Video, Zap, BarChart2, AlignLeft, MessageSquare,
-  ClipboardList, Timer, Brain, CheckSquare, Check,
-  Sparkles, Clock, Users,
-} from 'lucide-react';
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  Code2,
+  FileText,
+  Mic,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 
-const BRAND = '#2557a7';
-const BRAND_HOVER = '#1e4a94';
-const BRAND_LIGHT = 'rgba(37,87,167,0.06)';
-const BRAND_BORDER = 'rgba(37,87,167,0.14)';
+const proofPoints = [
+  "Resume-aware answers",
+  "English phrasing support",
+  "Voice practice with feedback",
+  "Managerial, technical, and HR coverage",
+];
 
-const cards = [
+const workflow = [
   {
-    id: 'communication',
-    href: '/communication/start',
-    eyebrow: 'English Proficiency',
-    badge: 'Recommended',
-    title: 'Communication Assessment',
-    tagline: 'Evaluate spoken English across 7 skill dimensions with AI-powered scoring.',
-    stats: [
-      { value: '44', label: 'Questions' },
-      { value: '7',  label: 'Sections'  },
-      { value: '20m',label: 'Duration'  },
-    ],
-    features: [
-      { icon: Mic,           label: 'See & Repeat'        },
-      { icon: Headphones,    label: 'Listen & Repeat'     },
-      { icon: AlignLeft,     label: 'Jumbled Sentences'   },
-      { icon: MessageSquare, label: 'Sentence Completion' },
-      { icon: Headphones,    label: 'Listen & Correct'    },
-      { icon: BookOpen,      label: 'Story Comprehension' },
-    ],
-    cta: 'Start Assessment',
-    Icon: Mic,
+    title: "Generate from your resume",
+    body: "CareerBOT reads your resume context and turns it into interview-ready notes, not generic sample answers.",
   },
   {
-    id: 'mock-test',
-    href: '/mock-test',
-    eyebrow: 'Timed Practice Test',
-    badge: 'New',
-    title: 'Mock Test',
-    tagline: 'Simulate real exam conditions with timed MCQ sections scored instantly.',
-    stats: [
-      { value: '40', label: 'Questions' },
-      { value: '4',  label: 'Sections'  },
-      { value: '80m',label: 'Duration'  },
-    ],
-    features: [
-      { icon: Brain,         label: 'Aptitude'         },
-      { icon: ClipboardList, label: 'Reasoning'        },
-      { icon: CheckSquare,   label: 'Domain Knowledge' },
-      { icon: Timer,         label: 'Timed Sections'   },
-      { icon: BarChart2,     label: 'Score Breakdown'  },
-      { icon: Zap,           label: 'Instant Results'  },
-    ],
-    cta: 'Take Mock Test',
-    Icon: ClipboardList,
+    title: "Refine your speaking structure",
+    body: "Use clear scripts, transitions, power phrases, and recovery lines before moving into spoken practice.",
   },
   {
-    id: 'mock-interview',
-    href: '/mock-interview/live',
-    eyebrow: 'AI Interview Simulation',
-    badge: 'Advanced',
-    title: 'Mock Interview',
-    tagline: 'A full AI-powered voice interview — speak your answers, get instant scoring and a detailed report.',
-    stats: [
-      { value: '8–10', label: 'Questions' },
-      { value: 'AI',   label: 'Voice'     },
-      { value: '20m',  label: 'Duration'  },
-    ],
-    features: [
-      { icon: Video,    label: 'Live AI Interviewer' },
-      { icon: Mic,      label: 'Voice Detection'     },
-      { icon: Zap,      label: 'Real-time Scoring'   },
-      { icon: BarChart2,label: 'Score Breakdown'     },
-      { icon: FileText, label: 'Full Report'         },
-      { icon: Brain,    label: 'AI Feedback'         },
-    ],
-    cta: 'Start Live Interview',
-    Icon: Video,
+    title: "Practice with less guidance",
+    body: "Move from full notes to keywords-only recall so your answers sound prepared without sounding memorized.",
+  },
+  {
+    title: "Improve after every answer",
+    body: "Record your response and review feedback for clarity, structure, coverage, confidence, and timing.",
   },
 ];
 
-const steps = {
-  communication: [
-    'Open Sections Overview and click Start Assessment',
-    'Complete each section — AI scores in real time',
-    'Receive your full score report on completion',
-  ],
-  'mock-test': [
-    'Select your test category and difficulty level',
-    'Answer 40 questions across 4 auto-timed sections',
-    'Review instant score breakdown and explanations',
-  ],
-  'mock-interview': [
-    'Start a live AI voice interview directly',
-    'Use notes and practice separately if you want to warm up',
-    'Get real-time transcription, scoring, and a full report',
-  ],
-};
-
-const tableRows: [string, string, string, string][] = [
-  ['Best for',      'English fluency',      'Aptitude & reasoning',  'Full interview sim'  ],
-  ['Format',        '7 structured sections','4 timed MCQ sections',  'Live voice mock'    ],
-  ['Duration',      '~20 min',              '~30 min',               '~20 min'             ],
-  ['AI Evaluation', '✓',                    '—',                     '✓'                   ],
-  ['Score Report',  '✓',                    '✓',                     '✓'                   ],
-  ['Difficulty',    'Beginner → Advanced',  'Beginner → Advanced',   'Advanced'            ],
+const modules = [
+  {
+    title: "Interview Notes",
+    description: "Self-introduction, project explanations, HR answers, strengths, weaknesses, and role-specific talking points.",
+    href: "/notes/generate",
+    icon: FileText,
+  },
+  {
+    title: "English Essentials",
+    description: "Clean openers, transitions, recovery phrases, closing lines, and interview-safe English patterns.",
+    href: "/notes/english",
+    icon: BookOpen,
+  },
+  {
+    title: "Managerial Practice",
+    description: "Leadership, ownership, conflict, ambiguity, stakeholder decisions, and STAR-style storytelling.",
+    href: "/notes/managerial",
+    icon: Mic,
+  },
+  {
+    title: "Technical Practice",
+    description: "Approach, assumptions, constraints, trade-offs, edge cases, and precise technical explanations.",
+    href: "/notes/technical",
+    icon: Code2,
+  },
+  {
+    title: "HR Practice",
+    description: "Recruiter screens, motivation, culture fit, teamwork, salary readiness, and final-fit conversations.",
+    href: "/notes/hr",
+    icon: Users,
+  },
 ];
 
-export default function InterviewPrepHub() {
-  const router = useRouter();
+const answerSystem = [
+  "What to say first",
+  "Which proof point to use",
+  "How to structure the answer",
+  "What the interviewer should remember",
+  "Where your answer sounds weak",
+  "How to make it sound more natural",
+];
 
+function SectionHeading({
+  eyebrow,
+  title,
+  body,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+}) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-6 py-5">
+    <div className="mx-auto max-w-3xl text-center">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2557a7]">{eyebrow}</p>
+      <h2 className="mt-3 text-3xl font-black leading-tight text-gray-950 sm:text-4xl">{title}</h2>
+      <p className="mt-4 text-base font-medium leading-7 text-gray-600">{body}</p>
+    </div>
+  );
+}
 
-        {/* ── Back ─────────────────────────────────────────── */}
-        <button
-          onClick={() => router.back()}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-700 mb-4 transition-colors"
-        >
-          <ArrowLeft size={13} />
-          Back
-        </button>
+export default function NotesLandingPage() {
+  return (
+    <>
+      <LandingNavbar />
+      <main className="bg-white text-gray-950">
+        <section className="relative isolate overflow-hidden border-b border-gray-200 bg-white">
+          <Image
+            src="/images/landing/mock-interview-promo.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="pointer-events-none -z-10 object-cover opacity-[0.08] grayscale"
+          />
+          <div className="absolute inset-0 -z-10 bg-white/88" />
+          <div className="mx-auto flex min-h-[calc(100vh-96px)] max-w-7xl flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
+            <div className="max-w-4xl">
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#2557a7]/20 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-[#2557a7] shadow-sm">
+                <ShieldCheck size={14} />
+                Interview notes and answer practice
+              </div>
 
-        {/* ── Hero ─────────────────────────────────────────── */}
-        <div className="mb-5">
-          <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white mb-2"
-            style={{ backgroundColor: BRAND }}
-          >
-            <Sparkles size={9} />
-            Interview Preparation
-          </span>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight mb-1">
-            Choose Your Preparation Path
-          </h1>
-          <p className="text-sm text-gray-500 max-w-lg leading-relaxed">
-            Three AI-powered tools to sharpen every dimension of your interview performance.
-          </p>
-          <div className="mt-2.5 flex flex-wrap gap-4">
-            {[
-              { icon: Users, label: '3 Preparation Tools'   },
-              { icon: Zap,   label: 'AI-Powered Evaluation' },
-              { icon: Clock, label: 'Self-Paced'            },
-            ].map(({ icon: Icon, label }) => (
-              <span key={label} className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-                <Icon size={12} style={{ color: BRAND }} />
-                {label}
-              </span>
-            ))}
+              <h1 className="max-w-5xl text-4xl font-black leading-[1.02] tracking-normal text-gray-950 sm:text-6xl lg:text-[74px]">
+                Interview notes that turn your resume into confident answers.
+              </h1>
+
+              <p className="mt-6 max-w-3xl text-lg font-medium leading-8 text-gray-600 sm:text-xl">
+                Build role-aware scripts, improve your English phrasing, and practice managerial, technical, and HR answers before the real interview.
+              </p>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href="/notes/generate"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-6 text-sm font-black text-white shadow-[0_18px_38px_rgba(37,87,167,0.24)] transition hover:bg-[#1f4b91]"
+                >
+                  Generate my notes
+                  <ArrowRight size={17} />
+                </Link>
+                <Link
+                  href="/notes/english"
+                  className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-6 text-sm font-black text-gray-800 transition hover:border-[#2557a7]/45 hover:text-[#2557a7]"
+                >
+                  View English essentials
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-12 grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {proofPoints.map((point) => (
+                <div key={point} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                  <CheckCircle2 size={17} className="shrink-0 text-[#2557a7]" />
+                  <p className="text-sm font-bold text-gray-700">{point}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </section>
 
-        {/* ── Cards ────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-          {cards.map((card) => {
-            const CardIcon = card.Icon;
-            return (
-              <div
-                key={card.id}
-                className="group bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-              >
-                {/* Brand accent bar */}
-                <div className="h-0.75 shrink-0" style={{ backgroundColor: BRAND }} />
+        <section className="border-b border-gray-200 bg-gray-50">
+          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-14 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+            <div className="flex flex-col justify-center">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2557a7]">Why notes matter</p>
+              <h2 className="mt-3 text-3xl font-black leading-tight text-gray-950 sm:text-4xl">
+                Most candidates do not fail because they lack experience.
+              </h2>
+              <p className="mt-4 text-base font-medium leading-7 text-gray-600">
+                They fail because their answers are scattered, too generic, too long, or hard to believe under pressure. Notes gives your experience a structure you can actually speak.
+              </p>
+            </div>
 
-                <div className="flex flex-col flex-1 p-4 gap-3">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-gray-400">Before</p>
+                <h3 className="mt-3 text-xl font-black text-gray-950">Unstructured preparation</h3>
+                <ul className="mt-5 space-y-3 text-sm font-medium leading-6 text-gray-600">
+                  <li>Generic answers copied from examples</li>
+                  <li>Strong experience hidden behind weak delivery</li>
+                  <li>No clear way to practice recall</li>
+                  <li>Answers that drift beyond the question</li>
+                </ul>
+              </div>
+              <div className="rounded-xl border border-[#2557a7]/25 bg-white p-5 shadow-[0_18px_45px_rgba(37,87,167,0.10)]">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2557a7]">After</p>
+                <h3 className="mt-3 text-xl font-black text-gray-950">Resume-backed answer system</h3>
+                <ul className="mt-5 space-y-3 text-sm font-medium leading-6 text-gray-700">
+                  <li>Role-aware scripts based on your background</li>
+                  <li>Clear structure for each common interview area</li>
+                  <li>Voice practice with notes, then keywords only</li>
+                  <li>Feedback that improves the next attempt</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
 
-                  {/* Row 1: icon + badge */}
-                  <div className="flex items-center justify-between">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center"
-                      style={{ backgroundColor: BRAND_LIGHT }}
-                    >
-                      <CardIcon size={17} style={{ color: BRAND }} />
-                    </div>
-                    <span
-                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white"
-                      style={{ backgroundColor: BRAND }}
-                    >
-                      {card.badge}
-                    </span>
+        <section className="border-b border-gray-200 bg-white">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="How it works"
+              title="A focused workflow from resume to spoken answer."
+              body="The product is designed around one outcome: helping you explain your experience clearly when an interviewer asks."
+            />
+
+            <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {workflow.map((step, index) => (
+                <div key={step.title} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="mb-5 flex h-9 w-9 items-center justify-center rounded-full bg-[#2557a7] text-sm font-black text-white">
+                    {index + 1}
                   </div>
+                  <h3 className="text-lg font-black text-gray-950">{step.title}</h3>
+                  <p className="mt-3 text-sm font-medium leading-6 text-gray-600">{step.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
-                  {/* Row 2: title + tagline */}
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                      {card.eyebrow}
-                    </p>
-                    <h2 className="text-[15px] font-extrabold text-gray-900 leading-snug mb-1.5">
-                      {card.title}
-                    </h2>
-                    <p className="text-xs text-gray-500 leading-relaxed">
-                      {card.tagline}
-                    </p>
-                  </div>
-
-                  {/* Row 3: stats */}
-                  <div
-                    className="grid grid-cols-3 divide-x divide-[rgba(37,87,167,0.1)] rounded-xl overflow-hidden"
-                    style={{ backgroundColor: BRAND_LIGHT }}
-                  >
-                    {card.stats.map(({ value, label }) => (
-                      <div key={label} className="flex flex-col items-center py-2 px-1">
-                        <span className="text-base font-extrabold text-gray-900 leading-none">{value}</span>
-                        <span className="text-[9px] text-gray-400 font-semibold mt-0.5 uppercase tracking-wide">{label}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Row 4: features */}
-                  <div>
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                      What&apos;s Covered
-                    </p>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                      {card.features.map(({ label }) => (
-                        <div key={label} className="flex items-center gap-1.5">
-                          <Check size={9} className="shrink-0" style={{ color: BRAND }} />
-                          <span className="text-[11px] text-gray-600 truncate">{label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Row 5: CTA */}
-                  <button
-                    onClick={() => router.push(card.href)}
-                    className="mt-auto w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm text-white transition-colors duration-150 active:scale-[0.98]"
-                    style={{ backgroundColor: BRAND }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = BRAND_HOVER)}
-                    onMouseOut={(e)  => (e.currentTarget.style.backgroundColor = BRAND)}
-                  >
-                    {card.cta}
-                    <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-
+        <section className="border-b border-gray-200 bg-gray-50">
+          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_1.05fr] lg:px-8">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)]">
+              <div className="border-b border-gray-200 pb-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2557a7]">Generated note</p>
+                <h3 className="mt-2 text-2xl font-black text-gray-950">Tell me about yourself</h3>
+              </div>
+              <div className="space-y-4 py-5">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-gray-400">Opening</p>
+                  <p className="mt-2 text-sm font-medium leading-6 text-gray-700">
+                    Start with your current role, strongest technical area, and the kind of problems you have solved.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-gray-400">Proof</p>
+                  <p className="mt-2 text-sm font-medium leading-6 text-gray-700">
+                    Mention one project, one measurable outcome, and one skill that connects directly to the target role.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[#2557a7]/20 bg-[#2557a7]/5 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2557a7]">Practice cue</p>
+                  <p className="mt-2 text-sm font-bold leading-6 text-gray-950">
+                    Keep it under 90 seconds. End with why this role is the natural next step.
+                  </p>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
 
-        {/* ── How it works ─────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-4">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
-            How It Works
-          </p>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {cards.map((card) => {
-              const CardIcon = card.Icon;
-              const cardSteps = steps[card.id as keyof typeof steps];
-              return (
-                <div key={card.id}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: BRAND_LIGHT }}
-                    >
-                      <CardIcon size={12} style={{ color: BRAND }} />
-                    </div>
-                    <p className="text-xs font-bold text-gray-800">{card.title}</p>
+            <div className="flex flex-col justify-center">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2557a7]">What you get</p>
+              <h2 className="mt-3 text-3xl font-black leading-tight text-gray-950 sm:text-4xl">
+                More than notes. A system for answering under pressure.
+              </h2>
+              <p className="mt-4 text-base font-medium leading-7 text-gray-600">
+                Each section is built to help you know what to say, why it matters, and how to make it sound credible in your own voice.
+              </p>
+              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {answerSystem.map((item) => (
+                  <div key={item} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+                    <CheckCircle2 size={16} className="shrink-0 text-[#2557a7]" />
+                    <p className="text-sm font-bold text-gray-800">{item}</p>
                   </div>
-                  <ol className="space-y-1.5">
-                    {cardSteps.map((step, i) => (
-                      <li key={i} className="flex items-start gap-2.5">
-                        <span
-                          className="shrink-0 w-4 h-4 rounded-full text-white text-[9px] font-extrabold flex items-center justify-center mt-0.5"
-                          style={{ backgroundColor: BRAND }}
-                        >
-                          {i + 1}
-                        </span>
-                        <span className="text-[11px] text-gray-500 leading-relaxed">{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── Comparison table ─────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              Side-by-Side Comparison
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 w-[28%]" />
-                  {cards.map((c) => (
-                    <th
-                      key={c.id}
-                      className="text-center px-4 py-2.5 text-xs font-bold w-[24%]"
-                      style={{ color: BRAND }}
-                    >
-                      {c.title}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tableRows.map(([attr, ...vals], i) => (
-                  <tr key={attr} className={i % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'}>
-                    <td className="px-5 py-2 text-xs font-semibold text-gray-600">{attr}</td>
-                    {vals.map((val, j) => (
-                      <td key={j} className="px-4 py-2 text-xs text-center text-gray-500">
-                        {val === '✓' ? (
-                          <Check size={13} className="mx-auto" style={{ color: BRAND }} />
-                        ) : val === '—' ? (
-                          <span className="text-gray-300">—</span>
-                        ) : val}
-                      </td>
-                    ))}
-                  </tr>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        {/* ── Guidance callout ─────────────────────────────── */}
-        <div
-          className="flex items-start gap-3.5 px-5 py-3.5 rounded-2xl border"
-          style={{ backgroundColor: BRAND_LIGHT, borderColor: BRAND_BORDER }}
-        >
-          <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: BRAND }}
-          >
-            <Sparkles size={14} className="text-white" />
+        <section className="bg-white">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="Practice coverage"
+              title="Prepare for every high-signal interview conversation."
+              body="Use one connected notes workspace across English, managerial, technical, and HR interview preparation."
+            />
+
+            <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+              {modules.map((module) => {
+                const Icon = module.icon;
+                return (
+                  <Link
+                    key={module.title}
+                    href={module.href}
+                    className="group rounded-xl border border-gray-200 bg-white p-5 transition hover:border-[#2557a7]/35 hover:shadow-[0_18px_44px_rgba(15,23,42,0.08)]"
+                  >
+                    <div className="mb-5 flex items-center justify-between">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/8 text-[#2557a7]">
+                        <Icon size={19} />
+                      </div>
+                      <ArrowRight size={16} className="text-gray-300 transition group-hover:text-[#2557a7]" />
+                    </div>
+                    <h3 className="text-base font-black text-gray-950">{module.title}</h3>
+                    <p className="mt-3 text-sm font-medium leading-6 text-gray-600">{module.description}</p>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900 mb-0.5">Recommended learning path</p>
-            <p className="text-xs text-gray-500 leading-relaxed max-w-2xl">
-              Start with{' '}
-              <span className="font-semibold" style={{ color: BRAND }}>Communication Assessment</span>
-              {' '}→ then{' '}
-              <span className="font-semibold" style={{ color: BRAND }}>Mock Test</span>
-              {' '}→ finally the{' '}
-              <span className="font-semibold" style={{ color: BRAND }}>Mock Interview</span>
-              {' '}for the full interview experience with AI voice feedback.
+        </section>
+
+        <section className="bg-gray-950 px-4 py-16 text-white sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-gray-300">Start prepared</p>
+            <h2 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">
+              Walk into your next interview with answers you can trust.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base font-medium leading-7 text-gray-300">
+              Generate your notes first, then practice until your answers sound clear, specific, and natural.
             </p>
+            <Link
+              href="/notes/generate"
+              className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-6 text-sm font-black text-white transition hover:bg-[#1f4b91]"
+            >
+              Generate interview notes
+              <ArrowRight size={17} />
+            </Link>
           </div>
-        </div>
-
-      </div>
-    </div>
+        </section>
+      </main>
+    </>
   );
 }
