@@ -81,7 +81,7 @@ function lastDisplayFor(block: string, selector: string): string | undefined {
 }
 
 describe("mock-interview sidebar on small screens", () => {
-  const css = read(`${MI_DIR}/mock-interview.css`);
+  const css = read("src/app/globals.css");
   const room = '.mi-workspace[data-room="true"] .mi-sidebar';
 
   it("hides the sidebar in the live room below 1024px (as develop2 did), after every other sidebar rule", () => {

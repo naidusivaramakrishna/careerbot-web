@@ -946,7 +946,7 @@ describe("ReportPage", () => {
     mocks.getReport.mockResolvedValue(report({ type }));
     const ReportPage = await importReportPage();
     render(<ReportPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /practice weak questions/i }));
+    fireEvent.click((await screen.findAllByRole("button", { name: /practice weak questions/i }))[0]);
     expect(mocks.push).toHaveBeenCalledWith(expectedHref);
   });
 
