@@ -49,8 +49,8 @@ export function validateResumeFile(
   if (!allowed.includes(ext)) {
     return `Invalid file type. Only ${allowed.map((e) => e.toUpperCase()).join(", ")} are allowed.`;
   }
-  if (checkSize && file.size > 10 * 1024 * 1024) {
-    return "File size exceeds 10MB. Please upload a smaller file.";
+  if (checkSize && file.size > 5 * 1024 * 1024) {
+    return "File size exceeds 5MB. Please upload a smaller file.";
   }
   return null;
 }
