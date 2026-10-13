@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useResume } from "../../../_context/ResumeContext";
 import { countryCodes } from "../../../_utils/sectionsConfig";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -22,8 +23,48 @@ interface PersonalInfoProps {
   onBlur: (key: string, value: string) => void;
 }
 
+export function isValidEmailText(value: unknown): boolean {
+  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+}
+
+const enteredEmailKey = (resumeKey: string) => `enhanced-email-entered:${resumeKey}`;
+
+function wasEmailEnteredHere(resumeKey: string): boolean {
+  try {
+    return window.localStorage.getItem(enteredEmailKey(resumeKey)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberEmailEnteredHere(resumeKey: string): void {
+  try {
+    window.localStorage.setItem(enteredEmailKey(resumeKey), "1");
+  } catch {
+    /* storage unavailable: the field simply relocks once the email is valid */
+  }
+}
+
 const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange, onBlur }) => {
-  const { resumeData, setResumeData } = useResume();
+  const { resumeData, setResumeData, resumeSource } = useResume();
+  const searchParams = useSearchParams();
+  // The builder's email is the account email and is not editable. An enhanced
+  // (uploaded/parsed) resume is different: its email comes from the file, so the
+  // user must be able to enter one when the parser found none (otherwise the
+  // "email missing" suggestion can never be fixed) and to correct one they
+  // typed themselves. It stays editable for: no email, a half-typed/invalid
+  // one (e.g. "ab" left behind by autosave), or one entered here earlier.
+  // Decided once when the form opens, so the field does not lock itself after
+  // the first keystroke.
+  const isEnhancedResume = resumeSource === "enhanced" || searchParams?.get("source") === "enhanced";
+  const resumeKey = String(resumeData?.resume_id ?? "current");
+  const emailEditable = useRef<boolean | null>(null);
+  if (emailEditable.current === null) {
+    // Judge by the form's value AND the loaded resume's: the form is filled in by an
+    // effect, so on a first render it can still be empty for a resume that has an email.
+    const hasValidEmail = isValidEmailText(formData.email) || isValidEmailText(resumeData?.personalInfo?.email);
+    emailEditable.current = isEnhancedResume && (!hasValidEmail || wasEmailEnteredHere(resumeKey));
+  }
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
   const [isGovernmentTemplate, setIsGovernmentTemplate] = useState(false);
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
@@ -64,9 +105,9 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
 
   const fields: Field[] = [
     { field: "Full Name", key: "fullname", required: true, maxLength: 100 },
-    // The API owns this account email. It remains visible on the resume but
-    // cannot be changed through a resume-section save.
-    { field: "Email", key: "email", required: true, type: "email", maxLength: 254, readOnly: true },
+    // The API owns the builder's account email: visible, not changeable through
+    // a resume-section save. Enhanced resumes with no email may enter one.
+    { field: "Email", key: "email", required: true, type: "email", maxLength: 254, readOnly: !emailEditable.current },
     // Location improves ATS context but is not required to save a resume. It
     // must remain removable so a user can undo an ATS-driven addition and let
     // the server reopen the related recommendation.
@@ -79,6 +120,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   type DomainFieldKey = "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex";
 
   const handleChange = (field: Field["key"] | DomainFieldKey, value: string) => {
+    if (field === "email" && emailEditable.current && isEnhancedResume) rememberEmailEnteredHere(resumeKey);
     // ✅ Update context for preview
     // Store phone and countryCode separately — templates handle combining them for display
     setResumeData({

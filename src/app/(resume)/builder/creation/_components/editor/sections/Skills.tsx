@@ -14,6 +14,7 @@ import { printedSkillKeysForDomain, templateSkillCategoryLabel } from "@/app/(re
 import { getSkillsEditorDomain, useAccountEmail } from "@/app/(resume)/templates/_utils/activeTemplateDomain";
 import logger from "@/lib/logger";
 import { isBuiltInCategoryName, renameCategoryErrorMessage } from "../../../_utils/skillCategoryName";
+import { announceSkillAdded } from "../../../_utils/skillAddedEvent";
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -156,7 +157,12 @@ const Skills: React.FC = () => {
 
   const handleDeletePredefinedCategory = async (categoryKey: string) => {
     const resumeId = resumeData.resume_id;
-    if (resumeId) {
+    // A template-default category that holds no skills was never saved: there is
+    // nothing on the server to delete, and the server rightly rejects a name it
+    // does not know. Hiding it locally is the whole delete.
+    const localSkills = (resumeData.categorizedSkills as unknown as Record<string, unknown> | undefined)?.[categoryKey];
+    const neverSaved = !Array.isArray(localSkills) || localSkills.length === 0;
+    if (resumeId && !neverSaved) {
       try {
         if (isEnhancedResume) {
           await deleteSkillCategoryFromEnhancedResume(resumeId, skillCategoryApiName(categoryKey));
@@ -382,6 +388,7 @@ const Skills: React.FC = () => {
                             // an unrelated save or a full page refresh.
                             bumpResumeSavedVersion();
                             toast.success("Skill added successfully.");
+                            announceSkillAdded(skill, skillCategoryApiName(cat.key));
                           } catch (err) {
                             const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
                             toast.error(errorMsg);
@@ -517,6 +524,7 @@ const Skills: React.FC = () => {
                           // unrelated save or a page refresh for the preview to catch up.
                           bumpResumeSavedVersion();
                           toast.success("Skill added successfully.");
+                          announceSkillAdded(skill, custom.name);
                         } catch (err) {
                           const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
                           toast.error(errorMsg);

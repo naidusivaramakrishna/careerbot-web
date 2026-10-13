@@ -148,7 +148,7 @@ function hasAtsDisplaySuggestions(value: unknown): boolean {
 /** Keep completed cards visible until the user explicitly undoes that fix.
  * A delayed/stale server response may still contain an old suggestion ID; it
  * must never turn a green card back into a pending card or make it disappear. */
-function reconcileServerSuggestions(
+export function reconcileServerSuggestions(
   previous: EnhancedSuggestion[],
   serverSuggestions: EnhancedSuggestion[],
   appliedFixes?: Map<string, boolean>,
@@ -176,6 +176,13 @@ function reconcileServerSuggestions(
   // this card may go from fixed back to pending when the server re-lists it;
   // any other re-listed card is a stale apply response and stays green.
   reopenedSuggestionId?: string,
+  // True only for the initial load, when the server sent its applied-fix ledger.
+  // A card this browser kept as fixed (localStorage) that the ledger does not list
+  // and the server lists as pending was fixed against a saved record that has since
+  // been replaced (a fresh scan of the original file, a stale record recomputed):
+  // it is not fixed any more. Never set for apply/delete responses, where the
+  // "stay green" rule protects a card from an older pending list racing the apply.
+  reopenUnbackedFixed = false,
 ): EnhancedSuggestion[] {
   // A suggestion the server list itself already marks "fixed" (see
   // resolveRemovedSkillDeductions) must stay fixed here too -- forcing every
@@ -219,6 +226,7 @@ function reconcileServerSuggestions(
       // unrelated sections. Keep locally server-confirmed cards fixed during
       // that apply reconciliation; only an explicit Undo may reopen them.
       if (suggestion.status === "fixed" && fresh.status !== "fixed" && suggestion.id !== reopenedSuggestionId) {
+        if (reopenUnbackedFixed) return [fresh];
         return [{ ...fresh, status: "fixed" as const, undoAvailable: suggestion.undoAvailable }];
       }
       return [fresh];
@@ -503,7 +511,6 @@ function reconcileConfirmedFix(
     ...fixed.slice(insertionIndex),
   ];
 }
-const FIXED_SUGGESTIONS_STORAGE_PREFIX = "careerbot:enhanced-fixed-suggestions:";
 
 function loadFixedSuggestions(resumeId?: string): EnhancedSuggestion[] {
   if (!resumeId || typeof window === "undefined") return [];
@@ -526,6 +533,7 @@ import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
 import { getSkillsEditorDomain, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
 import { domainSkillKeyForSlug } from "@/config/domainSkills";
 import logger from "@/lib/logger";
+import { FIXED_SUGGESTIONS_STORAGE_PREFIX } from "../_utils/fixedSuggestionsStorage";
 
 // Extract country code from a combined phone string like "+911234567890"
 function splitPhone(phone: string): { countryCode: string; phoneNumber: string } {
@@ -1711,6 +1719,19 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             // localStorage) that the server no longer lists really has been
             // resolved. See reconcileServerSuggestions' dropMissingPending
             // parameter.
+            // The server's applied-fix ledger (when it sent one) says which cards are
+            // really fixed; a green card the browser kept that it does not list is stale.
+            const loadedLedger = (resumeData as { applied_fixes?: unknown } | undefined)?.applied_fixes;
+            const hasLoadedLedger = Array.isArray(loadedLedger);
+            const loadedApplied = new Map<string, boolean>();
+            if (hasLoadedLedger) {
+              for (const item of loadedLedger as unknown[]) {
+                const fix = item && typeof item === "object" ? item as Record<string, unknown> : undefined;
+                if (typeof fix?.suggestion_id === "string" && fix.suggestion_id) {
+                  loadedApplied.set(fix.suggestion_id, fix.undo_available !== false);
+                }
+              }
+            }
             setEnhancedSuggestions(previous => reconcileServerSuggestions(
               previous,
               resolveRemovedSkillDeductions(
@@ -1718,10 +1739,13 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
                 loadedSkillNames,
                 id => Boolean(skillUndoInfoRef.current[id]),
               ),
-              undefined,
+              hasLoadedLedger ? loadedApplied : undefined,
               false,
               false,
               true,
+              new Set(),
+              undefined,
+              hasLoadedLedger,
             ));
           } else {
             // A score-only or partial refresh is not evidence that every

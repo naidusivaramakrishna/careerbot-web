@@ -1178,12 +1178,35 @@ section.docx {
   }
 }
 
-/* ATS Scan: the text an applied Auto/Manual Fix wrote, marked in the screen
-   preview only. PreviewPanel registers the ranges with the CSS Custom
-   Highlight API under this name; without this rule they paint nothing.
-   Same emerald pair as the Score tab's "fixed" cards. The text colour is set
-   too, so the mark stays readable on any template, light or dark. */
-::highlight(ats-fixed-text) {
-  background-color: var(--color-emerald-100);
-  color: var(--color-emerald-900);
+
+/* ATS Scan: score-gain feedback (badge pop + ring pulse). Decorative only. */
+@keyframes ats-gain-pop {
+  0%   { opacity: 0; transform: translateY(4px) scale(0.8); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.08); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ats-ring-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45); }
+  100% { box-shadow: 0 0 0 18px rgba(16, 185, 129, 0); }
+}
+.ats-gain-pop  { animation: ats-gain-pop 0.45s ease-out both; }
+.ats-ring-pulse { animation: ats-ring-pulse 1s ease-out 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ats-gain-pop, .ats-ring-pulse { animation: none; }
+}
+
+/* ATS Scan: text written by an applied fix is highlighted green in the preview
+   (CSS Custom Highlight API, registered as "ats-fixed-text" by PreviewPanel).
+   Screen only -- print/export are unaffected. */
+@media screen {
+  /* Opaque enough to read on white, with dark text and an underline so the
+     added words stand out from the black body text around them. */
+  ::highlight(ats-fixed-text) {
+    background-color: rgba(52, 211, 153, 0.55);
+    color: #064e3b;
+    text-decoration: underline;
+    text-decoration-color: #059669;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+  }
 }

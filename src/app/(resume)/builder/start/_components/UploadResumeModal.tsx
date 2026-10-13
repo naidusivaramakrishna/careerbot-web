@@ -4,7 +4,10 @@ import React, { useState, useRef, useCallback } from "react";
 import { X, Upload, FileText, AlertCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { parseResumeForEnhancer, enhanceResume } from "@/api/enhancerApi";
+import { parseResumeForEnhancer, enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
+import PriorFixesDialog from "@/components/common/PriorFixesDialog";
+import { clearStoredFixedSuggestions } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
+import { forgetFixedTextFor } from "@/app/(resume)/builder/creation/_hooks/useFixedTextHighlights";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 
 interface UploadResumeModalProps {
@@ -13,6 +16,20 @@ interface UploadResumeModalProps {
 }
 
 type UploadStep = "upload" | "parsing" | "enhancing";
+
+type EnhanceResult = Awaited<ReturnType<typeof enhanceResume>>;
+
+/** Fixes the returned record already carries: from the response, else the saved record. */
+async function countAppliedFixes(result: EnhanceResult): Promise<number> {
+  const inline = (result as unknown as { applied_fixes?: unknown }).applied_fixes;
+  if (Array.isArray(inline)) return inline.length;
+  try {
+    const record = await getEnhancedResume(result.enhanced_resume_id);
+    return Array.isArray(record?.applied_fixes) ? record.applied_fixes.length : 0;
+  } catch {
+    return 0; // informational only: never block opening the editor on it
+  }
+}
 
 const MAX_FILE_SIZE_MB = 10;
 
@@ -23,8 +40,13 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when the uploaded file already has fixes saved: asks "continue or start fresh".
+  const [prior, setPrior] = useState<{ count: number; resumeId: string; result: EnhanceResult } | null>(null);
+  const [startingFresh, setStartingFresh] = useState(false);
 
   const reset = () => {
+    setPrior(null);
+    setStartingFresh(false);
     setStep("upload");
     setDragActive(false);
     setFileName(null);
@@ -50,6 +72,36 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
     return null;
   };
 
+  const finishImport = (enhanceResult: EnhanceResult) => {
+    const enhancedResumeId = enhanceResult.enhanced_resume_id;
+
+    // Backend may return resume data in enhanced_resume OR enhancer_state.resume — use whichever is present
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const enhancedResumeSource = (enhanceResult as any).enhanced_resume
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      || (enhanceResult as any).enhancer_state?.resume
+      || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mappedData = mapParserOutputToBuilderData(enhancedResumeSource as any);
+
+    // Cache full mapped data so ResumeContext populates all sections on first load
+    localStorage.setItem(
+      "cached_resume_data",
+      JSON.stringify({ resumeId: enhancedResumeId, data: { ...mappedData, id: enhancedResumeId } })
+    );
+    localStorage.setItem("current_resume_id", enhancedResumeId);
+
+    // Track all enhanced IDs so the resume list can fetch them individually
+    const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+    if (!existingIds.includes(enhancedResumeId)) {
+      localStorage.setItem("enhanced_resume_ids", JSON.stringify([...existingIds, enhancedResumeId]));
+    }
+
+    toast.success("Resume imported! Opening editor…");
+    handleClose();
+    router.push(`/builder/creation/${enhancedResumeId}?source=enhanced`);
+  };
+
   const processFile = useCallback(async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
@@ -70,33 +122,13 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
       setStep("enhancing");
       const enhanceResult = await enhanceResume({ resume_id: resumeId });
 
-      const enhancedResumeId = enhanceResult.enhanced_resume_id;
-
-      // Backend may return resume data in enhanced_resume OR enhancer_state.resume — use whichever is present
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const enhancedResumeSource = (enhanceResult as any).enhanced_resume
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        || (enhanceResult as any).enhancer_state?.resume
-        || {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mappedData = mapParserOutputToBuilderData(enhancedResumeSource as any);
-
-      // Cache full mapped data so ResumeContext populates all sections on first load
-      localStorage.setItem(
-        "cached_resume_data",
-        JSON.stringify({ resumeId: enhancedResumeId, data: { ...mappedData, id: enhancedResumeId } })
-      );
-      localStorage.setItem("current_resume_id", enhancedResumeId);
-
-      // Track all enhanced IDs so the resume list can fetch them individually
-      const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
-      if (!existingIds.includes(enhancedResumeId)) {
-        localStorage.setItem("enhanced_resume_ids", JSON.stringify([...existingIds, enhancedResumeId]));
+      // The same file parsed again returns its saved record, fixes included: ask which to use.
+      const fixCount = await countAppliedFixes(enhanceResult);
+      if (fixCount > 0) {
+        setPrior({ count: fixCount, resumeId, result: enhanceResult });
+        return;
       }
-
-      toast.success("Resume imported! Opening editor…");
-      handleClose();
-      router.push(`/builder/creation/${enhancedResumeId}?source=enhanced`);
+      finishImport(enhanceResult);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to import resume. Please try again.";
       toast.error(msg);
@@ -104,6 +136,32 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const continueWithChanges = () => {
+    if (!prior) return;
+    const { result } = prior;
+    setPrior(null);
+    finishImport(result);
+  };
+
+  const startWithFreshData = async () => {
+    if (!prior || startingFresh) return;
+    setStartingFresh(true);
+    try {
+      const fresh = await enhanceResume({ resume_id: prior.resumeId, force_refresh: true });
+      // The fresh record reuses the same ID, and this browser keeps its green "fixed"
+      // cards and highlights under that ID: forget them or the editor reloads old fixes.
+      for (const id of new Set([fresh.enhanced_resume_id, prior.result.enhanced_resume_id])) {
+        clearStoredFixedSuggestions(id);
+        forgetFixedTextFor(id);
+      }
+      setPrior(null);
+      finishImport(fresh);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not scan the original file again.");
+      setStartingFresh(false);
+    }
+  };
 
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -124,6 +182,15 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
   if (!isOpen) return null;
 
   return (
+    <>
+    {prior && (
+      <PriorFixesDialog
+        count={prior.count}
+        busy={startingFresh}
+        onContinue={continueWithChanges}
+        onStartFresh={startWithFreshData}
+      />
+    )}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={(e) => { if (e.target === e.currentTarget && step === "upload") handleClose(); }}
@@ -246,5 +313,6 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
         </div>
       </div>
     </div>
+    </>
   );
 }

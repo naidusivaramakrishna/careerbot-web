@@ -13,6 +13,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/api/resumeApi', () => ({
@@ -64,7 +65,7 @@ describe('EmptyState', () => {
     expect(screen.getByText('PDF · DOCX')).toBeInTheDocument();
   });
 
-  it('reuses an existing builder resume and routes to templates', async () => {
+  it('reuses an existing builder resume and opens it in the builder', async () => {
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [{ id: 'existing-builder-1', name: 'Existing Resume' }],
       enhanced_resumes: [],
@@ -75,7 +76,7 @@ describe('EmptyState', () => {
     fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/templates');
+      expect(mockPush).toHaveBeenCalledWith('/builder/creation/existing-builder-1');
     });
     expect(mockCreateResumeWithAuth).not.toHaveBeenCalled();
     expect(onSelect).toHaveBeenCalledWith('builder');
@@ -92,7 +93,7 @@ describe('EmptyState', () => {
     fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/templates');
+      expect(mockPush).toHaveBeenCalledWith('/builder/creation/created-resume-1');
     });
     expect(mockCreateResumeWithAuth).toHaveBeenCalledTimes(1);
     expect(window.localStorage.setItem).toHaveBeenCalledWith('current_resume_id', 'created-resume-1');

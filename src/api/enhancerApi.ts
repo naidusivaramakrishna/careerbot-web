@@ -145,6 +145,12 @@ export interface EnhanceResumeRequest {
   region?: string;
   /** Persisted ATS template used by enhanced preview and export. */
   template_id?: string;
+  /**
+   * Scan the parsed resume again instead of returning its saved enhancement.
+   * Discards the fixes saved on that record and costs a scan; only send it when
+   * the user explicitly asks to scan the original again.
+   */
+  force_refresh?: boolean;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
