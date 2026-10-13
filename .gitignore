@@ -76,3 +76,7 @@ verify-*.png
 # Python bytecode from scripts/ai_review (a .pyc was committed here by accident)
 __pycache__/
 *.pyc
+reviews
+*.pdf
+*.doc
+*.docx

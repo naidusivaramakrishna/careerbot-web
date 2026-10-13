@@ -6,8 +6,11 @@ import { Toaster } from "sonner";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { VerificationRecovery } from "@/components/VerificationRecovery";
-import { ChatbotWidget } from "@/components/chatbot";
+import dynamic from "next/dynamic";
 import { isChatbotAllowedOnPage } from "@/lib/chatbotVisibility";
+
+// Lazy-load so the heavy chatbot code stays out of the root layout chunk.
+const ChatbotWidget = dynamic(() => import("@/components/chatbot/ChatbotWidget"), { ssr: false });
 
 export default function ClientLayout({
   children,

@@ -1461,7 +1461,7 @@ export default function LiveInterviewSessionPage() {
         />
       )}
 
-      <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#f6f8fb]">
+      <div className="mi-room mi-live-room">
 
         {/* Score toast */}
         {showFullscreenWarning && (
@@ -1478,7 +1478,7 @@ export default function LiveInterviewSessionPage() {
 
 
         {/* Status bar */}
-        <div className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-5 py-3 text-white shadow-sm">
+        <header className="mi-room-header mi-live-room-header">
           <div className="flex items-center gap-3">
             {wsConnected ? (
               <span className="flex items-center gap-1.5 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 px-2.5 py-1 text-xs font-semibold text-[#2557a7]">
@@ -1514,7 +1514,7 @@ export default function LiveInterviewSessionPage() {
               <PhoneOff size={12} /> End
             </button>
           </div>
-        </div>
+        </header>
 
         {serverError && (
           <div className="bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between gap-3">
@@ -1584,12 +1584,12 @@ export default function LiveInterviewSessionPage() {
 
         {/* Main content — verbal interview phases */}
         {phase !== "coding" && (
-        <div className="min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4">
+        <div className="mi-live-room-content min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4">
           <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-3">
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)_280px] lg:overflow-hidden">
+            <div className="mi-live-room-grid grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)_280px] lg:overflow-hidden">
               {/* Interviewer */}
               <section
-                className="relative min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)] lg:min-h-0"
+                className="mi-live-room-stage relative min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)] lg:min-h-0"
               >
                 {/* Live avatar (mock-interview-simli-avatar.txt). Element stays
                     mounted the whole time so Simli has a target to attach the
@@ -1651,7 +1651,7 @@ export default function LiveInterviewSessionPage() {
               </section>
 
               {/* Question and transcript */}
-              <section className="flex min-h-0 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <section className="mi-live-room-conversation flex min-h-0 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="shrink-0 rounded-lg border border-gray-900 bg-gray-950 p-4 text-white">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>

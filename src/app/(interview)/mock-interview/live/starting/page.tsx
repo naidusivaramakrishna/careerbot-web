@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createLiveSession } from "@/api/mockInterviewApi";
 import { getInterviewerByIndex, isVoiceMatchedToGender } from "../../_lib/interviewers";
 import { useMockInterview } from "../../_context/MockInterviewContext";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
 
 interface SessionParams {
   session_type: "hr" | "technical" | "managerial";
@@ -87,32 +87,5 @@ export default function LiveStartingPage() {
       });
   }, [router, setPendingAvatarSession]);
 
-  if (error) {
-    return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-6 bg-[#f6f8fb] px-4">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <p className="text-sm leading-6 text-gray-600">{error}</p>
-        </div>
-        <button
-          onClick={() => router.replace("/mock-interview/live")}
-          className="rounded-lg bg-[#2557a7] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f]"
-        >
-          Go Back
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#f6f8fb] px-4">
-      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-7 text-center shadow-sm">
-        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-[#2557a7] text-white">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2557a7]">Live room setup</p>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight text-gray-950">Preparing your interview session</h1>
-        <p className="mt-2 text-sm leading-6 text-gray-600">Connecting the AI interviewer, transcript capture, and secure report pipeline.</p>
-      </div>
-    </div>
-  );
+  return <main className="mi-session-state"><section className="mi-panel mi-state-card" aria-live="polite"><span className="mi-icon-tile">{error ? <AlertCircle size={28} /> : <Loader2 size={28} className="animate-spin" />}</span><p className="mi-eyebrow">YOUR INTERVIEW STUDIO</p><h1>{error ? "Let's get you back on track." : "Preparing your interview session"}</h1><p>{error || "Your room is coming together. We're connecting your AI interviewer and preparing to capture your conversation."}</p>{!error && <div className="mi-state-checks"><span><CheckCircle2 size={16} />Role selected</span><span><CheckCircle2 size={16} />Devices checked</span><span><Loader2 size={16} className="animate-spin" />Preparing room</span></div>}{error && <div className="mi-actions"><button className="mi-button" onClick={() => router.replace("/mock-interview/live")}>Go Back <ArrowRight size={17} /></button></div>}</section></main>;
 }
