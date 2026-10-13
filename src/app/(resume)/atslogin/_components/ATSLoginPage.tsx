@@ -171,14 +171,14 @@ function LegacyUploadZone({ isDragging, onDragOver, onDragLeave, onDrop, onAnaly
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-bold text-slate-700"><FaFileWord className="h-4 w-4 text-[#2563d8]" />DOCX</div>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-bold text-slate-700"><FaFileWord className="h-4 w-4 text-[#2563d8]" />DOC</div>
         </div>
-        <span className="relative z-10 text-[11px] text-slate-500">Max file size: 10MB</span>
+        <span className="relative z-10 text-[11px] text-slate-500">Max file size: 5MB</span>
         <div className="hidden relative z-10 flex items-center gap-2 text-[12px] text-slate-400">
           <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-600">PDF</span>
           <span>·</span>
           <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-600">DOCX</span>
           <span>·</span>
           <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-600">DOC</span>
-          <span>· Max 10MB</span>
+          <span>· Max 5MB</span>
         </div>
 
         <div className="hidden">
@@ -742,6 +742,9 @@ export default function ATSLoginPage() {
   const [isDragging,      setIsDragging]      = useState(false);
   const [agreed,          setAgreed]          = useState(false);
   const [error,           setError]           = useState("");
+  // "file" = the chosen file was rejected (type/size), so there is nothing to re-scan;
+  // "scan" = the upload/analysis itself failed and can be retried with the same file.
+  const [errorSource,     setErrorSource]     = useState<"file" | "scan">("scan");
   const [isLoading,       setIsLoading]       = useState(false);
   const [loadingPhase,    setLoadingPhase]    = useState<AnalysisPhase | "">("");
   const [progress,        setProgress]        = useState(0);
@@ -765,7 +768,7 @@ export default function ATSLoginPage() {
   const validateAndSetFile = (f: File) => {
     setError("");
     const err = validateResumeFile(f, { allowDoc: true, checkSize: true });
-    if (err) { setError(err); return; }
+    if (err) { setErrorSource("file"); setError(err); return; }
     setFile(f);
   };
 
@@ -788,6 +791,7 @@ export default function ATSLoginPage() {
       const resumeId = typeof result.resume_id === "string" ? result.resume_id : "";
       setTimeout(() => router.push(buildAtsReportRoute(resumeId)), 600);
     } catch (err: unknown) {
+      setErrorSource("scan");
       setError(normalizeResumeScanError(err, "Unable to process your resume. Please try again."));
       setIsLoading(false);
       setProgress(0);
@@ -841,7 +845,9 @@ export default function ATSLoginPage() {
       <ErrorModal
         error={error || null}
         onClose={() => setError("")}
-        onRetry={handleScanResume}
+        onRetry={errorSource === "file" ? () => document.getElementById("ats-file-upload")?.click() : handleScanResume}
+        retryLabel={errorSource === "file" ? "Choose Another File" : "Try Again"}
+        retryImmediately={errorSource === "file"}
       />
 
       <AnimatePresence>
@@ -951,7 +957,7 @@ export default function ATSLoginPage() {
                 ))}
                 <div className="hidden">
                 {([
-                  { n: "01", title: "Upload Your Resume",  desc: "PDF, DOCX or DOC · up to 10 MB"               },
+                  { n: "01", title: "Upload Your Resume",  desc: "PDF, DOCX or DOC · up to 5 MB"               },
                   { n: "02", title: "AI Scans Instantly",  desc: "Keywords, format & ATS compatibility checked"  },
                   { n: "03", title: "Get Your Report",     desc: "Score breakdown + prioritised action fixes"     },
                 ] as const).map((step) => (
@@ -1081,7 +1087,7 @@ export default function ATSLoginPage() {
 
               <div className="grid gap-3 border-t border-slate-200 px-5 py-5 text-sm text-slate-500 sm:grid-cols-3 sm:px-7">
                 <span className="flex items-center gap-2"><FileCheck2 className="h-4 w-4 shrink-0 text-[#2557a7]" />PDF, DOCX, DOC</span>
-                <span className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-[#2557a7]" />10MB maximum</span>
+                <span className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-[#2557a7]" />5MB maximum</span>
                 <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 shrink-0 text-[#2557a7]" />Encrypted &amp; private</span>
               </div>
 
