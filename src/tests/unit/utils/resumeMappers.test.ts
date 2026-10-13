@@ -571,3 +571,122 @@ describe("core_competencies saved before the source tag existed", () => {
     expect(mapped.customSections?.[0].source).toBeUndefined();
   });
 });
+
+describe("achievements mapping", () => {
+  // Shape the AI parser stores for achievements on a real resume: objects with
+  // the sentence under `text`, plus scoring metadata -- not plain strings.
+  const parsedAchievements = [
+    {
+      text: 'Runner-up for the project "Proactive Dropout Mitigation" in 8th National Level IEEE Project Competition-2024 at GSSSIETW, Mysore.',
+      tone: "unknown",
+      claim_type: "vague",
+      star_pattern: "S",
+      id: "1d876a33-1841-4f4f-a4ee-38bf941aa1b7",
+    },
+    {
+      text: "Runner-up for the project titled \"Cervical Cancer Prediction\" in Generative AI Hackathon at BNMIT, Bengaluru.",
+      tone: "unknown",
+      claim_type: "vague",
+      star_pattern: "S",
+      id: "fb822568-e1b7-4733-b325-946aae7603c4",
+    },
+  ];
+
+  it("keeps the text of achievements the parser returns as { text, ... } objects", () => {
+    const mapped = mapParserOutputToBuilderData({ achievements: parsedAchievements });
+
+    expect(mapped.achievements).toHaveLength(2);
+    expect(mapped.achievements?.map(item => item.title)).toEqual(parsedAchievements.map(item => item.text));
+    expect(mapped.achievements?.[0].id).toBe("1d876a33-1841-4f4f-a4ee-38bf941aa1b7");
+  });
+
+  it("reads the same objects when they sit under llm_data", () => {
+    const mapped = mapParserOutputToBuilderData({ llm_data: { achievements: parsedAchievements } });
+
+    expect(mapped.achievements?.map(item => item.title)).toEqual(parsedAchievements.map(item => item.text));
+  });
+
+  it("still maps plain-string and { title } achievements the way it did", () => {
+    const mapped = mapParserOutputToBuilderData({
+      achievements: ["Niper JEE 2025.", { title: "Smart India Hackathon", date: "2024", description: "Finalist" }],
+    });
+
+    expect(mapped.achievements?.[0]).toMatchObject({ title: "Niper JEE 2025.", date: "", description: "" });
+    expect(mapped.achievements?.[1]).toMatchObject({ title: "Smart India Hackathon", date: "2024", description: "Finalist" });
+  });
+});
+
+describe("list sections keep entries the parser sends as plain strings or { text }", () => {
+  // The parser's list sections are not always objects: awards and publications
+  // are declared as plain strings, the rest as "any". An entry read as an object
+  // used to map to blanks, so the preview drew the heading with nothing under it.
+  const TEXT = "Sample Entry Text 2024";
+  // section key -> the field the templates draw as that entry's main text
+  const SECTIONS: Array<[string, string]> = [
+    ["awards", "title"],
+    ["publications", "title"],
+    ["patents", "title"],
+    ["hobbies", "name"],
+    ["interests", "name"],
+    ["volunteering", "organization"],
+    ["references", "name"],
+    ["certifications", "name"],
+  ];
+
+  it.each(SECTIONS)("%s: a plain string becomes an entry with its text in %s", (section, mainKey) => {
+    const mapped = mapParserOutputToBuilderData({ [section]: [TEXT, "  "] } as never) as unknown as Record<string, Array<Record<string, string>>>;
+
+    expect(mapped[section]).toHaveLength(1);
+    expect(mapped[section][0][mainKey]).toBe(TEXT);
+  });
+
+  it.each(SECTIONS)("%s: a { text } object becomes an entry with its text in %s", (section, mainKey) => {
+    const mapped = mapParserOutputToBuilderData({ [section]: [{ text: TEXT }] } as never) as unknown as Record<string, Array<Record<string, string>>>;
+
+    expect(mapped[section]).toHaveLength(1);
+    expect(mapped[section][0][mainKey]).toBe(TEXT);
+  });
+
+  it("reads hobbies and interests from the parser's hobbies_and_interests key", () => {
+    const mapped = mapParserOutputToBuilderData({ hobbies_and_interests: ["Cycling", "Chess"] } as never);
+
+    expect(mapped.hobbies?.map((h) => h.name)).toEqual(["Cycling", "Chess"]);
+  });
+
+  it("leaves entries that are already objects exactly as before", () => {
+    const mapped = mapParserOutputToBuilderData({
+      awards: [{ title: "Best Paper", issuedBy: "IEEE", year: "2024" }, { name: "Dean's List", organization: "JNTU", date: "2022" }],
+      publications: [{ title: "Dropout Prediction", publisher: "IEEE", date: "2024" }],
+      references: [{ name: "Dr. K. Rao", relation: "Professor", contact: "rao@example.com" }],
+      certifications: [{ full_name: "AWS Solutions Architect", issuing_organization: "Amazon", year: "2023" }],
+    } as never);
+
+    expect(mapped.awards).toEqual([
+      { title: "Best Paper", issuedBy: "IEEE", year: "2024" },
+      { title: "Dean's List", issuedBy: "JNTU", year: "2022" },
+    ]);
+    expect(mapped.publications?.[0]).toMatchObject({ title: "Dropout Prediction", date: "2024" });
+    expect(mapped.references?.[0]).toMatchObject({ name: "Dr. K. Rao", relation: "Professor", contact: "rao@example.com" });
+    expect(mapped.certifications?.[0]).toMatchObject({ name: "AWS Solutions Architect", issuer: "Amazon", year: "2023" });
+  });
+});
+
+describe("hobbies aliases", () => {
+  it("reads hobbies_and_interests when hobbies is an empty list", () => {
+    const mapped = mapParserOutputToBuilderData({
+      contact: { name: "A" },
+      hobbies: [],
+      hobbies_and_interests: ["Chess", "Hiking"],
+    } as never);
+    expect((mapped.hobbies ?? []).map((h: { name?: string }) => h.name)).toEqual(["Chess", "Hiking"]);
+  });
+
+  it("uses a filled list alias when hobbies is a plain string the mapper cannot read", () => {
+    const mapped = mapParserOutputToBuilderData({
+      contact: { name: "A" },
+      hobbies: "Reading, Chess",
+      hobbies_and_interests: ["Cycling"],
+    } as never);
+    expect((mapped.hobbies ?? []).map((h: { name?: string }) => h.name)).toEqual(["Cycling"]);
+  });
+});

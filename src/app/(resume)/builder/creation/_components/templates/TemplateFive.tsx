@@ -5,6 +5,7 @@ import { useResume } from "../../_context/ResumeContext";
 import { hasRenderableCustomSectionContent, isRedundantCustomSectionFieldLabel } from "../../_utils/customSectionIdentity";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
+import AchievementRow from "@/components/common/AchievementRow";
 
 // TemplateFive — classic_professional
 // Backend config: Times-Roman, 18pt name, 12pt section heading, 11pt body, 1.6 line-height
@@ -326,21 +327,15 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
             <section className="mb-5" data-section="achievements">
               <h2 style={headingStyle} className="page-break-after-avoid">ACHIEVEMENTS</h2>
               {achievements.map((achievement, idx) => (
-                <div key={idx} className="mb-3 page-break-inside-avoid">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    {achievement.title && (
-                      <span className="font-semibold" style={titleStyle}>{achievement.title}</span>
-                    )}
-                    {achievement.date && (
-                      <span className="whitespace-nowrap ml-4" style={{ ...baseTextStyle, fontSize: "9px" }}>
-                        {formatDate(achievement.date)}
-                      </span>
-                    )}
-                  </div>
-                  {achievement.description && (
-                    <div className="resume-description" style={baseTextStyle} dangerouslySetInnerHTML={{ __html: achievement.description }} />
-                  )}
-                </div>
+                <AchievementRow
+                  key={idx}
+                  achievement={achievement}
+                  formatDate={formatDate}
+                  textStyle={baseTextStyle}
+              spacing="8px"
+              bullet="–"
+                  renderDescription={(html) => <div className="resume-description" dangerouslySetInnerHTML={{ __html: html }} />}
+                />
               ))}
             </section>
           )
