@@ -487,7 +487,7 @@ function PreInterviewScreen({
       selectedResumeId &&
       (selectedResumeId === uploadedResumeId || resumes.some((resume) => resume.id === selectedResumeId)),
     );
-    if (resumesLoading || !hasValidResume || !experienceLevel) return;
+    if (resumesLoading || !selectedResumeId || !hasValidResume || !experienceLevel) return;
     onStart(modalType, selectedRole.title, selectedResumeId, experienceLevel);
   };
 
