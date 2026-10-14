@@ -28,6 +28,7 @@ import {
   Sun,
   Trophy,
   X,
+  Zap,
 } from 'lucide-react';
 import { fetchProblems, fetchTopics } from '../_lib/api';
 import { fetchProblemsAnnotated } from '../_lib/gradingApi';
@@ -73,6 +74,97 @@ const TABS: { value: ActiveTab; label: string; icon?: React.ReactNode }[] = [
   { value: 'favorites', label: 'Favorites',          icon: <Star  className="h-3.5 w-3.5" /> },
   { value: 'recent',    label: 'Recently Attempted', icon: <Clock className="h-3.5 w-3.5" /> },
 ];
+
+// ── Popular Topics data ───────────────────────────────────────────────────
+
+const POPULAR_TOPICS = [
+  { label: 'Dynamic Programming', count: 27, tag: 'Dynamic Programming', gradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #60a5fa 100%)', icon: 'dp' },
+  { label: 'Two Pointers',        count: 13, tag: 'Two Pointers',        gradient: 'linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #fb923c 100%)', icon: 'twoptr' },
+  { label: 'Math',                count: 12, tag: 'Math',                gradient: 'linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #2dd4bf 100%)', icon: 'math' },
+  { label: 'Binary Search',       count: 12, tag: 'Binary Search',       gradient: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 55%, #a78bfa 100%)', icon: 'binsearch' },
+  { label: 'Tree',                count: 12, tag: 'Tree',                gradient: 'linear-gradient(135deg, #14532d 0%, #16a34a 55%, #4ade80 100%)', icon: 'tree' },
+  { label: 'Stack',               count: 11, tag: 'Stack',               gradient: 'linear-gradient(135deg, #92400e 0%, #d97706 55%, #fbbf24 100%)', icon: 'stack' },
+  { label: 'Backtracking',        count: 9,  tag: 'Backtracking',        gradient: 'linear-gradient(135deg, #9f1239 0%, #e11d48 55%, #fb7185 100%)', icon: 'backtrack' },
+  { label: 'Infosys',             count: 10, tag: 'Infosys',             gradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 55%, #818cf8 100%)', icon: 'company' },
+];
+
+function TopicCardIcon({ type }: { type: string }) {
+  const p = { width: 46, height: 46, viewBox: '0 0 46 46', fill: 'none', 'aria-hidden': true } as const;
+  if (type === 'dp') return (
+    <svg {...p}>
+      <rect x="3" y="3" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
+      <rect x="26" y="3" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
+      <rect x="3" y="31" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
+      <rect x="26" y="31" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
+      <line x1="20" y1="9" x2="26" y2="9" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
+      <line x1="11.5" y1="15" x2="11.5" y2="31" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
+      <line x1="34.5" y1="15" x2="34.5" y2="31" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
+    </svg>
+  );
+  if (type === 'twoptr') return (
+    <svg {...p}>
+      <rect x="4" y="19" width="38" height="8" rx="4" stroke="white" strokeWidth="2" strokeOpacity="0.35"/>
+      <circle cx="11" cy="23" r="5" fill="white" fillOpacity="0.9"/>
+      <circle cx="35" cy="23" r="5" fill="white" fillOpacity="0.9"/>
+      <path d="M19 23L14 23M14 23L17 20M14 23L17 26" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.85"/>
+      <path d="M27 23L32 23M32 23L29 20M32 23L29 26" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.85"/>
+    </svg>
+  );
+  if (type === 'math') return (
+    <svg {...p}>
+      <text x="23" y="35" textAnchor="middle" fontSize="34" fontWeight="700" fill="white" fillOpacity="0.9" fontFamily="serif">Σ</text>
+    </svg>
+  );
+  if (type === 'binsearch') return (
+    <svg {...p}>
+      <circle cx="19" cy="20" r="12" stroke="white" strokeWidth="2.5" strokeOpacity="0.9"/>
+      <line x1="27.5" y1="29" x2="41" y2="43" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.9"/>
+      <line x1="14" y1="20" x2="24" y2="20" stroke="white" strokeWidth="2" strokeOpacity="0.75"/>
+      <line x1="19" y1="15" x2="19" y2="25" stroke="white" strokeWidth="2" strokeOpacity="0.75"/>
+    </svg>
+  );
+  if (type === 'tree') return (
+    <svg {...p}>
+      <circle cx="23" cy="6" r="4.5" fill="white" fillOpacity="0.9"/>
+      <circle cx="10" cy="22" r="4.5" fill="white" fillOpacity="0.9"/>
+      <circle cx="36" cy="22" r="4.5" fill="white" fillOpacity="0.9"/>
+      <line x1="19.5" y1="10" x2="13.5" y2="18" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
+      <line x1="26.5" y1="10" x2="32.5" y2="18" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
+      <circle cx="4" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
+      <circle cx="16" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
+      <circle cx="30" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
+      <circle cx="42" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
+      <line x1="7" y1="26" x2="5" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
+      <line x1="13" y1="26" x2="15" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
+      <line x1="33" y1="26" x2="31" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
+      <line x1="39" y1="26" x2="41" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
+    </svg>
+  );
+  if (type === 'stack') return (
+    <svg {...p}>
+      <rect x="7" y="6"    width="32" height="9" rx="3" fill="white" fillOpacity="0.9"/>
+      <rect x="7" y="18.5" width="32" height="9" rx="3" fill="white" fillOpacity="0.7"/>
+      <rect x="7" y="31"   width="32" height="9" rx="3" fill="white" fillOpacity="0.45"/>
+    </svg>
+  );
+  if (type === 'backtrack') return (
+    <svg {...p}>
+      <path d="M39 12 C39 7 33 4 28 6 L10 13 M10 13 L15 9 M10 13 L14 18" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.9"/>
+      <path d="M7 34 C7 39 13 42 18 40 L36 33 M36 33 L31 37 M36 33 L32 28" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.9"/>
+    </svg>
+  );
+  return (
+    <svg {...p}>
+      <rect x="7" y="16" width="32" height="26" rx="2" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
+      <path d="M7 22 L39 22" stroke="white" strokeWidth="1.5" strokeOpacity="0.4"/>
+      <rect x="15" y="4" width="16" height="14" rx="2" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
+      <rect x="15" y="28" width="5" height="5" rx="1" fill="white" fillOpacity="0.75"/>
+      <rect x="26" y="28" width="5" height="5" rx="1" fill="white" fillOpacity="0.75"/>
+      <rect x="15" y="35" width="5" height="7" rx="1" fill="white" fillOpacity="0.75"/>
+      <rect x="26" y="35" width="5" height="7" rx="1" fill="white" fillOpacity="0.75"/>
+    </svg>
+  );
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -183,7 +275,7 @@ function CodingProblemsListContent() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [topbarSearch, setTopbarSearch] = useState('');
-  const [tag, setTag] = useState('');
+  const [tag, setTag] = useState(searchParams.get('tag') ?? '');
   const [activeTab, setActiveTab] = useState<ActiveTab>('all');
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
@@ -513,37 +605,6 @@ function CodingProblemsListContent() {
             </div>
           </div>
 
-          {/* Popular Topics */}
-          <div className="px-4 py-4 border-b border-slate-100 dark:border-slate-700/60">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              POPULAR TOPICS
-            </p>
-            <div className="space-y-0.5">
-              {popularTopics.map(([topicName, count]) => {
-                const dotColor = topicColorMap.get(topicName) ?? 'bg-slate-400';
-                const active = tag.toLowerCase() === topicName.toLowerCase();
-                return (
-                  <button
-                    key={topicName}
-                    type="button"
-                    onClick={() => setTag(active ? '' : topicName)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                      active
-                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
-                        : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
-                    <span className="flex-1 truncate text-sm">{topicName}</span>
-                    <span className={`shrink-0 text-xs font-semibold ${active ? 'text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Keep Going! widget */}
           <div className="mx-3 mb-4 mt-auto rounded-xl bg-gradient-to-br from-indigo-50 to-violet-50 p-4 dark:from-indigo-900/20 dark:to-violet-900/20">
             <div className="flex items-center gap-2 mb-1">
@@ -627,6 +688,61 @@ function CodingProblemsListContent() {
                     {tab.label}
                   </button>
                 ))}
+              </div>
+
+              {/* Popular Topics slider */}
+              <div className="px-5 pt-4 pb-2">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200">Popular Topics</h2>
+                  </div>
+                  {tag && (
+                    <button
+                      type="button"
+                      onClick={() => setTag('')}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
+                    >
+                      Clear filter ×
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="flex gap-3 pb-1"
+                  style={{ overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+                >
+                  {POPULAR_TOPICS.map((topic) => {
+                    const active = tag.toLowerCase() === topic.tag.toLowerCase();
+                    return (
+                      <button
+                        key={topic.tag}
+                        type="button"
+                        onClick={() => setTag(active ? '' : topic.tag)}
+                        className={`group relative flex flex-shrink-0 flex-col overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl ${active ? 'ring-2 ring-white ring-offset-2' : ''}`}
+                        style={{ background: topic.gradient, width: '148px', minHeight: '126px' }}
+                      >
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={{
+                            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.065) 1px, transparent 1px)',
+                            backgroundSize: '18px 18px',
+                          }}
+                        />
+                        <div
+                          className="pointer-events-none absolute -right-4 -top-4 h-20 w-20 rounded-full"
+                          style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)' }}
+                        />
+                        <div className="relative flex flex-1 items-center justify-center pt-3">
+                          <TopicCardIcon type={topic.icon} />
+                        </div>
+                        <div className="relative px-3 pb-3 pt-1 text-left">
+                          <p className="text-[12px] font-bold leading-snug text-white">{topic.label}</p>
+                          <p className="mt-0.5 text-[10px] font-medium text-white/65">&lt;/&gt; {topic.count} Problems</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Content area */}
