@@ -483,9 +483,18 @@ function PreInterviewScreen({
   const startSelectedRole = () => {
     if (!selectedRole || !modalType) return;
     onTypeChange(modalType);
-    if (!selectedResumeId || !experienceLevel) return;
+    const hasValidResume = Boolean(
+      selectedResumeId &&
+      (selectedResumeId === uploadedResumeId || resumes.some((resume) => resume.id === selectedResumeId)),
+    );
+    if (resumesLoading || !hasValidResume || !experienceLevel) return;
     onStart(modalType, selectedRole.title, selectedResumeId, experienceLevel);
   };
+
+  const hasValidResume = Boolean(
+    selectedResumeId &&
+    (selectedResumeId === uploadedResumeId || resumes.some((resume) => resume.id === selectedResumeId)),
+  );
 
   return (
     <main className={selectedRole ? "mi-page mi-role-page mi-role-setup-host" : "mi-page mi-role-page"}>
@@ -503,7 +512,7 @@ function PreInterviewScreen({
           <div className="mi-upload-area"><span className="mi-icon-tile">{isUploadingResume ? <Loader2 size={22} className="animate-spin" /> : <FileText size={22} />}</span><div><strong>{resumeFileName ?? "Upload your resume"}</strong><p>Required · PDF, DOC, or DOCX. Max 10MB.</p></div><button type="button" className="mi-button mi-button-secondary" onClick={() => resumeInputRef.current?.click()} disabled={starting || isUploadingResume}>{isUploadingResume ? "Uploading" : resumeFileName ? "Replace" : "Upload"}</button><input ref={resumeInputRef} type="file" aria-label="Upload resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={event => void handleResumeUpload(event.target.files?.[0])} /></div>
           <div className="mi-resume-picker" aria-label="Choose a saved resume"><div className="mi-panel-heading"><h3>Choose a resume</h3><span className="mi-caption">Required</span></div>{resumesLoading ? <p className="mi-caption">Loading your resumes…</p> : resumesError ? <p className="mi-form-error"><AlertCircle size={15} />{resumesError}</p> : resumes.length === 0 ? <p className="mi-caption">No saved resumes found. Upload one above to continue.</p> : <div className="mi-resume-list">{resumes.map((resume) => <label className={selectedResumeId === resume.id ? "mi-resume-option is-selected" : "mi-resume-option"} key={resume.id}><input type="radio" name="mock-interview-resume" value={resume.id} checked={selectedResumeId === resume.id} onChange={() => { setSelectedResumeId(resume.id); setResumeFileName(null); localStorage.setItem("current_resume_id", resume.id); }} /><span className="mi-resume-file"><FileText size={18} /><span><strong>{resume.name}</strong><small>{resume.updatedAt ? `Updated ${new Date(resume.updatedAt).toLocaleDateString()}` : "Saved resume"}</small></span></span><CheckCircle2 size={17} aria-hidden="true" /></label>)}</div>}</div>
           {resumeUploadError && <p className="mi-form-error" role="alert"><AlertCircle size={15} />{resumeUploadError}</p>}{resumeFileName && !resumeUploadError && <p className="mi-form-success"><CheckCircle2 size={15} />Resume ready for this interview.</p>}
-            <div className="mi-modal-actions"><button type="button" className="mi-button mi-button-secondary" onClick={closeRoleModal} disabled={starting}>Back</button><button type="button" className="mi-button" onClick={startSelectedRole} disabled={!modalType || !experienceLevel || !selectedResumeId || starting || isUploadingResume}>{starting ? <><Loader2 size={17} className="animate-spin" />Opening room check</> : <>Continue to room check <ArrowRight size={17} /></>}</button></div>
+            <div className="mi-modal-actions"><button type="button" className="mi-button mi-button-secondary" onClick={closeRoleModal} disabled={starting}>Back</button><button type="button" className="mi-button" onClick={startSelectedRole} disabled={!modalType || !experienceLevel || !hasValidResume || resumesLoading || Boolean(resumesError && selectedResumeId !== uploadedResumeId) || starting || isUploadingResume}>{starting ? <><Loader2 size={17} className="animate-spin" />Opening room check</> : <>Continue to room check <ArrowRight size={17} /></>}</button></div>
           </section>
           <aside className="mi-panel mi-role-setup-aside"><p className="mi-eyebrow">WHAT HAPPENS NEXT?</p><ol><li><span>1</span><div><strong>Choose your format</strong><p>Set the interview style for your {selectedRole.title} practice.</p></div></li><li><span>2</span><div><strong>Check your room</strong><p>Test your microphone, camera, speakers, and connection.</p></div></li><li><span>3</span><div><strong>Start the conversation</strong><p>Meet your AI interviewer and practise with confidence.</p></div></li></ol><div className="mi-role-setup-secure"><ShieldCheck size={22} /><div><strong>Your data is secure</strong><p>Your resume is processed privately and used only to personalise this interview.</p></div></div></aside>
         </div>
@@ -548,6 +557,10 @@ export default function LiveSetupPage() {
   }, [phase]);
 
   const handleStart = (selectedType = sessionType, targetRole?: string, resumeId?: string, selectedExperienceLevel?: ExperienceLevel) => {
+    if (!targetRole || !resumeId || !selectedExperienceLevel) {
+      setStartError("Choose a role, resume, and experience level before continuing.");
+      return;
+    }
     setStartError(null);
     setSessionType(selectedType);
 
@@ -573,12 +586,11 @@ export default function LiveSetupPage() {
     const typeMap: Record<SessionType, "hr" | "technical" | "managerial"> = {
       HR: "hr", Technical: "technical", Managerial: "managerial", "Technical + Coding": "technical",
     };
-    const selectedResume = resumeId ?? localStorage.getItem("current_resume_id") ?? undefined;
     const interviewerIndex = pickRandomInterviewerIndex();
     const selectedInterviewer = MOCK_INTERVIEWERS[interviewerIndex];
     sessionStorage.setItem("live_session_params", JSON.stringify({
       session_type: typeMap[selectedType],
-      resume_id: selectedResume,
+      resume_id: resumeId,
       experience_level: selectedExperienceLevel,
       target_role: targetRole,
       voice: selectedInterviewer.voice,
