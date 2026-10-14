@@ -54,11 +54,21 @@ describe("old /notes URLs after the move to /prep", () => {
     ["/notes/hr#top", "/prep/hr#top"],
     ["/notes/managerial?tab=hr", "/prep/managerial?tab=hr"],
     ["/notes/technical/", "/prep/technical"],
+    ["/notes/hr/practice", "/prep/hr/practice"],
+    ["/notes/managerial/practice", "/prep/managerial/practice"],
+    ["/notes/technical/practice?q=1", "/prep/technical/practice?q=1"],
     ["/prep/notes", "/prep/notes"],
     ["/prep/technical", "/prep/technical"],
   ])("a notification for %s opens %s", (actionUrl, expected) => {
     expect(resolveNotificationRoute({ type: "prep", action_url: actionUrl })).toBe(expected);
   });
+
+  it.each(OLD_ROUTES.filter(([oldUrl]) => oldUrl !== "/notes"))(
+    "a notification for %s opens the same page the redirect does (%s)",
+    (oldUrl, newUrl) => {
+      expect(resolveNotificationRoute({ type: "prep", action_url: oldUrl })).toBe(newUrl);
+    },
+  );
 
   it("still ignores paths that are not known pages", () => {
     expect(resolveNotificationRoute({ type: "prep", action_url: "/notes/unknown" })).toBeNull();

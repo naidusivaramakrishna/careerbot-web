@@ -18,8 +18,11 @@ const VALID_EXACT_PATHS = new Set([
   '/prep/notes',
   '/prep/english',
   '/prep/hr',
+  '/prep/hr/practice',
   '/prep/managerial',
+  '/prep/managerial/practice',
   '/prep/technical',
+  '/prep/technical/practice',
   '/mock-test/history',
   '/dashboard',
   '/profile',
@@ -48,20 +51,15 @@ const TYPE_FALLBACK: Record<string, string | null> = {
   system:        null,
 };
 
-// Interview notes moved from /notes/* to /prep/* (next.config.ts redirects the old
-// URLs too). Notifications stored before the move still carry the old paths.
-const LEGACY_NOTES_PATHS: Record<string, string> = {
-  '/notes/generate':   '/prep/notes',
-  '/notes/english':    '/prep/english',
-  '/notes/hr':         '/prep/hr',
-  '/notes/managerial': '/prep/managerial',
-  '/notes/technical':  '/prep/technical',
-};
-
+// Interview notes moved from /notes/* to /prep/*. Notifications stored before the
+// move still carry the old paths: map them the way next.config.ts redirects them
+// (/notes/generate -> /prep/notes, any other /notes/<page> -> /prep/<page>).
 function withCurrentNotesPath(url: string): string {
-  const [, path = '', rest = ''] = url.match(/^([^?#]*)([\s\S]*)$/) ?? [];
-  const moved = LEGACY_NOTES_PATHS[path.replace(/\/$/, '')];
-  return moved ? moved + rest : url;
+  const [, rawPath = '', rest = ''] = url.match(/^([^?#]*)([\s\S]*)$/) ?? [];
+  const path = rawPath.replace(/\/$/, '');
+  if (path === '/notes/generate') return '/prep/notes' + rest;
+  if (path.startsWith('/notes/')) return '/prep' + path.slice('/notes'.length) + rest;
+  return url;
 }
 
 function isValidAppPath(path: string): boolean {
