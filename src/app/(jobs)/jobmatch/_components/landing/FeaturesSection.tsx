@@ -19,7 +19,7 @@ const features = [
     iconColor: "#2557A7",
     checkColor: "#2557A7",
     checkBg: "#F8FAFC",
-    badgeColor: "bg-blue-50 text-brand-600 border-blue-100",
+    badgeColor: "bg-blue-50 text-[#155EEF] border-blue-100",
   },
   {
     Icon: Lightbulb,
@@ -53,7 +53,7 @@ const features = [
     iconColor: "#067647",
     checkColor: "#067647",
     checkBg: "#F8FAFC",
-    badgeColor: "bg-success-50 text-success-700 border-success-200",
+    badgeColor: "bg-[#ECFDF3] text-[#067647] border-[#ABEFC6]",
   },
 ];
 
@@ -74,7 +74,7 @@ export default function FeaturesSection() {
           <span className="inline-block text-body-sm text-[#2557A7] uppercase tracking-widest bg-[#F8FAFC] border border-[#EAECF0] px-4 py-1.5 rounded-full mb-5">
             What You Get
           </span>
-          <h2 className="text-h2 md:text-h2 mb-5 tracking-tight text-[#101828]">
+          <h2 className="text-4xl md:text-5xl font-bold leading-tight mb-5 tracking-tight text-[#101828]">
             Everything You Need to<br />
             Get the Job
           </h2>

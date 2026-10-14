@@ -50,7 +50,7 @@
 .heading {
   margin: 0;
   color: #000000;
-  font-size: min(2.56cqw, 46px);
+  font-size: clamp(32px, 2.56cqw, 46px);
   font-weight: 700;
   line-height: 1.195652;
   letter-spacing: -0.01em;
@@ -59,7 +59,7 @@
 .description {
   max-width: 553px;
   margin: min(1.28cqw, 23px) min(2.226cqw, 40px) 0 0;
-  font-size: min(1.113cqw, 20px);
+  font-size: clamp(15px, 1.113cqw, 20px);
   font-weight: 400;
   line-height: 1.5;
   letter-spacing: 0;
@@ -68,23 +68,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: min(.668cqw, 12px);
+  gap: clamp(10px, .668cqw, 12px);
   margin-top: min(1.169cqw, 21px);
-  width: min(14.747cqw, 265px);
+  width: clamp(220px, 14.747cqw, 265px);
   min-height: 44px;
   padding: min(.946cqw, 17px) min(1.502cqw, 27px);
   border: 0;
   border-radius: min(.724cqw, 13px);
   background: var(--hero-blue);
   color: #FFFFFF;
-  font-size: min(1.113cqw, 20px);
+  font-size: clamp(16px, 1.113cqw, 20px);
   font-weight: 500;
   font-family: inherit;
-  line-height: min(1.447cqw, 26px);
+  line-height: clamp(22px, 1.447cqw, 26px);
   cursor: pointer;
   white-space: nowrap;
 }
-.action svg { width: min(1.113cqw, 20px); height: min(1.113cqw, 20px); flex-shrink: 0; stroke-width: 1.5; }
+.action svg { width: clamp(18px, 1.113cqw, 20px); height: clamp(18px, 1.113cqw, 20px); flex-shrink: 0; stroke-width: 1.5; }
 .action:focus-visible { outline: 2px solid var(--hero-blue); outline-offset: 4px; }
 .trust {
   display: flex;
@@ -98,13 +98,13 @@
 .trust li {
   display: inline-flex;
   align-items: center;
-  gap: min(.39cqw, 7px);
-  font-size: min(.835cqw, 15px);
+  gap: clamp(6px, .39cqw, 7px);
+  font-size: clamp(12px, .835cqw, 15px);
   font-weight: 600;
-  line-height: min(1.113cqw, 20px);
+  line-height: clamp(18px, 1.113cqw, 20px);
   white-space: nowrap;
 }
-.trust img { width: min(1.002cqw, 18px); height: min(1.002cqw, 18px); flex-shrink: 0; object-fit: contain; }
+.trust img { width: clamp(16px, 1.002cqw, 18px); height: clamp(16px, 1.002cqw, 18px); flex-shrink: 0; object-fit: contain; }
 .artwork { display: block; width: 100%; height: auto; }
 
 @container (max-width: 1250px) and (min-width: 1000px) {

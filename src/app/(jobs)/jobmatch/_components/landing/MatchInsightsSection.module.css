@@ -5,9 +5,9 @@
   font-family: var(--font-sans, Inter, sans-serif);
 }
 .content { max-width: 1797px; margin-inline: auto; padding: 0 0 min(2.782cqw, 50px); }
-.heading { margin: 0; text-align: center; font-size: min(2.56cqw, 46px); line-height: 1.217391; font-weight: 700; letter-spacing: -.01em; }
+.heading { margin: 0; text-align: center; font-size: clamp(32px, 2.56cqw, 46px); line-height: 1.217391; font-weight: 700; letter-spacing: -.01em; }
 .heading span { color: #2557A7; }
-.subtitle { margin: min(.668cqw, 12px) min(2.226cqw, 40px) 0; text-align: center; font-size: min(1.113cqw, 20px); line-height: 1.5; }
+.subtitle { margin: min(.668cqw, 12px) min(2.226cqw, 40px) 0; text-align: center; font-size: clamp(16px, 1.113cqw, 20px); line-height: 1.5; }
 .stage { position: relative; margin-top: min(.334cqw, 6px); height: min(48.414cqw, 870px); }
 .laptop { position: absolute; top: 0; left: 50%; display: block; width: min(53.868cqw, 968px); height: auto; transform: translateX(-50%); }
 .arrows { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
@@ -19,10 +19,10 @@
 .resume { top: min(8.681cqw, 156px); left: 3.895%; }
 .skills { top: min(21.981cqw, 395px); right: 3.283%; }
 .analysis { top: min(40.457cqw, 727px); left: 47.858%; }
-.icon { display: grid; place-items: center; width: min(2.337cqw, 42px); height: min(2.337cqw, 42px); border-radius: min(.278cqw, 5px); color: #2557A7; background: #E4ECF8; }
-.icon img { width: min(1.558cqw, 28px); height: min(1.558cqw, 28px); object-fit: contain; }
-.callout h3 { margin: min(.668cqw, 12px) 0 0; font-size: min(.89cqw, 16px); line-height: 1.25; font-weight: 700; }
-.callout p { margin: min(.334cqw, 6px) 0 0; font-size: min(.779cqw, 14px); line-height: 1.285714; font-weight: 400; }
+.icon { display: grid; place-items: center; width: clamp(32px, 2.337cqw, 42px); height: clamp(32px, 2.337cqw, 42px); border-radius: min(.278cqw, 5px); color: #2557A7; background: #E4ECF8; }
+.icon img { width: clamp(23px, 1.558cqw, 28px); height: clamp(23px, 1.558cqw, 28px); object-fit: contain; }
+.callout h3 { margin: min(.668cqw, 12px) 0 0; font-size: clamp(14px, .89cqw, 16px); line-height: 1.25; font-weight: 700; }
+.callout p { margin: min(.334cqw, 6px) 0 0; font-size: clamp(12px, .779cqw, 14px); line-height: 1.285714; font-weight: 400; }
 
 @container (max-width: 1250px) and (min-width: 1000px) {
   .stage { height: calc(40.457cqw + 150px); }

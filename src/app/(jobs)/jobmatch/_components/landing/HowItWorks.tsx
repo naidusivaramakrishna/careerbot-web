@@ -53,7 +53,7 @@ function UploadPreview() {
           transition={{ duration: 0.55, type: "spring", stiffness: 180 }}
           className="absolute top-3 right-4 bg-white rounded-xl shadow-lg px-3 py-1.5 flex items-center gap-2 border border-slate-100"
         >
-          <div className="w-6 h-7 rounded bg-brand-600 flex items-center justify-center shrink-0">
+          <div className="w-6 h-7 rounded bg-[#155EEF] flex items-center justify-center shrink-0">
             <svg width="10" height="12" viewBox="0 0 12 14" fill="none">
               <path d="M2 1h5.5L10 3.5V13H2V1z" fill="white" fillOpacity=".9"/>
               <path d="M7 1v3h3" stroke="white" strokeWidth="1.2"/>
@@ -69,7 +69,7 @@ function UploadPreview() {
         </div>
         <p className="text-body-sm text-slate-600">Drop your resume here</p>
         <p className="text-body-sm text-slate-600">PDF &amp; DOCX only (max 2MB)</p>
-        <div className="mt-1 px-4 py-1.5 bg-brand-600 text-white text-body-sm rounded-lg shadow-sm">Upload Resume</div>
+        <div className="mt-1 px-4 py-1.5 bg-[#155EEF] text-white text-body-sm rounded-lg shadow-sm">Upload Resume</div>
       </motion.div>
 
       <AnimatePresence>
@@ -84,11 +84,11 @@ function UploadPreview() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-body-sm text-slate-600">Uploading Resume.pdf</span>
-                  <span className="text-body-sm text-brand-600">Analyzing…</span>
+                  <span className="text-body-sm text-[#155EEF]">Analyzing…</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                   <motion.div
-                    className="h-full bg-brand-600 rounded-full"
+                    className="h-full bg-[#155EEF] rounded-full"
                     initial={{ width: "0%" }}
                     animate={{ width: "70%" }}
                     transition={{ duration: 1.4, ease: "easeInOut" }}
@@ -106,7 +106,7 @@ function UploadPreview() {
                     transition={{ delay: i * 0.12 }}
                     className="flex items-center gap-2 text-body-sm text-slate-700"
                   >
-                    <span className="w-4 h-4 rounded-full bg-success-50 flex items-center justify-center shrink-0">
+                    <span className="w-4 h-4 rounded-full bg-[#ECFDF3] flex items-center justify-center shrink-0">
                       <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
                         <path d="M2 5l2.5 2.5L8 3" stroke="#067647" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
@@ -170,14 +170,14 @@ function JDPreview() {
 
               {/* Tabs: link / text */}
               <div className="flex gap-2 mb-4">
-                <span className="text-body-sm text-brand-600 border-b-2 border-blue-600 pb-0.5 cursor-pointer">Paste Link</span>
+                <span className="text-body-sm text-[#155EEF] border-b-2 border-blue-600 pb-0.5 cursor-pointer">Paste Link</span>
                 <span className="text-body-sm text-slate-600 pb-0.5 cursor-pointer">Paste Text</span>
               </div>
 
               {/* Buttons */}
               <div className="flex justify-end gap-2">
                 <button type="button" className="px-4 py-1.5 rounded-lg border border-slate-200 text-label text-slate-600">Cancel</button>
-                <button type="button" className="px-4 py-1.5 rounded-lg bg-brand-600 text-white text-label shadow-sm">Continue</button>
+                <button type="button" className="px-4 py-1.5 rounded-lg bg-[#155EEF] text-white text-label shadow-sm">Continue</button>
               </div>
         </motion.div>
       </div>
@@ -255,7 +255,7 @@ function AnalyzePreview() {
         {/* Skills split */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <p className="text-body-sm text-success-700 uppercase tracking-wider mb-2">Matched Skills</p>
+            <p className="text-body-sm text-[#067647] uppercase tracking-wider mb-2">Matched Skills</p>
             <div className="flex flex-col gap-1">
               {matched.map((s, i) => (
                 <motion.div key={s} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 + i * 0.09 }}
@@ -276,7 +276,7 @@ function AnalyzePreview() {
                     <span className="w-2.5 h-2.5 rounded-sm bg-[#B42318] shrink-0"/>
                     {s.name}
                   </div>
-                  <span className="text-body-sm text-brand-600">{s.pts}</span>
+                  <span className="text-body-sm text-[#155EEF]">{s.pts}</span>
                 </motion.div>
               ))}
             </div>
@@ -307,11 +307,11 @@ function OptimizePreview() {
         {/* Dark header */}
         <div className="bg-[#101828] px-5 py-4 flex items-start justify-between">
           <div>
-            <p className="text-body-sm text-slate-600 uppercase tracking-widest mb-1">Resume Tailoring</p>
+            <p className="text-body-sm text-slate-400 uppercase tracking-widest mb-1">Resume Tailoring</p>
             <p className="text-body text-white">Senior Frontend Engineer</p>
           </div>
           <div className="text-right">
-            <p className="text-body-sm text-slate-600 uppercase tracking-widest mb-1">Match</p>
+            <p className="text-body-sm text-slate-400 uppercase tracking-widest mb-1">Match</p>
             <motion.p
               className="text-h3 text-amber-400"
               key={phase >= 3 ? "after" : "before"}
@@ -336,7 +336,7 @@ function OptimizePreview() {
                       initial={{ opacity: 0, scale: 0.8, y: 6 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       transition={{ delay: i * 0.12, duration: 0.3 }}
-                      className="px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-brand-600 text-body-sm"
+                      className="px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-[#155EEF] text-body-sm"
                     >
                       {kw}
                     </motion.span>
@@ -368,9 +368,9 @@ function OptimizePreview() {
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.15 }}
-                    className="flex items-start gap-2 px-3 py-2 rounded-lg bg-success-50 border border-success-200"
+                    className="flex items-start gap-2 px-3 py-2 rounded-lg bg-[#ECFDF3] border border-[#ABEFC6]"
                   >
-                    <span className="text-success-700 text-body-sm shrink-0 mt-0.5">+</span>
+                    <span className="text-[#067647] text-body-sm shrink-0 mt-0.5">+</span>
                     <div>
                       <p className="text-body-sm text-slate-800">Senior Frontend Engineer</p>
                       <p className="text-body-sm text-slate-600">React &amp; Next.js Specialist</p>
@@ -457,7 +457,7 @@ export default function HowItWorks() {
           <span className="inline-block text-body-sm text-[#2557A7] uppercase tracking-widest bg-[#F8FAFC] border border-[#EAECF0] px-4 py-1.5 rounded-full mb-5">
             How It Works
           </span>
-          <h2 className="text-h2 md:text-h2 mb-4 tracking-tight text-slate-900">
+          <h2 className="text-4xl md:text-5xl font-bold leading-tight mb-4 tracking-tight text-slate-900">
             From Resume to{" "}
             <span className="bg-gradient-to-r from-[#2557A7] to-[#7c3aed] bg-clip-text text-transparent">
               Interview Ready
@@ -492,7 +492,7 @@ export default function HowItWorks() {
                     {isActive && (
                       <motion.div
                         layoutId="activeAccent"
-                        className="absolute left-0 top-3 bottom-3 w-0.75 bg-brand-600 rounded-full"
+                        className="absolute left-0 top-3 bottom-3 w-0.75 bg-[#155EEF] rounded-full"
                         transition={{ type: "spring", stiffness: 400, damping: 32 }}
                       />
                     )}
@@ -500,7 +500,7 @@ export default function HowItWorks() {
                     {/* Step circle */}
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
                       isActive
-                        ? "bg-brand-600 text-white shadow-md shadow-blue-200"
+                        ? "bg-[#155EEF] text-white shadow-md shadow-blue-200"
                         : "bg-slate-200 text-slate-600"
                     }`}>
                       <span className="text-body-sm">{step.number}</span>
@@ -530,7 +530,7 @@ export default function HowItWorks() {
 
                     {/* Right icon */}
                     {isActive ? (
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-600 shrink-0 animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#155EEF] shrink-0 animate-pulse" />
                     ) : (
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D0D5DD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                         <path d="M7 17L17 7M17 7H7M17 7v10"/>
@@ -543,8 +543,8 @@ export default function HowItWorks() {
             {/* Progress dots */}
             <div className="flex items-center gap-1.5 px-1 mt-1">
               {STEPS.map((step, i) => (
-                <button type="button" key={step.number} onClick={() => handleSelect(i)}
-                  className={`transition-all duration-300 rounded-full ${i === active ? "w-6 h-1.5 bg-brand-600 text-label" : "w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400 text-label"}`}
+                <button type="button" key={step.number} onClick={() => handleSelect(i)} aria-label={`Show step ${i + 1}`}
+                  className={`transition-all duration-300 rounded-full ${i === active ? "w-6 h-1.5 bg-[#155EEF]" : "w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400"}`}
                 />
               ))}
             </div>
@@ -575,9 +575,9 @@ export default function HowItWorks() {
                   key={active}
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="inline-flex items-center gap-1.5 bg-brand-600/10 border border-blue-200 text-brand-600 text-body-sm uppercase tracking-wider px-2.5 py-1 rounded-full"
+                  className="inline-flex items-center gap-1.5 bg-[#155EEF]/10 border border-blue-200 text-[#155EEF] text-body-sm uppercase tracking-wider px-2.5 py-1 rounded-full"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse"/>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#155EEF] animate-pulse"/>
                   Step {STEPS[active].number} — {STEPS[active].title}
                 </motion.span>
               </div>

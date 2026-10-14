@@ -28,7 +28,7 @@ export default function StatsSection() {
               viewport={{ once: true }}
               transition={{ duration: 0.45, delay: i * 0.1 }}
             >
-              <span className="text-h1 md:text-h1 text-[#2557A7] mb-2">{value}</span>
+              <span className="text-4xl md:text-5xl font-bold text-[#2557A7] mb-2">{value}</span>
               <span className="text-body-sm text-black">{label}</span>
             </motion.div>
           ))}

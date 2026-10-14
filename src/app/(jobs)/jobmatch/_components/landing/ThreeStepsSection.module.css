@@ -12,7 +12,7 @@
 .heading {
   margin: 0;
   text-align: center;
-  font-size: min(2.56cqw, 46px);
+  font-size: clamp(32px, 2.56cqw, 46px);
   line-height: 1.217391;
   font-weight: 700;
   letter-spacing: -.01em;
@@ -21,7 +21,7 @@
 .subtitle {
   margin: min(.556cqw, 10px) 0 0;
   text-align: center;
-  font-size: min(1.113cqw, 20px);
+  font-size: clamp(16px, 1.113cqw, 20px);
   line-height: 1.4;
 }
 .cards {
@@ -48,12 +48,12 @@
   left: min(.779cqw, 14px);
   display: grid;
   place-items: center;
-  width: min(2.671cqw, 48px);
-  height: min(2.671cqw, 48px);
+  width: clamp(36px, 2.671cqw, 48px);
+  height: clamp(36px, 2.671cqw, 48px);
   border-radius: 50%;
   background: #2557A7;
   color: #FFFFFF;
-  font-size: min(1.002cqw, 18px);
+  font-size: clamp(14px, 1.002cqw, 18px);
   line-height: 1;
   font-weight: 700;
 }
@@ -63,8 +63,8 @@
 .resumeImage { display: block; width: min(11.798cqw, 212px); height: auto; transform: translateY(max(-.223cqw, -4px)); }
 .jobImage { display: block; width: min(11.909cqw, 214px); height: auto; transform: translateY(min(.89cqw, 16px)); }
 .reportImage { display: block; width: min(12.465cqw, 224px); height: auto; transform: translateY(min(.835cqw, 15px)); }
-.title { margin: min(.89cqw, 16px) 0 0; font-size: min(1.113cqw, 20px); line-height: 1.4; font-weight: 700; }
-.description { margin: min(.445cqw, 8px) 0 0; font-size: min(.89cqw, 16px); line-height: 1.25; font-weight: 400; }
+.title { margin: min(.89cqw, 16px) 0 0; font-size: clamp(17px, 1.113cqw, 20px); line-height: 1.4; font-weight: 700; }
+.description { margin: min(.445cqw, 8px) 0 0; font-size: clamp(14px, .89cqw, 16px); line-height: 1.25; font-weight: 400; }
 
 @container (max-width: 1250px) and (min-width: 1000px) {
   .content { padding-inline: 4cqw; }

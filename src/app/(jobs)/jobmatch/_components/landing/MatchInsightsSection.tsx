@@ -29,7 +29,7 @@ export default function MatchInsightsSection() {
         <h2 id="jobmatch-insights-title" className={styles.heading}>Know exactly <span>where you stand</span></h2>
         <p className={styles.subtitle}>
           Once your resume and job description are analyzed, CareerBOT gives you a clear and<br className={styles.copyBreak} />
-          {" "}detailed view of your match, highlighting what works and where you can improve .
+          {" "}detailed view of your match, highlighting what works and where you can improve.
         </p>
         <div className={styles.stage}>
           <Image src="/images/jobmatch-reference/know-exactly-where-you-stand.png" width={3116} height={2078} alt="CareerBOT compares a resume and job description with a match score, skill highlights, and key insights on a laptop screen." className={styles.laptop} sizes="(max-width: 999px) 90vw, (max-width: 1797px) 54vw, 968px" unoptimized />
