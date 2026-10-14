@@ -181,7 +181,7 @@ function InfoScreen({ onContinue }: { onContinue: () => void }) {
       </div>
       <section className="mi-panel mi-journey"><div className="mi-section-heading"><div><p className="mi-eyebrow">WHAT TO EXPECT</p><h2>Your path through the interview</h2></div><p>A few simple steps to make your practice count.</p></div><div className="mi-journey-grid">{[
         { Icon: ShieldCheck, title: "Check your room", copy: "Test your devices and find a quiet space." },
-        { Icon: UserRound, title: "Make it yours", copy: "Choose your role, interview type, and optional resume." },
+        { Icon: UserRound, title: "Make it yours", copy: "Choose your role, interview type, and resume." },
         { Icon: MessageSquareText, title: "Have the conversation", copy: "Listen to each question, respond naturally, then pause." },
         { Icon: FileText, title: "Find your next step", copy: "Review your transcript, scores, and feedback." },
       ].map(({ Icon, title, copy }, index) => <article key={title}><span className="mi-icon-tile"><Icon size={23} /></span><small>0{index + 1}</small><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
@@ -375,6 +375,7 @@ function PreInterviewScreen({
     if (typeof window === "undefined") return undefined;
     return localStorage.getItem("current_resume_id") ?? undefined;
   });
+  const [uploadedResumeId, setUploadedResumeId] = useState<string | undefined>();
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | undefined>();
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
   const visibleRoles = selectedCategory === "All" ? ROLE_CARDS : ROLE_CARDS.filter((role) => role.category === selectedCategory);
@@ -393,6 +394,14 @@ function PreInterviewScreen({
     }).catch(() => { if (active) setResumesError("Could not load your saved resumes."); }).finally(() => { if (active) setResumesLoading(false); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (resumesLoading || !selectedResumeId || selectedResumeId === uploadedResumeId) return;
+    if (!resumes.some((resume) => resume.id === selectedResumeId)) {
+      setSelectedResumeId(undefined);
+      if (typeof window !== "undefined") localStorage.removeItem("current_resume_id");
+    }
+  }, [resumes, resumesLoading, selectedResumeId, uploadedResumeId]);
   const availableInterviewTypes = selectedRole?.category === "Tech"
     ? INTERVIEW_TYPES
     : INTERVIEW_TYPES.filter((type) => type !== "Technical + Coding");
@@ -449,6 +458,7 @@ function PreInterviewScreen({
 
       localStorage.setItem("current_resume_id", parsed.resume_id);
       setSelectedResumeId(parsed.resume_id);
+      setUploadedResumeId(parsed.resume_id);
       setResumeFileName(parsed.file_name || file.name);
     } catch (error) {
       setResumeFileName(null);
@@ -478,26 +488,26 @@ function PreInterviewScreen({
   };
 
   return (
-    <main className="mi-page mi-role-page">
-      <PageHeading eyebrow="STEP 02 / MAKE IT YOURS" title="Choose your interview role" description="Choose the role you want to practise for. Then select your interview format and add a resume if you like." action={<span className="mi-pill"><UserRound size={15} />{visibleRoles.length} roles shown</span>} />
+    <main className={selectedRole ? "mi-page mi-role-page mi-role-setup-host" : "mi-page mi-role-page"}>
+      <PageHeading eyebrow="STEP 02 / MAKE IT YOURS" title="Choose your interview role" description="Choose the role you want to practise for. Then select your interview format and choose a resume to personalise your interview." action={<span className="mi-pill"><UserRound size={15} />{visibleRoles.length} roles shown</span>} />
       {isMobile && <div className="mi-notice"><Smartphone size={19} /><p><strong>Mobile device detected.</strong> For best results, use a laptop or desktop with stable internet. Mobile browsers may limit microphone and fullscreen behavior.</p></div>}
       <section className="mi-panel mi-role-browser"><div className="mi-role-filters" aria-label="Filter roles by discipline">{ROLE_CATEGORY_FILTERS.map(category => <button type="button" key={category} aria-pressed={selectedCategory === category} onClick={() => setSelectedCategory(category)} className={selectedCategory === category ? "is-active" : ""}>{category}</button>)}</div><div className="mi-role-grid">{visibleRoles.map(role => <button type="button" key={role.title} aria-label={role.title} onClick={() => openRoleModal(role)} className="mi-role-card"><span className="mi-icon-tile"><UserRound size={21} /></span><span><strong>{role.title}</strong><small>{role.category}</small></span><ArrowRight size={17} aria-hidden="true" /></button>)}</div></section>
-      <div className="mi-next-action"><ShieldCheck size={24} /><div><strong>Your experience makes it personal.</strong><p>An optional resume gives the interviewer more context for your conversation.</p></div></div>
-      {selectedRole && <main className="mi-page mi-role-setup-page" aria-labelledby="role-confirm-title">
+      <div className="mi-next-action"><ShieldCheck size={24} /><div><strong>Your resume makes it personal.</strong><p>Choose a resume so the interviewer can tailor the conversation to your experience.</p></div></div>
+      {selectedRole && <section className="mi-page mi-role-setup-page" aria-labelledby="role-confirm-title">
         <button type="button" className="mi-back-link" onClick={closeRoleModal} disabled={starting}><ArrowRight size={16} aria-hidden="true" /> Back to role selection</button>
         <div className="mi-role-setup-grid">
           <section className="mi-role-setup-main">
             <p className="mi-eyebrow">STEP 02 / MAKE IT YOURS</p><h1 id="role-confirm-title">Set up your mock interview</h1><p className="mi-role-setup-lede">You&apos;re preparing for a <strong>{selectedRole.title}</strong> interview. Choose the format that best matches the conversation you want to practise.</p>
             <div className="mi-modal-section"><div className="mi-panel-heading"><h3>Interview type</h3><span className="mi-caption">Required</span></div><div className="mi-type-grid">{availableInterviewTypes.map(type => <button type="button" key={type} aria-pressed={modalType === type} onClick={() => { setModalType(type); onTypeChange(type); }} className={modalType === type ? "is-active" : ""}><span>{type}</span><small>{type === "HR" ? "Experience & communication" : type === "Managerial" ? "Leadership & decision-making" : type === "Technical + Coding" ? "Technical interview format" : "Skills & problem-solving"}</small>{modalType === type && <CheckCircle2 size={17} />}</button>)}</div></div>
             <div className="mi-modal-section"><div className="mi-panel-heading"><h3>Experience level</h3><span className="mi-caption">Required</span></div><div className="mi-type-grid mi-experience-grid">{([['fresher', 'Fresher', 'Starting your career'], ['mid', 'Mid', 'Growing professional experience'], ['senior', 'Senior', 'Experienced specialist or lead']] as const).map(([value, label, description]) => <button type="button" key={value} aria-pressed={experienceLevel === value} onClick={() => setExperienceLevel(value)} className={experienceLevel === value ? "is-active" : ""}><span>{label}</span><small>{description}</small>{experienceLevel === value && <CheckCircle2 size={17} />}</button>)}</div></div>
-          <div className="mi-upload-area"><span className="mi-icon-tile">{isUploadingResume ? <Loader2 size={22} className="animate-spin" /> : <FileText size={22} />}</span><div><strong>{resumeFileName ?? "Add your resume"}</strong><p>Optional · PDF, DOC, or DOCX. Max 10MB.</p></div><button type="button" className="mi-button mi-button-secondary" onClick={() => resumeInputRef.current?.click()} disabled={starting || isUploadingResume}>{isUploadingResume ? "Uploading" : resumeFileName ? "Replace" : "Upload"}</button><input ref={resumeInputRef} type="file" aria-label="Upload resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={event => void handleResumeUpload(event.target.files?.[0])} /></div>
+          <div className="mi-upload-area"><span className="mi-icon-tile">{isUploadingResume ? <Loader2 size={22} className="animate-spin" /> : <FileText size={22} />}</span><div><strong>{resumeFileName ?? "Upload your resume"}</strong><p>Required · PDF, DOC, or DOCX. Max 10MB.</p></div><button type="button" className="mi-button mi-button-secondary" onClick={() => resumeInputRef.current?.click()} disabled={starting || isUploadingResume}>{isUploadingResume ? "Uploading" : resumeFileName ? "Replace" : "Upload"}</button><input ref={resumeInputRef} type="file" aria-label="Upload resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={event => void handleResumeUpload(event.target.files?.[0])} /></div>
           <div className="mi-resume-picker" aria-label="Choose a saved resume"><div className="mi-panel-heading"><h3>Choose a resume</h3><span className="mi-caption">Required</span></div>{resumesLoading ? <p className="mi-caption">Loading your resumes…</p> : resumesError ? <p className="mi-form-error"><AlertCircle size={15} />{resumesError}</p> : resumes.length === 0 ? <p className="mi-caption">No saved resumes found. Upload one above to continue.</p> : <div className="mi-resume-list">{resumes.map((resume) => <label className={selectedResumeId === resume.id ? "mi-resume-option is-selected" : "mi-resume-option"} key={resume.id}><input type="radio" name="mock-interview-resume" value={resume.id} checked={selectedResumeId === resume.id} onChange={() => { setSelectedResumeId(resume.id); setResumeFileName(null); localStorage.setItem("current_resume_id", resume.id); }} /><span className="mi-resume-file"><FileText size={18} /><span><strong>{resume.name}</strong><small>{resume.updatedAt ? `Updated ${new Date(resume.updatedAt).toLocaleDateString()}` : "Saved resume"}</small></span></span><CheckCircle2 size={17} aria-hidden="true" /></label>)}</div>}</div>
           {resumeUploadError && <p className="mi-form-error" role="alert"><AlertCircle size={15} />{resumeUploadError}</p>}{resumeFileName && !resumeUploadError && <p className="mi-form-success"><CheckCircle2 size={15} />Resume ready for this interview.</p>}
             <div className="mi-modal-actions"><button type="button" className="mi-button mi-button-secondary" onClick={closeRoleModal} disabled={starting}>Back</button><button type="button" className="mi-button" onClick={startSelectedRole} disabled={!modalType || !experienceLevel || !selectedResumeId || starting || isUploadingResume}>{starting ? <><Loader2 size={17} className="animate-spin" />Opening room check</> : <>Continue to room check <ArrowRight size={17} /></>}</button></div>
           </section>
           <aside className="mi-panel mi-role-setup-aside"><p className="mi-eyebrow">WHAT HAPPENS NEXT?</p><ol><li><span>1</span><div><strong>Choose your format</strong><p>Set the interview style for your {selectedRole.title} practice.</p></div></li><li><span>2</span><div><strong>Check your room</strong><p>Test your microphone, camera, speakers, and connection.</p></div></li><li><span>3</span><div><strong>Start the conversation</strong><p>Meet your AI interviewer and practise with confidence.</p></div></li></ol><div className="mi-role-setup-secure"><ShieldCheck size={22} /><div><strong>Your data is secure</strong><p>Your resume is processed privately and used only to personalise this interview.</p></div></div></aside>
         </div>
-      </main>}
+      </section>}
     </main>
   );
 }
@@ -587,7 +597,7 @@ export default function LiveSetupPage() {
         <nav className="mi-setup-progress" aria-label="Interview setup progress">
           <ol>
             {["Get ready", "Choose your role", "Check devices"].map((label, index) => {
-              const current = phase === "info" ? 0 : phase === "preflight" ? 1 : 2;
+              const current = phase === "info" ? 0 : phase === "pre-interview" ? 1 : 2;
               return (
                 <li key={label} aria-current={index === current ? "step" : undefined} data-complete={index < current}>
                   <span>{index < current ? <CheckCircle2 size={16} aria-hidden="true" /> : index + 1}</span>

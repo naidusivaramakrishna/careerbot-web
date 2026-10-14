@@ -356,7 +356,7 @@ describe("ReadinessGate", () => {
 async function completeRoleSetup() {
   fireEvent.click(screen.getByRole("button", { name: /choose your role/i }));
   fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
-  const setup = screen.getByRole("main", { name: /set up your mock interview/i });
+  const setup = screen.getByRole("region", { name: /set up your mock interview/i });
   fireEvent.click(within(setup).getByText("Technical", { exact: true }));
   fireEvent.click(within(setup).getByRole("button", { name: /^mid/i }));
   fireEvent.click(await within(setup).findByRole("radio", { name: /frontend resume/i }));
@@ -384,7 +384,7 @@ describe("LiveSetupPage", () => {
     expect(screen.getByRole("heading", { name: "Choose your interview role" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
 
-    const setup = screen.getByRole("main", { name: /set up your mock interview/i });
+    const setup = screen.getByRole("region", { name: /set up your mock interview/i });
     expect(setup).toHaveTextContent("Frontend Developer");
     const proceed = () => within(setup).getByRole("button", { name: /continue to room check/i });
     expect(proceed()).toBeDisabled();
