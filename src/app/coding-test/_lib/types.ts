@@ -9,7 +9,7 @@ export interface TopicCategory {
   category: string;
   topics: TopicInfo[];
 }
-export type CodingTestLanguage = 'python' | 'java' | 'cpp' | 'c' | 'javascript' | 'csharp';
+export type CodingTestLanguage = 'python' | 'java' | 'cpp' | 'c';
 
 export interface CodingProblemSummary {
   slug: string;

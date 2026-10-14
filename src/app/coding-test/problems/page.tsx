@@ -77,16 +77,18 @@ const TABS: { value: ActiveTab; label: string; icon?: React.ReactNode }[] = [
 
 // ── Popular Topics data ───────────────────────────────────────────────────
 
-const POPULAR_TOPICS = [
-  { label: 'Dynamic Programming', count: 27, tag: 'Dynamic Programming', gradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #60a5fa 100%)', icon: 'dp' },
-  { label: 'Two Pointers',        count: 13, tag: 'Two Pointers',        gradient: 'linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #fb923c 100%)', icon: 'twoptr' },
-  { label: 'Math',                count: 12, tag: 'Math',                gradient: 'linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #2dd4bf 100%)', icon: 'math' },
-  { label: 'Binary Search',       count: 12, tag: 'Binary Search',       gradient: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 55%, #a78bfa 100%)', icon: 'binsearch' },
-  { label: 'Tree',                count: 12, tag: 'Tree',                gradient: 'linear-gradient(135deg, #14532d 0%, #16a34a 55%, #4ade80 100%)', icon: 'tree' },
-  { label: 'Stack',               count: 11, tag: 'Stack',               gradient: 'linear-gradient(135deg, #92400e 0%, #d97706 55%, #fbbf24 100%)', icon: 'stack' },
-  { label: 'Backtracking',        count: 9,  tag: 'Backtracking',        gradient: 'linear-gradient(135deg, #9f1239 0%, #e11d48 55%, #fb7185 100%)', icon: 'backtrack' },
-  { label: 'Infosys',             count: 10, tag: 'Infosys',             gradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 55%, #818cf8 100%)', icon: 'company' },
-];
+// Card styling only, looked up by topic name; the topics and counts shown come
+// from the loaded problems (popularTopics). Unknown topics get the default.
+const TOPIC_CARD_STYLES: Record<string, { gradient: string; icon: string }> = {
+  'dynamic programming': { gradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #60a5fa 100%)', icon: 'dp' },
+  'two pointers':        { gradient: 'linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #fb923c 100%)', icon: 'twoptr' },
+  'math':                { gradient: 'linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #2dd4bf 100%)', icon: 'math' },
+  'binary search':       { gradient: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 55%, #a78bfa 100%)', icon: 'binsearch' },
+  'tree':                { gradient: 'linear-gradient(135deg, #14532d 0%, #16a34a 55%, #4ade80 100%)', icon: 'tree' },
+  'stack':               { gradient: 'linear-gradient(135deg, #92400e 0%, #d97706 55%, #fbbf24 100%)', icon: 'stack' },
+  'backtracking':        { gradient: 'linear-gradient(135deg, #9f1239 0%, #e11d48 55%, #fb7185 100%)', icon: 'backtrack' },
+};
+const DEFAULT_TOPIC_CARD_STYLE = { gradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 55%, #818cf8 100%)', icon: 'code' };
 
 function TopicCardIcon({ type }: { type: string }) {
   const p = { width: 46, height: 46, viewBox: '0 0 46 46', fill: 'none', 'aria-hidden': true } as const;
@@ -113,6 +115,11 @@ function TopicCardIcon({ type }: { type: string }) {
   if (type === 'math') return (
     <svg {...p}>
       <text x="23" y="35" textAnchor="middle" fontSize="34" fontWeight="700" fill="white" fillOpacity="0.9" fontFamily="serif">Σ</text>
+    </svg>
+  );
+  if (type === 'code') return (
+    <svg {...p}>
+      <text x="23" y="30" textAnchor="middle" fontSize="20" fontWeight="700" fill="white" fillOpacity="0.9" fontFamily="monospace">&lt;/&gt;</text>
     </svg>
   );
   if (type === 'binsearch') return (
@@ -690,60 +697,63 @@ function CodingProblemsListContent() {
                 ))}
               </div>
 
-              {/* Popular Topics slider */}
-              <div className="px-5 pt-4 pb-2">
-                <div className="mb-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200">Popular Topics</h2>
-                  </div>
-                  {tag && (
-                    <button
-                      type="button"
-                      onClick={() => setTag('')}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
-                    >
-                      Clear filter ×
-                    </button>
-                  )}
-                </div>
-                <div
-                  className="flex gap-3 pb-1"
-                  style={{ overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
-                >
-                  {POPULAR_TOPICS.map((topic) => {
-                    const active = tag.toLowerCase() === topic.tag.toLowerCase();
-                    return (
+              {/* Popular Topics slider (live topics + counts) */}
+              {popularTopics.length > 0 && (
+                <div className="px-5 pt-4 pb-2">
+                  <div className="mb-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                      <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200">Popular Topics</h2>
+                    </div>
+                    {tag && (
                       <button
-                        key={topic.tag}
                         type="button"
-                        onClick={() => setTag(active ? '' : topic.tag)}
-                        className={`group relative flex flex-shrink-0 flex-col overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl ${active ? 'ring-2 ring-white ring-offset-2' : ''}`}
-                        style={{ background: topic.gradient, width: '148px', minHeight: '126px' }}
+                        onClick={() => setTag('')}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
                       >
-                        <div
-                          className="pointer-events-none absolute inset-0"
-                          style={{
-                            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.065) 1px, transparent 1px)',
-                            backgroundSize: '18px 18px',
-                          }}
-                        />
-                        <div
-                          className="pointer-events-none absolute -right-4 -top-4 h-20 w-20 rounded-full"
-                          style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)' }}
-                        />
-                        <div className="relative flex flex-1 items-center justify-center pt-3">
-                          <TopicCardIcon type={topic.icon} />
-                        </div>
-                        <div className="relative px-3 pb-3 pt-1 text-left">
-                          <p className="text-[12px] font-bold leading-snug text-white">{topic.label}</p>
-                          <p className="mt-0.5 text-[10px] font-medium text-white/65">&lt;/&gt; {topic.count} Problems</p>
-                        </div>
+                        Clear filter ×
                       </button>
-                    );
-                  })}
+                    )}
+                  </div>
+                  <div
+                    className="flex gap-3 pb-1"
+                    style={{ overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+                  >
+                    {popularTopics.map(([topicName, count]) => {
+                      const style = TOPIC_CARD_STYLES[topicName.toLowerCase()] ?? DEFAULT_TOPIC_CARD_STYLE;
+                      const active = tag.toLowerCase() === topicName.toLowerCase();
+                      return (
+                        <button
+                          key={topicName}
+                          type="button"
+                          onClick={() => setTag(active ? '' : topicName)}
+                          className={`group relative flex flex-shrink-0 flex-col overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl ${active ? 'ring-2 ring-white ring-offset-2' : ''}`}
+                          style={{ background: style.gradient, width: '148px', minHeight: '126px' }}
+                        >
+                          <div
+                            className="pointer-events-none absolute inset-0"
+                            style={{
+                              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.065) 1px, transparent 1px)',
+                              backgroundSize: '18px 18px',
+                            }}
+                          />
+                          <div
+                            className="pointer-events-none absolute -right-4 -top-4 h-20 w-20 rounded-full"
+                            style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)' }}
+                          />
+                          <div className="relative flex flex-1 items-center justify-center pt-3">
+                            <TopicCardIcon type={style.icon} />
+                          </div>
+                          <div className="relative px-3 pb-3 pt-1 text-left">
+                            <p className="text-[12px] font-bold leading-snug text-white">{topicName}</p>
+                            <p className="mt-0.5 text-[10px] font-medium text-white/65">&lt;/&gt; {count} {count === 1 ? 'Problem' : 'Problems'}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Content area */}
               <div className="px-5 pb-8 pt-4">

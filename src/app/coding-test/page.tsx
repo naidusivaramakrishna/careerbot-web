@@ -4,15 +4,19 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Code2, BarChart3, ChevronRight, Flame, Target, Trophy, BookOpen, TrendingUp,
-  Terminal, History, Zap,
+  Terminal, History,
 } from 'lucide-react';
 import { fetchProblems } from './_lib/api';
 import { fetchProblemsAnnotated, fetchQuota } from './_lib/gradingApi';
 import type { CodingTestLanguage, ProblemWithStatus, QuotaResponse } from './_lib/types';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
+import ClientLayout from '@/app/(user)/dashboard/ClientLayout';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 const ONBOARDING_KEY = 'coding_test_onboarded';
-const DAILY_GOAL = 3;
+// Practice target. user_status carries no timestamp, so progress is the total
+// accepted count (capped), not a per-day number.
+const GOAL_TARGET = 3;
 
 const LANG_CONFIG: {
   value: CodingTestLanguage;
@@ -35,6 +39,8 @@ const QUICK_ACTIONS = [
 // ── Hero Banner ───────────────────────────────────────────────────────────────
 
 function HeroBanner() {
+  const { data } = useDashboard();
+  const firstName = data?.user?.name?.trim().split(/\s+/)[0] || 'there';
   return (
     <div
       className="relative overflow-hidden rounded-2xl"
@@ -62,7 +68,7 @@ function HeroBanner() {
         className="absolute top-0 bottom-0 left-0 flex flex-col justify-center pl-7"
         style={{ width: '280px' }}
       >
-        <p className="mb-0.5 text-[14px] font-medium text-white/90">Hey Shobha! 👋</p>
+        <p className="mb-0.5 text-[14px] font-medium text-white/90">Hey {firstName}! 👋</p>
         <div className="text-[22px] font-black leading-tight text-white tracking-tight">Keep Going,</div>
         <div
           className="text-[22px] font-black leading-tight tracking-tight mb-2"
@@ -111,7 +117,7 @@ function TotalSolvedCard({ solved, total }: { solved: number; total: number | nu
   );
 }
 
-function DailyGoalStatCard({ progress, goal }: { progress: number; goal: number }) {
+function PracticeGoalCard({ progress, goal }: { progress: number; goal: number }) {
   const pct = goal > 0 ? Math.round((progress / goal) * 100) : 0;
   return (
     <div className="relative overflow-hidden rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50 to-purple-50 px-5 py-4 shadow-sm">
@@ -125,11 +131,12 @@ function DailyGoalStatCard({ progress, goal }: { progress: number; goal: number 
           <Target className="h-5 w-5 text-violet-600" />
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-violet-600">Daily Goal</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-violet-600">Practice Goal</p>
           <p className="text-[28px] font-extrabold tabular-nums leading-none text-slate-800">
             {progress}
             <span className="ml-1.5 text-sm font-normal text-slate-400">/ {goal}</span>
           </p>
+          <p className="mt-1 text-[11px] text-slate-500">Target: solve {goal} problems</p>
         </div>
       </div>
       <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-violet-100">
@@ -151,9 +158,10 @@ function StreakCard() {
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-orange-500">Streak</p>
+          {/* No streak data source yet: show a placeholder, not a fake number. */}
           <p className="text-[28px] font-extrabold tabular-nums leading-none text-orange-600">
-            0
-            <span className="ml-1.5 text-sm font-normal text-orange-400">days</span>
+            —
+            <span className="ml-1.5 text-sm font-normal text-orange-400">Coming soon</span>
           </p>
         </div>
       </div>
@@ -295,150 +303,6 @@ function QuickActionsCard() {
   );
 }
 
-// ── Popular Topics ─────────────────────────────────────────────────────────────
-
-const POPULAR_TOPICS = [
-  { label: 'Dynamic Programming', count: 27, tag: 'Dynamic Programming', gradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #60a5fa 100%)', icon: 'dp' },
-  { label: 'Two Pointers',        count: 13, tag: 'Two Pointers',        gradient: 'linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #fb923c 100%)', icon: 'twoptr' },
-  { label: 'Math',                count: 12, tag: 'Math',                gradient: 'linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #2dd4bf 100%)', icon: 'math' },
-  { label: 'Binary Search',       count: 12, tag: 'Binary Search',       gradient: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 55%, #a78bfa 100%)', icon: 'binsearch' },
-  { label: 'Tree',                count: 12, tag: 'Tree',                gradient: 'linear-gradient(135deg, #14532d 0%, #16a34a 55%, #4ade80 100%)', icon: 'tree' },
-  { label: 'Stack',               count: 11, tag: 'Stack',               gradient: 'linear-gradient(135deg, #92400e 0%, #d97706 55%, #fbbf24 100%)', icon: 'stack' },
-  { label: 'Backtracking',        count: 9,  tag: 'Backtracking',        gradient: 'linear-gradient(135deg, #9f1239 0%, #e11d48 55%, #fb7185 100%)', icon: 'backtrack' },
-  { label: 'Infosys',             count: 10, tag: 'Infosys',             gradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 55%, #818cf8 100%)', icon: 'company' },
-];
-
-function TopicCardIcon({ type }: { type: string }) {
-  const p = { width: 46, height: 46, viewBox: '0 0 46 46', fill: 'none', 'aria-hidden': true } as const;
-  if (type === 'dp') return (
-    <svg {...p}>
-      <rect x="3" y="3" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
-      <rect x="26" y="3" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
-      <rect x="3" y="31" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
-      <rect x="26" y="31" width="17" height="12" rx="2.5" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
-      <line x1="20" y1="9" x2="26" y2="9" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
-      <line x1="11.5" y1="15" x2="11.5" y2="31" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
-      <line x1="34.5" y1="15" x2="34.5" y2="31" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
-    </svg>
-  );
-  if (type === 'twoptr') return (
-    <svg {...p}>
-      <rect x="4" y="19" width="38" height="8" rx="4" stroke="white" strokeWidth="2" strokeOpacity="0.35"/>
-      <circle cx="11" cy="23" r="5" fill="white" fillOpacity="0.9"/>
-      <circle cx="35" cy="23" r="5" fill="white" fillOpacity="0.9"/>
-      <path d="M19 23L14 23M14 23L17 20M14 23L17 26" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.85"/>
-      <path d="M27 23L32 23M32 23L29 20M32 23L29 26" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.85"/>
-    </svg>
-  );
-  if (type === 'math') return (
-    <svg {...p}>
-      <text x="23" y="35" textAnchor="middle" fontSize="34" fontWeight="700" fill="white" fillOpacity="0.9" fontFamily="serif">Σ</text>
-    </svg>
-  );
-  if (type === 'binsearch') return (
-    <svg {...p}>
-      <circle cx="19" cy="20" r="12" stroke="white" strokeWidth="2.5" strokeOpacity="0.9"/>
-      <line x1="27.5" y1="29" x2="41" y2="43" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.9"/>
-      <line x1="14" y1="20" x2="24" y2="20" stroke="white" strokeWidth="2" strokeOpacity="0.75"/>
-      <line x1="19" y1="15" x2="19" y2="25" stroke="white" strokeWidth="2" strokeOpacity="0.75"/>
-    </svg>
-  );
-  if (type === 'tree') return (
-    <svg {...p}>
-      <circle cx="23" cy="6" r="4.5" fill="white" fillOpacity="0.9"/>
-      <circle cx="10" cy="22" r="4.5" fill="white" fillOpacity="0.9"/>
-      <circle cx="36" cy="22" r="4.5" fill="white" fillOpacity="0.9"/>
-      <line x1="19.5" y1="10" x2="13.5" y2="18" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
-      <line x1="26.5" y1="10" x2="32.5" y2="18" stroke="white" strokeWidth="2" strokeOpacity="0.8"/>
-      <circle cx="4" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
-      <circle cx="16" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
-      <circle cx="30" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
-      <circle cx="42" cy="38" r="3.5" fill="white" fillOpacity="0.7"/>
-      <line x1="7" y1="26" x2="5" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
-      <line x1="13" y1="26" x2="15" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
-      <line x1="33" y1="26" x2="31" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
-      <line x1="39" y1="26" x2="41" y2="35" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
-    </svg>
-  );
-  if (type === 'stack') return (
-    <svg {...p}>
-      <rect x="7" y="6"    width="32" height="9" rx="3" fill="white" fillOpacity="0.9"/>
-      <rect x="7" y="18.5" width="32" height="9" rx="3" fill="white" fillOpacity="0.7"/>
-      <rect x="7" y="31"   width="32" height="9" rx="3" fill="white" fillOpacity="0.45"/>
-    </svg>
-  );
-  if (type === 'backtrack') return (
-    <svg {...p}>
-      <path d="M39 12 C39 7 33 4 28 6 L10 13 M10 13 L15 9 M10 13 L14 18" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.9"/>
-      <path d="M7 34 C7 39 13 42 18 40 L36 33 M36 33 L31 37 M36 33 L32 28" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.9"/>
-    </svg>
-  );
-  return (
-    <svg {...p}>
-      <rect x="7" y="16" width="32" height="26" rx="2" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
-      <path d="M7 22 L39 22" stroke="white" strokeWidth="1.5" strokeOpacity="0.4"/>
-      <rect x="15" y="4" width="16" height="14" rx="2" stroke="white" strokeWidth="2.2" strokeOpacity="0.9"/>
-      <rect x="15" y="28" width="5" height="5" rx="1" fill="white" fillOpacity="0.75"/>
-      <rect x="26" y="28" width="5" height="5" rx="1" fill="white" fillOpacity="0.75"/>
-      <rect x="15" y="35" width="5" height="7" rx="1" fill="white" fillOpacity="0.75"/>
-      <rect x="26" y="35" width="5" height="7" rx="1" fill="white" fillOpacity="0.75"/>
-    </svg>
-  );
-}
-
-function PopularTopicsSection() {
-  return (
-    <section>
-      <div className="mb-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Zap className="h-3.5 w-3.5 text-slate-500" />
-          <h2 className="text-sm font-bold text-slate-800">Popular Topics</h2>
-        </div>
-        <Link
-          href="/coding-test/problems"
-          className="text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-800"
-        >
-          View all →
-        </Link>
-      </div>
-      <div
-        className="flex gap-3 pb-1"
-        style={{ overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
-      >
-        {POPULAR_TOPICS.map((topic) => (
-          <Link
-            key={topic.tag}
-            href={`/coding-test/problems?tag=${encodeURIComponent(topic.tag)}`}
-            className="group relative flex flex-shrink-0 flex-col overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl"
-            style={{ background: topic.gradient, width: '158px', minHeight: '136px' }}
-          >
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.065) 1px, transparent 1px)',
-                backgroundSize: '18px 18px',
-              }}
-            />
-            <div
-              className="pointer-events-none absolute -right-4 -top-4 h-20 w-20 rounded-full"
-              style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)' }}
-            />
-            <div className="relative flex flex-1 items-center justify-center pt-4">
-              <TopicCardIcon type={topic.icon} />
-            </div>
-            <div className="relative px-3.5 pb-3.5 pt-1">
-              <p className="text-[13px] font-bold leading-snug text-white">{topic.label}</p>
-              <p className="mt-0.5 text-[11px] font-medium text-white/65">
-                &lt;/&gt; {topic.count} Problems
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 // ── Language Card ─────────────────────────────────────────────────────────────
 
 function LanguageCard({ lang }: { lang: typeof LANG_CONFIG[number] }) {
@@ -458,11 +322,20 @@ function LanguageCard({ lang }: { lang: typeof LANG_CONFIG[number] }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function CodingPracticeHub() {
+export default function CodingPracticeHubPage() {
+  // Only the hub gets the dashboard chrome: the other /coding-test routes use
+  // full-viewport (h-screen) layouts with their own navigation.
+  return (
+    <ClientLayout>
+      <CodingPracticeHub />
+    </ClientLayout>
+  );
+}
+
+function CodingPracticeHub() {
   const [total, setTotal]                   = useState<number | null>(null);
   const [allProblems, setAllProblems]       = useState<ProblemWithStatus[]>([]);
   const [quota, setQuota]                   = useState<QuotaResponse | null>(null);
-  const [ready, setReady]                   = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -484,8 +357,7 @@ export default function CodingPracticeHub() {
         setTotal(count);
         setAllProblems(problems);
         if (q) setQuota(q);
-        setReady(true);
-      }).catch(() => setReady(true));
+      }).catch(() => {});
 
     load();
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
@@ -504,18 +376,13 @@ export default function CodingPracticeHub() {
     return { easySolved, easyTotal, mediumSolved, mediumTotal, hardSolved, hardTotal, totalSolved };
   }, [allProblems]);
 
-  const todaySolved = useMemo(
-    () => allProblems.filter((p) => p.user_status === 'accepted').length,
-    [allProblems],
-  );
-
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="bg-slate-100">
       {showOnboarding && <OnboardingModal onDismiss={dismissOnboarding} />}
 
       {/* Low-credit banner */}
       {quota && quota.submissions_remaining < 5 && (
-        <div className="sticky top-0 z-10 bg-amber-50 border-b border-amber-200 px-6 py-2 text-center text-sm text-amber-800">
+        <div className="sticky top-14 z-10 bg-amber-50 border-b border-amber-200 px-6 py-2 text-center text-sm text-amber-800">
           <span className="font-semibold">{quota.submissions_remaining}</span> AI grading credits remaining.{' '}
           <Link href="/payments" className="font-semibold underline hover:text-amber-900">Upgrade</Link>
         </div>
@@ -530,7 +397,7 @@ export default function CodingPracticeHub() {
           {/* 3 Stat Cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <TotalSolvedCard solved={stats.totalSolved} total={total} />
-            <DailyGoalStatCard progress={Math.min(todaySolved, DAILY_GOAL)} goal={DAILY_GOAL} />
+            <PracticeGoalCard progress={Math.min(stats.totalSolved, GOAL_TARGET)} goal={GOAL_TARGET} />
             <StreakCard />
           </div>
 
@@ -558,7 +425,7 @@ export default function CodingPracticeHub() {
                 Browse all →
               </Link>
             </div>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {LANG_CONFIG.map((lang) => (
                 <LanguageCard key={lang.value} lang={lang} />
               ))}

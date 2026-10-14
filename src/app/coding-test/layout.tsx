@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import ClientLayout from '@/app/(user)/dashboard/ClientLayout';
 
 export const metadata: Metadata = {
   title: 'Coding Practice — CareerBOT',
@@ -11,5 +10,5 @@ export default function CodingTestLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <ClientLayout>{children}</ClientLayout>;
+  return <>{children}</>;
 }
