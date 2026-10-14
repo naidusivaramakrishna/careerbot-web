@@ -15,11 +15,11 @@ const features = [
       "0–100 precision score",
       "Role-specific keyword comparison",
     ],
-    iconBg: "#EEF4FF",
+    iconBg: "#F8FAFC",
     iconColor: "#2557A7",
     checkColor: "#2557A7",
-    checkBg: "#EEF4FF",
-    badgeColor: "bg-blue-50 text-blue-700 border-blue-100",
+    checkBg: "#F8FAFC",
+    badgeColor: "bg-blue-50 text-brand-600 border-blue-100",
   },
   {
     Icon: Lightbulb,
@@ -32,10 +32,10 @@ const features = [
       "Technical + soft skill breakdown",
       "Matched skills highlighted",
     ],
-    iconBg: "#F3EEFF",
+    iconBg: "#F8FAFC",
     iconColor: "#7c3aed",
     checkColor: "#7c3aed",
-    checkBg: "#F3EEFF",
+    checkBg: "#F8FAFC",
     badgeColor: "bg-purple-50 text-purple-700 border-purple-100",
   },
   {
@@ -49,17 +49,17 @@ const features = [
       "Resume updates automatically",
       "Score improves in real time",
     ],
-    iconBg: "#ECFDF5",
-    iconColor: "#059669",
-    checkColor: "#059669",
-    checkBg: "#ECFDF5",
-    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    iconBg: "#F8FAFC",
+    iconColor: "#067647",
+    checkColor: "#067647",
+    checkBg: "#F8FAFC",
+    badgeColor: "bg-success-50 text-success-700 border-success-200",
   },
 ];
 
 export default function FeaturesSection() {
   return (
-    <section className="relative py-10 md:py-14 overflow-hidden" style={{ background: "#ffffff", borderTop: "1px solid #e8edf5" }}>
+    <section className="relative py-10 md:py-14 overflow-hidden" style={{ background: "#FFFFFF", borderTop: "1px solid #F2F4F7" }}>
 
       <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
 
@@ -71,14 +71,14 @@ export default function FeaturesSection() {
           viewport={{ once: true }}
           transition={{ duration: 0.55 }}
         >
-          <span className="inline-block text-[11px] font-bold text-[#2557A7] uppercase tracking-widest bg-[#EEF4FF] border border-[#dde8f8] px-4 py-1.5 rounded-full mb-5">
+          <span className="inline-block text-body-sm text-[#2557A7] uppercase tracking-widest bg-[#F8FAFC] border border-[#EAECF0] px-4 py-1.5 rounded-full mb-5">
             What You Get
           </span>
-          <h2 className="text-4xl md:text-5xl font-black mb-5 leading-tight tracking-tight text-[#0f172a]">
+          <h2 className="text-h2 md:text-h2 mb-5 tracking-tight text-[#101828]">
             Everything You Need to<br />
             Get the Job
           </h2>
-          <p className="text-slate-500 text-base max-w-lg mx-auto leading-relaxed">
+          <p className="text-slate-600 text-body-lg max-w-lg mx-auto">
             Three core capabilities that turn your resume from &ldquo;maybe&rdquo; to &ldquo;interview scheduled&rdquo;.
           </p>
         </motion.div>
@@ -105,13 +105,13 @@ export default function FeaturesSection() {
                     style={{ background: iconBg }}>
                     <Icon style={{ width: 28, height: 28, color: iconColor }} strokeWidth={1.6} />
                   </div>
-                  <h3 className="text-[19px] font-black text-[#0f172a] leading-snug tracking-tight">
+                  <h3 className="text-h3 text-[#101828] tracking-tight">
                     {title}
                   </h3>
                 </div>
 
                 {/* Description */}
-                <p className="text-[13.5px] text-slate-500 leading-relaxed text-center mb-6">
+                <p className="text-body-sm text-slate-600 text-center mb-6">
                   {description}
                 </p>
 
@@ -128,7 +128,7 @@ export default function FeaturesSection() {
                           <path d="M2 6l3 3 5-5" stroke={checkColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       </div>
-                      <span className="text-[13px] text-slate-600 font-medium">{point}</span>
+                      <span className="text-body-sm text-slate-600">{point}</span>
                     </li>
                   ))}
                 </ul>

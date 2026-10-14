@@ -1,0 +1,102 @@
+.section {
+  container-type: inline-size;
+  background: #FFFFFF;
+  color: #000000;
+  font-family: var(--font-sans, Inter, sans-serif);
+}
+.content {
+  max-width: 1797px;
+  margin-inline: auto;
+  padding: min(1.725cqw, 31px) min(6.9cqw, 124px) min(6.511cqw, 117px);
+}
+.heading {
+  margin: 0;
+  text-align: center;
+  font-size: min(2.56cqw, 46px);
+  line-height: 1.217391;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.heading span { color: #2557A7; }
+.subtitle {
+  margin: min(.556cqw, 10px) 0 0;
+  text-align: center;
+  font-size: min(1.113cqw, 20px);
+  line-height: 1.4;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: min(2.894cqw, 52px);
+  margin: min(3.951cqw, 71px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.card {
+  position: relative;
+  min-width: 0;
+  min-height: min(18.475cqw, 332px);
+  padding: 0 min(1.113cqw, 20px) min(2.504cqw, 45px);
+  border-radius: 0 0 min(.445cqw, 8px) min(.445cqw, 8px);
+  background: #FFFFFF;
+  box-shadow: 0 4px 4px #00000040, 0 0 3px #0000000A;
+  text-align: center;
+}
+.number {
+  position: absolute;
+  top: min(.556cqw, 10px);
+  left: min(.779cqw, 14px);
+  display: grid;
+  place-items: center;
+  width: min(2.671cqw, 48px);
+  height: min(2.671cqw, 48px);
+  border-radius: 50%;
+  background: #2557A7;
+  color: #FFFFFF;
+  font-size: min(1.002cqw, 18px);
+  line-height: 1;
+  font-weight: 700;
+}
+.card:nth-child(n + 2) .number { left: min(1.558cqw, 28px); }
+.card:nth-child(2) .number { left: min(1.614cqw, 29px); }
+.artwork { display: grid; place-items: center; height: min(10.851cqw, 195px); }
+.resumeImage { display: block; width: min(11.798cqw, 212px); height: auto; transform: translateY(max(-.223cqw, -4px)); }
+.jobImage { display: block; width: min(11.909cqw, 214px); height: auto; transform: translateY(min(.89cqw, 16px)); }
+.reportImage { display: block; width: min(12.465cqw, 224px); height: auto; transform: translateY(min(.835cqw, 15px)); }
+.title { margin: min(.89cqw, 16px) 0 0; font-size: min(1.113cqw, 20px); line-height: 1.4; font-weight: 700; }
+.description { margin: min(.445cqw, 8px) 0 0; font-size: min(.89cqw, 16px); line-height: 1.25; font-weight: 400; }
+
+@container (max-width: 1250px) and (min-width: 1000px) {
+  .content { padding-inline: 4cqw; }
+  .heading { font-size: 32px; }
+  .subtitle { font-size: 16px; }
+  .title { font-size: 17px; }
+  .description { font-size: 14px; }
+  .description br { display: none; }
+  .card { min-height: 280px; }
+  .number { width: 36px; height: 36px; font-size: 14px; }
+}
+@container (max-width: 999px) {
+  .content { padding: 40px 5.287cqw 64px; }
+  .heading { font-size: clamp(28px, 4.4cqw, 40px); }
+  .subtitle { margin-top: 12px; font-size: 17px; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 40px; gap: 28px; }
+  .card { min-height: 332px; padding: 0 16px 36px; border-radius: 0 0 8px 8px; }
+  .card:last-child { grid-column: 1 / -1; width: calc((100% - 28px) / 2); justify-self: center; }
+  .number { top: 10px; left: 14px; width: 40px; height: 40px; font-size: 16px; }
+  .card:nth-child(n + 2) .number { left: 14px; }
+  .card:nth-child(2) .number { left: 14px; }
+  .artwork { height: 200px; }
+  .resumeImage { width: 190px; transform: none; }
+  .jobImage { width: 194px; transform: translateY(10px); }
+  .reportImage { width: 220px; transform: translateY(10px); }
+  .title { margin-top: 16px; font-size: 20px; }
+  .description { margin-top: 6px; font-size: 16px; }
+  .description br { display: none; }
+}
+@container (max-width: 600px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .card:last-child { grid-column: auto; width: 100%; }
+  .heading { font-size: 30px; }
+  .subtitle { font-size: 16px; }
+}

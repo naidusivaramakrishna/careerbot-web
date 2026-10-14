@@ -1,0 +1,135 @@
+.hero {
+  --hero-blue: #2557A7;
+  --hero-highlight-blue: #2557A7;
+  --hero-icon-blue: #2557A7;
+  --hero-corner-blue: #E3ECF8;
+  container-type: inline-size;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #FFFFFF;
+  color: #000000;
+  font-family: var(--font-sans, Inter, sans-serif);
+}
+
+.hero::before,
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: min(12.799cqw, 230px);
+  height: min(12.799cqw, 230px);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--hero-corner-blue) 0%, var(--hero-corner-blue) 35%, #FFFFFF00 72%);
+  pointer-events: none;
+}
+
+.hero::before { top: max(-5.008cqw, -90px); right: max(-4.174cqw, -75px); }
+.hero::after {
+  bottom: 0;
+  left: 0;
+  width: min(10.573cqw, 190px);
+  height: min(10.573cqw, 190px);
+  border-radius: 0;
+  background: radial-gradient(circle at bottom left, var(--hero-corner-blue) 0%, var(--hero-corner-blue) 28%, #FFFFFF00 70.7%);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 593fr) minmax(0, 1048fr);
+  align-items: start;
+  width: 100%;
+  max-width: 1797px;
+  margin-inline: auto;
+  /* Reference artwork starts 222px from the page top at 1797px wide.
+     Account for the existing 86px navigation without changing its UI. */
+  padding: clamp(48px, calc(12.354cqw - 86px), 136px) min(3.394cqw, 61px) min(7.791cqw, 140px) min(5.287cqw, 95px);
+}
+
+.copy { min-width: 0; padding-top: min(2.226cqw, 40px); }
+.heading {
+  margin: 0;
+  color: #000000;
+  font-size: min(2.56cqw, 46px);
+  font-weight: 700;
+  line-height: 1.195652;
+  letter-spacing: -0.01em;
+}
+.heading span { color: var(--hero-highlight-blue); padding-inline-start: min(.668cqw, 12px); }
+.description {
+  max-width: 553px;
+  margin: min(1.28cqw, 23px) min(2.226cqw, 40px) 0 0;
+  font-size: min(1.113cqw, 20px);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: min(.668cqw, 12px);
+  margin-top: min(1.169cqw, 21px);
+  width: min(14.747cqw, 265px);
+  min-height: 44px;
+  padding: min(.946cqw, 17px) min(1.502cqw, 27px);
+  border: 0;
+  border-radius: min(.724cqw, 13px);
+  background: var(--hero-blue);
+  color: #FFFFFF;
+  font-size: min(1.113cqw, 20px);
+  font-weight: 500;
+  font-family: inherit;
+  line-height: min(1.447cqw, 26px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.action svg { width: min(1.113cqw, 20px); height: min(1.113cqw, 20px); flex-shrink: 0; stroke-width: 1.5; }
+.action:focus-visible { outline: 2px solid var(--hero-blue); outline-offset: 4px; }
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px min(2.226cqw, 40px);
+  margin: min(1.613cqw, 29px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.trust li {
+  display: inline-flex;
+  align-items: center;
+  gap: min(.39cqw, 7px);
+  font-size: min(.835cqw, 15px);
+  font-weight: 600;
+  line-height: min(1.113cqw, 20px);
+  white-space: nowrap;
+}
+.trust img { width: min(1.002cqw, 18px); height: min(1.002cqw, 18px); flex-shrink: 0; object-fit: contain; }
+.artwork { display: block; width: 100%; height: auto; }
+
+@container (max-width: 1250px) and (min-width: 1000px) {
+  .description { font-size: 15px; }
+  .action { width: 220px; font-size: 16px; line-height: 22px; gap: 10px; }
+  .action svg { width: 18px; height: 18px; }
+  .trust { gap: 12px 20px; }
+  .trust li { font-size: 12px; line-height: 18px; gap: 6px; }
+  .trust img { width: 16px; height: 16px; }
+}
+@container (max-width: 999px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 40px; padding: 56px 5.287cqw; }
+  .copy { padding-top: 0; }
+  .heading { font-size: clamp(32px, 5.35cqw, 48px); }
+  .description { max-width: 553px; margin: 24px 0 0; font-size: 18px; }
+  .action { width: min(265px, 100%); margin-top: 24px; padding: 17px 27px; border-radius: 13px; font-size: 20px; line-height: 26px; gap: 12px; }
+  .action svg { width: 20px; height: 20px; }
+  .trust { margin-top: 28px; gap: 12px 32px; }
+  .trust li { font-size: 14px; line-height: 20px; gap: 7px; }
+  .trust img { width: 18px; height: 18px; }
+  .artwork { max-width: 839px; margin-inline: auto; }
+}
+@container (max-width: 480px) {
+  .layout { padding-block: 40px; gap: 32px; }
+  .description { font-size: 16px; }
+  .trust { gap: 12px 20px; }
+  .trust li { font-size: 12px; }
+}
