@@ -5,14 +5,16 @@ import EmptyState from '@/app/(resume)/builder/start/_components/EmptyState';
 import { createResumeWithAuth, getAllResumesUnified } from '@/api/resumeApi';
 import { toast } from 'sonner';
 
-const { mockPush } = vi.hoisted(() => ({
+const { mockPush, search } = vi.hoisted(() => ({
   mockPush: vi.fn(),
+  search: { params: new URLSearchParams() },
 }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
+  useSearchParams: () => search.params,
 }));
 
 vi.mock('@/api/resumeApi', () => ({
@@ -47,6 +49,8 @@ const renderEmptyState = (selected: string | null = null) =>
 describe('EmptyState', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    search.params = new URLSearchParams();
+    window.sessionStorage.clear();
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [],
       enhanced_resumes: [],
@@ -64,7 +68,7 @@ describe('EmptyState', () => {
     expect(screen.getByText('PDF · DOCX')).toBeInTheDocument();
   });
 
-  it('reuses an existing builder resume and routes to templates', async () => {
+  it('reuses an existing builder resume and opens it in the builder', async () => {
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [{ id: 'existing-builder-1', name: 'Existing Resume' }],
       enhanced_resumes: [],
@@ -75,7 +79,7 @@ describe('EmptyState', () => {
     fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/templates');
+      expect(mockPush).toHaveBeenCalledWith('/builder/creation/existing-builder-1');
     });
     expect(mockCreateResumeWithAuth).not.toHaveBeenCalled();
     expect(onSelect).toHaveBeenCalledWith('builder');
@@ -92,10 +96,26 @@ describe('EmptyState', () => {
     fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/templates');
+      expect(mockPush).toHaveBeenCalledWith('/builder/creation/created-resume-1');
     });
     expect(mockCreateResumeWithAuth).toHaveBeenCalledTimes(1);
     expect(window.localStorage.setItem).toHaveBeenCalledWith('current_resume_id', 'created-resume-1');
+    expect(window.sessionStorage.getItem('builder_fresh_start')).toBe('true');
+  });
+
+  it.each([
+    ['/cover-letter/new', '/builder/creation/created-resume-1?return_to=%2Fcover-letter%2Fnew'],
+    ['//evil.example', '/builder/creation/created-resume-1'],
+    ['https://evil.example', '/builder/creation/created-resume-1'],
+  ])('passes on return_to=%s only when it is a same-site path', async (returnTo, expected) => {
+    search.params = new URLSearchParams({ return_to: returnTo });
+    renderEmptyState();
+
+    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(expected);
+    });
   });
 
   it('shows creating state while resume creation is in flight', async () => {

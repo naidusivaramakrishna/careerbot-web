@@ -145,6 +145,13 @@ export interface EnhanceResumeRequest {
   region?: string;
   /** Persisted ATS template used by enhanced preview and export. */
   template_id?: string;
+  /**
+   * Request a new scan instead of the saved enhancement. Callers should inspect
+   * `applied_fixes` (or retrieve the record when that optional field is absent)
+   * before clearing client-side fixed state. Only send it when the user
+   * explicitly asks to scan the original again.
+   */
+  force_refresh?: boolean;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

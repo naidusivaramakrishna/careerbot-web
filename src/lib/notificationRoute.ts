@@ -17,8 +17,12 @@ const VALID_EXACT_PATHS = new Set([
   '/mock-interview/history',
   '/prep/notes',
   '/prep/english',
+  '/prep/hr',
+  '/prep/hr/practice',
   '/prep/managerial',
+  '/prep/managerial/practice',
   '/prep/technical',
+  '/prep/technical/practice',
   '/mock-test/history',
   '/dashboard',
   '/profile',
@@ -47,12 +51,15 @@ const TYPE_FALLBACK: Record<string, string | null> = {
   system:        null,
 };
 
-// Interview notes moved from /notes/* to /prep/*; notifications stored before the
-// move still carry the old URL, so translate it instead of dropping the link.
-function normalizeLegacyPath(path: string): string {
-  return path
-    .replace(/^\/notes\/generate(?=[/?#]|$)/, '/prep/notes')
-    .replace(/^\/notes(?=[/?#]|$)/, '/prep');
+// Interview notes moved from /notes/* to /prep/*. Notifications stored before the
+// move still carry the old paths: map them the way next.config.ts redirects them
+// (/notes/generate -> /prep/notes, any other /notes/<page> -> /prep/<page>).
+function withCurrentNotesPath(url: string): string {
+  const [, rawPath = '', rest = ''] = url.match(/^([^?#]*)([\s\S]*)$/) ?? [];
+  const path = rawPath.replace(/\/$/, '');
+  if (path === '/notes/generate') return '/prep/notes' + rest;
+  if (path.startsWith('/notes/')) return '/prep' + path.slice('/notes'.length) + rest;
+  return url;
 }
 
 function isValidAppPath(path: string): boolean {
@@ -64,7 +71,7 @@ function isValidAppPath(path: string): boolean {
 
 export function resolveNotificationRoute(n: Pick<Notification, 'type' | 'action_url'>): string | null {
   // Only use action_url if it exactly matches a known working page
-  const actionUrl = n.action_url ? normalizeLegacyPath(n.action_url) : n.action_url;
+  const actionUrl = n.action_url ? withCurrentNotesPath(n.action_url) : null;
   if (actionUrl && isValidAppPath(actionUrl)) return actionUrl;
   // Otherwise fall back to type-based routing
   return TYPE_FALLBACK[n.type?.toLowerCase?.()] ?? null;

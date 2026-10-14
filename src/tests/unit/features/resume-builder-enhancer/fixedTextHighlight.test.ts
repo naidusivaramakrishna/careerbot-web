@@ -3,6 +3,7 @@ import {
   toPlainLines,
   diffTextUnits,
   findHighlightRanges,
+  unitBelongsToSuggestionSection,
 } from "@/app/(resume)/builder/creation/_utils/fixedTextHighlight";
 
 describe("toPlainLines", () => {
@@ -56,5 +57,66 @@ describe("findHighlightRanges", () => {
 
   it("finds nothing for text that is not rendered", () => {
     expect(findHighlightRanges(mount("<p>hello</p>"), [{ key: "summary", text: "absent" }])).toEqual([]);
+  });
+
+  it("highlights the added value but not the 'Label:' heading in front of it", () => {
+    const root = mount(
+      '<div data-section="skills"><p><b>Tools:</b> Docker</p><p><b>Cloud Platform:</b> AWS</p><p><b>Database:</b> MySQL</p></div>',
+    );
+    const ranges = findHighlightRanges(root, [
+      { key: "categorizedSkills", text: "Tools" },
+      { key: "categorizedSkills", text: "Docker" },
+      { key: "categorizedSkills", text: "Cloud Platform" },
+      { key: "categorizedSkills", text: "AWS" },
+    ]);
+    expect(ranges.map((range) => range.toString())).toEqual(["Docker", "AWS"]);
+  });
+
+  it("skips a label whose colon is in a separate element from the label text", () => {
+    const root = mount(
+      '<div data-section="skills"><p><b>Additional Skills</b><span>:</span> <span>Docker</span>, <span>AWS</span></p></div>',
+    );
+    const ranges = findHighlightRanges(root, [
+      { key: "categorizedSkills", text: "Additional Skills" },
+      { key: "categorizedSkills", text: "Docker" },
+      { key: "categorizedSkills", text: "AWS" },
+    ]);
+    expect(ranges.map((range) => range.toString())).toEqual(["Docker", "AWS"]);
+  });
+});
+
+describe("unitBelongsToSuggestionSection", () => {
+  const unit = (key: string) => ({ key, text: "x" });
+
+  it("lets a card only claim text from the sections it can change", () => {
+    expect(unitBelongsToSuggestionSection(unit("categorizedSkills"), "Keywords")).toBe(true);
+    expect(unitBelongsToSuggestionSection(unit("professionalSummary"), "Keywords")).toBe(false);
+    expect(unitBelongsToSuggestionSection(unit("personalInfo"), "Contact")).toBe(true);
+    expect(unitBelongsToSuggestionSection(unit("workExperience"), "Contact")).toBe(false);
+  });
+
+  it("covers the bullet-level cards that write into experience, projects and internships", () => {
+    for (const field of ["workExperience", "projects", "internships"]) {
+      expect(unitBelongsToSuggestionSection(unit(field), "Leadership")).toBe(true);
+    }
+    expect(unitBelongsToSuggestionSection(unit("education"), "Leadership")).toBe(false);
+  });
+
+  it("never filters when the card's section or the text's field is unknown", () => {
+    expect(unitBelongsToSuggestionSection(unit("workExperience"), "format")).toBe(true);
+    expect(unitBelongsToSuggestionSection(unit("somethingNew"), "Keywords")).toBe(true);
+  });
+});
+
+describe("findHighlightRanges: profile links", () => {
+  it("looks for the link's label in the contact block only, not in a project titled 'Portfolio Website'", () => {
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<div data-section="personal-info"><a>Portfolio</a></div>' +
+      '<div data-section="projects"><p>Portfolio Website</p></div>';
+    document.body.appendChild(root);
+    const ranges = findHighlightRanges(root, [{ key: "portfolio", text: "https://janedoe.dev" }]);
+    expect(ranges.map((range) => range.toString())).toEqual(["Portfolio"]);
+    root.remove();
   });
 });

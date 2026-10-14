@@ -5,6 +5,7 @@ import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sect
 import SafeHTML from "@/components/common/SafeHTML";
 import { filterSkillsByDomain, hasPrintableSkills } from "./skillsFilterByDomain";
 import { isRedundantCustomSectionFieldLabel, extractNamedCustomSection, splitCompetencyLabel } from "../builder/creation/_utils/customSectionIdentity";
+import AchievementRow from "@/components/common/AchievementRow";
 
 interface Props {
   data: ResumeData;
@@ -483,18 +484,19 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Certifications"))}
             <div style={sectionBorderStyle("12px")} />
-            <div style={{ paddingLeft: "20px" }}>
-              {certifications.map((cert, idx) => (
-                <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
-                  • <span style={{ ...titleStyle }}>{cert.name || cert.issuer}</span>
+            {certifications.map((cert, idx) => (
+              <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", display: "flex", alignItems: "flex-start", fontSize: "12px" }}>
+                <span style={{ marginRight: "8px" }}>•</span>
+                <div>
+                  <span style={{ ...titleStyle }}>{cert.name || cert.issuer}</span>
                   {cert.name && cert.issuer && <span> - {cert.issuer}</span>}
                   {((cert.issueDate) || cert.expiryDate) && <span> | </span>}
                   {(cert.issueDate) && <span>{cert.issueDate}</span>}
                   {(cert.issueDate) && cert.expiryDate && <span> – </span>}
                   {cert.expiryDate && <span>{cert.expiryDate}</span>}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         ) : null;
 
@@ -631,10 +633,10 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={sectionBorderStyle("12px")} />
             <div className="grid grid-cols-2 gap-2">
               {languages.map((lang, idx) => (
-                <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize: "11px", ...baseTextStyle }}>
-                  <span style={{ marginRight: "6px" }}>•</span>
+                <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize: "12px", ...baseTextStyle }}>
+                  <span style={{ marginRight: "8px" }}>•</span>
                   <span>
-                    <span style={{ ...titleStyle, fontSize: "11px" }}>{lang.name} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
+                    <span style={{ ...titleStyle, fontSize: "12px" }}>{lang.name} </span> {lang.proficiency && <span style={{ fontSize: "12px" }}> - {lang.proficiency}</span>}
                   </span>
                 </div>
               ))}
@@ -648,7 +650,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {renderSectionHeading("AWARDS")}
             <div style={sectionBorderStyle("12px")} />
             {awards.map((award, idx) => (
-              <div key={idx} style={{ marginBottom: "8px", display: "flex", alignItems: "flex-start" }}>
+              <div key={idx} style={{ marginBottom: "4px", display: "flex", alignItems: "flex-start" }}>
                 <span style={{ marginRight: "8px", ...baseTextStyle }}>•</span>
                 <div style={baseTextStyle}>
                   <span style={{ ...titleStyle, fontSize: "12px" }}>{award.title || award.issuedBy}</span>
@@ -665,25 +667,14 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {renderSectionHeading(getSectionTitle("Achievements"))}
             <div style={sectionBorderStyle("12px")} />
             {achievements.map((achievement, idx) => (
-              <div key={idx} style={{ marginBottom: "12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", alignItems: "baseline" }}>
-                  {achievement.title && <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{achievement.title}</h3>}
-                  {achievement.date && (
-                    <span style={{ ...baseTextStyle, fontSize: "12px" }}>
-                      {formatDate(achievement.date)}
-                    </span>
-                  )}
-                </div>
-                {
-                  achievement.description && (
-                    <div style={{ paddingLeft: "20px", marginTop: "4px" }}>
-                      {renderHTMLToReact(achievement.description)}
-                    </div>
-                  )
-                }
-              </div>
-            ))
-            }
+              <AchievementRow
+                key={idx}
+                achievement={achievement}
+                formatDate={formatDate}
+                textStyle={{ ...baseTextStyle, fontSize: "12px" }}
+                renderDescription={renderHTMLToReact}
+              />
+            ))}
           </div >
         ) : null;
 

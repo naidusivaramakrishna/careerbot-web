@@ -18,6 +18,7 @@ import {
   Check,
   X,
   ArrowRight,
+  RefreshCw,
   Info,
   ChevronDown,
   ChevronUp,
@@ -787,7 +788,22 @@ export default function NotesPage() {
         <div>
           <h1 className="text-lg font-bold text-gray-900 tracking-tight">Interview Notes</h1>
         </div>
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-60"
+        >
+          <RefreshCw size={12} />
+          Regenerate
+        </button>
       </div>
+
+      {generateError && (
+        <div role="alert" className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 mb-3">
+          <AlertCircle size={12} className="text-gray-400 shrink-0" />
+          {generateError}
+        </div>
+      )}
 
       {unfilledCount > 0 && (
         <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-[#2557a7]/5 border border-[#2557a7]/12 rounded-lg">

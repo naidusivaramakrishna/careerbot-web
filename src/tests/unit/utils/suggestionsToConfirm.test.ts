@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResumeData } from "@/app/(resume)/builder/creation/_context/ResumeContext";
-import { suggestionsToConfirm } from "@/app/(resume)/builder/creation/_utils/suggestionSection";
+import { findSoftSkillSuggestion, suggestionsToConfirm } from "@/app/(resume)/builder/creation/_utils/suggestionSection";
 
 const resumeWith = (personalInfo: Record<string, string>) =>
   ({ personalInfo: { fullname: "Shravya P", email: "s@example.com", ...personalInfo } }) as unknown as ResumeData;
@@ -96,5 +96,70 @@ describe("suggestionsToConfirm — cards a saved section has satisfied", () => {
     });
     // github is targeted but still empty -> skipped; location is satisfied structurally.
     expect(result.map((r) => r.suggestion.id)).toEqual(["contact_issue_0"]);
+  });
+});
+
+describe("soft-skill count cards (soft_skills_low / soft_skills_missing)", () => {
+  const softCard = {
+    id: "soft_skills_low",
+    section: "Skills",
+    message: "Only a few soft skills listed — add at least 3 soft skills (e.g. Communication, Problem Solving, Teamwork) to reach full score.",
+    fix_type: "manual",
+    status: "pending",
+  };
+  const skillsResume = {
+    skills: [],
+    categorizedSkills: {
+      programming_languages: [], frameworks: [], soft_skills: [], project_management: [], marketing_sales: [],
+      custom_categories: [{ id: "c1", name: "Soft Skills", skills: ["Quick Learner", "Teamwork", "Good Communication"] }],
+      hidden_predefined_categories: [], skill_id_map: {},
+    },
+  } as unknown as ResumeData;
+
+  it("is never confirmed with the whole skills list as if it were one soft skill", () => {
+    // /enhance/apply appends `value` as ONE soft skill, so a joined list would be
+    // stored as a single bogus entry. A soft-skill card is confirmed per added chip.
+    const result = suggestionsToConfirm(skillsResume, [softCard], "Skills", {
+      id: "soft_skills_low",
+      initialValue: "Quick Learner, Teamwork",
+    });
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe("findSoftSkillSuggestion — which card a newly added chip confirms", () => {
+  const card = (over: Record<string, unknown>) => ({
+    id: "soft_skills_low", section: "Skills", message: "Only a few soft skills listed", fix_type: "manual", status: "pending", ...over,
+  });
+
+  it("returns the pending soft-skill card when a skill is added to the Soft Skills category", () => {
+    expect(findSoftSkillSuggestion([card({})], "Soft Skills")?.id).toBe("soft_skills_low");
+    expect(findSoftSkillSuggestion([card({ id: "soft_skills_missing", message: "No soft skills found" })], "soft_skills")?.id)
+      .toBe("soft_skills_missing");
+  });
+
+  it("matches a skills_issue_* card only when its message is about soft skills", () => {
+    expect(findSoftSkillSuggestion([card({ id: "skills_issue_2", message: "Add at least 3 soft skills" })], "Soft Skills")?.id)
+      .toBe("skills_issue_2");
+    expect(findSoftSkillSuggestion([card({ id: "skills_issue_2", message: "Add Docker to your skills" })], "Soft Skills"))
+      .toBeUndefined();
+  });
+
+  it("does not treat a category that merely contains 'soft' as the Soft Skills category", () => {
+    expect(findSoftSkillSuggestion([card({})], "Software Tools")).toBeUndefined();
+    expect(findSoftSkillSuggestion([card({})], "Microsoft Office")).toBeUndefined();
+    expect(findSoftSkillSuggestion([card({})], "  soft_skills ")?.id).toBe("soft_skills_low");
+  });
+
+  it("ignores skills added to any other category", () => {
+    expect(findSoftSkillSuggestion([card({})], "Tools")).toBeUndefined();
+    expect(findSoftSkillSuggestion([card({})], "Programming Languages")).toBeUndefined();
+  });
+
+  it("ignores fixed cards, non-manual cards and cards of other sections", () => {
+    expect(findSoftSkillSuggestion([card({ status: "fixed" })], "Soft Skills")).toBeUndefined();
+    expect(findSoftSkillSuggestion([card({ fix_type: "auto" })], "Soft Skills")).toBeUndefined();
+    expect(findSoftSkillSuggestion([card({ section: "Summary" })], "Soft Skills")).toBeUndefined();
   });
 });

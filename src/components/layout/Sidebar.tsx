@@ -304,7 +304,7 @@ export default function Sidebar() {
         }
       }
     }
-    if (pathname.startsWith("/prep"))                                          return "interview_notes";
+    if (pathname === "/prep" || pathname.startsWith("/prep/"))                  return "interview_notes";
     if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
     if (pathname.startsWith("/communication"))                                  return "comm_assess";
     if (pathname.startsWith("/mock-test"))                                      return "mock_test";
