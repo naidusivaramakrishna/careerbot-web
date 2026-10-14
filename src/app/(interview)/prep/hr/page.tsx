@@ -57,7 +57,7 @@ export default function HRPage() {
     try {
       const data = await generateHrQuestions(10);
       sessionStorage.setItem(HR_QUESTIONS_KEY, JSON.stringify(data));
-      router.push("/notes/hr/practice");
+      router.push("/prep/hr/practice");
     } catch {
       setError("Could not prepare HR questions. Check your connection and try again.");
     } finally {

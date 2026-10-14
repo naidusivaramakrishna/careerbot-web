@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -19,9 +19,9 @@ import {
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
 import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
 import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
-import { submitPracticeAnswer, getNotes, MrTrQuestion, GenerateMrTrQuestionsResponse, SubmitAnswerResponse } from "@/api/interviewPrepApi";
+import { submitPracticeAnswer, getNotes, SubmitAnswerResponse, HrQuestion, GenerateHrQuestionsResponse } from "@/api/interviewPrepApi";
 
-const MANAGERIAL_QUESTIONS_KEY = "managerial_generated_questions";
+const HR_QUESTIONS_KEY = "hr_generated_questions";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 
 // ─── Note-matching helpers ────────────────────────────────────────────────────
@@ -96,10 +96,10 @@ type Question = {
   keywords: string[];
 };
 
-// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Session persistence ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+// ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Session persistence ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
 
-const STORAGE_KEY = "practice_session_v1";
-const SESSION_TTL_MS = 14400 * 1000; // 4h ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â matches PRACTICE_SESSION_TTL on backend
+const STORAGE_KEY = "hr_practice_session_v1";
+const SESSION_TTL_MS = 14400 * 1000; // 4h ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â matches PRACTICE_SESSION_TTL on backend
 
 type SavedSession = {
   roundNumber: number;
@@ -142,7 +142,7 @@ function clearSession(userId?: string | null) {
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
-function ManagerialPracticeContent() {
+function HRPracticeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setPracticeAnswered, setPracticeTotal, userId } = useMockInterview();
@@ -170,42 +170,42 @@ function ManagerialPracticeContent() {
     errorDismissRef.current = setTimeout(() => setSubmitError(null), 5000);
   }, []);
 
+  // Persist progress to localStorage
   useEffect(() => {
     if (questions.length === 0 || skipSaveRef.current) return;
     saveSession({ roundNumber, sessionId: sessionId ?? undefined, questions, currentIndex, answeredMap, notesMap, userId: userId ?? undefined });
   }, [sessionId, questions, currentIndex, answeredMap, notesMap, roundNumber, userId]);
 
+  // Load session on mount / round change
   useEffect(() => {
     setCurrentAnswer(null);
     skipSaveRef.current = false;
 
-    // Fresh data from the managerial info page always takes priority — it carries
-    // the session_id that must match the question_ids sent to the answer endpoint.
-    let stored: GenerateMrTrQuestionsResponse | null = null;
+    // Fresh data from the HR info page always takes priority — it carries the
+    // session_id that must match the question_ids sent to the answer endpoint.
+    let stored: GenerateHrQuestionsResponse | null = null;
     try {
-      const raw = sessionStorage.getItem(MANAGERIAL_QUESTIONS_KEY);
+      const raw = sessionStorage.getItem(HR_QUESTIONS_KEY);
       if (raw) {
-        stored = JSON.parse(raw) as GenerateMrTrQuestionsResponse;
-        sessionStorage.removeItem(MANAGERIAL_QUESTIONS_KEY);
+        stored = JSON.parse(raw) as GenerateHrQuestionsResponse;
+        sessionStorage.removeItem(HR_QUESTIONS_KEY);
       }
     } catch {}
-
-    const mapPregen = (qs: MrTrQuestion[]): Question[] =>
-      qs.map((q, i) => ({
-        question_id: q.id,
-        question_text: q.text,
-        order: i + 1,
-        difficulty: "intermediate",
-        why_asked: q.category || "Practice question",
-        expected_duration_s: q.time_limit_s,
-        note_script: "",
-        keywords: q.key_points,
-      }));
 
     if (stored && stored.questions.length > 0) {
       setSessionId(stored.session_id);
 
-      const mappedQuestions = mapPregen(stored.questions);
+      const mappedQuestions: Question[] = stored.questions.map((q: HrQuestion, i: number) => ({
+        question_id: q.id,
+        question_text: q.text,
+        order: i + 1,
+        difficulty: "intermediate",
+        why_asked: q.category || "HR interview question",
+        expected_duration_s: q.time_limit_s,
+        note_script: "",
+        keywords: q.key_points.length > 0 ? q.key_points : ["motivation", "fit", "example"],
+      }));
+
       setQuestions(mappedQuestions);
       setPracticeTotal(mappedQuestions.length);
       setCurrentIndex(0);
@@ -250,9 +250,11 @@ function ManagerialPracticeContent() {
       return;
     }
 
-    setSessionError("No questions found. Please go back and start managerial practice again.");
+    setSessionError("No questions found. Please go back and start HR practice again.");
     setSessionLoading(false);
   }, [roundNumber, setPracticeTotal, questionsRemaining, userId]);
+
+  // Elapsed timer
 
   const question = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -343,7 +345,7 @@ function ManagerialPracticeContent() {
 
   const handleTryAgain = () => setCurrentAnswer(null);
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Loading ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Loading ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   if (sessionLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -366,7 +368,7 @@ function ManagerialPracticeContent() {
           <h2 className="text-base font-bold text-gray-900 mb-2">Could Not Load Questions</h2>
           <p className="text-sm text-gray-500 mb-4">{sessionError}</p>
           <button
-            onClick={() => router.push("/notes/managerial")}
+            onClick={() => router.push("/prep/hr")}
             className="px-5 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] transition-all"
           >
             Go Back
@@ -387,17 +389,18 @@ function ManagerialPracticeContent() {
     );
   }
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Main UI ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Main UI ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   return (
     <main className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
 
       <button
-        onClick={() => router.push("/notes/managerial")}
+        onClick={() => router.push("/prep/hr")}
         className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-500 shadow-sm transition-colors hover:text-gray-800"
       >
         <ChevronLeft size={14} /> Back
       </button>
 
+      {/* Submit error */}
       {submitError && (
         <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
           <div className="flex items-start gap-2.5">
@@ -408,11 +411,14 @@ function ManagerialPracticeContent() {
         </div>
       )}
 
+      {/* Long answer warning */}
+
+      {/* Header: title + question circles */}
       <section className="mb-4 rounded-xl border border-gray-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-black text-gray-950">Managerial Practice</h1>
-          <p className="mt-0.5 text-[11px] font-medium text-gray-500">Practice leadership answers with less guidance each round.</p>
+          <h1 className="text-lg font-black text-gray-950">HR Practice</h1>
+          <p className="mt-0.5 text-[11px] font-medium text-gray-500">Practice warm, specific answers for fit and recruiter screens.</p>
         </div>
 
         <div className="flex max-w-full items-center gap-2 overflow-x-auto py-1">
@@ -435,6 +441,7 @@ function ManagerialPracticeContent() {
         </div>
       </div>
 
+      {/* Progress bar */}
       <div className="mt-3">
         <div className="flex justify-between text-xs text-gray-500 mb-1">
           <span>Question {currentIndex + 1} of {questions.length}</span>
@@ -454,10 +461,13 @@ function ManagerialPracticeContent() {
       </div>
       </section>
 
+      {/* Two-column layout */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
 
+        {/* Left column */}
         <div className="space-y-3">
 
+          {/* Question card */}
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
             <div className="h-1 bg-[#2557a7]" />
             <div className="px-4 pt-3 pb-2.5 border-b border-gray-100">
@@ -489,6 +499,7 @@ function ManagerialPracticeContent() {
             </div>
           </div>
 
+          {/* Recorder */}
           {!currentAnswer && !isSubmitting && (
             <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
               <div className="flex items-center gap-2 mb-2.5">
@@ -502,6 +513,7 @@ function ManagerialPracticeContent() {
             </div>
           )}
 
+          {/* Submitting */}
           {isSubmitting && (
             <div className="rounded-xl border border-gray-200 bg-white p-8 flex flex-col items-center gap-3 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
               <Loader2 size={32} className="text-[#2557a7] animate-spin" />
@@ -510,6 +522,7 @@ function ManagerialPracticeContent() {
             </div>
           )}
 
+          {/* Transcript */}
           {currentAnswer && (
             <TranscriptDisplay
               transcript={currentAnswer.transcript}
@@ -519,6 +532,7 @@ function ManagerialPracticeContent() {
             />
           )}
 
+          {/* Navigation buttons */}
           {currentAnswer && (
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
@@ -538,7 +552,6 @@ function ManagerialPracticeContent() {
           )}
 
         </div>
-
         <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {currentAnswer && (
             <FeedbackCard
@@ -562,68 +575,72 @@ function ManagerialPracticeContent() {
               answerId={currentAnswer.answerId}
             />
           )}
-          <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
-            showNotes
-              ? roundNumber === 1
-                ? "border-[#2557a7]/20 bg-[#2557a7]/5"
-                : "border-gray-200 bg-gray-50"
-              : "border-gray-200 bg-gray-50"
-          }`}>
-            <button
-              type="button"
-              aria-expanded={showNotes}
-              onClick={() => setShowNotes((s) => !s)}
-              className="w-full flex items-center justify-between px-3 py-2.5"
-            >
-              <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
-                {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
-                {roundNumber === 1 ? "Your Notes" : "Keywords only"}
-              </div>
-              {showNotes
-                ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
-                : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
-            </button>
-            {showNotes && (
-              <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
-                {roundNumber === 1 ? (
-                  (question.note_script || notesMap[question.question_id]) ? (
-                    <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
-                      {question.note_script || notesMap[question.question_id]}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">
-                      No answer script found for this question. Go to the Notes page to generate your prepared scripts.
-                    </p>
-                  )
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {question.keywords.map((kw) => (
-                      <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
-                        {kw}
-                      </span>
-                    ))}
+          {!currentAnswer && (
+            <>
+              <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
+                showNotes
+                  ? roundNumber === 1
+                    ? "border-[#2557a7]/20 bg-[#2557a7]/5"
+                    : "border-gray-200 bg-gray-50"
+                  : "border-gray-200 bg-gray-50"
+              }`}>
+                <button
+                  type="button"
+                  aria-expanded={showNotes}
+                  onClick={() => setShowNotes((s) => !s)}
+                  className="w-full flex items-center justify-between px-3 py-2.5"
+                >
+                  <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
+                    {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
+                    {roundNumber === 1 ? "Your Notes" : "Keywords only"}
+                  </div>
+                  {showNotes
+                    ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
+                    : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
+                </button>
+                {showNotes && (
+                  <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
+                    {roundNumber === 1 ? (
+                      (question.note_script || notesMap[question.question_id]) ? (
+                        <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
+                          {question.note_script || notesMap[question.question_id]}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          No answer script found for this question. Go to the Notes page to generate your prepared scripts.
+                        </p>
+                      )
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(question.keywords.length ? question.keywords : ["motivation", "fit", "example"]).map((kw) => (
+                          <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-            <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
-              <Mic size={24} className="text-[#2557a7]" />
-            </div>
-            <p className="text-sm font-black text-gray-800">AI Feedback</p>
-            <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
-              Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
-            </p>
-          </div>
+              <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+                <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+                  <Mic size={24} className="text-[#2557a7]" />
+                </div>
+                <p className="text-sm font-black text-gray-800">AI Feedback</p>
+                <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+                  Record your answer to unlock tone, clarity, structure, and confidence feedback.
+                </p>
+              </div>
+            </>
+          )}
         </aside>
 
       </div>
 
       <div className="mt-6 text-center">
         <button
-          onClick={() => router.push("/notes/english")}
+          onClick={() => router.push("/prep/english")}
           className="text-xs text-[#2557a7] hover:text-[#1e4a8f] underline-offset-2 hover:underline"
         >
           Need help? Review English phrases
@@ -634,10 +651,10 @@ function ManagerialPracticeContent() {
   );
 }
 
-export default function ManagerialPracticePage() {
+export default function HRPracticePage() {
   return (
     <Suspense>
-      <ManagerialPracticeContent />
+      <HRPracticeContent />
     </Suspense>
   );
 }

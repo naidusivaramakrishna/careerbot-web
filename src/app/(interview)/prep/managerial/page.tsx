@@ -67,7 +67,7 @@ export default function ManagerialPage() {
         question_bank_gaps: [],
       });
       sessionStorage.setItem(MANAGERIAL_QUESTIONS_KEY, JSON.stringify(data));
-      router.push("/notes/managerial/practice");
+      router.push("/prep/managerial/practice");
     } catch {
       setError("Could not prepare managerial questions. Check your connection and try again.");
     } finally {

@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 
 export default function NotesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLandingPage = pathname === "/notes";
+  const isLandingPage = pathname === "/prep";
 
   return (
     <DashboardProvider>

@@ -137,7 +137,7 @@ const NAV_GROUPS: {
     label: "GENERATE",
     items: [
       { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history" },
-      { id: "interview_notes", label: "Interview Notes", icon: IcoNotes, path: "/notes/generate" },
+      { id: "interview_notes", label: "Interview Notes", icon: IcoNotes, path: "/prep/notes" },
     ],
   },
   {
@@ -167,7 +167,7 @@ const COLLEGE_NAV_GROUP: (typeof NAV_GROUPS)[number] = {
   ],
 };
 
-const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/notes"];
+const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/prep"];
 
 /* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
    cursor can cross the gap between icon and panel without it disappearing. */
@@ -304,7 +304,7 @@ export default function Sidebar() {
         }
       }
     }
-    if (pathname.startsWith("/notes"))                                          return "interview_notes";
+    if (pathname === "/prep" || pathname.startsWith("/prep/"))                  return "interview_notes";
     if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
     if (pathname.startsWith("/communication"))                                  return "comm_assess";
     if (pathname.startsWith("/mock-test"))                                      return "mock_test";

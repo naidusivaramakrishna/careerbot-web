@@ -69,7 +69,7 @@ export default function TechnicalPage() {
         question_bank_gaps: [],
       });
       sessionStorage.setItem(TECH_QUESTIONS_KEY, JSON.stringify(data));
-      router.push("/notes/technical/practice");
+      router.push("/prep/technical/practice");
     } catch {
       setError("Could not prepare technical questions. Check your connection and try again.");
     } finally {
