@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockHttpClient = vi.hoisted(() => ({
   post: vi.fn(),
+  patch: vi.fn(),
   delete: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ import {
   addSkillToCategory,
   deleteSkillById,
   deleteSkillCategory,
+  renameSkillCategory,
 } from "@/api/resumeApi";
 
 describe("builder skill category paths", () => {
@@ -39,5 +41,27 @@ describe("builder skill category paths", () => {
       2,
       "/resumes/resume-1/skills/categories/CI/CD%20%26%20Delivery",
     );
+  });
+});
+
+describe("builder skill category rename", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("PATCHes the encoded category path with new_name", async () => {
+    mockHttpClient.patch.mockResolvedValueOnce({ data: { success: true } });
+
+    await renameSkillCategory("resume-1", "CI/CD & Delivery", "Release Tooling");
+
+    expect(mockHttpClient.patch).toHaveBeenCalledWith(
+      "/resumes/resume-1/skills/CI/CD%20%26%20Delivery/rename",
+      { new_name: "Release Tooling" },
+    );
+  });
+
+  it("rethrows so the editor can revert the name", async () => {
+    mockHttpClient.patch.mockRejectedValueOnce(new Error("409"));
+    await expect(renameSkillCategory("resume-1", "A Tools", "B Tools")).rejects.toThrow("409");
   });
 });

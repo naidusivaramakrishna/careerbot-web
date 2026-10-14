@@ -13,28 +13,38 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/api/enhancerApi", () => ({ enhanceResume: vi.fn(), getEnhancedResume: vi.fn() }));
 vi.mock("@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide", () => ({
-  default: ({ tabRequest }: { tabRequest?: { tab: string; id: number } }) => (
-    <div data-testid="resume-side" data-requested-tab={tabRequest?.tab ?? ""} data-request-id={tabRequest?.id ?? ""} />
+  default: ({ tabRequest, atsFixMode }: { tabRequest?: { tab: string; id: number }; atsFixMode?: boolean }) => (
+    <div
+      data-testid="resume-side"
+      data-requested-tab={tabRequest?.tab ?? ""}
+      data-request-id={tabRequest?.id ?? ""}
+      data-ats-fix-mode={atsFixMode ? "true" : "false"}
+    />
   ),
 }));
 // Mirrors the real toolbar: PreviewPanel.tsx handleResumeScoreClick and the Templates / Job Match buttons.
+// ATS Scan passes hideJobMatch, so — like the real toolbar — the Job Match
+// button simply is not rendered; it is not just inert.
 vi.mock("@/app/(resume)/builder/creation/_components/PreviewPanel", () => ({
-  default: ({ onTabClick, onOpenSidebar }: { onTabClick: (tab: string) => void; onOpenSidebar?: (tab: string) => void }) => (
+  default: ({ onTabClick, onOpenSidebar, hideJobMatch }: { onTabClick: (tab: string) => void; onOpenSidebar?: (tab: string) => void; hideJobMatch?: boolean }) => (
     <div data-testid="preview-panel">
       <button onClick={() => { onOpenSidebar?.("Score"); onTabClick("Score"); }}>Toolbar Score</button>
       <button onClick={() => onTabClick("Templates")}>Toolbar Templates</button>
-      <button onClick={() => onTabClick("Job Match")}>Toolbar Job Match</button>
+      {!hideJobMatch && <button onClick={() => onTabClick("Job Match")}>Toolbar Job Match</button>}
     </div>
   ),
 }));
 vi.mock("@/app/(resume)/builder/creation/_components/templates/TemplatesTab", () => ({
   default: () => <div data-testid="templates-tab" />,
 }));
-vi.mock("@/app/(resume)/builder/creation/_components/job/JobMatchTab", () => ({
-  default: () => <div data-testid="job-match-tab" />,
-}));
+const clearStored = vi.hoisted(() => vi.fn());
 vi.mock("@/app/(resume)/builder/creation/_context/ResumeContext", () => ({
+  useResume: () => ({ enhancedAtsScore: null, enhancedSuggestions: [{ id: "a", status: "pending", fix_type: "auto" }] }),
   ResumeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage", () => ({
+  clearStoredFixedSuggestions: clearStored,
+  clearStoredFixedText: vi.fn(),
 }));
 vi.mock("@/app/(resume)/builder/creation/_context/ScoreContext", () => ({
   ScoreProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -66,6 +76,7 @@ describe("ATS report workspace setup", () => {
     vi.mocked(window.localStorage.setItem).mockClear();
     vi.mocked(enhanceResume).mockReset();
     vi.mocked(getEnhancedResume).mockReset();
+    clearStored.mockClear();
   });
   afterEach(() => {
     vi.mocked(window.localStorage.setItem).mockImplementation(realLocalSetItem);
@@ -197,14 +208,31 @@ describe("ATS report workspace setup", () => {
       expect(screen.getByTestId("resume-side").getAttribute("data-request-id")).not.toBe(firstId);
     });
 
-    it("Job Match opens the job match panel", async () => {
+    it("does not offer Job Match — ATS Scan is a report-only, score-fix workspace", async () => {
       await renderWorkspace();
 
-      fireEvent.click(screen.getByText("Toolbar Job Match"));
+      expect(screen.queryByText("Toolbar Job Match")).toBeNull();
+      expect(screen.queryByTestId("job-match-tab")).toBeNull();
+    });
 
-      expect(screen.getByRole("dialog", { name: "Job Match" })).toBeTruthy();
-      expect(screen.getByTestId("job-match-tab")).toBeTruthy();
-      expect(screen.queryByTestId("templates-tab")).toBeNull();
+    it("puts the ATS sidebar in atsFixMode, so it shows Score only, never the section editor", async () => {
+      await renderWorkspace();
+
+      expect(screen.getByTestId("resume-side").getAttribute("data-ats-fix-mode")).toBe("true");
+    });
+
+    it("small-screen fix drawer is collapsed by default and toggles accessibly", async () => {
+      await renderWorkspace();
+      const toggle = screen.getByRole("button", { name: /ATS fixes/ });
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(toggle.textContent).toContain("1 left");
+
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(document.getElementById("ats-fix-panel")?.className).toContain("max-h-[60vh]");
+
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
     });
 
     it("Templates still opens the templates panel", async () => {
@@ -215,5 +243,164 @@ describe("ATS report workspace setup", () => {
       expect(screen.getByRole("dialog", { name: "Resume templates" })).toBeTruthy();
       expect(screen.getByTestId("templates-tab")).toBeTruthy();
     });
+  });
+
+  it("tells the user when the scanned file already has applied fixes", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume).mockResolvedValueOnce({
+      success: true,
+      enhanced_resume_id: "enh-1",
+      enhanced_resume: { contact: { name: "Avery" } },
+      applied_fixes: [{ suggestion_id: "a" }, { suggestion_id: "b" }],
+    } as never);
+
+    render(<ATSLoginReportPage />);
+
+    const banner = await screen.findByTestId("prior-fixes-dialog");
+    expect(banner.textContent).toContain("2 fixes applied");
+    fireEvent.click(screen.getByText("Continue with my changes"));
+    expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+    expect(enhanceResume).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no banner for a record with no applied fixes", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume).mockResolvedValueOnce({
+      success: true, enhanced_resume_id: "enh-1", enhanced_resume: {}, applied_fixes: [],
+    } as never);
+
+    render(<ATSLoginReportPage />);
+
+    await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+    expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+  });
+
+  it("scans the original again only after the user confirms, then clears the banner", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {},
+        applied_fixes: [{ suggestion_id: "a" }],
+      } as never)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-2", enhanced_resume: {}, applied_fixes: [],
+      } as never);
+
+    render(<ATSLoginReportPage />);
+    await screen.findByTestId("prior-fixes-dialog");
+
+    fireEvent.click(screen.getByText("Start with fresh data"));
+    expect(enhanceResume).toHaveBeenCalledTimes(1);          // nothing sent before confirming
+    expect(screen.getByTestId("prior-fixes-dialog").textContent).toContain("discards the 1 fix");
+
+    fireEvent.click(screen.getByText("Yes, start fresh"));
+    await waitFor(() => expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull());
+    expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", force_refresh: true });
+    // The fresh record reuses the old ID: what this browser kept for it (green
+    // cards, highlights) must be forgotten or the new workspace shows old fixes.
+    expect(clearStored).toHaveBeenCalledWith("enh-2");
+    expect(clearStored).toHaveBeenCalledWith("enh-1");
+  });
+
+  it("keeps the saved fixes when the user cancels the rescan", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume).mockResolvedValueOnce({
+      success: true, enhanced_resume_id: "enh-1", enhanced_resume: {}, applied_fixes: [{ suggestion_id: "a" }],
+    } as never);
+
+    render(<ATSLoginReportPage />);
+    await screen.findByTestId("prior-fixes-dialog");
+    fireEvent.click(screen.getByText("Start with fresh data"));
+    fireEvent.click(screen.getByText("Cancel"));
+
+    expect(screen.getByTestId("prior-fixes-dialog").textContent).toContain("1 fix applied");
+    expect(enhanceResume).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the banner when the report already names its saved record (a re-scan of a known file)", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-1" })));
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      id: "enh-1", original_resume_id: "src-1", enhanced_data: {},
+      applied_fixes: [{ suggestion_id: "a" }, { suggestion_id: "b" }],
+    } as never);
+
+    render(<ATSLoginReportPage />);
+
+    const banner = await screen.findByTestId("prior-fixes-dialog");
+    expect(banner.textContent).toContain("2 fixes applied");
+    expect(enhanceResume).not.toHaveBeenCalled();           // no credit-charging scan just to show a note
+  });
+
+  it("shows no banner and still opens the workspace when the saved record cannot be read", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-1" })));
+    vi.mocked(getEnhancedResume).mockRejectedValue(new Error("offline"));
+
+    render(<ATSLoginReportPage />);
+
+    await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+    expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+  });
+
+  it("scans again when the saved record the report names is gone (stale after a re-parse)", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-old" })));
+    const notFound = Object.assign(new Error("not found"), { __raw: { detail: { error: "enhanced_resume_not_found" } } });
+    vi.mocked(getEnhancedResume).mockRejectedValue(notFound);
+    vi.mocked(enhanceResume).mockResolvedValueOnce({
+      success: true, enhanced_resume_id: "enh-new", enhanced_resume: { contact: { name: "Avery" } }, applied_fixes: [],
+    } as never);
+
+    render(<ATSLoginReportPage />);
+
+    await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+    expect(enhanceResume).toHaveBeenCalledTimes(1);
+    expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1" });
+    expect(screen.queryByText("Could not prepare ATS fixes")).toBeNull();
+  });
+
+  it("asks again, like the upload dialog, when the service keeps the saved fixes on a fresh scan", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {}, applied_fixes: [{ suggestion_id: "a" }],
+      } as never)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {},
+        applied_fixes: [{ suggestion_id: "a" }, { suggestion_id: "b" }],
+      } as never);
+
+    render(<ATSLoginReportPage />);
+    await screen.findByTestId("prior-fixes-dialog");
+    fireEvent.click(screen.getByText("Start with fresh data"));
+    fireEvent.click(screen.getByText("Yes, start fresh"));
+
+    await waitFor(() => expect(enhanceResume).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("Yes, start fresh")).not.toBeDisabled());
+    expect(screen.queryByText("Could not prepare ATS fixes")).toBeNull();
+    expect(screen.getByTestId("prior-fixes-dialog").textContent).toContain("discards the 2 fixes");
+    expect(screen.getByTestId("resume-side")).toBeTruthy();
+    expect(clearStored).not.toHaveBeenCalled(); // the fixes are still saved: keep the browser's copy
+
+    fireEvent.click(screen.getByText("Cancel"));
+    fireEvent.click(screen.getByText("Continue with my changes"));
+    expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+  });
+
+  it("ties the fresh scan to the same ATS breakdown the first scan used", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ ats_breakdown_id: "bd-9" })));
+    vi.mocked(enhanceResume)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {}, applied_fixes: [{ suggestion_id: "a" }],
+      } as never)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-2", enhanced_resume: {}, applied_fixes: [],
+      } as never);
+
+    render(<ATSLoginReportPage />);
+    await screen.findByTestId("prior-fixes-dialog");
+    fireEvent.click(screen.getByText("Start with fresh data"));
+    fireEvent.click(screen.getByText("Yes, start fresh"));
+
+    await waitFor(() => expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull());
+    expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", force_refresh: true, ats_breakdown: "bd-9" });
   });
 });

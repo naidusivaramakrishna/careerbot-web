@@ -156,4 +156,61 @@ describe("PreviewPanel — server preview trigger keyed on resumeSavedVersion (P
 
     expect(mockedGetPreview).toHaveBeenCalledTimes(2);
   });
+
+  describe("sections that hold nothing (they render nothing)", () => {
+    const withTalks = (talks: unknown[]) =>
+      ({ ...(baseResumeData as object), conferencePresentations: talks }) as never;
+    const order = ["Personal Info", "Conference Presentations"];
+    const advance = async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+    };
+
+    it("does not re-fetch when the user types the first entry into an empty section", async () => {
+      mockContext({ sectionOrder: order, resumeData: withTalks([]) });
+      const { rerender } = render(panel());
+      await settleInitialPreview();
+      expect(mockedGetPreview).toHaveBeenCalledTimes(1);
+
+      // A draft reaches resumeData before anything is saved.
+      mockContext({ sectionOrder: order, resumeData: withTalks([{ title: "Edge AI" }]) });
+      rerender(panel());
+      await advance();
+
+      expect(mockedGetPreview).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-fetch when an empty section is removed from the order", async () => {
+      mockContext({ sectionOrder: order, resumeData: withTalks([]) });
+      const { rerender } = render(panel());
+      await settleInitialPreview();
+
+      mockContext({ sectionOrder: ["Personal Info"], resumeData: withTalks([]) });
+      rerender(panel());
+      await advance();
+
+      expect(mockedGetPreview).toHaveBeenCalledTimes(1);
+    });
+
+    it("re-fetches when a section whose content was saved moves in the order", async () => {
+      mockContext({ sectionOrder: order, resumeData: withTalks([]) });
+      const { rerender } = render(panel());
+      await settleInitialPreview();
+      mockContext({ sectionOrder: order, resumeData: withTalks([{ title: "Edge AI" }]), resumeSavedVersion: 1 });
+      rerender(panel());
+      await advance();
+      expect(mockedGetPreview).toHaveBeenCalledTimes(2);
+
+      mockContext({
+        sectionOrder: [...order].reverse(),
+        resumeData: withTalks([{ title: "Edge AI" }]),
+        resumeSavedVersion: 1,
+      });
+      rerender(panel());
+      await advance();
+
+      expect(mockedGetPreview).toHaveBeenCalledTimes(3);
+    });
+  });
 });

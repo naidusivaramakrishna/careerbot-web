@@ -112,14 +112,20 @@ export interface PaymentHistoryResponse {
 
 // ─── Coupon ───────────────────────────────────────────────────────────────────
 
+// Mirrors careerbot-api CouponValidationResult.to_dict()
+// (app/services/payment_service/coupon_service.py). Field names are the
+// backend's: `final_amount` / `code` — NOT final_amount_inr / coupon_code.
+// Amounts are rupees. On is_valid=false, discount_type is "" and the amounts
+// equal the requested amount.
 export interface CouponValidationResponse {
   is_valid: boolean;
-  message: string;
+  code: string;
+  original_amount: number;
   discount_amount: number;
+  final_amount: number;
   discount_type: string;
   discount_value: number;
-  final_amount_inr: number;
-  coupon_code: string;
+  message: string;
 }
 
 // ─── Subscription ─────────────────────────────────────────────────────────────
@@ -219,14 +225,20 @@ export const getPaymentHistory = async (
   return response.data;
 };
 
-// Validate coupon BEFORE creating order (does not redeem)
+// Validate coupon BEFORE creating order (does not redeem).
+// With plan_id + billing_cycle the backend prices the plan from its own catalog
+// and ignores amount_inr; original_amount / final_amount in the response are
+// server-computed. amount_inr is still sent so an older backend (which requires
+// it and ignores billing_cycle) keeps working during a rolling deploy.
 export const validateCoupon = async (
   code: string,
   amount_inr: number,
-  plan_id?: string
+  plan_id?: string,
+  billing_cycle?: "monthly" | "yearly"
 ): Promise<CouponValidationResponse> => {
   const params = new URLSearchParams({ code, amount_inr: String(amount_inr) });
   if (plan_id) params.set("plan_id", plan_id);
+  if (billing_cycle) params.set("billing_cycle", billing_cycle);
 
   const response = await httpClient.post<CouponValidationResponse>(
     `/api/v1/payments/validate-coupon?${params.toString()}`,

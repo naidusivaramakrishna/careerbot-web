@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+import { PageHeading } from "../_components/MockUI";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOCK_INTERVIEWERS, pickRandomInterviewerIndex } from "../_lib/interviewers";
@@ -162,129 +164,25 @@ function DeviceSelect({
 }
 
 function InfoScreen({ onContinue }: { onContinue: () => void }) {
-  const flow = [
-    { title: "Question", copy: "The interviewer asks one focused prompt at a time.", Icon: MessageSquareText },
-    { title: "Answer", copy: "Respond naturally while mic and camera stay locked on.", Icon: UserRound },
-    { title: "Report", copy: "Your transcript, timing, and scoring become the final report.", Icon: ShieldCheck },
-  ];
-
-  const expectations = [
-    "Use specific examples with context, action, and result.",
-    "Finish your thought before pressing Done Speaking.",
-    "Stay on this tab until the session completes or the report opens.",
-    "Keep a stable connection — if it drops, the session ends and a report is built from the answers captured so far.",
-  ];
-
   return (
-    <main className="min-h-screen px-4 py-6 text-gray-950 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-5 flex flex-col gap-4 rounded-lg border border-gray-200 bg-white px-6 py-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7] text-white">
-                <Radio size={18} />
-              </span>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Mock Interview</p>
-                <h1 className="text-2xl font-semibold tracking-tight text-gray-950">Room setup workflow</h1>
-              </div>
-            </div>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-gray-600">
-              Review the live AI interview flow, session format, and candidate instructions before continuing to device checks.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onContinue}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f]"
-          >
-            Continue to room check <ArrowRight size={15} />
-          </button>
+    <main className="mi-page mi-setup-home">
+      <div className="mi-intro-grid">
+        <div className="mi-intro-copy">
+          <span className="mi-pill"><Radio size={15} /> YOUR INTERVIEW STUDIO</span>
+          <h1>Get ready for your next interview</h1>
+          <p className="mi-description">A focused conversation. A fresh perspective. Practise how you tell your story, with an AI interviewer who guides you through every question.</p>
+          <div className="mi-actions"><button type="button" className="mi-button" onClick={onContinue}>Continue to room check <ArrowRight size={18} /></button></div>
+          <div className="mi-intro-details"><span><Mic size={17} /> Voice-led interview</span><span><FileText size={17} /> Personalised report</span></div>
         </div>
-
-        <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="grid border-b border-gray-200 lg:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)]">
-            <div className="p-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Session plan</p>
-              <h2 className="mt-1 text-lg font-semibold text-gray-950">Live AI voice panel</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
-                The room opens a guided AI interview, confirms device readiness, and produces a transcript with the final report after completion.
-              </p>
-            </div>
-
-            <div className="grid border-t border-gray-200 sm:grid-cols-3 lg:border-l lg:border-t-0">
-              <div className="border-b border-gray-200 p-5 sm:border-b-0 sm:border-r">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
-                    <Radio size={18} />
-                  </span>
-                </div>
-                <p className="mt-4 text-sm font-semibold text-gray-950">Voice interview</p>
-                <p className="mt-1 text-xs leading-5 text-gray-600">AI interviewer joins after setup.</p>
-              </div>
-
-              <div className="border-b border-gray-200 p-5 sm:border-b-0 sm:border-r">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
-                    <Mic size={18} />
-                  </span>
-                </div>
-                <p className="mt-4 text-sm font-semibold text-gray-950">Device check</p>
-                <p className="mt-1 text-xs leading-5 text-gray-600">Mic, camera, speaker, and network.</p>
-              </div>
-
-              <div className="p-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
-                    <FileText size={18} />
-                  </span>
-                </div>
-                <p className="mt-4 text-sm font-semibold text-gray-950">Transcript + report</p>
-                <p className="mt-1 text-xs leading-5 text-gray-600">Generated when the interview ends.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="p-6">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Interview flow</p>
-                  <h2 className="mt-1 text-lg font-semibold text-gray-950">What happens inside the room</h2>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-lg border border-gray-200">
-                {flow.map(({ title, copy, Icon }, index) => (
-                  <div key={title} className="grid gap-4 border-b border-gray-100 px-4 py-4 last:border-b-0 sm:grid-cols-[44px_140px_minmax(0,1fr)] sm:items-center">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#2557a7]/5 text-[#2557a7]">
-                      <Icon size={16} />
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Step {index + 1}</p>
-                      <p className="text-sm font-semibold text-gray-950">{title}</p>
-                    </div>
-                    <p className="text-sm leading-6 text-gray-600">{copy}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <aside className="border-t border-gray-200 bg-gray-50 p-6 lg:border-l lg:border-t-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Candidate instructions</p>
-              <h2 className="mt-1 text-lg font-semibold text-gray-950">How to perform well</h2>
-              <div className="mt-5 space-y-3">
-                {expectations.map((item) => (
-                  <div key={item} className="flex gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm leading-5 text-gray-700">
-                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#2557a7]" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </aside>
-          </div>
-        </section>
+        <div className="mi-interviewer-card"><div className="mi-interviewer-photo"><Image src={MOCK_INTERVIEWERS[0].src} alt="Ananya, your AI interviewer" fill priority sizes="(min-width: 1024px) 400px, 90vw" /></div><div className="mi-interviewer-caption"><div><p className="mi-eyebrow">MEET YOUR INTERVIEWER</p><h2>Ananya</h2><p>A conversation built around your experience.</p></div><span className="mi-icon-tile"><MessageSquareText size={23} /></span></div></div>
       </div>
+      <section className="mi-panel mi-journey"><div className="mi-section-heading"><div><p className="mi-eyebrow">WHAT TO EXPECT</p><h2>Your path through the interview</h2></div><p>A few simple steps to make your practice count.</p></div><div className="mi-journey-grid">{[
+        { Icon: ShieldCheck, title: "Check your room", copy: "Test your devices and find a quiet space." },
+        { Icon: UserRound, title: "Make it yours", copy: "Choose your role, interview type, and optional resume." },
+        { Icon: MessageSquareText, title: "Have the conversation", copy: "Listen to each question, respond naturally, then pause." },
+        { Icon: FileText, title: "Find your next step", copy: "Review your transcript, scores, and feedback." },
+      ].map(({ Icon, title, copy }, index) => <article key={title}><span className="mi-icon-tile"><Icon size={23} /></span><small>0{index + 1}</small><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
+      <section className="mi-next-action"><span className="mi-icon-tile"><ShieldCheck size={24} /></span><div><strong>A little care makes a better conversation.</strong><p>Use specific examples, finish your thought before pausing, and stay on this tab until your interview ends. Keep a stable connection — if it drops, the session ends and a report is built from the answers captured so far. Your voice is transcribed for scoring.</p></div></section>
     </main>
   );
 }
@@ -405,138 +303,20 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
 
   const canContinue = micState === "ok" && camState === "ok" && speakerState === "ok" && quietConfirmed && network.state !== "offline";
 
+  const readyCount = [micState === "ok", camState === "ok", speakerState === "ok", network.state === "ok" || network.state === "warning"].filter(Boolean).length;
   return (
-    <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Room check</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950">Set up your interview room</h1>
-        <p className="mt-3 text-sm leading-6 text-gray-600">
-          Verify every live-interview dependency before the AI interviewer joins.
-        </p>
-        <div className="mt-6 rounded-lg border border-gray-200">
-          {[
-            ["Microphone", micState],
-            ["Camera", camState],
-            ["Speaker", speakerState],
-            ["Connection", network.state],
-          ].map(([label, state]) => (
-            <div key={label} className="flex items-center justify-between border-b border-gray-100 px-3 py-3 text-xs last:border-b-0">
-              <span className="font-semibold text-gray-700">{label}</span>
-              <span className={`font-bold ${state === "ok" ? "text-[#2557a7]" : "text-gray-400"}`}>{state === "ok" ? "Ready" : "Pending"}</span>
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      <section>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${micState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
-                {micState === "ok" ? <CheckCircle2 size={18} className="text-[#2557a7]" /> : <Mic size={18} className="text-gray-500" />}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Microphone</p>
-                <p className={`text-xs mt-0.5 ${micState === "ok" ? "text-[#2557a7]" : "text-gray-500"}`}>
-                  {micState === "idle" && "Choose a mic and run a level check."}
-                  {micState === "checking" && "Listening for input..."}
-                  {micState === "ok" && "Microphone is available."}
-                  {micState === "denied" && "Microphone access is blocked. Allow it in the browser and retry."}
-                  {micState === "error" && "Could not access this microphone."}
-                </p>
-              </div>
-            </div>
-            <button aria-label="Test microphone" onClick={testMicrophone} disabled={micState === "checking"} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#2557a7] text-white text-xs font-semibold rounded-lg hover:bg-[#2557a7]/90 disabled:opacity-50 transition-colors">
-              {micState === "checking" ? <><Loader2 size={12} className="animate-spin" /> Checking</> : <><RefreshCw size={12} /> Test</>}
-            </button>
-          </div>
-          <DeviceSelect label="Microphone" value={selectedMic} devices={micDevices} onChange={setSelectedMic} />
-          <div className="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden" aria-label="Microphone input level">
-            <div className="h-full rounded-full bg-[#2557a7] transition-all" style={{ width: `${micLevel}%` }} />
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${camState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
-                {camState === "ok" ? <CheckCircle2 size={18} className="text-[#2557a7]" /> : camState === "denied" || camState === "error" ? <VideoOff size={18} className="text-gray-500" /> : <Video size={18} className="text-gray-500" />}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Camera</p>
-                <p className={`text-xs mt-0.5 ${camState === "ok" ? "text-[#2557a7]" : "text-gray-500"}`}>
-                  {camState === "idle" && "Choose a camera and preview it."}
-                  {camState === "checking" && "Requesting camera access..."}
-                  {camState === "ok" && "Camera preview is working."}
-                  {camState === "denied" && "Camera access is blocked. Allow it in the browser and retry."}
-                  {camState === "error" && "Could not access this camera."}
-                </p>
-              </div>
-            </div>
-            <button aria-label="Test camera" onClick={testCamera} disabled={camState === "checking"} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#2557a7] text-white text-xs font-semibold rounded-lg hover:bg-[#2557a7]/90 disabled:opacity-50 transition-colors">
-              {camState === "checking" ? <><Loader2 size={12} className="animate-spin" /> Checking</> : <><RefreshCw size={12} /> Test</>}
-            </button>
-          </div>
-          <DeviceSelect label="Camera" value={selectedCam} devices={camDevices} onChange={setSelectedCam} />
-          <div className="mt-3 aspect-video overflow-hidden rounded-lg bg-gray-900">
-            {cameraStream ? (
-              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full scale-x-[-1] object-cover" />
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs text-gray-400">Camera preview appears here</div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${speakerState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
-                {speakerState === "ok" ? <CheckCircle2 size={18} className="text-[#2557a7]" /> : <Volume2 size={18} className="text-gray-500" />}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Speaker</p>
-                <p className={`text-xs mt-0.5 ${speakerState === "ok" ? "text-[#2557a7]" : "text-gray-500"}`}>
-                  {speakerState === "idle" && "Play a short tone to confirm you can hear the AI."}
-                  {speakerState === "playing" && "Playing test tone..."}
-                  {speakerState === "ok" && "Speaker test completed."}
-                  {speakerState === "error" && "Could not play test tone. Check browser audio output."}
-                </p>
-              </div>
-            </div>
-            <button aria-label="Test speaker" onClick={testSpeaker} disabled={speakerState === "playing"} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#2557a7] text-white text-xs font-semibold rounded-lg hover:bg-[#2557a7]/90 disabled:opacity-50 transition-colors">
-              {speakerState === "playing" ? <><Loader2 size={12} className="animate-spin" /> Playing</> : <><Volume2 size={12} /> Test</>}
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${network.state === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"}`}>
-              {network.state === "offline" ? <WifiOff size={18} className="text-gray-500" /> : network.state === "ok" ? <CheckCircle2 size={18} className="text-[#2557a7]" /> : <Wifi size={18} className="text-gray-500" />}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Connection</p>
-              <p className={`text-xs mt-0.5 ${network.state === "ok" ? "text-[#2557a7]" : "text-gray-500"}`}>{network.label}</p>
-              <p className="text-xs text-gray-400 mt-1">Use a stable network. The interview streams audio in real time.</p>
-            </div>
-          </div>
-        </div>
+    <main className="mi-page">
+      <PageHeading eyebrow="STEP 02 / ROOM CHECK" title="Set up your interview room" description="A quick check now helps you stay focused on the conversation later." />
+      <div className="mi-preflight-layout">
+        <section className="mi-device-grid" aria-label="Device checks">
+          <article className="mi-panel mi-device-card"><div className="mi-device-top"><span className="mi-icon-tile"><Mic size={24} /></span><span className={micState === "ok" ? "mi-pill" : "mi-pill mi-pill-neutral"}>{micState === "ok" ? "Ready" : "Check required"}</span></div><h2>Microphone</h2><p>{micState === "ok" ? "Microphone is available." : micState === "denied" ? "Microphone permission denied. Allow access and try again." : micState === "error" ? "Could not access microphone. Please retry." : "Make sure your voice can be heard clearly."}</p><DeviceSelect label="Microphone input" value={selectedMic} devices={micDevices} onChange={setSelectedMic} /><div className="mi-mic-track" aria-label="Microphone input level"><span style={{ width: micLevel + "%" }} /></div><button type="button" className="mi-button mi-button-secondary" aria-label="Test microphone" onClick={testMicrophone} disabled={micState === "checking"}>{micState === "checking" ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}{micState === "checking" ? "Checking" : "Test microphone"}</button></article>
+          <article className="mi-panel mi-device-card"><div className="mi-device-top"><span className="mi-icon-tile"><Video size={24} /></span><span className={camState === "ok" ? "mi-pill" : "mi-pill mi-pill-neutral"}>{camState === "ok" ? "Ready" : "Check required"}</span></div><h2>Camera</h2><p>{camState === "ok" ? "Camera preview is working." : camState === "denied" ? "Camera permission denied. Allow access and try again." : camState === "error" ? "Could not access camera. Please retry." : "Frame yourself as you would in a real interview."}</p><DeviceSelect label="Camera input" value={selectedCam} devices={camDevices} onChange={setSelectedCam} /><div className="mi-camera-preview">{cameraStream ? <video ref={videoRef} autoPlay playsInline muted /> : <span><VideoOff size={22} />Camera preview appears here</span>}</div><button type="button" className="mi-button mi-button-secondary" aria-label="Test camera" onClick={testCamera} disabled={camState === "checking"}>{camState === "checking" ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}{camState === "checking" ? "Checking" : "Test camera"}</button></article>
+          <article className="mi-panel mi-device-card"><div className="mi-device-top"><span className="mi-icon-tile"><Volume2 size={24} /></span><span className={speakerState === "ok" ? "mi-pill" : "mi-pill mi-pill-neutral"}>{speakerState === "ok" ? "Ready" : "Check required"}</span></div><h2>Speakers</h2><p>{speakerState === "ok" ? "Speaker test completed." : speakerState === "error" ? "Could not play the test tone. Please retry." : "Play a short tone to check your audio output."}</p><button type="button" className="mi-button mi-button-secondary" aria-label="Test speaker" onClick={testSpeaker} disabled={speakerState === "playing"}>{speakerState === "playing" ? <Loader2 className="animate-spin" size={16} /> : <Volume2 size={16} />}{speakerState === "playing" ? "Playing" : "Test speaker"}</button></article>
+          <article className="mi-panel mi-device-card"><div className="mi-device-top"><span className="mi-icon-tile">{network.state === "offline" ? <WifiOff size={24} /> : <Wifi size={24} />}</span><span className={network.state === "ok" ? "mi-pill" : "mi-pill mi-pill-neutral"}>{network.state === "ok" ? "Ready" : network.state === "warning" ? "Slow connection" : network.state === "offline" ? "Offline" : "Checking"}</span></div><h2>Connection</h2><p>{network.label}</p><div className="mi-device-tip">A stable connection keeps the audio conversation flowing. Connection is checked automatically.</div></article>
+        </section>
+        <aside className="mi-panel mi-preflight-summary"><p className="mi-eyebrow">YOUR ROOM AT A GLANCE</p><h2>Make space to focus.</h2><div className="mi-readiness-count"><strong>{readyCount}<span>/4</span></strong><p>device checks ready</p></div><div className="mi-mic-track"><span style={{ width: readyCount * 25 + "%" }} /></div><ul>{[["Microphone", micState === "ok"], ["Camera", camState === "ok"], ["Speakers", speakerState === "ok"], ["Connection", network.state === "ok" || network.state === "warning"]].map(([label, ready]) => <li key={String(label)}><span>{label}</span>{ready ? <CheckCircle2 size={18} /> : <span className="mi-check-pending" />}</li>)}</ul><label className="mi-consent"><input type="checkbox" checked={quietConfirmed} onChange={event => setQuietConfirmed(event.target.checked)} /><span><strong>Quiet environment confirmed</strong><small>I am in a quiet room, understand my voice is transcribed for scoring, and can stay on this tab until the report is generated.</small></span></label><button type="button" className="mi-button" onClick={onContinue} disabled={!canContinue}>Continue to interview setup <ArrowRight size={17} /></button><p className="mi-caption">Complete the device checks and confirm your environment to continue.</p></aside>
       </div>
-
-      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <input type="checkbox" checked={quietConfirmed} onChange={(event) => setQuietConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 rounded accent-[#2557a7]" />
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Quiet environment confirmed</p>
-          <p className="text-xs text-gray-500 mt-0.5">I am in a quiet room, understand my voice is transcribed for scoring, and can stay on this tab until the report is generated.</p>
-        </div>
-      </label>
-
-      <button onClick={onContinue} disabled={!canContinue} className="mt-4 w-full rounded-lg bg-[#2557a7] py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e4a8f] disabled:cursor-not-allowed disabled:opacity-40">
-        {canContinue ? "Continue to interview setup" : "Complete mic, camera, speaker, and room checks"}
-      </button>
-      </section>
-    </div>
+    </main>
   );
 }
 
@@ -670,176 +450,23 @@ function PreInterviewScreen({
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      {isMobile && (
-        <div className="mb-5 flex items-start gap-2.5 bg-[#2557a7]/5 border border-[#2557a7]/20 rounded-lg px-4 py-3">
-          <Smartphone size={15} className="text-[#2557a7] mt-0.5 shrink-0" />
-          <p className="text-xs text-gray-700">
-            <span className="font-semibold">Mobile device detected.</span> For best results, use a laptop or desktop with stable internet. Mobile browsers may limit microphone and fullscreen behavior.
-          </p>
-        </div>
-      )}
-
-      <div className="mb-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Role matrix</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">Choose your interview role</h2>
-            <p className="mt-1 text-sm text-gray-500">Filter by discipline, then open a role to confirm format and resume.</p>
-          </div>
-          <div className="text-xs font-semibold text-gray-500">{visibleRoles.length} roles shown</div>
-        </div>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
-        {ROLE_CATEGORY_FILTERS.map((category) => {
-          const isActive = selectedCategory === category;
-
-          return (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setSelectedCategory(category)}
-              className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold leading-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2 ${
-                isActive
-                  ? "border-transparent bg-[#2557a7] text-white shadow-sm"
-                  : "border-gray-200 bg-white text-gray-700 hover:border-[#2557a7]/40 hover:text-[#2557a7]"
-              }`}
-            >
-              {category}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {visibleRoles.map((role) => {
-          const roleTitle = role.title;
-
-          return (
-            <button
-              key={roleTitle}
-              type="button"
-              onClick={() => openRoleModal(role)}
-              className="flex min-h-[60px] items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-3 text-center text-sm font-semibold text-gray-900 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2557a7]/40 hover:text-[#2557a7] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
-            >
-              {roleTitle}
-            </button>
-          );
-        })}
-      </div>
-
-      {selectedRole && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4" role="dialog" aria-modal="true" aria-labelledby="role-confirm-title">
-          <section className="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#2557a7]">Confirm interview</p>
-                <h2 id="role-confirm-title" className="mt-1 text-lg font-semibold text-gray-950">{selectedRole.title}</h2>
-              </div>
-              <button
-                type="button"
-                onClick={closeRoleModal}
-                disabled={starting}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50 disabled:opacity-50"
-                aria-label="Cancel interview setup"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="mb-4 rounded-lg border border-dashed border-[#2557a7]/35 bg-white p-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2557a7]/10 text-[#2557a7]">
-                      {isUploadingResume ? <Loader2 size={17} className="animate-spin" /> : <FileText size={17} />}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Resume</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-gray-900">
-                        {resumeFileName ?? "Upload resume for tailored questions"}
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-gray-500">PDF, DOC, or DOCX. Max 10MB.</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => resumeInputRef.current?.click()}
-                    disabled={starting || isUploadingResume}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#2557a7]/25 bg-white px-3 py-2 text-sm font-semibold text-[#2557a7] transition hover:border-[#2557a7]/45 hover:bg-[#2557a7]/5 disabled:opacity-60"
-                  >
-                    {isUploadingResume ? "Uploading" : resumeFileName ? "Replace" : "Upload"}
-                  </button>
-                  <input
-                    ref={resumeInputRef}
-                    type="file"
-                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    className="hidden"
-                    onChange={(event) => void handleResumeUpload(event.target.files?.[0])}
-                  />
-                </div>
-                {resumeUploadError && (
-                  <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-red-600">
-                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
-                    <span>{resumeUploadError}</span>
-                  </p>
-                )}
-                {resumeFileName && !resumeUploadError && (
-                  <p className="mt-3 flex items-center gap-2 text-xs font-medium text-green-700">
-                    <CheckCircle2 size={14} />
-                    <span>Resume ready for this interview.</span>
-                  </p>
-                )}
-              </div>
-
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Interview type</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {availableInterviewTypes.map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    aria-pressed={modalType === type}
-                    onClick={() => {
-                      setModalType(type);
-                      onTypeChange(type);
-                    }}
-                    className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
-                      modalType === type
-                        ? "border-[#2557a7] bg-[#2557a7] text-white shadow-sm"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-[#2557a7]/40"
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={closeRoleModal}
-                disabled={starting}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={startSelectedRole}
-                disabled={starting || isUploadingResume || !modalType}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2557a7]/90 disabled:opacity-60"
-              >
-                {starting ? <><Loader2 size={16} className="animate-spin" /> Creating room</> : <><Play size={16} /> Start Interview</>}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-    </div>
+    <main className="mi-page mi-role-page">
+      <PageHeading eyebrow="STEP 03 / MAKE IT YOURS" title="Choose your interview role" description="Choose the role you want to practise for. Then select your interview format and add a resume if you like." action={<span className="mi-pill"><UserRound size={15} />{visibleRoles.length} roles shown</span>} />
+      {isMobile && <div className="mi-notice"><Smartphone size={19} /><p><strong>Mobile device detected.</strong> For best results, use a laptop or desktop with stable internet. Mobile browsers may limit microphone and fullscreen behavior.</p></div>}
+      <section className="mi-panel mi-role-browser"><div className="mi-role-filters" aria-label="Filter roles by discipline">{ROLE_CATEGORY_FILTERS.map(category => <button type="button" key={category} aria-pressed={selectedCategory === category} onClick={() => setSelectedCategory(category)} className={selectedCategory === category ? "is-active" : ""}>{category}</button>)}</div><div className="mi-role-grid">{visibleRoles.map(role => <button type="button" key={role.title} aria-label={role.title} onClick={() => openRoleModal(role)} className="mi-role-card"><span className="mi-icon-tile"><UserRound size={21} /></span><span><strong>{role.title}</strong><small>{role.category}</small></span><ArrowRight size={17} aria-hidden="true" /></button>)}</div></section>
+      <div className="mi-next-action"><ShieldCheck size={24} /><div><strong>Your experience makes it personal.</strong><p>An optional resume gives the interviewer more context for your conversation.</p></div></div>
+      {selectedRole && <div className="mi-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="role-confirm-title">
+        <section className="mi-modal"><button type="button" className="mi-modal-close" aria-label="Close interview confirmation" onClick={closeRoleModal} disabled={starting}><X size={20} /></button><span className="mi-icon-tile"><UserRound size={26} /></span><p className="mi-eyebrow">CONFIRM INTERVIEW</p><h2 id="role-confirm-title">{selectedRole.title}</h2><p>Set the focus of your conversation. You&apos;re one step away.</p>
+          <div className="mi-modal-section"><div className="mi-panel-heading"><h3>Interview type</h3><span className="mi-caption">Choose one</span></div><div className="mi-type-grid">{availableInterviewTypes.map(type => <button type="button" key={type} aria-pressed={modalType === type} onClick={() => { setModalType(type); onTypeChange(type); }} className={modalType === type ? "is-active" : ""}><span>{type}</span><small>{type === "HR" ? "Experience & communication" : type === "Managerial" ? "Leadership & decision-making" : type === "Technical + Coding" ? "Technical interview format" : "Skills & problem-solving"}</small>{modalType === type && <CheckCircle2 size={17} />}</button>)}</div></div>
+          <div className="mi-upload-area"><span className="mi-icon-tile">{isUploadingResume ? <Loader2 size={22} className="animate-spin" /> : <FileText size={22} />}</span><div><strong>{resumeFileName ?? "Add your resume"}</strong><p>Optional · PDF, DOC, or DOCX. Max 10MB.</p></div><button type="button" className="mi-button mi-button-secondary" onClick={() => resumeInputRef.current?.click()} disabled={starting || isUploadingResume}>{isUploadingResume ? "Uploading" : resumeFileName ? "Replace" : "Upload"}</button><input ref={resumeInputRef} type="file" aria-label="Upload resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={event => void handleResumeUpload(event.target.files?.[0])} /></div>
+          {resumeUploadError && <p className="mi-form-error" role="alert"><AlertCircle size={15} />{resumeUploadError}</p>}{resumeFileName && !resumeUploadError && <p className="mi-form-success"><CheckCircle2 size={15} />Resume ready for this interview.</p>}
+          <div className="mi-modal-actions"><button type="button" className="mi-button mi-button-secondary" onClick={closeRoleModal} disabled={starting}>Cancel</button><button type="button" className="mi-button" onClick={startSelectedRole} disabled={!modalType || starting || isUploadingResume}>{starting ? <><Loader2 size={17} className="animate-spin" />Creating room</> : <>Start Interview <Play size={17} /></>}</button></div>
+        </section>
+      </div>}
+    </main>
   );
 }
+
 export default function LiveSetupPage() {
   const router = useRouter();
   const [phase, setPhase] = useState<SetupPhase>("info");
@@ -861,7 +488,7 @@ export default function LiveSetupPage() {
     if (phase === "pre-interview") {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          const scrollContainer = document.querySelector('.relative.flex-1.overflow-auto') as HTMLElement;
+          const scrollContainer = document.querySelector('.mi-content') as HTMLElement;
           if (scrollContainer) {
             scrollContainer.scrollTop = 0;
           } else {
@@ -917,6 +544,21 @@ export default function LiveSetupPage() {
 
   return (
     <>
+      {phase !== "connecting" && (
+        <nav className="mi-setup-progress" aria-label="Interview setup progress">
+          <ol>
+            {["Get ready", "Check devices", "Choose your role"].map((label, index) => {
+              const current = phase === "info" ? 0 : phase === "preflight" ? 1 : 2;
+              return (
+                <li key={label} aria-current={index === current ? "step" : undefined} data-complete={index < current}>
+                  <span>{index < current ? <CheckCircle2 size={16} aria-hidden="true" /> : index + 1}</span>
+                  <strong>{label}</strong>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      )}
       {phase === "info" && <InfoScreen onContinue={() => setPhase("preflight")} />}
       {phase === "preflight" && <PreflightScreen onContinue={() => setPhase("pre-interview")} />}
       {phase === "connecting" && <ConnectingScreen sessionType={sessionType} />}

@@ -309,7 +309,7 @@ describe("MockSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /optional prep notes and practice/i }));
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
-    expect(mocks.push).toHaveBeenCalledWith("/notes/generate");
+    expect(mocks.push).toHaveBeenCalledWith("/prep/notes");
   });
 });
 
@@ -357,7 +357,7 @@ describe("LiveSetupPage", () => {
   it("runs device checks, then opens the role-confirmation modal", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
-    expect(screen.getByRole("heading", { name: /room setup workflow/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /get ready for your next interview/i })).toBeInTheDocument();
     await completePreflight();
 
     expect(screen.getByRole("heading", { name: "Choose your interview role" })).toBeInTheDocument();
@@ -367,7 +367,7 @@ describe("LiveSetupPage", () => {
     expect(dialog).toHaveTextContent("Frontend Developer");
     // Start Interview stays disabled until an interview type is chosen.
     expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeDisabled();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
+    fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
     expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeEnabled();
   }, 15_000);
 
@@ -378,7 +378,7 @@ describe("LiveSetupPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Technical" }));
+    fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
     fireEvent.click(within(dialog).getByRole("button", { name: /start interview/i }));
 
     expect(mocks.createLiveSession).not.toHaveBeenCalled();
@@ -937,16 +937,16 @@ describe("ReportPage", () => {
   });
 
   it.each([
-    ["HR", "/notes/hr"],
-    ["live_technical", "/notes/technical"],
-    ["live_managerial", "/notes/managerial"],
-    ["something_else", "/notes/generate"],
+    ["HR", "/prep/hr"],
+    ["live_technical", "/prep/technical"],
+    ["live_managerial", "/prep/managerial"],
+    ["something_else", "/prep/notes"],
   ])("sends 'Practice Weak Questions' to the notes page matching a %s report", async (type, expectedHref) => {
     mocks.params = { sessionId: "report-123" };
     mocks.getReport.mockResolvedValue(report({ type }));
     const ReportPage = await importReportPage();
     render(<ReportPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /practice weak questions/i }));
+    fireEvent.click((await screen.findAllByRole("button", { name: /practice weak questions/i }))[0]);
     expect(mocks.push).toHaveBeenCalledWith(expectedHref);
   });
 
@@ -1080,9 +1080,13 @@ describe("ReportPage", () => {
     expect(screen.getByText("Focus area")).toBeInTheDocument();
 
     // Redo list keeps each question's REAL number (Q1 and Q3, not Q1 and Q2) and its note.
-    expect(screen.getByText("Q1: Tell me about yourself.")).toBeInTheDocument();
-    expect(screen.getByText("Q3: Describe a time you collaborated.")).toBeInTheDocument();
-    expect(screen.queryByText("Q2: Which projects sparked your interest?")).not.toBeInTheDocument();
+    expect(screen.getByText("Q1:").parentElement).toHaveTextContent("Q1: Tell me about yourself.");
+    expect(screen.getByText("Q3:").parentElement).toHaveTextContent("Q3: Describe a time you collaborated.");
+    // Q2 (6.5/10) is not a redo item. Search inside the redo region, because
+    // the number and the text are separate nodes there.
+    const redo = screen.getByRole("region", { name: "Questions to redo" });
+    expect(within(redo).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(redo).queryByText(/Which projects sparked your interest/)).not.toBeInTheDocument();
     expect(screen.getByText("Lacked detail and connection to the role.")).toBeInTheDocument();
 
     // Values the backend did not send are not invented.

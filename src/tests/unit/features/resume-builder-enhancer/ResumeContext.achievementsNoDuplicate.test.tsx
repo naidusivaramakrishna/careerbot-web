@@ -143,3 +143,78 @@ describe("ResumeContext — achievements do not duplicate on an unrelated Save",
     expect(latest.resumeData.achievements).toHaveLength(3);
   });
 });
+
+// A fix response may reword an achievement; the local copy is then a stale
+// original and must go. Any other sync must keep a changed local achievement,
+// because there it is the user's own unsaved edit.
+describe("ResumeContext — achievements reworded by a fix vs. edited by the user", () => {
+  const ORIGINAL = "Managed the team effort that won the April Code Challenge";
+  const REWORDED = "Won April Code Challenge";
+  const titles = () => latest.resumeData.achievements?.map((a) => a.title);
+  const renderWith = async (achievements: string[]) => {
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      id: "enhanced-1",
+      enhanced_data: { ...baseData, achievements },
+    } as never);
+    render(
+      <ResumeProvider resumeId="enhanced-1" source="enhanced">
+        <Consumer />
+      </ResumeProvider>,
+    );
+    await screen.findByText("Name: Veni");
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
+
+  it("drops the stale original when an auto fix rewords an achievement", async () => {
+    await renderWith([ORIGINAL]);
+    expect(titles()).toEqual([ORIGINAL]);
+    mockHttp.post.mockResolvedValueOnce({
+      status: 200,
+      headers: {},
+      data: {
+        success: true,
+        enhanced_data: { ...baseData, achievements: [REWORDED] },
+        suggestions: [],
+        applied_fixes: [{ suggestion_id: "ach-1", status: "applied", undo_available: true }],
+      },
+    });
+
+    await act(async () => {
+      await latest.applyAutoFix("ach-1");
+    });
+
+    expect(titles()).toEqual([REWORDED]);
+  });
+
+  it("keeps the user's unsaved edit when an unrelated save returns the old text", async () => {
+    await renderWith([REWORDED]);
+    const edited = `${REWORDED} Finals`;
+    act(() => {
+      latest.setResumeData((previous) => ({
+        ...previous,
+        achievements: [{ title: edited, date: "", description: "" }],
+      }));
+    });
+    mockHttp.patch.mockResolvedValueOnce({
+      status: 200,
+      headers: {},
+      data: {
+        ats_score: { final_score: 80, section_breakdown: {} },
+        enhanced_resume: { enhanced_data: { ...baseData, achievements: [REWORDED] } },
+      },
+    });
+
+    await act(async () => {
+      await updateEnhancedResume("enhanced-1", {
+        enhanced_sections: { professionalSummary: baseData.professionalSummary },
+      });
+    });
+
+    await waitFor(() => expect(latest.enhancedDataVersion).toBeGreaterThan(0));
+    expect(titles()).toEqual([REWORDED, edited]);
+  });
+});

@@ -145,6 +145,13 @@ export interface EnhanceResumeRequest {
   region?: string;
   /** Persisted ATS template used by enhanced preview and export. */
   template_id?: string;
+  /**
+   * Request a new scan instead of the saved enhancement. Callers should inspect
+   * `applied_fixes` (or retrieve the record when that optional field is absent)
+   * before clearing client-side fixed state. Only send it when the user
+   * explicitly asks to scan the original again.
+   */
+  force_refresh?: boolean;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -458,6 +465,30 @@ export async function deleteSkillCategoryFromEnhancedResume(
     publishEnhancedResumeSync(enhanced_id, response.data);
   } catch (err: unknown) {
     logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Rename a custom skill category of an enhanced resume
+ * PATCH /api/v1/resume/enhance/{enhanced_id}/skills/{category}/rename
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Current custom category name
+ * @param newName - New category name (2-50 chars)
+ */
+export async function renameSkillCategoryInEnhancedResume(
+  enhanced_id: string,
+  category: string,
+  newName: string
+): Promise<void> {
+  const path = `/resume/enhance/${enhanced_id}/skills/${encodeCategoryPath(category)}/rename`;
+  try {
+    logApiRequest('PATCH', path, { new_name: newName });
+    const response = await httpClient.patch(path, { new_name: newName });
+    logApiResponse('PATCH', path, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('PATCH', path, err);
     throw err;
   }
 }

@@ -3,9 +3,16 @@ import { computePreviewScore } from "@/app/(resume)/builder/creation/_lib/comput
 import type { ResumeResponse } from "@/api/resumeApi";
 
 describe("computePreviewScore", () => {
-  it("returns 0 for empty resume", () => {
-    const result = computePreviewScore({} as ResumeResponse);
+  it("returns 0 for a missing resume", () => {
+    const result = computePreviewScore(undefined as unknown as ResumeResponse);
     expect(result.score).toBe(0);
+    expect(result.band).toBe("weak");
+  });
+
+  it("scores an empty resume at only the fixed formatting baseline", () => {
+    const result = computePreviewScore({} as ResumeResponse);
+    expect(result.breakdown.formatting).toBe(5);
+    expect(result.score).toBe(5);
     expect(result.band).toBe("weak");
   });
 
@@ -70,8 +77,9 @@ describe("computePreviewScore", () => {
       skills: ["JavaScript", "React", "Node.js", "MongoDB"],
     };
 
+    const withoutProjects = computePreviewScore({ ...fresherResume, projects: [] });
     const result = computePreviewScore(fresherResume);
-    expect(result.score).toBeGreaterThan(30);
+    expect(result.score).toBeGreaterThan(withoutProjects.score);
     expect(result.suggestions.length).toBeGreaterThan(0);
   });
 

@@ -239,8 +239,8 @@ const ResearchGrants: React.FC = () => {
           {editingEntries.map((grant, editIndex) => (
               <div key={editIndex} className="flex flex-col gap-3 pb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Grant Title *
+                  <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                    Grant Title <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -253,8 +253,8 @@ const ResearchGrants: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Funding Agency *
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
+                      Funding Agency <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -265,7 +265,7 @@ const ResearchGrants: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       Amount
                     </label>
                     <input
@@ -280,7 +280,7 @@ const ResearchGrants: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       Start Year
                     </label>
                     <input
@@ -293,7 +293,7 @@ const ResearchGrants: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       End Year
                     </label>
                     <input
@@ -309,7 +309,7 @@ const ResearchGrants: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       Role
                     </label>
                     <select
@@ -324,7 +324,7 @@ const ResearchGrants: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-[#3b3b3b] mb-1">
                       Status
                     </label>
                     <select

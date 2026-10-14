@@ -16,6 +16,7 @@ export default function MockInterviewLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const isRoomRoute = /^\/mock-interview\/live\/[^/]+$/.test(pathname) && !pathname.endsWith("/starting");
   const isPrivateMockRoute = pathname !== "/mock-interview";
 
   return (
@@ -23,15 +24,16 @@ export default function MockInterviewLayout({
       <div
         data-mock-interview={isPrivateMockRoute ? "private" : undefined}
         style={INTER_VARIABLE_STYLE}
-        className="antialiased font-(family-name:--font-inter) h-screen overflow-hidden bg-gray-50"
+        data-room={isRoomRoute || undefined}
+        className="mi-workspace antialiased font-(family-name:--font-inter)"
       >
-        <div className="flex h-full">
+        <div className="mi-shell">
           <MockSidebar />
           {/* relative: makes this scroller the containing block for absolutely
               positioned descendants (e.g. sr-only text). Without it they are
               placed against the viewport, escape overflow-hidden above, and
               stretch the document into a blank scroll area below the layout. */}
-          <div className="relative flex-1 min-h-0 overflow-auto min-w-0">
+          <div className="mi-content">
             {children}
           </div>
         </div>

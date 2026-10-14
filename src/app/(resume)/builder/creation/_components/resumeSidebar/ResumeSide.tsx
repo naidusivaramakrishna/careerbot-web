@@ -10,7 +10,7 @@ import AIReviewTab from "../aiReview/AIReviewTab";
 import ScoreTab from "../score/ScoreTab";
 import { getScoreSectionAction } from "../../_utils/scoreSectionRouting";
 
-import PersonalInfo from "../editor/sections/PersonalInfo";
+import PersonalInfo, { isValidEmailText } from "../editor/sections/PersonalInfo";
 import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
 import ServiceRecord from "../editor/sections/ServiceRecord";
 import Education from "../editor/sections/Education";
@@ -305,7 +305,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
       // Personal Info
       newFormData["fullname"] = resumeData.personalInfo?.fullname || "";
-      newFormData["email"] = resumeData.personalInfo?.email || "";
+      // A half-typed address left by an earlier autosave ("ab") is not an email:
+      // show the box empty instead of presenting it as the saved value.
+      newFormData["email"] = isValidEmailText(resumeData.personalInfo?.email) ? String(resumeData.personalInfo?.email) : "";
       newFormData["countryCode"] = resumeData.personalInfo?.countryCode || "+91";
       newFormData["phone"] = resumeData.personalInfo?.phone || "";
       newFormData["location"] = resumeData.personalInfo?.location || "";

@@ -6,6 +6,7 @@ import { hasRenderableCustomSectionContent, isRedundantCustomSectionFieldLabel }
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
 import SafeHTML from "@/components/common/SafeHTML";
+import AchievementRow from "@/components/common/AchievementRow";
 
 interface Props {
   data: ResumeData;
@@ -380,7 +381,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                 CERTIFICATIONS
               </h3>
               {certifications.map((cert, idx) => (
-                <div key={idx} className="mb-3 page-break-inside-avoid">
+                <div key={idx} className="mb-2 page-break-inside-avoid">
                   <div className="flex items-start">
                     <span className="mr-2" style={baseTextStyle}>•</span>
                     <div style={baseTextStyle}>
@@ -417,22 +418,14 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                 ACHIEVEMENTS
               </h3>
               {achievements.map((achievement, idx) => (
-                <div key={idx} className="mb-3 page-break-inside-avoid">
-                  <div className="flex justify-between items-start mb-1">
-                    {achievement.title && (
-                      <span className="font-semibold" style={titleStyle}>{achievement.title}</span>
-                    )}
-                    {achievement.date && (
-                      <span className="text-sm whitespace-nowrap" style={baseTextStyle}>
-                        {formatDate(achievement.date)}
-                      </span>
-                    )}
-                  </div>
-                  {/* ✅ Changed to support HTML formatting */}
-                  {achievement.description && (
-                    <SafeHTML content={achievement.description} className="text-sm resume-description" />
-                  )}
-                </div>
+                <AchievementRow
+                  key={idx}
+                  achievement={achievement}
+                  formatDate={formatDate}
+                  textStyle={baseTextStyle}
+              spacing="8px"
+                  renderDescription={(html) => <SafeHTML content={html} className="resume-description" />}
+                />
               ))}
             </section>
           )

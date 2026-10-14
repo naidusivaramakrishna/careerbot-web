@@ -148,7 +148,7 @@ function hasAtsDisplaySuggestions(value: unknown): boolean {
 /** Keep completed cards visible until the user explicitly undoes that fix.
  * A delayed/stale server response may still contain an old suggestion ID; it
  * must never turn a green card back into a pending card or make it disappear. */
-function reconcileServerSuggestions(
+export function reconcileServerSuggestions(
   previous: EnhancedSuggestion[],
   serverSuggestions: EnhancedSuggestion[],
   appliedFixes?: Map<string, boolean>,
@@ -176,6 +176,13 @@ function reconcileServerSuggestions(
   // this card may go from fixed back to pending when the server re-lists it;
   // any other re-listed card is a stale apply response and stays green.
   reopenedSuggestionId?: string,
+  // True only for the initial load, when the server sent its applied-fix ledger.
+  // A card this browser kept as fixed (localStorage) that the ledger does not list
+  // and the server lists as pending (or, if Undo-able, no longer lists) was fixed
+  // against a saved record that has since been replaced (a fresh scan of the
+  // original file, a stale record recomputed): it is not fixed any more. Never set for apply/delete responses, where the
+  // "stay green" rule protects a card from an older pending list racing the apply.
+  reopenUnbackedFixed = false,
 ): EnhancedSuggestion[] {
   // A suggestion the server list itself already marks "fixed" (see
   // resolveRemovedSkillDeductions) must stay fixed here too -- forcing every
@@ -219,6 +226,7 @@ function reconcileServerSuggestions(
       // unrelated sections. Keep locally server-confirmed cards fixed during
       // that apply reconciliation; only an explicit Undo may reopen them.
       if (suggestion.status === "fixed" && fresh.status !== "fixed" && suggestion.id !== reopenedSuggestionId) {
+        if (reopenUnbackedFixed) return [fresh];
         return [{ ...fresh, status: "fixed" as const, undoAvailable: suggestion.undoAvailable }];
       }
       return [fresh];
@@ -253,7 +261,17 @@ function reconcileServerSuggestions(
     }
     // A fixed card can be removed only by an explicit authoritative ledger
     // response (for example, an Undo). Legacy responses keep it visible.
-    return hasAppliedFixLedger ? [] : [{ ...suggestion, status: "fixed" as const }];
+    if (hasAppliedFixLedger) return [];
+    // On load, an Undo-able green card the ledger does not list and the server
+    // no longer lists either is a stale browser copy. Section-save cards
+    // (undoAvailable: false) and re-filled deleted sections are never in the
+    // ledger, so they stay. A skill-removal card stays green while the server
+    // still lists its deduction (resolveRemovedSkillDeductions); once it does
+    // not, it is gone like any other card (its Undo data does not survive a reload).
+    if (reopenUnbackedFixed && suggestion.undoAvailable !== false && !suggestion.id.startsWith("section-deleted-")) {
+      return [];
+    }
+    return [{ ...suggestion, status: "fixed" as const }];
   });
   const newlyIntroduced = serverSuggestions
     .filter(suggestion => !previousIds.has(suggestion.id))
@@ -281,8 +299,8 @@ function reconcileServerSuggestions(
 // reconciliation). Dropping the two sections from this list instead swaps
 // that for the opposite bug: an achievement the user has typed but not saved
 // yet is silently discarded by the next unrelated sync. So both stay listed
-// and mergeSectionPreservingLocalIdLess compares content -- see the
-// contentKey() note there.
+// and mergeSectionPreservingLocalIdLess compares content while ignoring
+// backend identity -- see its note below.
 const ID_KEYED_ARRAY_SECTIONS = [
   "education", "workExperience", "projects", "certifications", "achievements",
   "volunteering", "references", "internships", "awards", "hobbies",
@@ -312,25 +330,66 @@ const ID_KEYED_ARRAY_SECTIONS = [
  * need not preserve the local object's key order. Sections whose entries
  * carry a backend id never reach this test; it exists for achievements and
  * languages, which arrive as plain strings and so are mapped to id-less
- * objects whether or not they are already saved. If two entries differ in
- * any field the comparison fails and the local copy is kept -- erring toward
- * the duplicate, never toward discarding something the user typed. */
-function contentKey(item: unknown): string {
+ * objects whether or not they are already saved. Identity fields are omitted
+ * because a server response can add an id to an otherwise identical entry. */
+function contentKeyWithoutIdentity(item: unknown): string {
   if (!item || typeof item !== "object") return JSON.stringify(item ?? null);
   const record = item as Record<string, unknown>;
-  return JSON.stringify(Object.keys(record).sort().map((key) => [key, record[key]]));
+  return JSON.stringify(
+    Object.keys(record)
+      .filter((key) => key !== "id" && key !== "_id")
+      .sort()
+      .map((key) => [key, record[key]]),
+  );
 }
 
-function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
+function isLikelyRewordedDuplicate(serverItem: unknown, localItem: unknown): boolean {
+  if (!serverItem || !localItem || typeof serverItem !== "object" || typeof localItem !== "object") {
+    return false;
+  }
+
+  const serverTitle = (serverItem as Record<string, unknown>).title;
+  const localTitle = (localItem as Record<string, unknown>).title;
+  if (typeof serverTitle !== "string" || typeof localTitle !== "string") return false;
+
+  const words = (value: string) => new Set((value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []));
+  const serverWords = words(serverTitle);
+  const localWords = words(localTitle);
+  if (serverWords.size < 3 || localWords.size < 3) return false;
+
+  return [...serverWords].every((word) => localWords.has(word))
+    || [...localWords].every((word) => serverWords.has(word));
+}
+
+export function mergeSectionPreservingLocalIdLess<T extends { id?: unknown; _id?: unknown }>(
   serverItems: unknown,
   localItems: unknown,
+  dropRewordedCopies = false,
 ): unknown {
   if (!Array.isArray(serverItems)) return serverItems;
   if (!Array.isArray(localItems)) return serverItems;
-  const serverContent = new Set((serverItems as unknown[]).map(contentKey));
+  const serverContent = new Set((serverItems as unknown[]).map(contentKeyWithoutIdentity));
+  // A local entry is dropped as the stale original of a reworded server entry
+  // only on a fix/undo response (dropRewordedCopies), where the server has just
+  // rewritten content. On any other sync a changed id-less entry is more likely
+  // the user's own unsaved edit, and title matching would discard it. Even then
+  // only an id-less server entry the local list does not already hold can be a
+  // rewording (id-less sections such as achievements cannot be matched by id):
+  // a saved entry with an id, or one the user still has unchanged, is not one --
+  // matching against those dropped new input such as "Inventory Management
+  // System Mobile App" next to a saved "Inventory Management System". When
+  // unsure, keep the possible duplicate.
+  const localContent = new Set((localItems as unknown[]).map(contentKeyWithoutIdentity));
+  const rewordedServerItems = dropRewordedCopies
+    ? (serverItems as T[]).filter(
+      (item) => item && typeof item === "object" && !item.id && !item._id
+        && !localContent.has(contentKeyWithoutIdentity(item)),
+    )
+    : [];
   const localIdLess = (localItems as T[]).filter(
     (item) => item && typeof item === "object" && !item.id && !item._id
-      && !serverContent.has(contentKey(item)),
+      && !serverContent.has(contentKeyWithoutIdentity(item))
+      && !rewordedServerItems.some((serverItem) => isLikelyRewordedDuplicate(serverItem, item)),
   );
   return localIdLess.length > 0 ? [...serverItems, ...localIdLess] : serverItems;
 }
@@ -462,7 +521,6 @@ function reconcileConfirmedFix(
     ...fixed.slice(insertionIndex),
   ];
 }
-const FIXED_SUGGESTIONS_STORAGE_PREFIX = "careerbot:enhanced-fixed-suggestions:";
 
 function loadFixedSuggestions(resumeId?: string): EnhancedSuggestion[] {
   if (!resumeId || typeof window === "undefined") return [];
@@ -485,6 +543,7 @@ import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
 import { getSkillsEditorDomain, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
 import { domainSkillKeyForSlug } from "@/config/domainSkills";
 import logger from "@/lib/logger";
+import { FIXED_SUGGESTIONS_STORAGE_PREFIX } from "../_utils/fixedSuggestionsStorage";
 
 // Extract country code from a combined phone string like "+911234567890"
 function splitPhone(phone: string): { countryCode: string; phoneNumber: string } {
@@ -1026,7 +1085,7 @@ interface ResumeContextType {
   updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<{ beforeScore: number; afterScore: number; scoreConfirmed: boolean }>;
-  applyManualFix: (suggestionId: string, value: string, origin?: "autosave") => Promise<void>;
+  applyManualFix: (suggestionId: string, value?: string, origin?: "autosave") => Promise<void>;
   resolveSkillRemovedSuggestions: (skillName: string, category?: string) => void;
   undoFix: (suggestionId: string) => Promise<void>;
   removeEnhancedScoreSection: (sectionName: string) => void;
@@ -1670,6 +1729,19 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             // localStorage) that the server no longer lists really has been
             // resolved. See reconcileServerSuggestions' dropMissingPending
             // parameter.
+            // The server's applied-fix ledger (when it sent one) says which cards are
+            // really fixed; a green card the browser kept that it does not list is stale.
+            const loadedLedger = (resumeData as { applied_fixes?: unknown } | undefined)?.applied_fixes;
+            const hasLoadedLedger = Array.isArray(loadedLedger);
+            const loadedApplied = new Map<string, boolean>();
+            if (hasLoadedLedger) {
+              for (const item of loadedLedger as unknown[]) {
+                const fix = item && typeof item === "object" ? item as Record<string, unknown> : undefined;
+                if (typeof fix?.suggestion_id === "string" && fix.suggestion_id) {
+                  loadedApplied.set(fix.suggestion_id, fix.undo_available !== false);
+                }
+              }
+            }
             setEnhancedSuggestions(previous => reconcileServerSuggestions(
               previous,
               resolveRemovedSkillDeductions(
@@ -1677,10 +1749,13 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
                 loadedSkillNames,
                 id => Boolean(skillUndoInfoRef.current[id]),
               ),
-              undefined,
+              hasLoadedLedger ? loadedApplied : undefined,
               false,
               false,
               true,
+              new Set(),
+              undefined,
+              hasLoadedLedger,
             ));
           } else {
             // A score-only or partial refresh is not evidence that every
@@ -2310,6 +2385,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       // copies (mergeSectionPreservingLocalIdLess) would show each new entry
       // twice and the next Save would persist the copy as a duplicate.
       savedSections?: readonly string[];
+      // The response of an apply-fix or undo: the server just rewrote content,
+      // so a local id-less entry may be the stale original of a reworded one
+      // (see mergeSectionPreservingLocalIdLess).
+      fixResponse?: boolean;
     },
   ): boolean => {
     if (!payload || typeof payload !== "object") return false;
@@ -2396,6 +2475,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           mergedArraySections[key] = mergeSectionPreservingLocalIdLess(
             mappedRecord[key],
             previousRecord[key],
+            options?.fixResponse === true,
           );
         }
       }
@@ -2698,7 +2778,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // Apply and Undo must consume the same canonical resume shape.  The old
     // auto-fix-only mapper read enhancer_state.resume and could retain stale
     // values when the API also supplied enhanced_data.
-    syncEnhancedResumeData(response);
+    syncEnhancedResumeData(response, { fixResponse: true });
     const nextScore = scoreStateFromFixResponse(response, enhancedAtsScore);
     setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
     // Replace all cards only when the server explicitly sends its suggestion
@@ -2736,7 +2816,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     };
   };
 
-  const applyManualFix = async (suggestionId: string, value: string, origin?: "autosave"): Promise<void> => {
+  const applyManualFix = async (suggestionId: string, value?: string, origin?: "autosave"): Promise<void> => {
     // Missing-section suggestions are generated by our own delete/reload
     // reconciliation, not by the AI service. Sending their synthetic IDs to
     // /enhance/apply can only return 404/422. The section save/autosave has
@@ -2751,7 +2831,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // presence suggestions returned here after a UI-only removal, so the card
     // disappeared while the score remained unchanged and returned on reload.
     if (suggestionId.startsWith("section-deleted-")) {
-      if (!value.trim()) throw new Error("Add section content before marking this suggestion as done.");
+      if (!value?.trim()) throw new Error("Add section content before marking this suggestion as done.");
       if (suggestion?.section.toLowerCase() === "projects") {
         const requiredMatch = suggestionMessage.match(/add(?:ing)?\s+(\d+)\s+projects?/i);
         const requiredCount = requiredMatch ? Number(requiredMatch[1]) : 1;
@@ -2783,7 +2863,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       enhancer_state: resumeIdProp,
       suggestion_id: suggestionId,
       fix_type: "manual",
-      value,
+      ...(value === undefined ? {} : { value }),
     });
     // Drop a response superseded by a newer apply-fix click (out-of-order guard).
     if (requestId !== latestFixRequestRef.current) return;
@@ -2806,7 +2886,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // the exact overwrite the "autosave" origin tag on the sync event already
     // prevents for the autosave response itself. Score/suggestions still
     // sync below; only the resumeData replacement is skipped.
-    if (origin !== "autosave") syncEnhancedResumeData(response);
+    if (origin !== "autosave") syncEnhancedResumeData(response, { fixResponse: true });
     {
       setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
       const freshSuggestions = suggestionsFromFixResponse(response);
@@ -3025,7 +3105,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     if (didUndo) {
       // Undo returns a complete server snapshot. Use the same canonical mapper
       // as apply/delete so an old enhancer_state cannot restore a deleted item.
-      syncEnhancedResumeData(response);
+      syncEnhancedResumeData(response, { fixResponse: true });
       setEnhancedAtsScore(prev => scoreStateFromFixResponse(response, prev));
       // Rebuild suggestions — the deleted fix's suggestion should reappear in the fresh list
       const freshSuggestions = suggestionsFromFixResponse(response);

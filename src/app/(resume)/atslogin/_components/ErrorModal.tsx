@@ -6,9 +6,14 @@ interface ErrorModalProps {
   error: string | null;
   onRetry: () => void;
   onClose: () => void;
+  /** Label for the primary button. Defaults to "Try Again". */
+  retryLabel?: string;
+  /** Run onRetry in the click itself (needed to open a file picker, which browsers
+   *  only allow from a user gesture). Default closes first, then retries. */
+  retryImmediately?: boolean;
 }
 
-export default function ErrorModal({ error, onRetry, onClose }: ErrorModalProps) {
+export default function ErrorModal({ error, onRetry, onClose, retryLabel = "Try Again", retryImmediately = false }: ErrorModalProps) {
   if (!error) return null;
 
   // Determine error type and customize styling
@@ -61,6 +66,11 @@ export default function ErrorModal({ error, onRetry, onClose }: ErrorModalProps)
   }
 
   const handleRetryClick = () => {
+    if (retryImmediately) {
+      onClose();
+      onRetry();
+      return;
+    }
     onClose();
     setTimeout(onRetry, 200);
   };
@@ -110,7 +120,7 @@ export default function ErrorModal({ error, onRetry, onClose }: ErrorModalProps)
                 className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r ${buttonColor} text-white text-sm font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105`}
               >
                 <RefreshCw className="w-4 h-4" />
-                Try Again
+                {retryLabel}
               </button>
               <button
                 onClick={onClose}
