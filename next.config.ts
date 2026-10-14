@@ -82,6 +82,16 @@ const nextConfig: NextConfig = {
     ],
   },
   
+  // Interview notes moved from /notes/* to /prep/* (the generator is now /prep/notes).
+  // Old links, bookmarks and stored notification URLs keep working.
+  async redirects() {
+    return [
+      { source: '/notes', destination: '/prep', permanent: true },
+      { source: '/notes/generate', destination: '/prep/notes', permanent: true },
+      { source: '/notes/:path*', destination: '/prep/:path*', permanent: true },
+    ];
+  },
+
   async rewrites() {
     // BACKEND_URL lets local devs override the proxy target when WSL's
     // automatic localhost-forwarding for podman ports breaks (set in .env.local).

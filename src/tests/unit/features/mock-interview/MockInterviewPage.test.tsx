@@ -309,7 +309,7 @@ describe("MockSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /optional prep notes and practice/i }));
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
-    expect(mocks.push).toHaveBeenCalledWith("/notes/generate");
+    expect(mocks.push).toHaveBeenCalledWith("/prep/notes");
   });
 });
 
@@ -937,10 +937,10 @@ describe("ReportPage", () => {
   });
 
   it.each([
-    ["HR", "/notes/hr"],
-    ["live_technical", "/notes/technical"],
-    ["live_managerial", "/notes/managerial"],
-    ["something_else", "/notes/generate"],
+    ["HR", "/prep/hr"],
+    ["live_technical", "/prep/technical"],
+    ["live_managerial", "/prep/managerial"],
+    ["something_else", "/prep/notes"],
   ])("sends 'Practice Weak Questions' to the notes page matching a %s report", async (type, expectedHref) => {
     mocks.params = { sessionId: "report-123" };
     mocks.getReport.mockResolvedValue(report({ type }));

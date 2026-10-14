@@ -53,7 +53,7 @@ export default function MockSidebar() {
             </button>;
           })}
         </nav>
-        <div className="mi-prep-note"><FileText size={23} /><h2>A little preparation goes a long way.</h2><p>Build your talking points before your next interview.</p><button onClick={() => router.push("/notes/generate")} aria-label="Optional prep notes and practice">Optional Prep <ArrowUpRight size={15} /></button></div>
+        <div className="mi-prep-note"><FileText size={23} /><h2>A little preparation goes a long way.</h2><p>Build your talking points before your next interview.</p><button onClick={() => router.push("/prep/notes")} aria-label="Optional prep notes and practice">Optional Prep <ArrowUpRight size={15} /></button></div>
         <div className="mi-sidebar-bottom"><span className="mi-nav-caption">MAKE EVERY ATTEMPT COUNT</span><button ref={exitRef} onClick={() => setShowExitConfirm(true)} aria-label="Exit mock interview" className="mi-exit"><LogOut size={18} /><span>Back to dashboard</span></button></div>
       </div>
     </aside>

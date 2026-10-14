@@ -54,10 +54,10 @@ type UiDimension = ReportDimension;
 /** Notes/practice page matching the interview type ("HR", "live_technical", ...). */
 function getPracticeHref(type: string | undefined): string {
   const t = (type ?? "").toLowerCase();
-  if (t.includes("technical")) return "/notes/technical";
-  if (t.includes("managerial")) return "/notes/managerial";
-  if (t.includes("hr")) return "/notes/hr";
-  return "/notes/generate";
+  if (t.includes("technical")) return "/prep/technical";
+  if (t.includes("managerial")) return "/prep/managerial";
+  if (t.includes("hr")) return "/prep/hr";
+  return "/prep/notes";
 }
 
 interface UiReport {
