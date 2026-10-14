@@ -26,6 +26,18 @@ body {
   line-height: 22px;
 }
 
+/* Keep the interaction affordance consistent across the application. */
+button:not(:disabled),
+a[href],
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -1139,3 +1151,9 @@ section.docx {
 /* Like develop2, the live room has no sidebar below 1024px: it fills the viewport and has its own End control, and a sidebar or 60px top bar squeezes it or pushes its controls below the fold. */
 @media(max-width:1023px){.mi-workspace[data-room="true"] .mi-sidebar{display:none}}
 @media(prefers-reduced-motion:reduce){.mi-workspace *,.mi-workspace *::before,.mi-workspace *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+/* Dedicated role setup screen */
+.mi-role-setup-page{max-width:1180px;margin:0 auto}.mi-back-link{display:inline-flex;align-items:center;gap:8px;color:var(--mi-ink);font-size:12px;font-weight:650;margin-bottom:26px}.mi-back-link svg{transform:rotate(180deg)}.mi-back-link:hover{color:var(--mi-brand)}.mi-role-setup-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,.8fr);gap:28px;align-items:start}.mi-role-setup-main{background:#fff;border:1px solid var(--mi-line);border-radius:16px;padding:34px}.mi-role-setup-main h1{font-size:34px;letter-spacing:-.03em;margin-top:10px}.mi-role-setup-lede{max-width:650px;color:var(--mi-muted);font-size:14px;line-height:1.8;margin-top:10px}.mi-role-setup-lede strong{color:var(--mi-ink)}.mi-role-setup-main .mi-modal-section{margin-top:30px}.mi-role-setup-aside{position:sticky;top:24px;padding:26px}.mi-role-setup-aside>ol{list-style:none;margin:22px 0 0;padding:0}.mi-role-setup-aside li{display:flex;gap:13px;position:relative;padding-bottom:25px}.mi-role-setup-aside li:not(:last-child)::after{content:"";position:absolute;left:14px;top:31px;bottom:7px;width:1px;background:var(--mi-line)}.mi-role-setup-aside li>span{display:grid;place-items:center;flex:0 0 29px;height:29px;border-radius:50%;background:var(--mi-tint);color:var(--mi-brand);font-size:12px;font-weight:700}.mi-role-setup-aside strong{display:block;font-size:12px}.mi-role-setup-aside p{color:var(--mi-muted);font-size:11px;line-height:1.7;margin-top:4px}.mi-role-setup-secure{display:flex;gap:12px;border:1px solid var(--mi-line);border-radius:10px;padding:16px;margin-top:4px}.mi-role-setup-secure>svg{color:var(--mi-brand);flex-shrink:0}.mi-role-setup-secure p{font-size:10px}
+@media (max-width:760px){.mi-role-setup-grid{grid-template-columns:1fr;gap:18px}.mi-role-setup-main{padding:24px 20px}.mi-role-setup-main h1{font-size:29px}.mi-role-setup-aside{position:static;padding:22px 20px}.mi-role-setup-main .mi-type-grid{grid-template-columns:1fr}.mi-role-setup-main .mi-modal-actions{flex-direction:column-reverse}.mi-role-setup-main .mi-modal-actions .mi-button{width:100%}}
+.mi-resume-picker{margin-top:26px;border-top:1px solid var(--mi-line);padding-top:24px}.mi-resume-list{display:grid;gap:8px;margin-top:12px;max-height:230px;overflow:auto}.mi-resume-option{display:flex;align-items:center;gap:11px;border:1px solid var(--mi-line);border-radius:10px;padding:12px 14px;cursor:pointer;transition:border-color .15s,background .15s}.mi-resume-option:hover,.mi-resume-option.is-selected{border-color:var(--mi-brand);background:var(--mi-tint)}.mi-resume-option input{accent-color:var(--mi-brand);width:16px;height:16px;flex-shrink:0}.mi-resume-file{display:flex;align-items:center;gap:10px;min-width:0;flex:1}.mi-resume-file>svg{color:var(--mi-brand);flex-shrink:0}.mi-resume-file strong,.mi-resume-file small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mi-resume-file strong{font-size:12px}.mi-resume-file small{color:var(--mi-muted);font-size:10px;margin-top:3px}.mi-resume-option>svg{color:var(--mi-brand);opacity:0}.mi-resume-option.is-selected>svg{opacity:1}
+/* Role setup replaces the role browser while a role is selected. */
+.mi-role-setup-host>.mi-heading,.mi-role-setup-host>.mi-role-browser,.mi-role-setup-host>.mi-next-action{display:none}.mi-role-setup-page{padding:0 0 36px}

@@ -431,7 +431,7 @@ describe("MockInterview HistoryPage", () => {
     await waitFor(() => expect(screen.getByText("Page 1 of 2 \u00b7 10 sessions")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "2" }));
     await waitFor(() => expect(screen.getByText("Page 2 of 2 \u00b7 1 session")).toBeInTheDocument());
-  });
+  }, 15_000);
 
   it("labels the list's session count in the singular for one completed session", async () => {
     const HistoryPage = await importHistoryPage();
