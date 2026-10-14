@@ -146,9 +146,10 @@ export interface EnhanceResumeRequest {
   /** Persisted ATS template used by enhanced preview and export. */
   template_id?: string;
   /**
-   * Scan the parsed resume again instead of returning its saved enhancement.
-   * Discards the fixes saved on that record and costs a scan; only send it when
-   * the user explicitly asks to scan the original again.
+   * Request a new scan instead of the saved enhancement. Callers should inspect
+   * `applied_fixes` (or retrieve the record when that optional field is absent)
+   * before clearing client-side fixed state. Only send it when the user
+   * explicitly asks to scan the original again.
    */
   force_refresh?: boolean;
 }

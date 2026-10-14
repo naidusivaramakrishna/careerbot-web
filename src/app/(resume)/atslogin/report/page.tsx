@@ -3,6 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, RefreshCw, XCircle, X } from "lucide-react";
+import { toast } from "sonner";
 import ResumeSide from "@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide";
 import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/TemplatesTab";
@@ -11,6 +12,7 @@ import { ResumeProvider, useResume } from "@/app/(resume)/builder/creation/_cont
 import { getEnhancedCurrentScore } from "@/app/(resume)/builder/creation/_utils/enhancedScore";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
+import { verifyFreshEnhancement } from "@/utils/verifyEnhancedRefresh";
 import PriorFixesDialog from "@/components/common/PriorFixesDialog";
 import { clearStoredFixedSuggestions, clearStoredFixedText } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
 import { cacheBuilderResume, readEnhancedResumeIds, rememberEnhancedResumeId, writeReportCache } from "./atsReportCache";
@@ -522,6 +524,15 @@ function ATSLoginReport() {
         ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),
       });
       if (!result.enhanced_resume_id) throw new Error("The new scan did not return a resume ID.");
+      const refreshVerification = await verifyFreshEnhancement(result);
+      if (refreshVerification === "retained") {
+        // The service kept the saved fixes. As in the upload dialog, ask again
+        // (Continue or retry) instead of replacing the workspace with an error.
+        const response = result as unknown as Record<string, unknown>;
+        setPriorFixCount(Math.max(1, await countAppliedFixes(response, result.enhanced_resume_id)));
+        toast.error("The saved fixes are still present. Please try again.");
+        return;
+      }
       const response = result as unknown as Record<string, unknown>;
       const sourceData = (response.enhanced_resume as Record<string, unknown> | undefined)
         || ((response.enhancer_state as { resume?: Record<string, unknown> } | undefined)?.resume) || {};

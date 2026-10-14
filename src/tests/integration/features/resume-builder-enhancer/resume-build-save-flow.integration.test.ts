@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { useHandler } from '../../shared/msw-server';
+import { server, resetMSWServer, useHandler } from '../../shared/msw-server';
 
 /**
  * Integration Test: Resume Builder Complete Workflow
@@ -14,7 +14,57 @@ import { useHandler } from '../../shared/msw-server';
  *
  * Run: npm run test:integration:resume
  */
+/**
+ * The shared MSW handlers return one canned resume for every call. This flow
+ * needs a backend that remembers what was created and saved, so it installs a
+ * small in-memory store for the resume endpoints (reset for every test).
+ */
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+
+function installInMemoryResumeApi() {
+  const store = new Map<string, Record<string, unknown>>();
+  let nextId = 1;
+  const handlers = [
+    http.post(`${API_BASE}/resume/create`, async ({ request }) => {
+      const { title } = (await request.json()) as { title: string };
+      const id = `resume-${nextId++}`;
+      const resume = { id, title, sections: { summary: '', experience: [], education: [] }, score: 0 };
+      store.set(id, resume);
+      return HttpResponse.json(resume);
+    }),
+    http.put(`${API_BASE}/resume/:resumeId`, async ({ params, request }) => {
+      const current = store.get(params.resumeId as string);
+      if (!current) return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+      const body = (await request.json()) as { sections?: Record<string, unknown> };
+      const updated = {
+        ...current,
+        sections: { ...(current.sections as object), ...(body.sections ?? {}) },
+        lastModified: new Date().toISOString(),
+      };
+      store.set(params.resumeId as string, updated);
+      return HttpResponse.json(updated);
+    }),
+    http.post(`${API_BASE}/resume/:resumeId/enhance`, ({ params }) => {
+      const current = store.get(params.resumeId as string);
+      if (!current) return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+      return HttpResponse.json({ ...current, score: 85 });
+    }),
+    http.get(`${API_BASE}/resume/:resumeId`, ({ params }) => {
+      const found = store.get(params.resumeId as string);
+      return found ? HttpResponse.json(found) : HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
+  ];
+  server.use(...handlers);
+}
+
 describe('Resume Builder: Build, Save, and Display Flow', () => {
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeEach(() => {
+    installInMemoryResumeApi();
+  });
+  afterEach(() => resetMSWServer());
+  afterAll(() => server.close());
+
   it('creates new resume', async () => {
     const createRes = await fetch('/api/resume/create', {
       method: 'POST',
@@ -115,7 +165,7 @@ describe('Resume Builder: Build, Save, and Display Flow', () => {
 
     // Add content
     useHandler(
-      http.put(`/api/resume/${created.id}`, () => {
+      http.put(`${API_BASE}/resume/${created.id}`, () => {
         return HttpResponse.json({
           ...created,
           sections: {

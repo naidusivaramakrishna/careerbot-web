@@ -41,13 +41,20 @@ const SECTION_KEY_MAP: Record<string, string> = {
  */
 function omitAccountManagedEmail(
   sectionName: string,
-  data: Record<string, unknown> | unknown[]
+  data: Record<string, unknown> | unknown[],
+  // An enhanced resume's email belongs to the file, not the account: keep one the
+  // user entered (the parser found none) so the "email missing" fix can be saved.
+  keepEnteredEmail = false
 ): Record<string, unknown> | unknown[] {
   if (sectionName !== "Personal Info" || Array.isArray(data)) return data;
+  // Only a complete address is saved: autosave fires per keystroke, and a
+  // half-typed "ab" left on the resume would be stored as its email.
+  if (keepEnteredEmail && isValidEmailText(data.email)) return data;
   const { email: _accountEmail, ...editableFields } = data;
   return editableFields;
 }
 import { useSearchParams } from "next/navigation";
+import { isValidEmailText } from "./sections/PersonalInfo";
 import {
   DragDropContext,
   Droppable,
@@ -71,7 +78,8 @@ import { useModalMountVersion } from "../../_hooks/useModalMountVersion";
 import { useSavedResumeSnapshot } from "../../_hooks/useSavedResumeSnapshot";
 import { updateResume, getAllResumes, autoSaveResume, transformCustomSectionsForBackend } from "@/api/resumeApi";
 import { autoSaveEnhancedResume, updateEnhancedResume } from "@/api/enhancerApi";
-import { getSectionValue, suggestionsToConfirm, toSuggestionSectionKey } from "../../_utils/suggestionSection";
+import { findSoftSkillSuggestion, getSectionValue, suggestionsToConfirm, toSuggestionSectionKey } from "../../_utils/suggestionSection";
+import { SKILL_ADDED_EVENT, type SkillAddedDetail } from "../../_utils/skillAddedEvent";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 
@@ -553,6 +561,27 @@ const EditorTab: React.FC<Props> = ({
   // ATS report embeds this editor without a `source=enhanced` URL parameter.
   // The provider is the authoritative source in that case.
   const isEnhancedResume = resumeSource === "enhanced" || searchParams.get("source") === "enhanced";
+  // A soft skill added as a chip answers its "add at least 3 soft skills" card.
+  // The chip goes through its own endpoint (no section Save), so nothing else
+  // confirms its matching card. /enhance/apply requires the one newly-added
+  // name to update the canonical soft_skills list and score; its server-side
+  // value fixer de-duplicates that name before writing it.
+  useEffect(() => {
+    if (!isEnhancedResume) return;
+    const onSkillAdded = (event: Event) => {
+      const { skill, category } = (event as CustomEvent<Partial<SkillAddedDetail>>).detail ?? {};
+      if (typeof skill !== "string" || typeof category !== "string" || !skill.trim()) return;
+      const target = findSoftSkillSuggestion(enhancedSuggestionsRef.current, category);
+      if (!target) return;
+      // The skill itself is already saved by the Skills endpoint. The apply
+      // endpoint still needs this one value to confirm and re-score the card.
+      void applyManualFixRef.current(target.id, skill.trim(), "autosave").catch((error) => {
+        logger.warn("Could not confirm soft-skill ATS suggestion", { error, suggestionId: target.id });
+      });
+    };
+    window.addEventListener(SKILL_ADDED_EVENT, onSkillAdded);
+    return () => window.removeEventListener(SKILL_ADDED_EVENT, onSkillAdded);
+  }, [isEnhancedResume]);
 
   // ATS Scan edits an enhanced-resume record. Its ID is different from the
   // normal builder ID held in browser storage, so the provider ID must win.
@@ -973,7 +1002,7 @@ const EditorTab: React.FC<Props> = ({
         if (sectionName === "Education" && Array.isArray(sectionData)) {
           sectionData = prepareEducationForPersistence(sectionData as Array<Record<string, unknown>>);
         }
-        sectionData = omitAccountManagedEmail(sectionName, sectionData);
+        sectionData = omitAccountManagedEmail(sectionName, sectionData, isEnhancedResume);
 
         // A brand-new item that hasn't been assigned a backend id yet gets filtered
         // out above, so a section with ONLY new items computes to []. Sending that []
@@ -1500,7 +1529,8 @@ const EditorTab: React.FC<Props> = ({
     } else {
       const sectionData = omitAccountManagedEmail(
         openModalSection,
-        transformFormDataToBackend(openModalSection) as Record<string, unknown> | unknown[]
+        transformFormDataToBackend(openModalSection) as Record<string, unknown> | unknown[],
+        isEnhancedResume
       );
 
       const backendKey =
@@ -1970,7 +2000,7 @@ const EditorTab: React.FC<Props> = ({
                               const filtered = (resumeDataRef.current.customSections || []).filter(
                                 cs => normalizeCustomSectionName(cs.sectionName) !== normalizeCustomSectionName(s.name)
                               );
-                              removeCustomSection(customSection.id);
+                              if (customSection) removeCustomSection(customSection.id);
                               setSectionOrder(prev => prev.filter(n => n !== s.name));
                               handleDeleteSection(originalIndex);
                               if (rid && rid !== "null" && rid !== "undefined") {

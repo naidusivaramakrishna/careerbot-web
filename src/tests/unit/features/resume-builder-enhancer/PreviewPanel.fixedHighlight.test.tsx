@@ -1,15 +1,14 @@
 /**
- * ATS Scan: once an Auto/Manual Fix is applied, only the text it wrote is
- * highlighted green in the preview (CSS Custom Highlight API, screen only).
- * Undo clears it again because the suggestion is no longer "fixed".
+ * ATS Scan: once an Auto/Manual Fix is applied, only the text it added is
+ * highlighted green in the preview (CSS Custom Highlight API, screen only) --
+ * never the whole section. Undo clears it.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import PreviewPanel, { FIXED_TEXT_HIGHLIGHT } from "@/app/(resume)/builder/creation/_components/PreviewPanel";
+import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import { useResume } from "@/app/(resume)/builder/creation/_context/ResumeContext";
+import { resetFixedTextBaselines } from "@/app/(resume)/builder/creation/_hooks/useFixedTextHighlights";
 import { markPreviewSection, previewSectionKey } from "@/app/(resume)/templates/_utils/previewSectionMarker";
 
 vi.mock("@/app/(resume)/builder/creation/_context/ResumeContext", () => ({ useResume: vi.fn() }));
@@ -43,7 +42,7 @@ class FakeHighlight { ranges: Range[]; constructor(...ranges: Range[]) { this.ra
 const OLD = { skills: ["React"], workExperience: [{ company: "Acme", description: "<ul><li>Built things</li></ul>" }] };
 const NEW = { skills: ["React"], workExperience: [{ company: "Acme", description: "<ul><li>Led the design of a quiz platform</li></ul>" }] };
 
-function mockState(enhancedSuggestions: unknown[], resumeData: unknown, enhancedDataVersion: number) {
+function mockState(enhancedSuggestions: unknown[], resumeData: unknown, enhancedDataVersion = 0) {
   mockedUseResume.mockReturnValue({
     selectedTemplate: "clean_simple",
     resumeData,
@@ -57,90 +56,232 @@ function mockState(enhancedSuggestions: unknown[], resumeData: unknown, enhanced
   } as never);
 }
 
+const suggestion = (id: string, section: string, status: "pending" | "fixed") => ({
+  id, section, message: "x", status, undoAvailable: status === "fixed",
+});
+
 const panel = (isEnhancedResume = true) => (
   <PreviewPanel isTemplateSidebarOpen={false} onTabClick={() => {}} resumeId="r1" isEnhancedResume={isEnhancedResume} />
 );
-const renderPanel = async () => {
-  const view = render(panel());
+const renderPanel = async (isEnhancedResume = true) => {
+  const view = render(panel(isEnhancedResume));
   await act(async () => { await Promise.resolve(); });
   return view;
 };
 const settle = () => act(async () => { await Promise.resolve(); });
-
-// Each test renders the whole PreviewPanel. Locally a test takes under 1.5s, but
-// on a loaded CI runner the first one, which also pays the module load, went past
-// vitest's 5s default.
-const RENDER_TIMEOUT_MS = 15_000;
+const sectionCss = (view: { queryByTestId: (id: string) => HTMLElement | null }) =>
+  view.queryByTestId("ats-fixed-section-style")?.textContent ?? "";
 
 describe("PreviewPanel — green highlight for text written by a fix", () => {
   beforeEach(() => {
     mockedUseResume.mockReset();
+    resetFixedTextBaselines();
     registry.clear();
     vi.stubGlobal("CSS", { highlights: registry });
     vi.stubGlobal("Highlight", FakeHighlight);
   });
 
-  it("registers a highlight when a fix rewrites resume text, and clears it on Undo", async () => {
-    mockState([{ id: "s1", section: "Leadership", message: "x", status: "pending" }], OLD, 0);
-    const { rerender } = await renderPanel();
+  it("highlights the text an Auto Fix wrote, and clears it on Undo", async () => {
+    mockState([suggestion("s1", "Leadership", "pending")], OLD, 0);
+    const view = await renderPanel();
     expect(registry.has("ats-fixed-text")).toBe(false);
 
-    mockState([{ id: "s1", section: "Leadership", message: "x", status: "fixed", undoAvailable: true }], NEW, 1);
-    rerender(panel());
+    mockState([suggestion("s1", "Leadership", "fixed")], NEW, 1);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+    // Text-level, so no whole-section box.
+    expect(sectionCss(view)).toBe("");
+
+    mockState([suggestion("s1", "Leadership", "pending")], OLD, 2);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(false);
+    expect(sectionCss(view)).toBe("");
+  });
+
+  it("highlights a Manual Fix whose text was typed and autosaved BEFORE the card was confirmed", async () => {
+    const before = { personalInfo: { fullname: "Shravya P", location: "" } };
+    const typed = { personalInfo: { fullname: "Shravya P", location: "Vijayawada" } };
+    mockState([suggestion("c1", "Contact", "pending")], before, 0);
+    const view = await renderPanel();
+
+    // Typing changes resumeData with no enhancedDataVersion bump.
+    mockState([suggestion("c1", "Contact", "pending")], typed, 0);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(false);
+
+    // Confirming only flips the card; the data does not change in that render.
+    mockState([suggestion("c1", "Contact", "fixed")], typed, 1);
+    view.rerender(panel());
     await settle();
     expect(registry.has("ats-fixed-text")).toBe(true);
 
-    mockState([{ id: "s1", section: "Leadership", message: "x", status: "pending" }], OLD, 2);
-    rerender(panel());
+    mockState([suggestion("c1", "Contact", "pending")], before, 2);
+    view.rerender(panel());
     await settle();
     expect(registry.has("ats-fixed-text")).toBe(false);
   });
 
-  it("does not highlight when a fix changed no text, or for Formatting fixes / non-enhanced resumes", async () => {
-    mockState([{ id: "s1", section: "Skills", message: "x", status: "pending" }], OLD, 0);
+  it("highlights the added text when the card flips to fixed one render before the data lands", async () => {
+    mockState([suggestion("k1", "Keywords", "pending")], { skills: ["React"] }, 0);
+    const view = await renderPanel();
+
+    mockState([suggestion("k1", "Keywords", "fixed")], { skills: ["React"] }, 1);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(false);
+    expect(sectionCss(view)).toBe("");
+
+    mockState([suggestion("k1", "Keywords", "fixed")], { skills: ["React", "Docker", "AWS"] }, 2);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+    expect(sectionCss(view)).toBe("");
+  });
+
+  it("keeps highlighting after the preview unmounts and mounts again mid-session", async () => {
+    mockState([suggestion("k1", "Keywords", "pending")], { skills: ["React"] }, 0);
     const first = await renderPanel();
-    mockState([{ id: "s1", section: "Skills", message: "x", status: "fixed" }], OLD, 1);
+    mockState([suggestion("k1", "Keywords", "fixed")], { skills: ["React", "Docker"] }, 1);
+    first.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+    first.unmount();
+    expect(registry.has("ats-fixed-text")).toBe(false);
+
+    await renderPanel();
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+  });
+
+  it("does not highlight a pending suggestion", async () => {
+    mockState([suggestion("s1", "Skills", "pending")], OLD);
+    const view = await renderPanel();
+    expect(registry.has("ats-fixed-text")).toBe(false);
+    expect(view.queryByTestId("ats-fixed-section-style")).toBeNull();
+  });
+
+  it("never highlights Formatting fixes or a non-enhanced resume", async () => {
+    mockState([suggestion("formatting_1", "Formatting", "pending")], OLD, 0);
+    const first = await renderPanel();
+    mockState([suggestion("formatting_1", "Formatting", "fixed")], NEW, 1);
     first.rerender(panel());
     await settle();
     expect(registry.has("ats-fixed-text")).toBe(false);
+    expect(first.queryByTestId("ats-fixed-section-style")).toBeNull();
     first.unmount();
 
-    mockState([{ id: "formatting_1", section: "Formatting", message: "x", status: "pending" }], OLD, 0);
-    const second = await renderPanel();
-    mockState([{ id: "formatting_1", section: "Formatting", message: "x", status: "fixed" }], NEW, 1);
-    second.rerender(panel());
+    mockState([suggestion("s1", "Leadership", "pending")], OLD, 0);
+    const second = await renderPanel(false);
+    mockState([suggestion("s1", "Leadership", "fixed")], NEW, 1);
+    second.rerender(panel(false));
     await settle();
     expect(registry.has("ats-fixed-text")).toBe(false);
-    second.unmount();
+    expect(second.queryByTestId("ats-fixed-section-style")).toBeNull();
+  });
+});
 
-    mockState([{ id: "s1", section: "Leadership", message: "x", status: "pending" }], OLD, 0);
-    const third = render(panel(false));
-    await settle();
-    mockState([{ id: "s1", section: "Leadership", message: "x", status: "fixed" }], NEW, 1);
-    third.rerender(panel(false));
+describe("PreviewPanel — never highlights a whole section", () => {
+  beforeEach(() => {
+    mockedUseResume.mockReset();
+    resetFixedTextBaselines();
+    registry.clear();
+    vi.stubGlobal("CSS", { highlights: registry });
+    vi.stubGlobal("Highlight", FakeHighlight);
+  });
+
+  it("highlights nothing for a fix that was already applied when the preview opened", async () => {
+    mockState([suggestion("s1", "Skills", "fixed")], OLD);
+    const view = await renderPanel();
+    expect(registry.has("ats-fixed-text")).toBe(false);
+    expect(view.queryByTestId("ats-fixed-section-style")).toBeNull();
+  });
+
+  it("highlights nothing when a fix added no text", async () => {
+    mockState([suggestion("s1", "Skills", "pending")], OLD, 0);
+    const view = await renderPanel();
+    mockState([suggestion("s1", "Skills", "fixed")], OLD, 1);
+    view.rerender(panel());
     await settle();
     expect(registry.has("ats-fixed-text")).toBe(false);
-  });
-}, RENDER_TIMEOUT_MS);
-
-// The Custom Highlight API paints nothing without a ::highlight() rule, and jsdom
-// cannot render one, so check the stylesheet itself: the name PreviewPanel
-// registers must have a rule that sets a background, the one visible effect.
-describe("the ats-fixed-text highlight is styled", () => {
-  const globalsCss = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
-  const ruleBody = (name: string) =>
-    globalsCss.match(new RegExp(`::highlight\\(${name}\\)\\s*\\{([^}]*)\\}`))?.[1] ?? null;
-
-  it("has a ::highlight rule for the name PreviewPanel registers, with a background and text colour", () => {
-    expect(FIXED_TEXT_HIGHLIGHT).toBe("ats-fixed-text");
-    const body = ruleBody(FIXED_TEXT_HIGHLIGHT);
-    expect(body).not.toBeNull();
-    expect(body).toMatch(/(^|[;\s])background-color\s*:\s*\S/);
-    expect(body).toMatch(/(^|[;\s])color\s*:\s*\S/);
+    expect(view.queryByTestId("ats-fixed-section-style")).toBeNull();
   });
 
-  it("control: a highlight name nobody registers has no rule", () => {
-    expect(ruleBody("not-a-registered-highlight")).toBeNull();
+  it.each([
+    ["Contact", { personalInfo: { location: "" } }, { personalInfo: { location: "Vijayawada" } }],
+    ["Summary", { professionalSummary: { summary: "" } }, { professionalSummary: { summary: "Backend engineer" } }],
+    ["Keywords", { skills: ["React"] }, { skills: ["React", "Docker"] }],
+    ["Experience", { workExperience: [{ description: "Built" }] }, { workExperience: [{ description: "Built and led" }] }],
+    ["Education", { education: [{ school: "A", degree: "" }] }, { education: [{ school: "A", degree: "B.Tech" }] }],
+    ["Projects", { projects: [{ title: "P", description: "" }] }, { projects: [{ title: "P", description: "Added bullet" }] }],
+    ["Internships", { internships: [{ company: "C", description: "" }] }, { internships: [{ company: "C", description: "Added bullet" }] }],
+    ["Certifications", { certifications: [] }, { certifications: [{ name: "AWS SAA" }] }],
+    ["Achievements", { achievements: [] }, { achievements: [{ title: "Won hackathon" }] }],
+    ["Languages", { languages: [] }, { languages: [{ name: "Telugu" }] }],
+    ["Hobbies", { hobbies: [] }, { hobbies: [{ name: "Chess" }] }],
+    ["Volunteering", { volunteering: [] }, { volunteering: [{ role: "Mentor" }] }],
+  ])("highlights only the added text for a fixed %s suggestion", async (section, before, after) => {
+    mockState([suggestion("s1", section, "pending")], before, 0);
+    const view = await renderPanel();
+    mockState([suggestion("s1", section, "fixed")], after, 1);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+    expect(view.queryByTestId("ats-fixed-section-style")).toBeNull();
+  });
+
+  it.each([
+    ["SeaServiceRecord", { seaServiceRecord: [] }, { seaServiceRecord: [{ vessel: "MV Aurora" }] }],
+    ["ResearchGrants", { researchGrants: [] }, { researchGrants: [{ title: "DST Grant" }] }],
+    ["ConferencePresentations", { conferencePresentations: [] }, { conferencePresentations: [{ title: "ICML talk" }] }],
+    ["CustomSection", { customSections: [] }, { customSections: [{ id: "c1", sectionName: "Patents", fields: [{ id: "f1", fieldName: "Detail", fieldType: "text", value: "Filed one patent" }] }] }],
+    ["SomethingNewTheBackendAdds", { skills: ["React"] }, { skills: ["React", "Terraform"] }],
+  ])("highlights what a fix added for any section, including %s", async (section, before, after) => {
+    mockState([suggestion("s1", section, "pending")], before, 0);
+    const view = await renderPanel();
+    mockState([suggestion("s1", section, "fixed")], after, 1);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+    expect(view.queryByTestId("ats-fixed-section-style")).toBeNull();
+  });
+
+  it("highlights the exact words a fix added, wherever the preview shows them", async () => {
+    const before = { skills: ["React"], hobbies: [{ name: "Chess" }] };
+    const after = { skills: ["React", "Docker"], hobbies: [{ name: "Chess" }] };
+    mockState([suggestion("s1", "Keywords", "pending")], before, 0);
+    const view = await renderPanel();
+    mockState([suggestion("s1", "Keywords", "fixed")], after, 1);
+    view.rerender(panel());
+    await settle();
+
+    // Locate the highlighted ranges in a real DOM rather than the mocked templates.
+    const host = document.createElement("div");
+    host.innerHTML = '<div data-section="skills"><p>React, Docker</p></div><div data-section="hobbies"><p>Chess</p></div>';
+    document.body.appendChild(host);
+    const { findHighlightRanges, diffTextUnits } = await import("@/app/(resume)/builder/creation/_utils/fixedTextHighlight");
+    const ranges = findHighlightRanges(host, diffTextUnits(before, after));
+    expect(ranges.map((range) => range.toString())).toEqual(["Docker"]);
+    host.remove();
+  });
+
+  it("clears only the undone fix's text", async () => {
+    mockState([suggestion("s1", "Skills", "pending"), suggestion("e1", "Education", "pending")],
+      { skills: ["React"], education: [{ school: "A", degree: "" }] }, 0);
+    const view = await renderPanel();
+    mockState([suggestion("s1", "Skills", "fixed"), suggestion("e1", "Education", "fixed")],
+      { skills: ["React", "Docker"], education: [{ school: "A", degree: "B.Tech" }] }, 1);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(true);
+
+    mockState([suggestion("s1", "Skills", "pending"), suggestion("e1", "Education", "pending")],
+      { skills: ["React"], education: [{ school: "A", degree: "" }] }, 2);
+    view.rerender(panel());
+    await settle();
+    expect(registry.has("ats-fixed-text")).toBe(false);
   });
 });
 

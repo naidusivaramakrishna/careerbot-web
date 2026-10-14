@@ -114,6 +114,7 @@ function Harness({ initial }: { initial: AnyData }) {
     resumeStyle: {},
     sectionOrder: [],
     previewCatalogueKey: null,
+    bumpResumeSavedVersion: vi.fn(),
   };
   return <Skills />;
 }
@@ -122,12 +123,15 @@ function renderPreview(resumeData: AnyData) {
   ctx.value = {
     resumeData,
     setResumeData: vi.fn(),
+    // PreviewPanel reads the ATS suggestion list on every render.
+    enhancedSuggestions: [],
+    enhancedAtsScore: null,
     selectedTemplate: null,
     resumeStyle: {},
     sectionOrder: [],
     previewCatalogueKey: null,
   };
-  return render(<PreviewPanel isTemplateSidebarOpen={false} onTabClick={vi.fn()} resumeId="r1" />);
+  return render(<PreviewPanel isTemplateSidebarOpen={false} onTabClick={vi.fn()} resumeId="r1" isEnhancedResume />);
 }
 
 const skills = () => ({
