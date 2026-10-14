@@ -22,7 +22,7 @@ type EnhanceResult = Awaited<ReturnType<typeof enhanceResume>>;
 
 /** Fixes the returned record already carries: from the response, else the saved record. */
 async function countAppliedFixes(result: EnhanceResult): Promise<number> {
-  const inline = (result as unknown as { applied_fixes?: unknown }).applied_fixes;
+  const inline = result.applied_fixes;
   if (Array.isArray(inline)) return inline.length;
   try {
     const record = await getEnhancedResume(result.enhanced_resume_id);

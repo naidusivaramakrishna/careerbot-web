@@ -141,19 +141,18 @@ describe('ResumeBuilderPage', () => {
     });
   });
 
-  it('keeps the template sidebar collapsed and opens the Score tab in ResumeSide for enhanced resumes', async () => {
+  it('opens template sidebar and starts on Score tab for enhanced resumes', async () => {
     mockUseSearchParams.mockReturnValue(new URLSearchParams('source=enhanced') as never);
 
     renderBuilderPage('enhanced-resume-1');
 
-    // Score now lives in ResumeSide, so the template drawer stays collapsed.
     expect(screen.getByText('Enhanced: true')).toBeInTheDocument();
-    expect(screen.getByText('Initial tab: Score')).toBeInTheDocument();
-    expect(screen.getByText('Default open: true')).toBeInTheDocument();
-    expect(screen.getByText('Sidebar open: false')).toBeInTheDocument();
+    expect(screen.getByText('Default open: false')).toBeInTheDocument();
+    expect(screen.getByText('Sidebar open: true')).toBeInTheDocument();
+    expect(screen.getByText('Active tab: Score')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(window.localStorage.setItem).toHaveBeenCalledWith('template_sidebar_open', 'false');
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('template_sidebar_open', 'true');
     });
   });
 
@@ -172,9 +171,9 @@ describe('ResumeBuilderPage', () => {
 
     renderBuilderPage();
 
-    // Enhanced resumes always open on Score, even when arriving from ATS.
     expect(screen.getByText('Enhanced: true')).toBeInTheDocument();
-    expect(screen.getByText('Initial tab: Score')).toBeInTheDocument();
+    expect(screen.getByText('Initial tab: Editor')).toBeInTheDocument();
+    expect(screen.getByText('Active tab: Score')).toBeInTheDocument();
   });
 
   it('persists template sidebar state when toggled from sidebar controls', async () => {

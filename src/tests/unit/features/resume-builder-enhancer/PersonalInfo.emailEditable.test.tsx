@@ -4,7 +4,7 @@
  * fixed. Enhanced resumes may enter an email only while they have none.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 
 const ctx: { value: Record<string, unknown> } = { value: {} };
@@ -47,5 +47,13 @@ describe('Personal Info email field', () => {
   });
   it('stays locked in the builder even when empty', () => {
     expect(mount(null, '').readOnly).toBe(true);
+  });
+  it('records "entered here" once, not on every keystroke', () => {
+    const input = mount('enhanced', '');
+    vi.mocked(window.localStorage.setItem).mockClear();
+    for (const value of ['a', 'a@', 'a@b.co']) fireEvent.change(input, { target: { value } });
+    const writes = vi.mocked(window.localStorage.setItem).mock.calls.filter(([key]) => key === 'enhanced-email-entered:current');
+    expect(writes).toHaveLength(1);
+    window.localStorage.clear();
   });
 });

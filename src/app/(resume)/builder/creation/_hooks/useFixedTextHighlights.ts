@@ -202,10 +202,13 @@ export function useFixedTextHighlights(
         continue;
       }
       // Undo of a removal-only fix: the text it removed is back, so forget the empty set.
+      // Start the next application from today's text too, as the other Undo paths do:
+      // anything typed while the fix was applied is not that fix's text.
       const removed = state.removed.get(suggestion.id);
       if (removed && [...removed].every((key) => currentKeys.has(key))) {
         state.added.delete(suggestion.id);
         state.removed.delete(suggestion.id);
+        state.before.set(suggestion.id, currentKeys);
       }
       if (state.fixed.has(suggestion.id)) {
         const added = state.added.get(suggestion.id);

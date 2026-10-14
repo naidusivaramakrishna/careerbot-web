@@ -157,6 +157,18 @@ describe('useFixedTextHighlights', () => {
       expect(texts(hook.result.current)).toEqual(['Go']);
     });
 
+    it('does not paint text typed while a removal-only fix was applied once that fix is undone and applied again', () => {
+      const hook = mount(WITH_DOCKER, [sug('k', 'Skills', 'pending')]);
+      hook.rerender({ data: { ...BEFORE, skills: ['React'] }, s: [sug('k', 'Skills', 'fixed')] }); // Docker removed
+      hook.rerender({ data: { ...BEFORE, skills: ['React', 'Kubernetes'] }, s: [sug('k', 'Skills', 'fixed')] }); // typed
+      hook.rerender({ data: { ...BEFORE, skills: ['React', 'Kubernetes', 'Docker'] }, s: [sug('k', 'Skills', 'pending')] }); // Undo
+      hook.rerender({ data: { ...BEFORE, skills: ['React', 'Kubernetes'] }, s: [sug('k', 'Skills', 'fixed')] }); // removed again
+      hook.rerender({ data: { ...BEFORE, skills: ['React', 'Kubernetes'] }, s: [sug('k', 'Skills', 'fixed')] });
+
+      expect(hook.result.current).toEqual([]);
+      expect(window.localStorage.getItem('ats-fixed-text:r1') ?? '').not.toContain('Kubernetes');
+    });
+
     it('still highlights a fix whose data lands a render late after the user deleted text while it was pending', () => {
       const hook = mount({ ...BEFORE, skills: ['React', 'Java'] }, [sug('k', 'Keywords', 'pending')]);
       hook.rerender({ data: BEFORE, s: [sug('k', 'Keywords', 'pending')] }); // user deletes Java

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, RefreshCw, XCircle, X } from "lucide-react";
+import { toast } from "sonner";
 import ResumeSide from "@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide";
 import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import TemplatesTab from "@/app/(resume)/builder/creation/_components/templates/TemplatesTab";
@@ -525,7 +526,12 @@ function ATSLoginReport() {
       if (!result.enhanced_resume_id) throw new Error("The new scan did not return a resume ID.");
       const refreshVerification = await verifyFreshEnhancement(result);
       if (refreshVerification === "retained") {
-        throw new Error("The saved fixes are still present. Please try again.");
+        // The service kept the saved fixes. As in the upload dialog, ask again
+        // (Continue or retry) instead of replacing the workspace with an error.
+        const response = result as unknown as Record<string, unknown>;
+        setPriorFixCount(Math.max(1, await countAppliedFixes(response, result.enhanced_resume_id)));
+        toast.error("The saved fixes are still present. Please try again.");
+        return;
       }
       const response = result as unknown as Record<string, unknown>;
       const sourceData = (response.enhanced_resume as Record<string, unknown> | undefined)

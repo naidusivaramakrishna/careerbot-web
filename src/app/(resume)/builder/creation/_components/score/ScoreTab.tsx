@@ -69,6 +69,9 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
   // the user can address one focused group of recommendations at a time.
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [spotlightId, setSpotlightId] = useState<string | null>(null);
+  // "Next best fix" scroll + spotlight timers: a new click or unmount cancels the old ones.
+  const spotlightTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => spotlightTimersRef.current.forEach(clearTimeout), []);
   // Points a fixed card earned, and the most recent overall gain for the hero badge.
   const [pointsBySuggestion, setPointsBySuggestion] = useState<Record<string, number>>({});
   const [scoreGain, setScoreGain] = useState<{ amount: number; key: number } | null>(null);
@@ -213,13 +216,16 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
     setExpandedSections((current) => ({ ...current, [sectionName]: true }));
     setSpotlightId(suggestion.id);
     const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    setTimeout(() => {
-      document.getElementById(`ats-fix-${suggestion.id}`)?.scrollIntoView({
-        behavior: reduceMotion ? "auto" : "smooth",
-        block: "center",
-      });
-    }, 60);
-    setTimeout(() => setSpotlightId(null), 2600);
+    spotlightTimersRef.current.forEach(clearTimeout);
+    spotlightTimersRef.current = [
+      setTimeout(() => {
+        document.getElementById(`ats-fix-${suggestion.id}`)?.scrollIntoView({
+          behavior: reduceMotion ? "auto" : "smooth",
+          block: "center",
+        });
+      }, 60),
+      setTimeout(() => setSpotlightId(null), 2600),
+    ];
   };
 
 const openManualFix = (suggestionId: string, section: string, entryIndex?: number) => {

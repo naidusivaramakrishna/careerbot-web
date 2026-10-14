@@ -5,22 +5,19 @@ import ResumeLandingPage from '@/app/(resume)/builder/page';
 import { getAllResumesUnified, createResumeWithAuth } from '@/api/resumeApi';
 import { toast } from 'sonner';
 
-const { mockPush, mockHttpGet } = vi.hoisted(() => ({
+const { mockPush, mockUseAuth } = vi.hoisted(() => ({
   mockPush: vi.fn(),
-  mockHttpGet: vi.fn(),
+  mockUseAuth: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
-  useSearchParams: () => new URLSearchParams(),
-  usePathname: () => '/',
 }));
 
-// The page decides "signed in?" with a silent GET /auth/profile (checkAuthSilent).
-vi.mock('@/lib/http', () => ({
-  default: { get: mockHttpGet },
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: mockUseAuth,
 }));
 
 vi.mock('@/api/resumeApi', () => ({
@@ -65,7 +62,7 @@ describe('ResumeLandingPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: authenticated, not loading — mirrors the happy-path for most tests
-    mockHttpGet.mockResolvedValue({ data: {} });
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false, logout: vi.fn() });
     mockGetAllResumesUnified.mockResolvedValue(emptyResumeResponse as never);
     mockCreateResumeWithAuth.mockResolvedValue({
       id: 'new-resume-1',
@@ -80,7 +77,7 @@ describe('ResumeLandingPage', () => {
   it('renders the real landing sections, navigation, hero preview, and footer', () => {
     render(<ResumeLandingPage />);
 
-    expect(screen.getByRole('link', { name: 'CareerBOT home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /CareerBot CareerBOT/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('heading', { name: /Build or improve your resume/i })).toBeInTheDocument();
     expect(screen.getByText('AI Resume Builder & Enhancer')).toBeInTheDocument();
     expect(screen.getByText('12,400+')).toBeInTheDocument();
@@ -157,15 +154,25 @@ describe('ResumeLandingPage', () => {
     });
   });
 
-  it('shows sign-in modal when Start Free is clicked while unauthenticated', async () => {
-    mockHttpGet.mockRejectedValue(new Error('401'));
+  it('shows sign-in modal when Start Free is clicked while unauthenticated', () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false, logout: vi.fn() });
     render(<ResumeLandingPage />);
 
     fireEvent.click(screen.getAllByRole('button', { name: /Start Free/i })[0]);
 
-    expect(await screen.findByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
     expect(mockGetAllResumesUnified).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('disables Start Free and Build New Resume buttons while auth state is loading', () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: true, logout: vi.fn() });
+    render(<ResumeLandingPage />);
+
+    screen.getAllByRole('button', { name: /Start Free/i }).forEach((btn) =>
+      expect(btn).toBeDisabled()
+    );
+    expect(screen.getByRole('button', { name: /Build New Resume/i })).toBeDisabled();
   });
 
   it('links enhance existing resume to the upload path', () => {
@@ -194,13 +201,13 @@ describe('ResumeLandingPage', () => {
     );
   });
 
-  it('shows sign-in modal when Build New Resume is clicked while unauthenticated', async () => {
-    mockHttpGet.mockRejectedValue(new Error('401'));
+  it('shows sign-in modal when Build New Resume is clicked while unauthenticated', () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false, logout: vi.fn() });
     render(<ResumeLandingPage />);
 
     fireEvent.click(screen.getByRole('button', { name: /Build New Resume/i }));
 
-    expect(await screen.findByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Sign in modal' })).toBeInTheDocument();
     expect(mockCreateResumeWithAuth).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
@@ -237,14 +244,36 @@ describe('ResumeLandingPage', () => {
     });
   });
 
-  it('registers and removes the navbar scroll listener', () => {
+  it('registers and removes scroll/resize listeners for active navigation tracking', () => {
     const addSpy = vi.spyOn(window, 'addEventListener');
     const removeSpy = vi.spyOn(window, 'removeEventListener');
+    const sections: Record<string, { id: string; top: number }> = {
+      overview: { id: 'overview', top: 400 },
+      'choose-path': { id: 'choose-path', top: 80 },
+      'quality-checks': { id: 'quality-checks', top: 300 },
+    };
+
+    document.getElementById = vi.fn((id: string) => {
+      const section = sections[id];
+      if (!section) return null;
+      return {
+        id: section.id,
+        getBoundingClientRect: () => ({ top: section.top }),
+      } as HTMLElement;
+    });
 
     const { unmount } = render(<ResumeLandingPage />);
-    expect(addSpy).toHaveBeenCalledWith('scroll', expect.any(Function), { passive: true });
+
+    fireEvent.scroll(window);
+
+    sections['choose-path'].top = 300;
+    sections['quality-checks'].top = 90;
+    fireEvent.resize(window);
 
     unmount();
+    expect(addSpy).toHaveBeenCalledWith('scroll', expect.any(Function), { passive: true });
+    expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function));
     expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+    expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function));
   });
 });

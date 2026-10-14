@@ -59,6 +59,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   const isEnhancedResume = resumeSource === "enhanced" || searchParams?.get("source") === "enhanced";
   const resumeKey = String(resumeData?.resume_id ?? "current");
   const emailEditable = useRef<boolean | null>(null);
+  const emailRememberedFor = useRef<string | null>(null);
   if (emailEditable.current === null) {
     // Judge by the form's value AND the loaded resume's: the form is filled in by an
     // effect, so on a first render it can still be empty for a resume that has an email.
@@ -120,7 +121,11 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   type DomainFieldKey = "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex";
 
   const handleChange = (field: Field["key"] | DomainFieldKey, value: string) => {
-    if (field === "email" && emailEditable.current && isEnhancedResume) rememberEmailEnteredHere(resumeKey);
+    // Once per resume is enough: the flag only says "entered here", so skip the write per keystroke.
+    if (field === "email" && emailEditable.current && isEnhancedResume && emailRememberedFor.current !== resumeKey) {
+      rememberEmailEnteredHere(resumeKey);
+      emailRememberedFor.current = resumeKey;
+    }
     // ✅ Update context for preview
     // Store phone and countryCode separately — templates handle combining them for display
     setResumeData({
