@@ -21,9 +21,13 @@ vi.mock("@/app/(interview)/mock-interview/_context/MockInterviewContext", () => 
 
 import NotesPage from "@/app/(interview)/prep/notes/page";
 
+// The page is large and renders several async steps; on a loaded CI runner a
+// render alone has taken longer than the 5 s default (web #213, 2026-10-14).
+const WAIT = { timeout: 10_000 } as const;
+
 const savedNotes = { notes: { self_introduction: { script: "I am a developer." }, hr_answers: [] } };
 
-describe("Prep notes page", () => {
+describe("Prep notes page", { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -35,9 +39,9 @@ describe("Prep notes page", () => {
     api.getNotes.mockResolvedValue(savedNotes);
     render(<NotesPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate/ }, WAIT));
 
-    await waitFor(() => expect(api.generateNotes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.generateNotes).toHaveBeenCalledTimes(1), WAIT);
     expect(api.generateNotes).toHaveBeenCalledWith({ resume_id: "r1", target_role: undefined, experience_level: "fresher" });
   });
 
@@ -46,9 +50,9 @@ describe("Prep notes page", () => {
     api.generateNotes.mockRejectedValue(new Error("502"));
     render(<NotesPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate/ }, WAIT));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Failed to generate notes. Please try again.");
+    expect(await screen.findByRole("alert", {}, WAIT)).toHaveTextContent("Failed to generate notes. Please try again.");
     expect(screen.getByRole("button", { name: /Regenerate/ })).toBeTruthy();
   });
 
@@ -56,7 +60,7 @@ describe("Prep notes page", () => {
     api.getNotes.mockResolvedValue({ notes: {} });
     render(<NotesPage />);
 
-    expect(await screen.findByRole("button", { name: /Generate My Notes/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Generate My Notes/ }, WAIT)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Regenerate/ })).toBeNull();
   });
 
@@ -68,9 +72,9 @@ describe("Prep notes page", () => {
     api.getNotes.mockResolvedValue({ notes: {} });
     render(<NotesPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: label }));
+    fireEvent.click(await screen.findByRole("button", { name: label }, WAIT));
     fireEvent.click(screen.getByRole("button", { name: /Generate My Notes/ }));
 
-    await waitFor(() => expect(api.generateNotes).toHaveBeenCalledWith(expect.objectContaining({ experience_level: sent })));
+    await waitFor(() => expect(api.generateNotes).toHaveBeenCalledWith(expect.objectContaining({ experience_level: sent })), WAIT);
   });
 });

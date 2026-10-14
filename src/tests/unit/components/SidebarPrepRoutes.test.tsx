@@ -22,7 +22,7 @@ import Sidebar from "@/components/layout/Sidebar";
 const notesButton = () => screen.getByText("Interview Notes").closest("button") as HTMLButtonElement;
 const isActive = (button: HTMLButtonElement) => button.getAttribute("style")?.includes("rgb(37, 87, 167)") ?? false;
 
-describe("Sidebar and the /prep notes routes", () => {
+describe("Sidebar and the /prep notes routes", { timeout: 20_000 }, () => {
   beforeEach(() => nav.push.mockClear());
 
   it.each(["/prep", "/prep/notes", "/prep/hr", "/prep/technical/practice"])(
