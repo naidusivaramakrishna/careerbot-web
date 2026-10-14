@@ -15,7 +15,7 @@ export default function StatsLogos() {
     <section className="bg-white border-t border-slate-100 border-b border-slate-100 py-8">
       <div className="max-w-5xl mx-auto px-6 lg:px-8">
         <motion.p
-          className="text-center text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-7"
+          className="text-center text-body-sm text-slate-600 uppercase tracking-widest mb-7"
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
@@ -41,12 +41,12 @@ export default function StatsLogos() {
               transition={{ duration: 0.4, delay: i * 0.07 }}
             >
               <span
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-[15px] shadow-sm shrink-0"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-body shadow-sm shrink-0"
                 style={{ backgroundColor: color }}
               >
                 {letter}
               </span>
-              <span className="text-[15px] font-bold text-slate-600 tracking-tight">{name}</span>
+              <span className="text-body text-slate-600 tracking-tight">{name}</span>
             </motion.div>
           ))}
         </motion.div>
