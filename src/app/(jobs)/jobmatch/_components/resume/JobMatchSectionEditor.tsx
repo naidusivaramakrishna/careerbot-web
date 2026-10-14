@@ -84,8 +84,8 @@ const Field = ({
   multiline?: boolean; placeholder?: string; required?: boolean;
 }) => (
   <div>
-    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-      {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+    <label className="block text-label text-gray-700 mb-1.5">
+      {label}{required && <span className="text-[#B42318] ml-0.5">*</span>}
     </label>
     {multiline ? (
       <textarea
@@ -93,14 +93,14 @@ const Field = ({
         onChange={e => onChange(e.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors bg-gray-50 focus:bg-white"
+        className="w-full px-3.5 py-2.5 text-body-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors bg-gray-50 focus:bg-white"
       />
     ) : (
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors bg-gray-50 focus:bg-white"
+        className="w-full px-3.5 py-2.5 text-body-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors bg-gray-50 focus:bg-white"
       />
     )}
   </div>
@@ -140,16 +140,16 @@ const SummaryEditor = ({ value, onChange }: { value: string; onChange: (v: strin
   const summaryId = useId();
   return (
     <div>
-      <label htmlFor={summaryId} className="block text-sm font-semibold text-gray-700 mb-1.5">Professional Summary</label>
+      <label htmlFor={summaryId} className="block text-label text-gray-700 mb-1.5">Professional Summary</label>
       <textarea
         id={summaryId}
         value={value}
         onChange={e => onChange(e.target.value)}
         rows={8}
         placeholder="Write a compelling professional summary that highlights your key skills and experience..."
-        className="w-full px-3.5 py-2.5 text-sm text-gray-700 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors bg-gray-50 focus:bg-white"
+        className="w-full px-3.5 py-2.5 text-body-sm text-gray-700 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors bg-gray-50 focus:bg-white"
       />
-      <p className="text-[11px] text-gray-400 mt-1.5">{value.length} characters</p>
+      <p className="text-body-sm text-gray-600 mt-1.5">{value.length} characters</p>
     </div>
   );
 };
@@ -166,7 +166,7 @@ const TagsEditor = ({ value, onChange, placeholder }: {
   };
   return (
     <div>
-      <label htmlFor={inputId} className="block text-sm font-semibold text-gray-700 mb-1.5">Skills</label>
+      <label htmlFor={inputId} className="block text-label text-gray-700 mb-1.5">Skills</label>
       <div className="flex gap-2 mb-3">
         <input
           id={inputId}
@@ -174,22 +174,22 @@ const TagsEditor = ({ value, onChange, placeholder }: {
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
           placeholder={placeholder}
-          className="flex-1 px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-gray-50 focus:bg-white"
+          className="flex-1 px-3.5 py-2.5 text-body-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-gray-50 focus:bg-white"
         />
-        <button type="button" onClick={add} className="px-4 py-2.5 bg-[#2557a7] text-white rounded-lg hover:bg-[#1e4a96] transition-colors text-sm font-semibold">
+        <button type="button" onClick={add} className="px-4 py-2.5 bg-[#2557A7] text-white rounded-lg hover:bg-[#1F4E98] transition-colors text-label">
           <Plus className="w-4 h-4" />
         </button>
       </div>
       <div className="flex flex-wrap gap-2 min-h-[40px] p-3 bg-gray-50 rounded-lg border border-gray-200">
         {value.map((tag) => (
-          <span key={tag} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-white text-gray-700 border border-gray-200 rounded-full shadow-sm">
+          <span key={tag} className="inline-flex items-center gap-1.5 px-3 py-1 text-body-sm bg-white text-gray-700 border border-gray-200 rounded-full shadow-sm">
             {tag}
-            <button type="button" onClick={() => onChange(value.filter(t => t !== tag))} className="hover:text-red-500 transition-colors">
+            <button type="button" onClick={() => onChange(value.filter(t => t !== tag))} className="hover:text-[#B42318] transition-colors text-label">
               <X className="w-3 h-3" />
             </button>
           </span>
         ))}
-        {value.length === 0 && <p className="text-xs text-gray-400 italic self-center">Type above and press Enter or + to add skills.</p>}
+        {value.length === 0 && <p className="text-body-sm text-gray-600 italic self-center">Type above and press Enter or + to add skills.</p>}
       </div>
     </div>
   );
@@ -204,12 +204,12 @@ const ExpItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) =
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer select-none" role="button" tabIndex={0} onClick={() => setOpen(o => !o)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(o => !o)}>
-        <span className="text-sm font-semibold text-gray-700 truncate">{item.role || item.title || "New Entry"}</span>
+        <span className="text-body-sm text-gray-700 truncate">{item.role || item.title || "New Entry"}</span>
         <div className="flex items-center gap-2 shrink-0">
-          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 transition-colors">
+          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="text-[#B42318] hover:text-[#912018] transition-colors text-label">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-          {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-600" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-600" />}
         </div>
       </div>
       {open && (
@@ -224,14 +224,14 @@ const ExpItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) =
           </div>
           <Field label="Location" value={item.location || ""} onChange={v => onChange({ ...item, location: v })} placeholder="City, Country" />
           <div>
-            <label htmlFor={descId} className="block text-sm font-semibold text-gray-700 mb-1.5">Responsibilities <span className="text-gray-400 font-normal">(one per line)</span></label>
+            <label htmlFor={descId} className="block text-label text-gray-700 mb-1.5">Responsibilities <span className="text-gray-600 font-normal">(one per line)</span></label>
             <textarea
               id={descId}
               value={desc}
               onChange={e => onChange({ ...item, description: e.target.value.split("\n") })}
               rows={4}
               placeholder={"- Led development of key features\n- Collaborated with cross-functional teams"}
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-gray-50 focus:bg-white"
+              className="w-full px-3.5 py-2.5 text-body-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-gray-50 focus:bg-white"
             />
           </div>
         </div>
@@ -247,10 +247,10 @@ const EduItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) =
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer select-none" role="button" tabIndex={0} onClick={() => setOpen(o => !o)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(o => !o)}>
-        <span className="text-sm font-semibold text-gray-700 truncate">{item.degree || item.qualification || "New Entry"}</span>
+        <span className="text-body-sm text-gray-700 truncate">{item.degree || item.qualification || "New Entry"}</span>
         <div className="flex items-center gap-2 shrink-0">
-          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-          {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="text-[#B42318] hover:text-[#912018] transition-colors text-label"><Trash2 className="w-3.5 h-3.5" /></button>
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-600" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-600" />}
         </div>
       </div>
       {open && (
@@ -279,10 +279,10 @@ const ProjItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer select-none" role="button" tabIndex={0} onClick={() => setOpen(o => !o)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(o => !o)}>
-        <span className="text-sm font-semibold text-gray-700 truncate">{item.title || item.name || "New Project"}</span>
+        <span className="text-body-sm text-gray-700 truncate">{item.title || item.name || "New Project"}</span>
         <div className="flex items-center gap-2 shrink-0">
-          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-          {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+          <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} className="text-[#B42318] hover:text-[#912018] transition-colors text-label"><Trash2 className="w-3.5 h-3.5" /></button>
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-600" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-600" />}
         </div>
       </div>
       {open && (
@@ -321,7 +321,7 @@ const SimpleListEditor = ({ value, onChange, addLabel, fields, defaultItem }: {
     {value.map((item, idx) => (
       <div key={idx} className="border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm">
         <div className="flex justify-end">
-          <button type="button" onClick={() => onChange(value.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 transition-colors">
+          <button type="button" onClick={() => onChange(value.filter((_, i) => i !== idx))} className="text-[#B42318] hover:text-[#912018] transition-colors text-label">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -333,7 +333,7 @@ const SimpleListEditor = ({ value, onChange, addLabel, fields, defaultItem }: {
       </div>
     ))}
     <button type="button" onClick={() => onChange([...value, defaultItem])}
-      className="w-full py-3 text-sm text-[#2557a7] font-semibold border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
+      className="w-full py-3 text-label text-[#2557A7] border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
       <Plus className="w-3.5 h-3.5" /> {addLabel}
     </button>
   </div>
@@ -357,7 +357,7 @@ const renderExperienceSection = (localData: any, onChange: (v: any) => void) => 
         <ExpItem key={idx} item={item} onChange={v => onChange(list.map((x, i) => i === idx ? v : x))} onRemove={() => onChange(list.filter((_, i) => i !== idx))} />
       ))}
       <button type="button" onClick={() => onChange([...list, { role: "", company: "", startDate: "", endDate: "", description: [] }])}
-        className="w-full py-3 text-sm text-[#2557a7] font-semibold border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
+        className="w-full py-3 text-label text-[#2557A7] border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
         <Plus className="w-3.5 h-3.5" /> Add Entry
       </button>
     </div>
@@ -374,7 +374,7 @@ const renderEducationSection = (localData: any, onChange: (v: any) => void) => {
         <EduItem key={idx} item={item} onChange={v => onChange(list.map((x, i) => i === idx ? v : x))} onRemove={() => onChange(list.filter((_, i) => i !== idx))} />
       ))}
       <button type="button" onClick={() => onChange([...list, { degree: "", branch: "", school: "", startDate: "", endDate: "", grade: "" }])}
-        className="w-full py-3 text-sm text-[#2557a7] font-semibold border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
+        className="w-full py-3 text-label text-[#2557A7] border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
         <Plus className="w-3.5 h-3.5" /> Add Education
       </button>
     </div>
@@ -391,7 +391,7 @@ const renderProjectsSection = (localData: any, onChange: (v: any) => void) => {
         <ProjItem key={idx} item={item} onChange={v => onChange(list.map((x, i) => i === idx ? v : x))} onRemove={() => onChange(list.filter((_, i) => i !== idx))} />
       ))}
       <button type="button" onClick={() => onChange([...list, { title: "", description: "", technologies: [], link: "" }])}
-        className="w-full py-3 text-sm text-[#2557a7] font-semibold border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
+        className="w-full py-3 text-label text-[#2557A7] border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
         <Plus className="w-3.5 h-3.5" /> Add Project
       </button>
     </div>
@@ -476,9 +476,9 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
 
         {/* Header — centered title like Resume Builder */}
         <div className="relative flex items-center justify-center px-6 py-4 border-b border-gray-100 shrink-0">
-          <h2 className="text-[17px] font-bold text-gray-900">{sectionLabel}</h2>
-          <button type="button" onClick={onClose} className="absolute right-4 p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-4 h-4 text-gray-500" />
+          <h2 className="text-h2 text-gray-900">{sectionLabel}</h2>
+          <button type="button" onClick={onClose} className="absolute right-4 p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-label">
+            <X className="w-4 h-4 text-gray-600" />
           </button>
         </div>
 
@@ -486,27 +486,27 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
         <div className="flex-1 overflow-hidden flex min-h-0">
 
           {/* Form area */}
-          <div className="flex-1 overflow-y-auto p-4 jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+          <div className="flex-1 overflow-y-auto p-4 jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#EAECF0 transparent" }}>
             {renderBody()}
           </div>
 
           {/* ATS Suggestions panel */}
-          <div className="w-[220px] shrink-0 border-l border-gray-100 bg-[#fffef5] p-4 overflow-y-auto jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-            <h3 className="text-[13px] font-bold text-gray-800 mb-3">ATS Suggestions</h3>
+          <div className="w-[220px] shrink-0 border-l border-gray-100 bg-[#F8FAFC] p-4 overflow-y-auto jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#EAECF0 transparent" }}>
+            <h3 className="text-h3 text-gray-800 mb-3">ATS Suggestions</h3>
             <hr className="border-gray-200 mb-4" />
 
             <div className="space-y-4">
               {tips.map((tip) => (
                 <div key={tip}>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-amber-100 text-amber-700 rounded border border-amber-200 uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-body-sm bg-warning-50 text-warning-700 rounded border border-warning-200 uppercase tracking-wide">
                     ● Manual Fix
                   </span>
-                  <p className="text-[12px] text-gray-600 mt-2 leading-relaxed">{tip}</p>
+                  <p className="text-body-sm text-gray-600 mt-2">{tip}</p>
                 </div>
               ))}
             </div>
 
-            <p className="text-[11px] text-gray-400 leading-relaxed mt-5 italic border-t border-gray-100 pt-4">
+            <p className="text-body-sm text-gray-600 mt-5 italic border-t border-gray-100 pt-4">
               * Auto Fix buttons apply changes automatically. Manual Fix items require your own edits.
             </p>
           </div>
@@ -516,21 +516,21 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 shrink-0">
           <div>
             {savedAt && (
-              <span className="text-[12px] text-green-600 font-semibold">✓ Saved {savedAt}</span>
+              <span className="text-body-sm text-success-700">✓ Saved {savedAt}</span>
             )}
           </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-5 py-2 text-label text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="px-6 py-2 text-sm font-semibold text-white bg-[#2557a7] hover:bg-[#1e4a96] rounded-lg transition-colors"
+              className="px-6 py-2 text-label text-white bg-[#2557A7] hover:bg-[#1F4E98] rounded-lg transition-colors"
             >
               Save
             </button>

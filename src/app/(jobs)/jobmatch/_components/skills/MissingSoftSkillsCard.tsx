@@ -75,11 +75,11 @@ const MissingSoftSkillsCard: React.FC<MissingSoftSkillsCardProps> = ({
     <div className={`bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4 ${className}`}>
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-base font-bold text-gray-900">Soft Skills</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Click to add · ✕ to remove</p>
+          <h3 className="text-h3 text-gray-900">Soft Skills</h3>
+          <p className="text-body-sm text-gray-600 mt-0.5">Click to add · ✕ to remove</p>
         </div>
         <div className="px-3 py-1.5 rounded-lg bg-purple-50 border border-purple-100">
-          <span className="text-xs font-bold text-purple-700">
+          <span className="text-body-sm text-purple-700">
             {totalSelected} / {mergedSkills.length} added
           </span>
         </div>

@@ -1,14 +1,17 @@
 ﻿import React from "react";
 import { sanitizeHtml } from "@/lib/sanitizeHtml";
 
-export const matchedKeywordStyle: React.CSSProperties = { backgroundColor: "#d8fae9", color: "#087a52", borderRadius: 3, padding: "0 2px" };
+// Job Match's shared status palette (the success / error hues) —
+// matched reuses the "green" band, missing reuses "rose", so a keyword's
+// color always matches how the rest of the feature (score ring, breakdown
+// bars, JD highlighter) renders the same matched/missing judgment.
+export const matchedKeywordStyle: React.CSSProperties = { backgroundColor: "#D1FADF", color: "#067647", borderRadius: 3, padding: "0 2px" };
 // Single source of truth for every "missing" indicator in the resume preview —
-// skill/soft-skill chips (AnimatedSkillChip), inline keyword highlights below,
-// and the pending-field style in JobMatchTemplateThree.tsx all reuse this same
-// light rose so "missing" reads as one consistent color across every section
+// inline keyword highlights below and the pending skill chips in
+// JobMatchTemplateThree.tsx (missingStyle) reuse this same light rose so "missing" reads as one consistent color across every section
 // instead of each surface picking its own shade.
-export const missingKeywordStyle: React.CSSProperties = { backgroundColor: "#fdf0f2", color: "#c2456a", borderRadius: 3, padding: "0 2px" };
-export const missingKeywordBorderColor = "#f3c7d3";
+export const missingKeywordStyle: React.CSSProperties = { backgroundColor: "#FEE4E2", color: "#B42318", borderRadius: 3, padding: "0 2px" };
+export const missingKeywordBorderColor = "#FECDCA";
 
 export function highlightResumeKeywords(text: string, matched: string[], missing: string[]): React.ReactNode {
   const matchedSet = new Set(matched.filter(Boolean).map(value => value.trim().toLowerCase()));

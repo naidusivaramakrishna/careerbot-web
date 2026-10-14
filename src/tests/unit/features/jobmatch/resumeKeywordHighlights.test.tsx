@@ -6,12 +6,12 @@ import JobMatchTemplateThree from "@/app/(jobs)/jobmatch/_components/resume/JobM
 
 afterEach(cleanup);
 
-it("shows the whole suggested summary in rose, then green after applying", () => {
+it("shows the whole suggested summary plain (no highlight) until applied, then green after applying", () => {
   const props = { data: { summary: "Experienced Python developer." }, matchedKeywords: ["Python"], pendingFields: { summary: ["text"] } };
   const { container, rerender } = render(<JobMatchTemplateThree {...props}/>);
   const pending = container.querySelector('[data-resume-edit="pending"]') as HTMLElement;
   expect(pending.textContent).toBe("Experienced Python developer.");
-  expect(pending.style.backgroundColor).toBe("rgb(253, 240, 242)");
+  expect(pending.style.backgroundColor).toBe("");
   expect(pending.querySelector("mark")).toBeNull();
   rerender(<JobMatchTemplateThree {...props} addedFields={{ summary: ["text"] }}/>);
   const applied = container.querySelector('[data-resume-edit="applied"]') as HTMLElement;

@@ -36,9 +36,9 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
     <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
       <div className="h-12 px-5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-1.5 h-6 bg-linear-to-b from-[#2557a7] to-[#1a4a8f] rounded-full" />
+          <div className="w-1.5 h-6 bg-linear-to-b from-[#2557A7] to-[#2557A7] rounded-full" />
           <div>
-            <h3 className="text-sm font-bold text-gray-800">Your Resume</h3>
+            <h3 className="text-h3 text-gray-800">Your Resume</h3>
           </div>
         </div>
 
@@ -50,7 +50,7 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
               <button
                 type="button"
                 onClick={() => { setShowFontMenu(v => !v); setShowMenu(false); }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all shadow-sm"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-label text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all shadow-sm"
                 title="Change font"
               >
                 <Type className="w-3.5 h-3.5" />
@@ -80,10 +80,10 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
                         type="button"
                         onClick={() => { onFontChange(font.value); setShowFontMenu(false); }}
                         style={{ fontFamily: font.value }}
-                        className={`w-full text-left px-4 py-2 text-[13px] transition-colors ${
+                        className={`w-full text-left px-4 py-2 transition-colors ${
                           currentFont === font.value
-                            ? "bg-blue-50 text-blue-700 font-semibold"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-blue-50 text-jm-brand-600 text-label"
+                            : "text-gray-700 hover:bg-gray-50 text-label"
                         }`}
                       >
                         {font.label}
@@ -102,7 +102,7 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
                 type="button"
                 onClick={() => setShowMenu(!showMenu)}
                 disabled={isDownloading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2557a7] hover:bg-[#1a4a8f] text-white border border-[#2557a7] rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2557A7] hover:bg-[#1F4E98] text-white border border-[#2557A7] rounded-lg text-label transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 title="Download resume"
               >
                 {isDownloading ? (
@@ -119,14 +119,14 @@ const ResumeHeader: React.FC<ResumeHeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => { onDownload("pdf"); setShowMenu(false); }}
-                    className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors"
+                    className="w-full text-left px-4 py-2.5 text-label text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors"
                   >
                     Download as PDF
                   </button>
                   <button
                     type="button"
                     onClick={() => { onDownload("docx"); setShowMenu(false); }}
-                    className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    className="w-full text-left px-4 py-2.5 text-label text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Download as DOCX
                   </button>

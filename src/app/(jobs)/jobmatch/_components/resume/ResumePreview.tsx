@@ -145,11 +145,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // When parsedData is available, render the HTML template for section navigation
   if (parsedData) {
     return (
-      <div data-resume-preview="true" className="relative" style={{ backgroundColor: "#F8FAFD" }}>
+      <div data-resume-preview="true" className="relative" style={{ backgroundColor: "#F8FAFC" }}>
         {isUpdating && (
           <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#2557a7] border-t-transparent" />
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#2557A7] border-t-transparent" />
               <p className="text-sm font-semibold text-slate-600">Updating resume…</p>
             </div>
           </div>
@@ -163,13 +163,13 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
   if (pdfError) {
     return (
-      <div className="h-full bg-red-50 border border-red-200 rounded-lg p-6 flex flex-col items-center justify-center">
+      <div className="h-full bg-[#FEF3F2] border border-[#B20C0C26] rounded-lg p-6 flex flex-col items-center justify-center">
         <div className="text-center">
-          <svg className="w-12 h-12 text-red-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-12 h-12 text-[#B42318] mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-red-800 font-semibold mb-2">Error Loading Resume</p>
-          <p className="text-red-700 text-sm">{pdfError}</p>
+          <p className="text-[#B42318] font-semibold mb-2">Error Loading Resume</p>
+          <p className="text-[#B42318] text-sm">{pdfError}</p>
         </div>
       </div>
     );
@@ -188,7 +188,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             <button
               type="button"
               onClick={onRegenerate}
-              className="px-4 py-2 bg-[#2557a7] text-white rounded hover:bg-[#1a3f7a] text-sm font-medium"
+              className="px-4 py-2 bg-[#2557A7] text-white rounded hover:bg-[#1F4E98] text-sm font-medium"
             >
               Convert & Update Resume
             </button>
@@ -206,9 +206,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     previewContent = (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557a7] border-t-transparent mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">Loading resume preview...</p>
-          <p className="text-sm text-gray-400 mt-2">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557A7] border-t-transparent mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">Loading resume preview...</p>
+          <p className="text-sm text-gray-600 mt-2">
             Please wait while we fetch your resume
           </p>
         </div>
@@ -246,8 +246,8 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     previewContent = (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500 font-medium">No preview available</p>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-gray-600 font-medium">No preview available</p>
+          <p className="text-sm text-gray-600 mt-2">
             Resume data could not be loaded
           </p>
         </div>
@@ -256,11 +256,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   }
 
   return (
-    <div className="relative h-full bg-linear-to-br from-white to-[#f9fbff] rounded-lg overflow-hidden border border-[#e0eaf5]">
+    <div className="relative h-full bg-linear-to-br from-white to-[#F8FAFC] rounded-lg overflow-hidden border border-[#F2F4F7]">
       {isUpdating && (
         <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557a7] border-t-transparent" />
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557A7] border-t-transparent" />
             <p className="text-sm font-semibold text-slate-600">
               Updating resume...
             </p>

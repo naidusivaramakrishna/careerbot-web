@@ -181,11 +181,11 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
     <div className={`bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4 ${className}`}>
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-base font-bold text-gray-900">Technical Skills</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Click to add · ✕ to remove</p>
+          <h3 className="text-h3 text-gray-900">Technical Skills</h3>
+          <p className="text-body-sm text-gray-600 mt-0.5">Click to add · ✕ to remove</p>
         </div>
         <div className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100">
-          <span className="text-xs font-bold text-blue-700">
+          <span className="text-body-sm text-jm-brand-600">
             {totalSelected} / {totalSkills} added
           </span>
         </div>
@@ -193,10 +193,10 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
         {mergedCritical.length > 0 && (
-          <div className="bg-red-50 rounded-xl p-4 border border-red-100 hover:shadow-sm transition-all duration-200">
+          <div className="bg-[#FEF3F2] rounded-xl p-4 border border-[#B20C0C26] hover:shadow-sm transition-all duration-200">
             <ListSection
               title="🔴 Critical Skills"
-              titleColor="text-red-600"
+              titleColor="text-[#B42318]"
               items={mergedCritical}
               matchedMap={matchedCritical}
               onToggle={toggleCritical}
@@ -222,7 +222,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
           <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 hover:shadow-sm transition-all duration-200">
             <ListSection
               title="🔵 Nice to Have"
-              titleColor="text-blue-600"
+              titleColor="text-jm-brand-600"
               items={mergedNice}
               matchedMap={matchedNice}
               onToggle={toggleNice}

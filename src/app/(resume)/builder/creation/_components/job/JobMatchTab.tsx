@@ -193,6 +193,7 @@ const JobMatchTab: React.FC = () => {
 
         {/* ── CTA button ── */}
         <button
+          type="button"
           onClick={() => router.push("/jobs?tab=matched")}
           className="group w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl font-semibold text-white text-[14px] bg-[#2557a7] hover:bg-[#1e4d9b] transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98]"
         >

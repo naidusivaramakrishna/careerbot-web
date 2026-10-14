@@ -16,7 +16,7 @@ const ListSection: React.FC<ListSectionProps> = ({
     <div className="flex items-center gap-2.5">
       <div className={`w-1.5 h-5 rounded-full shadow-md ${titleColor ? titleColor.replace('text-', 'bg-') : 'bg-slate-400'}`}></div>
       <h4 className={`text-sm font-bold ${titleColor || 'text-slate-700'}`}>{title}</h4>
-      <div className="ml-auto px-3 py-1 rounded-full bg-gradient-to-r from-[#f0f6ff] to-[#e5eef9] text-xs font-semibold text-[#2557a7] border border-[#bfdbfe]">
+      <div className="ml-auto px-3 py-1 rounded-full bg-gradient-to-r from-[#F8FAFC] to-[#F2F4F7] text-body-sm text-[#2557A7] border border-[#B2CCFF]">
         {items.filter((it) => matchedMap[it]).length} / {items.length}
       </div>
     </div>

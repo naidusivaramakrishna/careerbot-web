@@ -2,9 +2,8 @@
 
 import React from "react";
 import { Edit3, Trash2 } from "lucide-react";
-import AnimatedSkillChip from "./AnimatedSkillChip";
 import SafeHTML from "@/components/common/SafeHTML";
-import { highlightResumeKeywords, ResumeKeywordHtml, matchedKeywordStyle, missingKeywordStyle, missingKeywordBorderColor } from "./resumeKeywordHighlights";
+import { highlightResumeKeywords, ResumeKeywordHtml, missingKeywordStyle, missingKeywordBorderColor } from "./resumeKeywordHighlights";
 import AutoPaginator from "@/components/common/AutoPaginator";
 import { getSafeExternalUrl } from "@/utils/validators";
 import { getEducationScore } from "@/utils/resumeMappers";
@@ -122,13 +121,13 @@ function SectionActions({
     <div className="absolute top-0 right-0 flex flex-col gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-20">
       {onEditSection && (
         <button type="button" onClick={() => onEditSection(sectionKey)} title="Edit section"
-          className="bg-blue-500 rounded-full p-1.5 shadow hover:bg-blue-600 transition-colors">
+          className="bg-jm-brand-600 rounded-full p-1.5 shadow hover:bg-jm-brand-700 transition-colors">
           <Edit3 className="w-3 h-3 text-white" />
         </button>
       )}
       {onDeleteSection && (
         <button type="button" onClick={() => onDeleteSection(sectionKey)} title="Remove section"
-          className="bg-red-500 rounded-full p-1.5 shadow hover:bg-red-600 transition-colors">
+          className="bg-[#B42318] rounded-full p-1.5 shadow hover:bg-[#912018] transition-colors">
           <Trash2 className="w-3 h-3 text-white" />
         </button>
       )}
@@ -145,10 +144,10 @@ function SectionDivider({ label, baseFont }: { label: string; baseFont: string }
         fontWeight: 700,
         letterSpacing: "0.1em",
         textTransform: "uppercase",
-        color: "#111827",
+        color: "#101828",
         margin: 0,
         paddingBottom: "5px",
-        borderBottom: "2px solid #111827",
+        borderBottom: "2px solid #101828",
         fontFamily: baseFont,
       }}>
         {label}
@@ -181,22 +180,15 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const matchedTerms = [...(matchedKeywords ?? []), ...(af.skills ?? []), ...(af.softSkills ?? [])];
   const missingTerms = [...(pendingSkills ?? []), ...(pendingSoftSkills ?? [])];
   const highlightText = (value: string) => keywordMode ? highlightResumeKeywords(value, matchedTerms, missingTerms) : value;
-  const renderMatchChip = (skill: string) => {
-    const lower = skill.toLowerCase();
-    const status = matchedTerms.some(term => term.toLowerCase() === lower) ? "matched" : missingTerms.some(term => term.toLowerCase() === lower) ? "missing" : "neutral";
-    return <AnimatedSkillChip key={lower} skill={skill} added={[...(af.skills ?? []), ...(af.softSkills ?? [])].some(term => term.toLowerCase() === lower)} status={status} title={status === "missing" ? "Missing skill suggested by the job description; not added to your resume" : undefined} style={{...(status === "matched" ? matchedKeywordStyle : status === "missing" ? missingKeywordStyle : {backgroundColor: "#f0f4fc", color: "#263761"}), display: "inline-block", padding: "3px 8px", borderRadius: 4, fontSize: 12, lineHeight: 1.4}}/>;
-  };
 
   const hlStyle: React.CSSProperties = {
     backgroundColor: "rgba(34,197,94,0.25)",
     borderRadius: "3px",
     padding: "0 2px",
   };
-  // Rose counterpart of hlStyle — a suggestion targeting this text hasn't
-  // been applied yet. Reuses missingKeywordStyle so this reads as the exact
-  // same light rose as the missing-skill chips above, not its own shade.
-  // Dashed underline keeps it distinguishable from hlStyle at a glance even
-  // for readers who can't rely on color alone.
+  // Used only for pending skill chips (renderSkillNode below) — a whole
+  // pending TEXT field (summary/bullets) renders plain now, no highlight,
+  // per explicit request; only the chips still mark "not yet applied".
   const missingStyle: React.CSSProperties = {
     ...missingKeywordStyle,
     padding: "0 2px",
@@ -204,7 +196,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   };
   const hl = (section: string, field: string, value: React.ReactNode): React.ReactNode => {
     if ((af[section] || []).includes(field)) return <span data-resume-edit="applied" style={hlStyle}>{value}</span>;
-    if ((pf[section] || []).includes(field)) return <span data-resume-edit="pending" style={missingStyle}>{value}</span>;
+    if ((pf[section] || []).includes(field)) return <span data-resume-edit="pending">{value}</span>;
     if (keywordMode && typeof value === "string") return highlightText(value);
     return <>{value}</>;
   };
@@ -591,12 +583,12 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     const items = parseDescription(desc);
     if (!items.length) return null;
     if (items.length === 1) return (
-      <p style={{ margin: "3px 0 0", fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65 }}>{highlightText(items[0])}</p>
+      <p style={{ margin: "3px 0 0", fontSize: "13.5px", color: "#101828", lineHeight: 1.65 }}>{highlightText(items[0])}</p>
     );
     return (
       <ul style={{ margin: "4px 0 0", paddingLeft: "18px", listStyleType: "disc" }}>
         {items.map((item, i) => (
-          <li key={`${item}-${i}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, marginBottom: "2px" }}>{highlightText(item)}</li>
+          <li key={`${item}-${i}`} style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.65, marginBottom: "2px" }}>{highlightText(item)}</li>
         ))}
       </ul>
     );
@@ -615,7 +607,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
       {items.map((raw, idx) => {
         if (typeof raw === "string") {
           return raw ? (
-            <p key={`${raw}-${idx}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, margin: "0 0 4px" }}>{raw}</p>
+            <p key={`${raw}-${idx}`} style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.65, margin: "0 0 4px" }}>{raw}</p>
           ) : null;
         }
         const item: Record<string, unknown> = (raw && typeof raw === "object") ? raw : {};
@@ -639,23 +631,23 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
           <div key={`${itemTitle}-${idx}`} className="page-break-inside-avoid" style={{ marginBottom: "10px" }}>
             {(itemTitle || dateStr) && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{itemTitle}</span>
-                {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
+                <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#101828" }}>{itemTitle}</span>
+                {dateStr && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
               </div>
             )}
-            {subtitle && <div style={{ fontSize: "13.5px", color: "#374151", fontStyle: "italic", marginTop: "1px" }}>{subtitle}</div>}
+            {subtitle && <div style={{ fontSize: "13.5px", color: "#344054", fontStyle: "italic", marginTop: "1px" }}>{subtitle}</div>}
             {description ? renderBullets(description) : null}
             {tags.length > 0 && (
-              <p style={{ fontSize: "13px", color: "#4b5563", margin: "3px 0 0" }}>{tags.join(", ")}</p>
+              <p style={{ fontSize: "13px", color: "#475467", margin: "3px 0 0" }}>{tags.join(", ")}</p>
             )}
             {getSafeExternalUrl(url) && (
               <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>
+                style={{ fontSize: "12.5px", color: "#2557A7", textDecoration: "none" }}>
                 [Link]
               </a>
             )}
             {extraEntries.map(([k, v]) => (
-              <p key={k} style={{ fontSize: "13px", color: "#4b5563", margin: "2px 0 0" }}>
+              <p key={k} style={{ fontSize: "13px", color: "#475467", margin: "2px 0 0" }}>
                 <strong>{prettifyLabel(k)}:</strong>{" "}
                 {(() => {
                   if (typeof v === "string") return v;
@@ -686,11 +678,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         .filter(([, v]) => v);
       if (!entries.length) return null;
       return (
-        <table style={{ fontSize: "13.5px", color: "#1f2937", borderCollapse: "collapse" }}>
+        <table style={{ fontSize: "13.5px", color: "#101828", borderCollapse: "collapse" }}>
           <tbody>
             {entries.map(([k, v]) => (
               <tr key={k}>
-                <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap", verticalAlign: "top" }}>{prettifyLabel(k)}</td>
+                <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#475467", whiteSpace: "nowrap", verticalAlign: "top" }}>{prettifyLabel(k)}</td>
                 <td style={{ paddingBottom: "3px" }}>: {v}</td>
               </tr>
             ))}
@@ -700,7 +692,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     }
     const s = typeof value === "string" ? value : "";
     if (!s) return null;
-    return <p style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, margin: 0 }}>{s}</p>;
+    return <p style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.65, margin: 0 }}>{s}</p>;
   };
 
   /* ── contact items ── */
@@ -711,22 +703,22 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   if (getSafeExternalUrl(linkedin)) contactParts.push(
     <a key="li" href={getSafeExternalUrl(linkedin)}
       target="_blank" rel="noopener noreferrer"
-      style={{ color: "#1d4ed8", textDecoration: "none" }}>
+      style={{ color: "#2557A7", textDecoration: "underline" }}>
       {hl("contact", "linkedin", "LinkedIn")}
-    </a>
-  );
-  if (getSafeExternalUrl(github)) contactParts.push(
-    <a key="gh" href={getSafeExternalUrl(github)}
-      target="_blank" rel="noopener noreferrer"
-      style={{ color: "#1d4ed8", textDecoration: "none" }}>
-      {hl("contact", "github", "GitHub")}
     </a>
   );
   if (getSafeExternalUrl(portfolio)) contactParts.push(
     <a key="pf" href={getSafeExternalUrl(portfolio)}
       target="_blank" rel="noopener noreferrer"
-      style={{ color: "#1d4ed8", textDecoration: "none" }}>
+      style={{ color: "#2557A7", textDecoration: "underline" }}>
       {hl("contact", "portfolio", "Portfolio")}
+    </a>
+  );
+  if (getSafeExternalUrl(github)) contactParts.push(
+    <a key="gh" href={getSafeExternalUrl(github)}
+      target="_blank" rel="noopener noreferrer"
+      style={{ color: "#2557A7", textDecoration: "underline" }}>
+      {hl("contact", "github", "GitHub")}
     </a>
   );
 
@@ -736,7 +728,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         .ats-desc b, .ats-desc strong { font-weight: 700; }
         .ats-desc i, .ats-desc em { font-style: italic; }
         .ats-desc ul { list-style-type: disc; padding-left: 1rem; margin-top: 3px; }
-        .ats-desc li { font-size: 13.5px; line-height: 1.65; margin-bottom: 2px; color: #1f2937; }
+        .ats-desc li { font-size: 13.5px; line-height: 1.65; margin-bottom: 2px; color: #101828; }
       `}</style>
 
       <div data-resume-document="true" style={{
@@ -744,10 +736,10 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
           width: "100%",
           margin: "0 auto",
           padding: "32px 48px",
-          background: "#ffffff",
+          background: "#FFFFFF",
           fontFamily: baseFont,
           boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
-          border: "1px solid #e5e7eb",
+          border: "1px solid #EAECF0",
           borderRadius: "12px",
           overflow: "hidden",
         }}>
@@ -765,7 +757,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               fontWeight: 700,
               textTransform: "uppercase",
               letterSpacing: "0.12em",
-              color: "#111827",
+              color: "#101828",
               margin: "0 0 5px",
               fontFamily: baseFont,
             }}>
@@ -773,31 +765,24 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             </h1>
 
             {title && (
-              <p style={{ fontSize: "14.5px", color: "#4b5563", fontWeight: 500, margin: "0 0 9px", letterSpacing: "0.03em" }}>
+              <p style={{ fontSize: "14.5px", color: "#475467", fontWeight: 500, margin: "0 0 9px", letterSpacing: "0.03em" }}>
                 {hl("contact", "title", title)}
               </p>
             )}
 
             {/* Contact row — pipe-separated, single line, ATS safe */}
             {contactParts.length > 0 && (
-              <div style={{ fontSize: "13px", color: "#374151", display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0 4px", lineHeight: 1.6 }}>
-                {[false, true].map((links) => {
-                  const parts = contactParts.filter(part => React.isValidElement(part) && (part.type === "a") === links);
-                  return parts.length > 0 && (
-                    <div key={String(links)} style={{ display: "flex", flexWrap: "wrap", justifyContent: "inherit", gap: "0 8px", width: "100%" }}>
-                      {parts.map((part, i) => (
-                        <span key={(part as React.ReactElement).key ?? i} style={{ display: "inline-flex", alignItems: "baseline", gap: "8px", maxWidth: "100%", overflowWrap: "anywhere" }}>
-                          {i > 0 && <span aria-hidden="true" style={{ color: "#9ca3af", userSelect: "none" }}>•</span>}
-                          {part}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })}
+              <div style={{ fontSize: "13px", color: "#344054", display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "baseline", gap: "0 8px", lineHeight: 1.6 }}>
+                {contactParts.map((part, i) => (
+                  <span key={(part as React.ReactElement).key ?? i} style={{ display: "inline-flex", alignItems: "baseline", gap: "8px", maxWidth: "100%", overflowWrap: "anywhere" }}>
+                    {i > 0 && <span aria-hidden="true" style={{ color: "#98A2B3", userSelect: "none" }}>|</span>}
+                    {part}
+                  </span>
+                ))}
               </div>
             )}
 
-            <hr style={{ border: "none", borderTop: "2px solid #111827", margin: "12px 0 0" }} />
+            <hr style={{ border: "none", borderTop: "2px solid #101828", margin: "12px 0 0" }} />
           </div>
 
           <AutoPaginator>
@@ -807,7 +792,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               <div id="resume-section-summary" data-summary-updated={(af.summary ?? []).includes("text") || undefined} className={sc("summary")} style={{ marginBottom: "14px" }}>
                 <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="summary" />
                 <SectionDivider baseFont={baseFont} label="Summary" />
-                <p style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, textAlign: "justify", margin: 0 }}>
+                <p style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.65, textAlign: "justify", margin: 0 }}>
                   {hl("summary", "text", professionalSummary)}
                 </p>
               </div>
@@ -866,18 +851,18 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     }}>
                       {/* Row 1: Company | Date */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{company}</span>
-                        {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
+                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#101828" }}>{company}</span>
+                        {dateStr && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
                       </div>
                       {/* Row 2: Role | Location */}
                       {(role || loc) && (
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "1px" }}>
-                          <span style={{ fontSize: "13.5px", fontStyle: "italic", color: "#374151" }}>{role}</span>
-                          {loc && <span style={{ fontSize: "13px", color: "#6b7280", whiteSpace: "nowrap", marginLeft: "8px" }}>{loc}</span>}
+                          <span style={{ fontSize: "13.5px", fontStyle: "italic", color: "#344054" }}>{role}</span>
+                          {loc && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{loc}</span>}
                         </div>
                       )}
                       {techStack.length > 0 && (
-                        <p style={{ fontSize: "13px", color: "#4b5563", fontStyle: "italic", margin: "2px 0 0" }}>
+                        <p style={{ fontSize: "13px", color: "#475467", fontStyle: "italic", margin: "2px 0 0" }}>
                           <strong>Tech Stack:</strong> {techStack.join(", ")}
                         </p>
                       )}
@@ -913,13 +898,13 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                       borderLeft: itemChanged ? "3px solid rgba(34,197,94,0.5)" : "none",
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>
+                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#101828" }}>
                           {[degree, branch].filter(Boolean).join(", ")}
                         </span>
-                        {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
+                        {dateStr && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
                       </div>
-                      <div style={{ fontSize: "13.5px", color: "#374151", marginTop: "1px" }}>{college}</div>
-                      {grade && <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "1px" }}>{gradeType}: {grade}</div>}
+                      <div style={{ fontSize: "13.5px", color: "#344054", marginTop: "1px" }}>{college}</div>
+                      {grade && <div style={{ fontSize: "13px", color: "#475467", marginTop: "1px" }}>{gradeType}: {grade}</div>}
                     </div>
                   );
                 })}
@@ -970,20 +955,20 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{projTitle}</span>
+                          <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#101828" }}>{projTitle}</span>
                           {getSafeExternalUrl(link) && (
                             <a href={getSafeExternalUrl(link)}
                               target="_blank" rel="noopener noreferrer"
-                              style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>
+                              style={{ fontSize: "12.5px", color: "#2557A7", textDecoration: "none" }}>
                               [Link]
                             </a>
                           )}
                         </div>
-                        {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
+                        {dateStr && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
                       </div>
                       {desc && renderBullets(desc)}
                       {tech.length > 0 && (
-                        <p style={{ fontSize: "13px", color: "#4b5563", margin: "3px 0 0" }}>
+                        <p style={{ fontSize: "13px", color: "#475467", margin: "3px 0 0" }}>
                           <strong>Technologies:</strong> {tech.join(", ")}
                         </p>
                       )}
@@ -1010,9 +995,9 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     );
                     const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.skills || []).map((s: string) => s.toLowerCase()));
-                    if (keywordMode) return <div style={{display: "flex", flexWrap: "wrap", gap: 6}}>{[...new Map([...realSkills, ...pendingList].map(skill => [skill.toLowerCase(), skill])).values()].map(renderMatchChip)}</div>;
+                    if (keywordMode) return <p style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.6 }}>{[...new Map([...realSkills, ...pendingList].map(skill => [skill.toLowerCase(), skill])).values()].join(" | ")}</p>;
                     return categorizeTechnicalSkills([...realSkills, ...pendingList]).map(({ label, skills: groupSkills }) => (
-                      <p key={label} style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
+                      <p key={label} style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.6 }}>
                         <strong>{label}:</strong>{" "}
                         {groupSkills.map((skill, idx) => {
                           const lower = skill.toLowerCase();
@@ -1037,7 +1022,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               <div id="resume-section-softSkills" className={sc("softSkills")} style={{ marginBottom: "14px" }}>
                 <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="softSkills" />
                 {skills.length === 0 && <SectionDivider baseFont={baseFont} label="Skills" />}
-                <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
+                <p style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.6 }}>
                   <strong>Soft Skills:</strong>{" "}
                   {(() => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1048,7 +1033,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
                     const combined = [...realSoft, ...pendingList];
-                    if (keywordMode) return <span style={{display: "inline-flex", flexWrap: "wrap", gap: 6}}>{combined.map(renderMatchChip)}</span>;
+                    if (keywordMode) return combined.join(" | ");
                     return combined.map((skill: string, idx: number) => {
                       const lower = skill.toLowerCase();
                       const isPending = pendingSet.has(lower);
@@ -1100,12 +1085,12 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                       borderLeft: sectionItemBorderLeft(isModified, isPending),
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{company}</span>
-                        {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
+                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#101828" }}>{company}</span>
+                        {dateStr && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
                       </div>
-                      {role && <div style={{ fontSize: "13.5px", fontStyle: "italic", color: "#374151", marginTop: "1px" }}>{role}</div>}
+                      {role && <div style={{ fontSize: "13.5px", fontStyle: "italic", color: "#344054", marginTop: "1px" }}>{role}</div>}
                       {Array.isArray(intern.tech_stack) && intern.tech_stack.length > 0 && (
-                        <p style={{ fontSize: "13px", color: "#4b5563", fontStyle: "italic", margin: "2px 0 0" }}>
+                        <p style={{ fontSize: "13px", color: "#475467", fontStyle: "italic", margin: "2px 0 0" }}>
                           <strong>Stack:</strong> {intern.tech_stack.map((t: unknown) => toStr(t)).filter(Boolean).join(", ")}
                         </p>
                       )}
@@ -1133,12 +1118,12 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const isModified = hlIdx("certifications", idx);
                     return (
                       <li key={`${certName}-${idx}`} style={{
-                        fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px",
+                        fontSize: "13.5px", color: "#101828", lineHeight: 1.7, marginBottom: "2px",
                         backgroundColor: isModified ? "rgba(34,197,94,0.1)" : undefined,
                       }}>
                         <span style={{ fontWeight: 600 }}>{certName}</span>
-                        {issuedBy && <span style={{ color: "#4b5563" }}>{" — "}{issuedBy}</span>}
-                        {year && <span style={{ color: "#6b7280" }}>{" ("}{year}{")"}</span>}
+                        {issuedBy && <span style={{ color: "#475467" }}>{" — "}{issuedBy}</span>}
+                        {year && <span style={{ color: "#475467" }}>{" ("}{year}{")"}</span>}
                       </li>
                     );
                   })}
@@ -1161,10 +1146,10 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const date = typeof achievement === "object" ? toStr(achievement.date || achievement.year || "") : "";
                     if (!achieveTitle) return null;
                     return (
-                      <li key={`${achieveTitle}-${idx}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px" }}>
+                      <li key={`${achieveTitle}-${idx}`} style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.7, marginBottom: "2px" }}>
                         <span style={{ fontWeight: 600 }}>{achieveTitle}</span>
-                        {date && <span style={{ color: "#6b7280" }}>{" ("}{formatDate(date)}{")"}</span>}
-                        {desc && <span style={{ color: "#374151" }}>{" — "}{desc}</span>}
+                        {date && <span style={{ color: "#475467" }}>{" ("}{formatDate(date)}{")"}</span>}
+                        {desc && <span style={{ color: "#344054" }}>{" — "}{desc}</span>}
                       </li>
                     );
                   })}
@@ -1185,10 +1170,10 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const year = toStr(award.year || award.date || "");
                     if (!awardTitle) return null;
                     return (
-                      <li key={`${awardTitle}-${idx}`} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, marginBottom: "2px" }}>
+                      <li key={`${awardTitle}-${idx}`} style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.7, marginBottom: "2px" }}>
                         <span style={{ fontWeight: 600 }}>{awardTitle}</span>
-                        {issuedBy && <span style={{ color: "#4b5563" }}>{" — "}{issuedBy}</span>}
-                        {year && <span style={{ color: "#6b7280" }}>{" ("}{year}{")"}</span>}
+                        {issuedBy && <span style={{ color: "#475467" }}>{" — "}{issuedBy}</span>}
+                        {year && <span style={{ color: "#475467" }}>{" ("}{year}{")"}</span>}
                       </li>
                     );
                   })}
@@ -1209,11 +1194,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const itemChanged = hlIdx("languages", idx);
                     return (
                       <li key={`${langName}-${idx}`} style={{
-                        fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, breakInside: "avoid",
+                        fontSize: "13.5px", color: "#101828", lineHeight: 1.7, breakInside: "avoid",
                         backgroundColor: itemChanged ? "rgba(34,197,94,0.1)" : undefined,
                       }}>
                         <span style={{ fontWeight: 600 }}>{langName}</span>
-                        {proficiency && <span style={{ color: "#6b7280" }}>{" — "}{proficiency}</span>}
+                        {proficiency && <span style={{ color: "#475467" }}>{" — "}{proficiency}</span>}
                       </li>
                     );
                   })}
@@ -1235,10 +1220,10 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   return (
                     <div key={`${role}-${idx}`} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{role}</span>
-                        {duration && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{duration}</span>}
+                        <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#101828" }}>{role}</span>
+                        {duration && <span style={{ fontSize: "13px", color: "#475467", whiteSpace: "nowrap", marginLeft: "8px" }}>{duration}</span>}
                       </div>
-                      {org && <div style={{ fontSize: "13.5px", color: "#374151", fontStyle: "italic", marginTop: "1px" }}>{org}</div>}
+                      {org && <div style={{ fontSize: "13.5px", color: "#344054", fontStyle: "italic", marginTop: "1px" }}>{org}</div>}
                       {desc && renderBullets(desc)}
                     </div>
                   );
@@ -1261,15 +1246,15 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   return (
                     <div key={`${pubTitle}-${idx}`} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{pubTitle}</span>
+                        <span style={{ fontSize: "14px", fontWeight: 700, color: "#101828" }}>{pubTitle}</span>
                         {getSafeExternalUrl(url) && (
                           <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>[Link]</a>
+                            style={{ fontSize: "12.5px", color: "#2557A7", textDecoration: "none" }}>[Link]</a>
                         )}
                       </div>
-                      {authors && <div style={{ fontSize: "13px", color: "#4b5563" }}>{authors}</div>}
+                      {authors && <div style={{ fontSize: "13px", color: "#475467" }}>{authors}</div>}
                       {(pubName || date) && (
-                        <div style={{ fontSize: "13px", color: "#6b7280" }}>
+                        <div style={{ fontSize: "13px", color: "#475467" }}>
                           {pubName && <em>{pubName}</em>}{pubName && date && " · "}{date && formatDate(date)}
                         </div>
                       )}
@@ -1284,7 +1269,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               <div id="resume-section-hobbies" className={sc("hobbies")} style={{ marginBottom: "14px" }}>
                 <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="hobbies" />
                 <SectionDivider baseFont={baseFont} label="Hobbies & Interests" />
-                <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.7 }}>
+                <p style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.7 }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {hobbies.map((hobby: any) => {
                     const hobbyName = typeof hobby === "string" ? hobby : toStr(hobby.name || hobby.hobby || "");
@@ -1299,7 +1284,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               <div id="resume-section-interests" className={sc("interests")} style={{ marginBottom: "14px" }}>
                 <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="interests" />
                 <SectionDivider baseFont={baseFont} label="Interests" />
-                <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.7 }}>
+                <p style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.7 }}>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {interests.map((interest: any) => {
                     const interestName = typeof interest === "string" ? interest : toStr(interest.name || interest.interest || "");
@@ -1322,9 +1307,9 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const refContact = toStr(ref.contact || ref.email || ref.phone || "");
                     return (
                       <div key={`${refName}-${idx}`}>
-                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{refName}</div>
-                        {relation && <div style={{ fontSize: "13px", color: "#4b5563" }}>{relation}</div>}
-                        {refContact && <div style={{ fontSize: "13px", color: "#6b7280" }}>{refContact}</div>}
+                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#101828" }}>{refName}</div>
+                        {relation && <div style={{ fontSize: "13px", color: "#475467" }}>{relation}</div>}
+                        {refContact && <div style={{ fontSize: "13px", color: "#475467" }}>{refContact}</div>}
                       </div>
                     );
                   })}
@@ -1336,12 +1321,12 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {!deleted.includes("personalDetails") && personalDetailsEntries.length > 0 && (
               <div id="resume-section-personalDetails" className={sc("personalDetails")} style={{ marginBottom: "14px" }}>
                 <SectionDivider baseFont={baseFont} label="Personal Details" />
-                <table style={{ fontSize: "13.5px", color: "#1f2937", borderCollapse: "collapse" }}>
+                <table style={{ fontSize: "13.5px", color: "#101828", borderCollapse: "collapse" }}>
                   <tbody>
                     {personalDetailsEntries.map(([label, value], idx) => (
                       <tr key={`${label}-${idx}`}>
                         {label && (
-                          <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap", verticalAlign: "top" }}>
+                          <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#475467", whiteSpace: "nowrap", verticalAlign: "top" }}>
                             {prettifyLabel(label)}
                           </td>
                         )}

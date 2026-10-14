@@ -42,7 +42,7 @@ const SectionActions = ({ sectionKey, onEditSection, onDeleteSection }: { sectio
           title="Edit section"
           className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-blue-50 hover:border-blue-400 transition-colors"
         >
-          <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+          <Edit3 className="w-3.5 h-3.5 text-jm-brand-600" />
         </button>
       )}
       {onDeleteSection && (
@@ -50,9 +50,9 @@ const SectionActions = ({ sectionKey, onEditSection, onDeleteSection }: { sectio
           type="button"
           onClick={() => onDeleteSection(sectionKey)}
           title="Remove section"
-          className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-red-50 hover:border-red-400 transition-colors"
+          className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-[#FEF3F2] hover:border-[#B42318] transition-colors"
         >
-          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+          <Trash2 className="w-3.5 h-3.5 text-[#B42318]" />
         </button>
       )}
     </div>
@@ -454,8 +454,8 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
     letterSpacing: "0.08em",
     marginBottom: "0.75rem",
     paddingBottom: "4px",
-    borderBottom: "1px solid #9ca3af",
-    color: "#111827",
+    borderBottom: "1px solid #98A2B3",
+    color: "#101828",
   };
 
   return (
@@ -677,7 +677,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                     <div className="font-bold text-sm text-gray-900 flex items-center gap-2">
                       {title}
                       {getSafeExternalUrl(link) && (
-                        <a href={getSafeExternalUrl(link)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                        <a href={getSafeExternalUrl(link)} target="_blank" rel="noopener noreferrer" className="text-jm-brand-600 hover:underline text-xs">
                           [Link]
                         </a>
                       )}
@@ -774,9 +774,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                     <div className="flex-1">
                       <span className="font-medium">{certName}</span>
                       {issuedBy && <span className="font-medium">{', ' + issuedBy}</span>}
-                      {year && <span className="text-xs ml-2 text-gray-500">({year})</span>}
-                      {expiryDate && <span className="text-xs ml-2 text-gray-500">(Expires: {expiryDate})</span>}
-                      {credentialId && <div className="text-xs text-gray-500 mt-0.5">Credential ID: {credentialId}</div>}
+                      {year && <span className="text-xs ml-2 text-gray-600">({year})</span>}
+                      {expiryDate && <span className="text-xs ml-2 text-gray-600">(Expires: {expiryDate})</span>}
+                      {credentialId && <div className="text-xs text-gray-600 mt-0.5">Credential ID: {credentialId}</div>}
                       {certBullets.length > 0 && (
                         <ul className="list-disc pl-5 mt-1 space-y-0.5 text-sm text-gray-700">
                           {certBullets.map((b, i) => <li key={`${b}-${i}`}>{b}</li>)}
@@ -896,7 +896,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   <div key={`${hobbyName}-${idx}`} className="mb-1">
                     <span className="font-semibold">{hobbyName}</span>
                     {description && <span> — {description}</span>}
-                    {proficiencyLevel && <span className="text-xs text-gray-500"> ({proficiencyLevel})</span>}
+                    {proficiencyLevel && <span className="text-xs text-gray-600"> ({proficiencyLevel})</span>}
                   </div>
                 );
               })}
@@ -921,7 +921,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                 return (
                   <div key={`${interestName}-${idx}`} className="mb-1">
                     <span className="font-semibold">{interestName}</span>
-                    {category && <span className="text-xs text-gray-500"> ({category})</span>}
+                    {category && <span className="text-xs text-gray-600"> ({category})</span>}
                     {description && <span> — {description}</span>}
                   </div>
                 );
@@ -980,7 +980,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   <div className="font-semibold text-sm text-gray-900 flex items-center gap-2">
                     {title}
                     {getSafeExternalUrl(url) && (
-                      <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                      <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer" className="text-jm-brand-600 hover:underline text-xs">
                         [Link]
                       </a>
                     )}

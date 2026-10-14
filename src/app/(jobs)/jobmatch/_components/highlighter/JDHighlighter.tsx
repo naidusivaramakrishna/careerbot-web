@@ -22,7 +22,7 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
     matchType === 'missing-tech' || matchType === 'missing-soft';
 
   return (
-    <p className="w-full text-[13px] leading-normal text-gray-900 whitespace-pre-wrap wrap-break-word">
+    <p className="w-full text-body text-gray-900 whitespace-pre-wrap wrap-break-word">
       {spans.map((s, i) => {
         // Spans have no unique id — they're plain text fragments (values can
         // repeat) freshly rebuilt as a whole in order from `text` on every
@@ -38,8 +38,8 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
           <mark
             key={key}
             style={{
-              background: isMissing(s.matchType) ? "#fff3f5" : "#d8fae9",
-              color: isMissing(s.matchType) ? "#ed2346" : "#087a52",
+              background: isMissing(s.matchType) ? "#FEE4E2" : "#D1FADF",
+              color: isMissing(s.matchType) ? "#B42318" : "#067647",
               padding: "1px 3px",
               borderRadius: "3px",
               cursor: clickable ? "pointer" : "default",
