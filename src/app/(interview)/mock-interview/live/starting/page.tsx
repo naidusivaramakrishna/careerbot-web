@@ -11,6 +11,7 @@ interface SessionParams {
   session_type: "hr" | "technical" | "managerial";
   resume_id?: string;
   target_role?: string;
+  experience_level?: "fresher" | "mid" | "senior";
   // voice is presentation-only now (picks which avatar/name to show) — the
   // backend no longer accepts a voice field; the AI provider assigns its own.
   voice: string;
@@ -80,6 +81,7 @@ export default function LiveStartingPage() {
       session_type: params.session_type,
       resume_id: params.resume_id,
       target_role: params.target_role,
+      experience_level: params.experience_level,
     })
       .then(onSuccess)
       .catch(() => {

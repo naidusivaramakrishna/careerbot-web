@@ -15,10 +15,10 @@ const VALID_EXACT_PATHS = new Set([
   '/parser',
   '/mock-interview/live',
   '/mock-interview/history',
-  '/notes/generate',
-  '/notes/english',
-  '/notes/managerial',
-  '/notes/technical',
+  '/prep/notes',
+  '/prep/english',
+  '/prep/managerial',
+  '/prep/technical',
   '/mock-test/history',
   '/dashboard',
   '/profile',
@@ -47,6 +47,14 @@ const TYPE_FALLBACK: Record<string, string | null> = {
   system:        null,
 };
 
+// Interview notes moved from /notes/* to /prep/*; notifications stored before the
+// move still carry the old URL, so translate it instead of dropping the link.
+function normalizeLegacyPath(path: string): string {
+  return path
+    .replace(/^\/notes\/generate(?=[/?#]|$)/, '/prep/notes')
+    .replace(/^\/notes(?=[/?#]|$)/, '/prep');
+}
+
 function isValidAppPath(path: string): boolean {
   if (!path || !path.startsWith('/')) return false;
   // Strip query string and hash before checking
@@ -56,7 +64,8 @@ function isValidAppPath(path: string): boolean {
 
 export function resolveNotificationRoute(n: Pick<Notification, 'type' | 'action_url'>): string | null {
   // Only use action_url if it exactly matches a known working page
-  if (n.action_url && isValidAppPath(n.action_url)) return n.action_url;
+  const actionUrl = n.action_url ? normalizeLegacyPath(n.action_url) : n.action_url;
+  if (actionUrl && isValidAppPath(actionUrl)) return actionUrl;
   // Otherwise fall back to type-based routing
   return TYPE_FALLBACK[n.type?.toLowerCase?.()] ?? null;
 }

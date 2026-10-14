@@ -309,7 +309,7 @@ describe("MockSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /optional prep notes and practice/i }));
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
-    expect(mocks.push).toHaveBeenCalledWith("/notes/generate");
+    expect(mocks.push).toHaveBeenCalledWith("/prep/notes");
   });
 });
 
@@ -338,11 +338,15 @@ describe("ReadinessGate", () => {
   });
 });
 
-// Info screen -> device-check screen -> role-selection screen. The consent
+// Info screen -> role-selection screen -> device-check screen. The consent
 // gate from the old flow is gone entirely (POST /consent "no longer gates
 // anything" per live-interview.txt) — there's no decline/cancel step anymore.
 async function completePreflight() {
-  fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
+  fireEvent.click(screen.getByRole("button", { name: /choose your role/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
+  const dialog = screen.getByRole("main", { name: /set up your mock interview/i });
+  fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
+  fireEvent.click(within(dialog).getByRole("button", { name: /continue to room check/i }));
   fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
   await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
@@ -363,12 +367,12 @@ describe("LiveSetupPage", () => {
     expect(screen.getByRole("heading", { name: "Choose your interview role" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getByRole("main", { name: /set up your mock interview/i });
     expect(dialog).toHaveTextContent("Frontend Developer");
     // Start Interview stays disabled until an interview type is chosen.
-    expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /continue to room check/i })).toBeDisabled();
     fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
-    expect(within(dialog).getByRole("button", { name: /start interview/i })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: /continue to room check/i })).toBeEnabled();
   }, 15_000);
 
   it("stores the single fixed interviewer identity before starting", async () => {
@@ -377,9 +381,9 @@ describe("LiveSetupPage", () => {
     await completePreflight();
 
     fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getByRole("main", { name: /set up your mock interview/i });
     fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
-    fireEvent.click(within(dialog).getByRole("button", { name: /start interview/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue to room check/i }));
 
     expect(mocks.createLiveSession).not.toHaveBeenCalled();
     expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_params", JSON.stringify({
@@ -937,10 +941,10 @@ describe("ReportPage", () => {
   });
 
   it.each([
-    ["HR", "/notes/hr"],
-    ["live_technical", "/notes/technical"],
-    ["live_managerial", "/notes/managerial"],
-    ["something_else", "/notes/generate"],
+    ["HR", "/prep/hr"],
+    ["live_technical", "/prep/technical"],
+    ["live_managerial", "/prep/managerial"],
+    ["something_else", "/prep/notes"],
   ])("sends 'Practice Weak Questions' to the notes page matching a %s report", async (type, expectedHref) => {
     mocks.params = { sessionId: "report-123" };
     mocks.getReport.mockResolvedValue(report({ type }));
