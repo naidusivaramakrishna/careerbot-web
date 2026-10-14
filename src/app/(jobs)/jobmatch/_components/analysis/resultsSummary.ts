@@ -1,3 +1,5 @@
+import { getBand, bandStyles, bandColors, type MatchBand } from "@/lib/job-match/bands";
+
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue => value && typeof value === "object" ? value as RecordValue : {};
 const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
@@ -6,7 +8,33 @@ export const resultScore = (value: unknown): number | null => {
   const score = Number.parseFloat(String(value));
   return Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : null;
 };
-export const resultColor = (score: number | null) => score == null ? "#64748B" : score >= 70 ? "#07845E" : score >= 50 ? "#CA8A04" : "#DC2626";
+// Adapter for backend results: absent/failed scores remain neutral.
+export type ScoreBandTone = 'green' | 'info' | 'warning' | 'rose' | 'neutral';
+const tones: Record<MatchBand, ScoreBandTone> = {
+  strong: 'green', good: 'info', fair: 'warning', 'needs-work': 'rose',
+};
+const descriptions: Record<MatchBand, string> = {
+  strong: 'Your resume is a strong match for this position.',
+  good: 'Your resume aligns well with this role. Review the remaining gaps to strengthen your application.',
+  fair: 'Your resume partially matches this role. Review the gaps and add relevant experience you can support.',
+  'needs-work': 'Review the gaps below to see where your resume can better reflect the job requirements.',
+};
+export function getScoreBand(value: number | null) {
+  const score = resultScore(value);
+  if (score == null) return {
+    tone: 'neutral' as const, label: 'Score unavailable', text: '#475467', bg: '#F2F4F7',
+    description: 'The overall score was not returned for this analysis.',
+    classes: { text: 'text-[#475467]', bg: 'bg-[#F2F4F7]', bar: 'bg-[#475467]' },
+  };
+  const band = getBand(score);
+  return {
+    tone: tones[band], label: bandStyles[band].label, ...bandColors[band],
+    description: descriptions[band], classes: bandStyles[band],
+  };
+}
+export const scoreBandTone = (score: number | null): ScoreBandTone => getScoreBand(score).tone;
+export const resultColor = (score: number | null) => getScoreBand(score).text;
+export const resultBg = (score: number | null) => getScoreBand(score).bg;
 
 export function resultsSummary(results: unknown) {
   const data = record(record(results).data);
@@ -46,6 +74,6 @@ export function resultsSummary(results: unknown) {
   ];
   return {
     score, matched, missing, areas, breakdown,
-    band: score == null ? "Score unavailable" : score >= 85 ? "Excellent Match" : score >= 70 ? "Good Match" : score >= 50 ? "Fair Match" : "Needs Improvement",
+    band: getScoreBand(score).label,
   };
 }

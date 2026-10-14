@@ -7,7 +7,7 @@ import MatchResultsOverview from "@/app/(jobs)/jobmatch/_components/analysis/Mat
 
 afterEach(cleanup);
 describe("results overview navigation", () => {
-  it("uses distinct bar fills and widths for good, average, bad and unavailable scores", () => {
+  it("uses distinct bar fills and widths for green, info, rose and neutral scores", () => {
     render(<MatchResultsOverview matchResults={{data: {ats_score: 78, match_result: {
       Technical_Skills_Check: {match_score: 85},
       Soft_Skills_Check: {match_score: 70},
@@ -21,7 +21,9 @@ describe("results overview navigation", () => {
     // many bars there are.
     const fill = (label: string) => screen.getByRole("progressbar", {name: `${label} match score`}).firstElementChild as HTMLElement;
     const labels = ["Technical Skills", "Soft Skills", "Experience", "Education", "Job Title Match"];
-    expect(labels.map(label => fill(label).getAttribute("data-tone"))).toEqual(["good", "good", "average", "unavailable", "bad"]);
+    // Job Match's shared score bands: 85-100 green, 70-84 info, 55-69 warning, 0-54 rose, null neutral.
+    expect(labels.map(label => fill(label).getAttribute("data-tone"))).toEqual(["green", "info", "warning", "neutral", "rose"]);
+    expect(labels.map(label => fill(label).className)).toEqual(["bg-success-700", "bg-info-700", "bg-warning-700", "bg-[#475467]", "bg-error-700"]);
     expect(labels.map(label => fill(label).style.width)).toEqual(["85%", "70%", "68%", "0%", "52%"]);
     // Capabilities and Certifications are detailed-analysis-only categories now.
     expect(screen.queryByRole("progressbar", {name: "Capabilities match score"})).toBeNull();
@@ -31,7 +33,7 @@ describe("results overview navigation", () => {
     const onDetails = vi.fn();
     const onBack = vi.fn();
     render(<MatchResultsOverview matchResults={{data: {ats_score: 67}}} resumeName="Resume.pdf" jobDescriptionName="Role.txt" onDetails={onDetails} onBack={onBack}/>);
-    expect(screen.getByText("Fair Match")).toBeTruthy();
+    expect(screen.getByText("Fair match")).toBeTruthy();
     expect(screen.getByText("Resume.pdf")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", {name: "View Detailed Analysis"}));
     expect(onDetails).toHaveBeenCalledOnce();

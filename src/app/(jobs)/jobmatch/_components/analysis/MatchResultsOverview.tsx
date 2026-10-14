@@ -2,8 +2,9 @@
 
 import React from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, Download, File, FileText, Info, Lightbulb, X, XCircle } from "lucide-react";
-import { resultsSummary } from "./resultsSummary";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, File, FileText, Info, Lightbulb, X, XCircle } from "lucide-react";
+import { getScoreBand, resultsSummary, resultColor, scoreBandTone } from "./resultsSummary";
+import { openMatchReportPreview } from "./matchReportPrint";
 import styles from "./MatchResultsOverview.module.css";
 
 // The full breakdown (all ~12 categories) lives on the detailed analysis
@@ -75,25 +76,16 @@ export default function MatchResultsOverview({matchResults, resumeName, jobDescr
       first.focus();
     }
   };
-  const scoreColor = (score: number | null) => {
-    if (score == null) return "#64748b";
-    if (score >= 70) return "#076b4e"; // Good: green
-    if (score >= 60) return "#8a5a10"; // Average: yellow
-    return "#b32b47"; // Bad: red
-  };
-  const scoreTone = (score: number | null) => score == null ? "unavailable" : score >= 70 ? "good" : score >= 60 ? "average" : "bad";
+  const scoreColor = resultColor;
+  const scoreTone = scoreBandTone;
   const color = scoreColor(summary.score);
-  const [isDownloading, setIsDownloading] = React.useState(false);
-  const downloadReport = async () => {
-    if (isDownloading) return;
-    setIsDownloading(true);
+  const [wholeScore, fractionalScore] = String(summary.score ?? "--").split(".");
+  const band = getScoreBand(summary.score);
+  const previewReport = () => {
     try {
-      const { createMatchReportPdf } = await import("./matchReportPdf");
-      await createMatchReportPdf(matchResults, resumeName, jobDescriptionName).save("CareerBOT-match-report.pdf", { returnPromise: true });
+      openMatchReportPreview(matchResults, resumeName, jobDescriptionName);
     } catch {
-      toast.error("Couldn't download the PDF report. Please try again.");
-    } finally {
-      setIsDownloading(false);
+      toast.error("Couldn't open the report preview. Allow pop-ups for this site and try again.");
     }
   };
   return <main className={styles.page}>
@@ -101,12 +93,12 @@ export default function MatchResultsOverview({matchResults, resumeName, jobDescr
       <button className={styles.back} onClick={onBack}><ArrowLeft size={16}/> Back to Job Match</button>
       <header className={styles.header}>
         <div><h1>Your Match <span>Results</span></h1><p>Here&apos;s how your resume matches the job description.</p></div>
-        <div className={styles.actions}><button onClick={downloadReport} disabled={isDownloading} aria-busy={isDownloading}><Download size={17}/> {isDownloading ? "Generating PDF..." : "Download Report"}</button><button className={styles.primary} onClick={onDetails}>View Detailed Analysis <ArrowRight size={17}/></button></div>
+        <div className={styles.actions}><button onClick={previewReport}><FileText size={17}/> View Report</button><button className={styles.primary} onClick={onDetails}>View Detailed Analysis <ArrowRight size={17}/></button></div>
       </header>
       <div className={styles.grid}>
         <section className={styles.score} aria-label="Overall match result">
-          <div className={styles.ring} style={{background: `conic-gradient(${color} ${(summary.score ?? 0) * 3.6}deg, #E8EDF3 0deg)`}}><div><strong>{summary.score == null ? "--" : `${summary.score}%`}</strong><small>Match Score</small></div></div>
-          <div><h2 className={styles.band} style={{color, background: `color-mix(in srgb, ${color} 15%, white)`}}>{summary.band}</h2><p>{summary.score == null ? "The overall score was not returned for this analysis." : summary.score >= 70 ? "Your resume aligns well with this role. Review the remaining gaps to strengthen your application." : "Review the gaps below to see where your resume can better reflect the job requirements."}</p></div>
+          <div className={styles.ring} style={{background: `conic-gradient(${color} ${(summary.score ?? 0) * 3.6}deg, #F2F4F7 0deg)`}}><div><strong><span className={styles.srOnly}>{summary.score == null ? "Score unavailable" : `${summary.score}%`}</span><span aria-hidden="true"><span>{wholeScore}</span>{fractionalScore && <span className={styles.scoreFraction}>.{fractionalScore}</span>}{summary.score != null && <span className={styles.percent}>%</span>}</span></strong><small>Match Score</small></div></div>
+          <div><h2 className={`${styles.band} ${band.classes.text} ${band.classes.bg}`} style={{color: band.text, background: band.bg}}>{summary.band}</h2><p>{getScoreBand(summary.score).description}</p></div>
         </section>
         <section className={`${styles.panel} ${styles.summaryPanel}`}><div className={styles.panelHeading}><h2>Quick Summary <Info size={14}/></h2><small>Click on each card to view details</small></div><div className={styles.stats}>
           {[{label: "Matched Keywords", text: "Skills aligned with the job requirements", count: summary.matched.length, Icon: CheckCircle2, tone: "positive"}, {label: "Missing Keywords", text: "Skills to work on for a better match", count: summary.missing.length, Icon: XCircle, tone: "negative"}, {label: "Sections to Improve", text: "Other areas to strengthen your profile", count: summary.areas.length, Icon: FileText, tone: "warning"}].map(({label,text,count,Icon,tone}) => <button key={label} onClick={onDetails} className={styles.stat}><span className={`${styles.statIcon} ${styles[tone]}`} data-filled={Icon !== FileText}><Icon size={25}/></span><strong>{count}</strong><ChevronRight className={styles.chevron} size={14}/><span className={styles.statLabel}>{label}</span><small>{text}</small></button>)}
@@ -140,7 +132,7 @@ export default function MatchResultsOverview({matchResults, resumeName, jobDescr
             </div>
           </section>;
         })}
-        <section className={`${styles.panel} ${styles.breakdownPanel}`}><div className={styles.panelHeading}><h2>Match Score Breakdown <Info size={15}/></h2><small>Each section is weighted based on its importance in the job match.</small></div><table className={styles.breakdown}><thead><tr><th scope="col">Category</th><th scope="col"><span className={styles.srOnly}>Score bar</span></th><th scope="col">Your Score</th></tr></thead><tbody>{summary.breakdown.filter(row => OVERVIEW_BREAKDOWN_LABELS.includes(row.label)).map(row => <tr key={row.label}><td>{row.label}</td><td><div className={styles.track} role="progressbar" aria-label={`${row.label} match score`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={row.score ?? undefined} aria-valuetext={row.score == null ? "Unavailable" : `${row.score}% - ${scoreTone(row.score)}`}><div data-tone={scoreTone(row.score)} style={{width: `${row.score ?? 0}%`}}/></div></td><td><strong style={{color: scoreColor(row.score)}}>{row.score == null ? "N/A" : `${row.score}%`}</strong></td></tr>)}</tbody></table></section>
+        <section className={`${styles.panel} ${styles.breakdownPanel}`}><div className={styles.panelHeading}><h2>Match Score Breakdown <Info size={15}/></h2><small>Each section is weighted based on its importance in the job match.</small></div><table className={styles.breakdown}><thead><tr><th scope="col">Category</th><th scope="col"><span className={styles.srOnly}>Score bar</span></th><th scope="col">Your Score</th></tr></thead><tbody>{summary.breakdown.filter(row => OVERVIEW_BREAKDOWN_LABELS.includes(row.label)).map(row => <tr key={row.label}><td>{row.label}</td><td><div className={styles.track} role="progressbar" aria-label={`${row.label} match score`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={row.score ?? undefined} aria-valuetext={row.score == null ? "Unavailable" : `${row.score}% - ${getScoreBand(row.score).label}`}><div data-tone={scoreTone(row.score)} className={getScoreBand(row.score).classes.bar} style={{width: `${row.score ?? 0}%`, background: getScoreBand(row.score).text}}/></div></td><td><strong style={{color: scoreColor(row.score)}}>{row.score == null ? "N/A" : `${row.score}%`}</strong></td></tr>)}</tbody></table></section>
       </div>
       <footer className={styles.next}><span className={styles.bulb}><Lightbulb size={25}/></span><div><strong>Next Step</strong><p>Explore the detailed analysis to get in-depth suggestions and actionable tips to improve your resume.</p></div></footer>
     </div>
@@ -165,20 +157,20 @@ export default function MatchResultsOverview({matchResults, resumeName, jobDescr
                 <FileText size={20} strokeWidth={1.8}/>
               </span>
               <div className="min-w-0 flex-1">
-                <h3 id="jd-preview-title" className="truncate text-sm font-bold text-gray-900">{jobDescriptionName}</h3>
-                {meta && <p className="mt-0.5 text-xs text-gray-500">{meta}</p>}
+                <h3 id="jd-preview-title" className="truncate text-h3 text-gray-900">{jobDescriptionName}</h3>
+                {meta && <p className="mt-0.5 text-body-sm text-gray-600">{meta}</p>}
               </div>
               <button
                 ref={jdCloseButtonRef}
                 onClick={() => setShowJdPreview(false)}
-                className="shrink-0 rounded-lg p-2 text-gray-400 transition-colors hover:bg-white/80 hover:text-gray-600"
+                className="shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-white/80 hover:text-gray-600 text-label"
                 aria-label="Close job description preview"
               >
                 <X size={18} />
               </button>
             </div>
             <div className="overflow-y-auto px-6 py-5">
-              <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-gray-700">{jdText}</p>
+              <p className="whitespace-pre-wrap text-body-sm text-gray-700">{jdText}</p>
             </div>
           </div>
         </div>

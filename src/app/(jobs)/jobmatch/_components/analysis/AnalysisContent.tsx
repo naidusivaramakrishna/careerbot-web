@@ -16,6 +16,7 @@ import { matcherEnhanceApply, matcherEnhanceRemove, matcherUpdateSections, downl
 import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import KeywordAnalysis from "./KeywordAnalysis";
+import { getScoreBand } from "./resultsSummary";
 import MatchPenalties, { getFixImpactCounts, type ApplyFixResult } from "./MatchPenalties";
 import {
   addBullet, addCertification, removeBullet, removeCertification, shiftHighlightsAfterRemoval,
@@ -24,19 +25,11 @@ import {
 const ANALYSIS_DRAFT_KEY = "jm_analysisDraft";
 
 // Match-score band shown in the RIGHT column's header card (donut + label +
-// blurb) — same "how good is this score" judgment ScoreBreakdown's per-row
-// scoreColor makes, just with a headline label attached.
+// blurb): the shared Job Match bands (lib/job-match/bands.ts via
+// getScoreBand), so it always agrees with the results overview.
 function matchBand(score: number): { label: string; color: string; description: string } {
-  if (score >= 85) {
-    return { label: "Excellent Match", color: "#076b4e", description: "Your resume is a strong match for this position." };
-  }
-  if (score >= 70) {
-    return { label: "Good Match", color: "#076b4e", description: "Your resume aligns well with the job requirements. A few improvements can make you a stronger candidate." };
-  }
-  if (score >= 50) {
-    return { label: "Fair Match", color: "#8a5a10", description: "Your resume partially matches this role — review the suggestions below to close the gap." };
-  }
-  return { label: "Needs Improvement", color: "#b32b47", description: "Your resume needs several updates to better match this role." };
+  const band = getScoreBand(score);
+  return { label: band.label, color: band.text, description: band.description };
 }
 
 // Contact fields (email/phone/location) can only be written back onto a

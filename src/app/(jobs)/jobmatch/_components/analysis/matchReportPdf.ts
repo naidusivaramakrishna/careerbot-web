@@ -13,7 +13,7 @@ export function createMatchReportPdf(matchResults: unknown, resumeName: string, 
     y = 22;
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(11);
-    pdf.setTextColor("#145BC2");
+    pdf.setTextColor("#2557A7");
     pdf.text("CareerBOT | Match Report", margin, y);
     y += 12;
   };
@@ -27,7 +27,7 @@ export function createMatchReportPdf(matchResults: unknown, resumeName: string, 
       ensureSpace(6);
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(10);
-      pdf.setTextColor("#40536B");
+      pdf.setTextColor("#475467");
       pdf.text(line, margin, y);
       y += 6;
     }
@@ -36,10 +36,10 @@ export function createMatchReportPdf(matchResults: unknown, resumeName: string, 
   const heading = (text: string) => {
     ensureSpace(24);
     y += 4;
-    pdf.setDrawColor("#DDE6F0");
+    pdf.setDrawColor("#EAECF0");
     pdf.line(margin, y, margin + width, y);
     y += 9;
-    pdf.setTextColor("#15243B");
+    pdf.setTextColor("#101828");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12);
     pdf.text(text, margin, y);
@@ -47,11 +47,11 @@ export function createMatchReportPdf(matchResults: unknown, resumeName: string, 
   };
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(14);
-  pdf.setTextColor("#145BC2");
+  pdf.setTextColor("#2557A7");
   pdf.text("CareerBOT", margin, y);
   y += 13;
   pdf.setFontSize(24);
-  pdf.setTextColor("#15243B");
+  pdf.setTextColor("#101828");
   pdf.text("Your Match Results", margin, y);
   y += 12;
   paragraph(`Resume: ${resumeName}`);
@@ -69,9 +69,9 @@ export function createMatchReportPdf(matchResults: unknown, resumeName: string, 
     ensureSpace(13);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(10);
-    pdf.setTextColor("#15243B");
+    pdf.setTextColor("#101828");
     pdf.text(row.label, margin, y);
-    pdf.setFillColor("#E8EEF7");
+    pdf.setFillColor("#F2F4F7");
     pdf.roundedRect(105, y - 3, 65, 3, 1.5, 1.5, "F");
     if (row.score != null && row.score > 0) {
       pdf.setFillColor(resultColor(row.score));
@@ -91,7 +91,7 @@ export function createMatchReportPdf(matchResults: unknown, resumeName: string, 
     pdf.setPage(page);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
-    pdf.setTextColor("#64748B");
+    pdf.setTextColor("#475467");
     pdf.text("CareerBOT | Job Match", margin, 287);
     pdf.text(`Page ${page} of ${pdf.getNumberOfPages()}`, margin + width, 287, { align: "right" });
   }

@@ -1,7 +1,10 @@
 /* Job Match landing typography tokens (Tailwind v4 @theme): they generate the
    text-h1 / text-h2 / text-h3 / text-body-lg / text-body / text-body-sm /
-   text-label utilities the jobmatch landing sections use. Without them those
-   classes produce no CSS at all. Values match the Job Match type scale. */
+   text-label utilities the jobmatch landing sections use, plus the overline
+   (uppercase table headers) and score roles the results views read with
+   var(--text-overline) / var(--text-score). Without them those classes
+   produce no CSS and those var()s are invalid. Values match the Job Match
+   type scale. */
 @theme {
   --text-h1: 30px;
   --text-h1--line-height: 38px;
@@ -24,4 +27,10 @@
   --text-label: 14px;
   --text-label--line-height: 20px;
   --text-label--font-weight: 600;
+  --text-overline: 12px;
+  --text-overline--line-height: 16px;
+  --text-overline--font-weight: 600;
+  --text-score: 34px;
+  --text-score--line-height: 38px;
+  --text-score--font-weight: 700;
 }
