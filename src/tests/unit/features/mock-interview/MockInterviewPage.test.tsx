@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     history_count: 0,
   },
   createLiveSession: vi.fn(),
+  getAllResumesUnified: vi.fn(),
   getReport: vi.fn(),
   downloadReportPdf: vi.fn(),
   buildWsUrl: vi.fn((url: string) => `ws://test.local${url}`),
@@ -58,6 +59,12 @@ vi.mock("@/api/mockInterviewApi", () => ({
   getReport: mocks.getReport,
   downloadReportPdf: mocks.downloadReportPdf,
   buildWsUrl: mocks.buildWsUrl,
+}));
+
+// The role-setup screen requires a saved resume; resumeApi is otherwise real.
+vi.mock("@/api/resumeApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/resumeApi")>()),
+  getAllResumesUnified: mocks.getAllResumesUnified,
 }));
 
 vi.mock("@/hooks/useAuth", () => ({
@@ -221,6 +228,10 @@ beforeEach(() => {
   mocks.params = { sessionId: "live-session-123" };
   mocks.isAuthenticated = false;
   mocks.authLoading = false;
+  mocks.getAllResumesUnified.mockResolvedValue({
+    builder_resumes: [{ resume_id: "resume-1", display_name: "Frontend Resume" }],
+    enhanced_resumes: [],
+  });
   mocks.stageState = { notes_generated: false, english_read: false, practice_answered: 0, practice_total: 0, readiness_passed: false, history_count: 0 };
   mocks.buildWsUrl.mockImplementation((url: string) => `ws://test.local${url}`);
   MockAudio.instances = [];
@@ -338,15 +349,21 @@ describe("ReadinessGate", () => {
   });
 });
 
-// Info screen -> role-selection screen -> device-check screen. The consent
+// Info screen -> role setup (role, interview type, experience level and a saved
+// resume are all required) -> room check -> the interview starts. The consent
 // gate from the old flow is gone entirely (POST /consent "no longer gates
 // anything" per live-interview.txt) — there's no decline/cancel step anymore.
-async function completePreflight() {
+async function completeRoleSetup() {
   fireEvent.click(screen.getByRole("button", { name: /choose your role/i }));
   fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
-  const dialog = screen.getByRole("main", { name: /set up your mock interview/i });
-  fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
-  fireEvent.click(within(dialog).getByRole("button", { name: /continue to room check/i }));
+  const setup = screen.getByRole("main", { name: /set up your mock interview/i });
+  fireEvent.click(within(setup).getByText("Technical", { exact: true }));
+  fireEvent.click(within(setup).getByRole("button", { name: /^mid/i }));
+  fireEvent.click(await within(setup).findByRole("radio", { name: /frontend resume/i }));
+  fireEvent.click(within(setup).getByRole("button", { name: /continue to room check/i }));
+}
+
+async function completeRoomCheck() {
   fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
   await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
@@ -358,37 +375,43 @@ async function completePreflight() {
 }
 
 describe("LiveSetupPage", () => {
-  it("runs device checks, then opens the role-confirmation modal", async () => {
+  it("requires an interview type, experience level and resume before the room check", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
     expect(screen.getByRole("heading", { name: /get ready for your next interview/i })).toBeInTheDocument();
-    await completePreflight();
 
+    fireEvent.click(screen.getByRole("button", { name: /choose your role/i }));
     expect(screen.getByRole("heading", { name: "Choose your interview role" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
 
-    const dialog = screen.getByRole("main", { name: /set up your mock interview/i });
-    expect(dialog).toHaveTextContent("Frontend Developer");
-    // Start Interview stays disabled until an interview type is chosen.
-    expect(within(dialog).getByRole("button", { name: /continue to room check/i })).toBeDisabled();
-    fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
-    expect(within(dialog).getByRole("button", { name: /continue to room check/i })).toBeEnabled();
+    const setup = screen.getByRole("main", { name: /set up your mock interview/i });
+    expect(setup).toHaveTextContent("Frontend Developer");
+    const proceed = () => within(setup).getByRole("button", { name: /continue to room check/i });
+    expect(proceed()).toBeDisabled();
+
+    fireEvent.click(within(setup).getByText("Technical", { exact: true }));
+    expect(proceed()).toBeDisabled();
+    fireEvent.click(within(setup).getByRole("button", { name: /^mid/i }));
+    expect(proceed()).toBeDisabled();
+    fireEvent.click(await within(setup).findByRole("radio", { name: /frontend resume/i }));
+    expect(proceed()).toBeEnabled();
+
+    fireEvent.click(proceed());
+    expect(screen.getByRole("button", { name: /test microphone/i })).toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
   }, 15_000);
 
   it("stores the single fixed interviewer identity before starting", async () => {
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
-    await completePreflight();
-
-    fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
-    const dialog = screen.getByRole("main", { name: /set up your mock interview/i });
-    fireEvent.click(within(dialog).getByText("Technical", { exact: true }));
-    fireEvent.click(within(dialog).getByRole("button", { name: /continue to room check/i }));
+    await completeRoleSetup();
+    await completeRoomCheck();
 
     expect(mocks.createLiveSession).not.toHaveBeenCalled();
     expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_params", JSON.stringify({
       session_type: "technical",
-      resume_id: undefined,
+      resume_id: "resume-1",
+      experience_level: "mid",
       target_role: "Frontend Developer",
       voice: "nova",
       interviewer_index: 0,
@@ -938,7 +961,7 @@ describe("ReportPage", () => {
     expect(screen.getByText("Strong interview performance.")).toBeInTheDocument();
     expect(screen.getByText("Tell me about teamwork.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /download pdf/i })).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it.each([
     ["HR", "/prep/hr"],

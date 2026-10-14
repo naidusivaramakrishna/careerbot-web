@@ -82,12 +82,12 @@ const nextConfig: NextConfig = {
     ],
   },
   
-  // Interview notes moved from /notes/* to /prep/*. Keep old bookmarks, shared
-  // links and already-stored notification URLs working.
+  // Interview notes moved from /notes/* to /prep/* (the generator is now /prep/notes).
+  // Old links, bookmarks and stored notification URLs keep working.
   async redirects() {
     return [
-      { source: '/notes/generate', destination: '/prep/notes', permanent: true },
       { source: '/notes', destination: '/prep', permanent: true },
+      { source: '/notes/generate', destination: '/prep/notes', permanent: true },
       { source: '/notes/:path*', destination: '/prep/:path*', permanent: true },
     ];
   },
