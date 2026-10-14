@@ -6,10 +6,11 @@ import { toast } from "sonner";
 import { useScore } from "../../_context/ScoreContext";
 import { useResume } from "../../_context/ResumeContext";
 import { useResumeScorePreview } from "../../_hooks/useResumeScorePreview";
-import { CheckCircle2, ChevronDown, Clock, Loader2, Pencil, RefreshCw, Undo2, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, Clock, Loader2, Pencil, RefreshCw, TrendingUp, Undo2, Zap } from "lucide-react";
 import { getEnhancedCurrentScore } from "../../_utils/enhancedScore";
 import {
   isBulkAutoFixSuggestion,
+  suggestionProgressWeight,
   withoutPendingChildrenOfFixedBulkSuggestions,
 } from "../../_utils/enhancedSuggestionGroups";
 import { getScoreSectionAction } from "../../_utils/scoreSectionRouting";
@@ -67,6 +68,63 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
   // Sections intentionally begin collapsed so the report stays scannable and
   // the user can address one focused group of recommendations at a time.
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [spotlightId, setSpotlightId] = useState<string | null>(null);
+  // "Next best fix" scroll + spotlight timers: a new click or unmount cancels the old ones.
+  const spotlightTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => spotlightTimersRef.current.forEach(clearTimeout), []);
+  // Points a fixed card earned, and the most recent overall gain for the hero badge.
+  const [pointsBySuggestion, setPointsBySuggestion] = useState<Record<string, number>>({});
+  const [scoreGain, setScoreGain] = useState<{ amount: number; key: number } | null>(null);
+  const currentScore = enhancedAtsScore ? getEnhancedCurrentScore(enhancedAtsScore) : 0;
+  // null until the first real score is known: 0 -> 72 on load is not a +72 gain.
+  const prevScoreRef = useRef<number | null>(enhancedAtsScore ? currentScore : null);
+  const prevFixedRef = useRef<Set<string>>(
+    new Set(enhancedSuggestions.filter((item) => item.status === "fixed").map((item) => item.id)),
+  );
+  // Fixed cards still waiting for the server-confirmed score that pays for them
+  // (the status and the refreshed score can land in separate renders).
+  const awaitingPointsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const fixedNow = new Set(enhancedSuggestions.filter((item) => item.status === "fixed").map((item) => item.id));
+    const newlyFixed = Array.from(fixedNow).filter((id) => !prevFixedRef.current.has(id));
+    const undone = Array.from(prevFixedRef.current).filter((id) => !fixedNow.has(id));
+    const delta = enhancedAtsScore && prevScoreRef.current !== null
+      ? Math.round((currentScore - prevScoreRef.current) * 10) / 10
+      : 0;
+    awaitingPointsRef.current = [
+      ...awaitingPointsRef.current.filter((id) => fixedNow.has(id)),
+      ...newlyFixed,
+    ];
+    if (undone.length > 0) {
+      setPointsBySuggestion((current) => {
+        const next = { ...current };
+        for (const id of undone) delete next[id];
+        return next;
+      });
+    }
+    if (delta > 0) {
+      setScoreGain({ amount: delta, key: Date.now() });
+      const payees = awaitingPointsRef.current;
+      if (payees.length > 0) {
+        const share = Math.round((delta / payees.length) * 10) / 10;
+        setPointsBySuggestion((current) => {
+          const next = { ...current };
+          for (const id of payees) next[id] = share;
+          return next;
+        });
+        awaitingPointsRef.current = [];
+      }
+    }
+    prevFixedRef.current = fixedNow;
+    prevScoreRef.current = enhancedAtsScore ? currentScore : null;
+  }, [currentScore, enhancedSuggestions, enhancedAtsScore]);
+
+  useEffect(() => {
+    if (!scoreGain) return;
+    const timer = setTimeout(() => setScoreGain(null), 4500);
+    return () => clearTimeout(timer);
+  }, [scoreGain]);
 
   if (!enhancedAtsScore) {
     return <div className="flex flex-col items-center justify-center gap-2 py-16"><p className="text-[13px] text-[#9CA3AF]">Score data not available.</p></div>;
@@ -74,8 +132,12 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
 
   const profile = enhancedAtsScore.profile;
   const breakdown = enhancedAtsScore.section_breakdown ?? {};
-  const score = getEnhancedCurrentScore(enhancedAtsScore);
+  const score = currentScore;
   const scoreColor = tier(score);
+  // A confirmed "Add all at once" fix must replace its still-pending child
+  // cards (e.g. the individual 'Docker'/'AWS' Auto Fix cards) -- otherwise
+  // they kept showing as pending even after the bulk fix that covers them
+  // was already applied.
   const visibleSuggestions = withoutPendingChildrenOfFixedBulkSuggestions(enhancedSuggestions);
   const trackedSuggestions = visibleSuggestions.filter((suggestion) => {
     if (suggestion.status !== "pending" && suggestion.status !== "fixed") return false;
@@ -100,11 +162,23 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
     );
     return !hasFixedPeer || hasPendingIndividualAutoFix;
   });
-  const fixedSuggestionCount = trackedSuggestions.filter(
-    (suggestion) => suggestion.status === "fixed",
-  ).length;
-  const overallEnhancementProgress = trackedSuggestions.length > 0
-    ? Math.round((fixedSuggestionCount / trackedSuggestions.length) * 100)
+  // Progress counts only what a section list below actually shows, so the
+  // overall figure always equals the sum of the section figures. A suggestion
+  // whose section is missing from the score breakdown is listed nowhere and
+  // must not inflate the total.
+  const listedSuggestions = trackedSuggestions.filter((suggestion) =>
+    Object.keys(breakdown).some((name) => belongsToScoreSection(suggestion, name)),
+  );
+  // A fixed "Add all at once" card stands for every keyword it names (its
+  // child cards are hidden), so it is weighted rather than counted as one.
+  const countRecommendations = (items: typeof trackedSuggestions): number =>
+    items.reduce((total, item) => total + suggestionProgressWeight(item, listedSuggestions), 0);
+  const fixedSuggestionCount = countRecommendations(
+    listedSuggestions.filter((suggestion) => suggestion.status === "fixed"),
+  );
+  const totalSuggestionCount = countRecommendations(listedSuggestions);
+  const overallEnhancementProgress = totalSuggestionCount > 0
+    ? Math.round((fixedSuggestionCount / totalSuggestionCount) * 100)
     : 100;
   // Only server-provided, actionable suggestions become enhancement sections.
   // Pending items rank before resolved work; ties use the backend's lower ATS
@@ -122,6 +196,37 @@ function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIn
       const scoreDifference = getSectionPercentage(sectionA) - getSectionPercentage(sectionB);
       return scoreDifference || nameA.localeCompare(nameB);
     });
+
+  // Heuristic for "highest impact": the weakest ATS section has the most
+  // headroom, and bulk / auto fixes are applied in one click so they win ties.
+  const nextBestFix = trackedSuggestions
+    .filter((suggestion) => suggestion.status === "pending" && suggestion.fix_type !== "info")
+    .flatMap((suggestion) => {
+      const entry = Object.entries(breakdown).find(([name]) => belongsToScoreSection(suggestion, name));
+      if (!entry) return [];
+      const headroom = 100 - getSectionPercentage(entry[1]);
+      const speedBonus = isBulkAutoFixSuggestion(suggestion) ? 15 : suggestion.fix_type === "auto" ? 10 : 0;
+      return [{ suggestion, sectionName: entry[0], rank: headroom + speedBonus }];
+    })
+    .sort((a, b) => b.rank - a.rank)[0];
+
+  const goToNextBestFix = () => {
+    if (!nextBestFix) return;
+    const { suggestion, sectionName } = nextBestFix;
+    setExpandedSections((current) => ({ ...current, [sectionName]: true }));
+    setSpotlightId(suggestion.id);
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    spotlightTimersRef.current.forEach(clearTimeout);
+    spotlightTimersRef.current = [
+      setTimeout(() => {
+        document.getElementById(`ats-fix-${suggestion.id}`)?.scrollIntoView({
+          behavior: reduceMotion ? "auto" : "smooth",
+          block: "center",
+        });
+      }, 60),
+      setTimeout(() => setSpotlightId(null), 2600),
+    ];
+  };
 
 const openManualFix = (suggestionId: string, section: string, entryIndex?: number) => {
     // The chosen issue travels with the editor navigation. This lets the save
@@ -161,13 +266,20 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex min-w-0 flex-col gap-4 p-4">
       <div className="rounded-2xl border border-[#EAECF0] bg-white p-5" style={{ borderTop: `3px solid ${scoreColor.arc}` }}>
         <div className="flex items-center gap-4">
-          <MultiColorCircularScore value={score} precision={2} />
+          <div key={scoreGain?.key ?? "idle"} className={scoreGain ? "ats-ring-pulse rounded-full" : undefined}>
+            <MultiColorCircularScore value={score} precision={2} />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[13px] font-semibold text-[#111827]">ATS Score</span>
+              {scoreGain && (
+                <span key={scoreGain.key} role="status" className="ats-gain-pop inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                  <TrendingUp size={11} aria-hidden="true" />+{Number(scoreGain.amount.toFixed(1))}
+                </span>
+              )}
               {profile && <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: scoreColor.light, color: scoreColor.text }}>{profile}</span>}
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-[#64748B]">
@@ -179,18 +291,41 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-[11px] font-semibold text-[#334155]">Enhancement progress</span>
             <span className="text-[11px] font-bold tabular-nums text-[#0F172A]">
-              {fixedSuggestionCount} of {trackedSuggestions.length} addressed
+              {fixedSuggestionCount} of {totalSuggestionCount} addressed
             </span>
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]" aria-label={`${overallEnhancementProgress}% of ATS recommendations addressed`}>
-            <div className="h-full rounded-full bg-[#2557A7] transition-all duration-700" style={{ width: `${overallEnhancementProgress}%` }} />
+            <div className={`h-full rounded-full transition-all duration-700 ${overallEnhancementProgress === 100 ? "bg-emerald-500" : "bg-[#2557A7]"}`} style={{ width: `${overallEnhancementProgress}%` }} />
           </div>
+          {nextBestFix ? (
+            <button
+              type="button"
+              onClick={goToNextBestFix}
+              className="mt-3 flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg bg-[#2557A7] px-3 py-2 text-left text-white transition hover:bg-[#1a4585] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2557A7] focus-visible:ring-offset-2"
+            >
+              <span className="min-w-0">
+                <span className="block text-[10px] font-medium text-blue-100">Next best fix · {nextBestFix.sectionName}</span>
+                <span className="block truncate text-[12px] font-semibold">{nextBestFix.suggestion.message}</span>
+              </span>
+              <ArrowRight size={14} className="shrink-0" aria-hidden="true" />
+            </button>
+          ) : totalSuggestionCount > 0 && fixedSuggestionCount === totalSuggestionCount ? (
+            <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-800">
+              <CheckCircle2 size={14} aria-hidden="true" /> All recommendations addressed
+            </p>
+          ) : null}
+          {fixedSuggestionCount > 0 && (
+            <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-emerald-800">
+              <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm bg-emerald-500" />
+              Sections highlighted green in your resume preview have been fixed.
+            </p>
+          )}
         </div>
       </div>
 
       {sectionEntries.length > 0 && (
         <div className="flex flex-col gap-3 rounded-2xl border border-[#EAECF0] bg-white p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9CA3AF]">Section Breakdown</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#374151]">Section Breakdown</p>
           <div className="flex flex-col gap-4">
             {sectionEntries.map(([name, sec], sectionIndex) => {
               const percentage = getSectionPercentage(sec);
@@ -203,8 +338,8 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
                 suggestion.status === "fixed" && belongsToScoreSection(suggestion, name),
               );
               const sectionSuggestions = [...pendingSectionSuggestions, ...fixedSectionSuggestions];
-              const resolvedCount = fixedSectionSuggestions.length;
-              const issueCount = sectionSuggestions.length;
+              const resolvedCount = countRecommendations(fixedSectionSuggestions);
+              const issueCount = countRecommendations(sectionSuggestions);
               // ATS quality and enhancement progress intentionally remain separate:
               // the former comes from the scoring engine, while the latter is
               // derived solely from the confirmed status of this section's issues.
@@ -216,7 +351,13 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
               // then turns green even if its ATS score refreshes separately.
               const progressColor = enhancementProgress === 100
                 ? { track: "#D1FAE5", fill: "#10B981" }
-                : { track: "#FEF3C7", fill: "#F59E0B" };
+                // amber-100/amber-500 left the track nearly invisible at 0%
+                // progress (the only visible color was the sliver-width fill,
+                // which is zero-width until the first fix lands) -- amber-200
+                // keeps the section reading as "needs attention" even before
+                // any fix, and amber-600 keeps the fill visibly darker as it
+                // grows across that stronger track.
+                : { track: "#FDE68A", fill: "#D97706" };
               const isExpanded = expandedSections[name] === true;
 
               return (
@@ -266,13 +407,18 @@ const openManualFix = (suggestionId: string, section: string, entryIndex?: numbe
                     const isTargetPickerOpen = targetPickerSuggestionId === suggestion.id;
 
                     return (
-                      <div key={suggestion.id} className={`rounded-md px-2.5 py-2 ${isFixed ? "bg-emerald-50" : "bg-amber-50"}`}>
+                      <div key={suggestion.id} id={`ats-fix-${suggestion.id}`} className={`rounded-md px-2.5 py-2 transition-shadow ${isFixed ? "bg-emerald-50" : "bg-amber-50"} ${spotlightId === suggestion.id ? "ring-2 ring-[#2557A7] ring-offset-1" : ""}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex min-w-0 items-start gap-1.5">
                             {isFixed && <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-600" />}
                             <div className="min-w-0">
-                              <p className={`text-[10px] leading-snug ${isFixed ? "text-emerald-900" : "text-[#B45309]"}`}>{suggestion.message}</p>
-                              {isFixed && <span className="mt-0.5 block text-[9px] font-semibold text-emerald-700">Fixed via {isAuto ? "Auto Fix" : "Manual Fix"}</span>}
+                              <p className={`text-[11px] leading-snug ${isFixed ? "text-emerald-900" : "text-[#92400E]"}`}>{suggestion.message}</p>
+                              {isFixed && (
+                                <span className="mt-0.5 flex items-center gap-1.5 text-[9px] font-semibold text-emerald-700">
+                                  Fixed via {isAuto ? "Auto Fix" : "Manual Fix"}
+                                  {pointsBySuggestion[suggestion.id] > 0 && <span className="rounded-full bg-emerald-200 px-1.5 py-px text-[9px] font-bold text-emerald-900">+{Number(pointsBySuggestion[suggestion.id].toFixed(1))} pts</span>}
+                                </span>
+                              )}
                             </div>
                           </div>
                           {isFixed ? (
@@ -407,7 +553,7 @@ export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: strin
   const tc = tier(displayScore);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex min-w-0 flex-col gap-4 p-4">
 
       {/* ── Score hero card ── */}
       <div

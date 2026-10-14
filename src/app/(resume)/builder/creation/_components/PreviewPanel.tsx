@@ -127,12 +127,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       : undefined,
   );
   const scoreLabel = "Score";
-  // Text that applied ATS fixes wrote into the resume (undo removes it again).
+  // The text applied ATS fixes added to the resume (undo removes it again).
   const fixedTextUnits = useFixedTextHighlights(
+    resumeIdProp ?? "current",
     resumeData,
     enhancedSuggestions,
-    enhancedDataVersion,
     isFormattingSuggestion,
+    isLoadingResume !== true,
   );
   const hasFixedFormatting = enhancedSuggestions.some(suggestion =>
     suggestion.status === "fixed" && isFormattingFix(suggestion.section, suggestion.id),

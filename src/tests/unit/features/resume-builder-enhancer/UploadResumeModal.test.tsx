@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import UploadResumeModal from '@/app/(resume)/builder/start/_components/UploadResumeModal';
-import { parseResumeForEnhancer, enhanceResume } from '@/api/enhancerApi';
+import { parseResumeForEnhancer, enhanceResume, getEnhancedResume } from '@/api/enhancerApi';
 import { mapParserOutputToBuilderData } from '@/utils/resumeMappers';
 import { toast } from 'sonner';
+import { clearStoredFixedSuggestions } from '@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage';
+import { forgetFixedTextFor } from '@/app/(resume)/builder/creation/_hooks/useFixedTextHighlights';
 
 const { mockPush } = vi.hoisted(() => ({
   mockPush: vi.fn(),
@@ -19,6 +21,13 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/api/enhancerApi', () => ({
   parseResumeForEnhancer: vi.fn(),
   enhanceResume: vi.fn(),
+  getEnhancedResume: vi.fn(),
+}));
+vi.mock('@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage', () => ({
+  clearStoredFixedSuggestions: vi.fn(),
+}));
+vi.mock('@/app/(resume)/builder/creation/_hooks/useFixedTextHighlights', () => ({
+  forgetFixedTextFor: vi.fn(),
 }));
 
 vi.mock('@/utils/resumeMappers', () => ({
@@ -27,8 +36,11 @@ vi.mock('@/utils/resumeMappers', () => ({
 
 const mockParseResumeForEnhancer = vi.mocked(parseResumeForEnhancer);
 const mockEnhanceResume = vi.mocked(enhanceResume);
+const mockGetEnhancedResume = vi.mocked(getEnhancedResume);
 const mockMapParserOutputToBuilderData = vi.mocked(mapParserOutputToBuilderData);
 const mockToast = vi.mocked(toast);
+const mockClearStoredFixedSuggestions = vi.mocked(clearStoredFixedSuggestions);
+const mockForgetFixedTextFor = vi.mocked(forgetFixedTextFor);
 
 const onClose = vi.fn();
 
@@ -51,6 +63,7 @@ describe('UploadResumeModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(window.localStorage.getItem).mockReturnValue(null);
+    mockGetEnhancedResume.mockResolvedValue({ applied_fixes: [] } as never);
     mockParseResumeForEnhancer.mockResolvedValue({ resume_id: 'parsed-resume-1' } as never);
     mockEnhanceResume.mockResolvedValue({
       enhanced_resume_id: 'enhanced-resume-1',
@@ -264,5 +277,208 @@ describe('UploadResumeModal', () => {
       expect(mockToast.error).toHaveBeenCalledWith('Failed to import resume. Please try again.');
     });
     expect(screen.getByText('Drag & drop your resume')).toBeInTheDocument();
+  });
+
+  describe('a file that already has saved fixes', () => {
+    const uploadPdf = () => {
+      const { container } = renderModal();
+      fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [pdfFile()] } });
+    };
+    const withSavedFixes = (count = 2) =>
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-1',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+        applied_fixes: Array.from({ length: count }, (_, i) => ({ suggestion_id: `s${i}` })),
+      } as never);
+
+    it('asks before opening the editor and keeps the fixes on "Continue with my changes"', async () => {
+      withSavedFixes();
+      uploadPdf();
+
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent('2 fixes applied');
+      expect(mockPush).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText('Continue with my changes'));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(mockEnhanceResume).toHaveBeenCalledTimes(1);          // no second, credit-charging scan
+    });
+
+    it('starts from the original file only after a second confirmation', async () => {
+      withSavedFixes(1);
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-2',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+      } as never);
+      uploadPdf();
+      await screen.findByRole('dialog');
+
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      expect(mockEnhanceResume).toHaveBeenCalledTimes(1);          // nothing sent before confirming
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-2?source=enhanced'));
+      expect(mockEnhanceResume).toHaveBeenLastCalledWith({ resume_id: 'parsed-resume-1', force_refresh: true });
+    });
+
+    it('keeps browser fixed-card state when the server says its saved fixes remain', async () => {
+      withSavedFixes(1);
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-1',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+        applied_fixes: [{ suggestion_id: 's0' }],
+      } as never);
+      uploadPdf();
+      await screen.findByRole('dialog');
+
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith('The saved fixes are still present. Please try again.');
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+      expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+    });
+
+    it('keeps the latest server result when a refresh response omits fixes but its record still has them', async () => {
+      withSavedFixes(1);
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-1',
+        enhanced_resume: { personalInfo: { fullname: 'Latest Server Candidate' } },
+      } as never);
+      mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 's0' }] } as never);
+      uploadPdf();
+      await screen.findByRole('dialog');
+
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+      await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('The saved fixes are still present. Please try again.'));
+
+      fireEvent.click(screen.getByText('Cancel'));
+      fireEvent.click(screen.getByText('Continue with my changes'));
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(mockMapParserOutputToBuilderData).toHaveBeenLastCalledWith({
+        personalInfo: { fullname: 'Latest Server Candidate' },
+      });
+      expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+      expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+    });
+
+    it('treats an omitted optional applied_fixes field on the refreshed record as empty', async () => {
+      withSavedFixes(1);
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-2',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+      } as never);
+      mockGetEnhancedResume.mockResolvedValueOnce({} as never);
+      uploadPdf();
+      await screen.findByRole('dialog');
+
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-2?source=enhanced'));
+      expect(mockClearStoredFixedSuggestions).toHaveBeenCalledWith('enhanced-resume-1');
+      expect(mockClearStoredFixedSuggestions).toHaveBeenCalledWith('enhanced-resume-2');
+      expect(mockForgetFixedTextFor).toHaveBeenCalledWith('enhanced-resume-1');
+      expect(mockForgetFixedTextFor).toHaveBeenCalledWith('enhanced-resume-2');
+    });
+
+    it('opens the successful fresh response without stale browser fixes when verification GET fails', async () => {
+      withSavedFixes(1);
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-2',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+      } as never);
+      mockGetEnhancedResume.mockRejectedValueOnce(new Error('Temporary read failure'));
+      uploadPdf();
+      await screen.findByRole('dialog');
+
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-2?source=enhanced'));
+      expect(mockClearStoredFixedSuggestions).toHaveBeenCalled();
+      expect(mockForgetFixedTextFor).toHaveBeenCalled();
+      expect(mockToast.warning).toHaveBeenCalledWith('Opened the latest scan, but could not verify its saved-fix list.');
+    });
+
+    describe('when "Start fresh" fails (e.g. 402 out of credits)', () => {
+      const failFreshScan = () => {
+        withSavedFixes(1);
+        mockEnhanceResume.mockRejectedValueOnce(new Error('Insufficient credits'));
+        uploadPdf();
+      };
+      const confirmStartFresh = async () => {
+        await screen.findByRole('dialog');
+        fireEvent.click(screen.getByText('Start with fresh data'));
+        fireEvent.click(screen.getByText('Yes, start fresh'));
+      };
+
+      it('drops the stale copy when the server already removed the fixes', async () => {
+        failFreshScan();
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(
+          'Insufficient credits The earlier fixes were already removed from this resume.',
+        ));
+        expect(mockGetEnhancedResume).toHaveBeenLastCalledWith('enhanced-resume-1');
+        expect(mockClearStoredFixedSuggestions).toHaveBeenCalledWith('enhanced-resume-1');
+        expect(mockForgetFixedTextFor).toHaveBeenCalledWith('enhanced-resume-1');
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByText('Continue with my changes')).toBeNull();
+        expect(mockPush).not.toHaveBeenCalled();
+      });
+
+      it('keeps the choice open when the saved fixes are still there', async () => {
+        failFreshScan();
+        mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 's0' }] } as never);
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Insufficient credits'));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+        expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+      });
+
+      it('keeps the choice open when the saved record does not say (no applied_fixes field)', async () => {
+        failFreshScan();
+        mockGetEnhancedResume.mockResolvedValueOnce({} as never);
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Insufficient credits'));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+        expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+      });
+
+      it('keeps the choice open when the saved record cannot be read', async () => {
+        failFreshScan();
+        mockGetEnhancedResume.mockRejectedValueOnce(new Error('Temporary read failure'));
+        await confirmStartFresh();
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Insufficient credits'));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(mockClearStoredFixedSuggestions).not.toHaveBeenCalled();
+        expect(mockForgetFixedTextFor).not.toHaveBeenCalled();
+      });
+    });
+
+    it('reads the saved record when the response carries no fix list', async () => {
+      mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 'a' }] } as never);
+      uploadPdf();
+
+      expect(await screen.findByRole('dialog')).toHaveTextContent('1 fix applied');
+    });
+
+    it('opens the editor straight away when there is nothing saved', async () => {
+      uploadPdf();
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
   });
 });

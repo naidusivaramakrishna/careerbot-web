@@ -66,7 +66,8 @@ describe("ScoreTab grouped Fix All suggestions", () => {
     const { rerender } = render(<ScoreTab />);
     fireEvent.click(screen.getByRole("button", { name: "Expand Skills ATS recommendations" }));
 
-    expect(screen.getByText("Add cloud platform experience")).toBeInTheDocument();
+    // The "Next best fix" shortcut repeats the top pending message, so it can appear twice.
+    expect(screen.getAllByText("Add cloud platform experience").length).toBeGreaterThan(0);
     expect(screen.getByText(bulk.message)).toBeInTheDocument();
     expect(screen.queryByText(children[0].message)).not.toBeInTheDocument();
     expect(screen.queryByText(children[1].message)).not.toBeInTheDocument();
@@ -75,8 +76,8 @@ describe("ScoreTab grouped Fix All suggestions", () => {
     resumeState.enhancedSuggestions = [...children, { ...bulk, status: "pending", undoAvailable: false }];
     rerender(<ScoreTab />);
 
-    expect(screen.getByText(children[0].message)).toBeInTheDocument();
-    expect(screen.getByText(children[1].message)).toBeInTheDocument();
-    expect(screen.getByText(children[2].message)).toBeInTheDocument();
+    expect(screen.getAllByText(children[0].message).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(children[1].message).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(children[2].message).length).toBeGreaterThan(0);
   });
 });

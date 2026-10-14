@@ -14,7 +14,7 @@ interface PriorFixesDialogProps {
 }
 
 /**
- * Shown when a file that was already improved is parsed again. One saved record
+ * Shown when a file that was already improved is re-uploaded and parsed again. One saved record
  * exists per uploaded resume, so the same working copy (fixes included) comes
  * back; this asks which one the user wants. The safe choice is the default:
  * Escape, a click outside and the primary button all keep the fixes. Starting

@@ -217,6 +217,39 @@ export interface ConfirmableSuggestion {
 }
 
 /**
+ * A "add at least 3 soft skills" count card. The AI service's /enhance/apply
+ * takes ONE soft skill name for it. The endpoint owns the canonical
+ * `soft_skills` list, de-duplicates that one name, and recomputes the count;
+ * these cards are therefore confirmed once per added chip, never from a
+ * whole-section value. Same id/message test the AI service applies
+ * (soft_skills_low, soft_skills_missing, skills_issue_* about soft skills).
+ */
+export function isSoftSkillSuggestion(suggestion: { id: string; message: string }): boolean {
+  const id = suggestion.id.toLowerCase();
+  return id.includes("soft_skill")
+    || (id.startsWith("skills_issue_") && /soft skill/i.test(suggestion.message));
+}
+
+/**
+ * The pending soft-skill card that a skill just added to `category` answers, if
+ * any. Skills are added through their own endpoint (no section Save), so this
+ * is how that add reaches /enhance/apply.
+ */
+export function findSoftSkillSuggestion<T extends ConfirmableSuggestion>(
+  suggestions: T[],
+  category: string,
+): T | undefined {
+  // "Soft Skills" / "soft_skills" only: an unanchored /soft/ also matched "Software Tools".
+  if (!/^\s*soft[\s_-]*skills?\s*$/i.test(category)) return undefined;
+  return suggestions.find((suggestion) =>
+    suggestion.status !== "fixed"
+    && suggestion.fix_type === "manual"
+    && suggestion.section.toLowerCase() === "skills"
+    && isSoftSkillSuggestion(suggestion),
+  );
+}
+
+/**
  * Pending Manual Fix cards a just-saved section has objectively satisfied, with the
  * value to confirm each with (/enhance/apply).
  *
@@ -239,6 +272,9 @@ export function suggestionsToConfirm<T extends ConfirmableSuggestion>(
     if (suggestion.status === "fixed" || suggestion.fix_type !== "manual" || !mappedSections.includes(suggestion.section)) {
       continue;
     }
+    // Confirmed per added chip (see findSoftSkillSuggestion); a whole-section
+    // value would be stored as a single bogus soft skill.
+    if (isSoftSkillSuggestion(suggestion)) continue;
     const value = getSectionValue(savedResume, suggestion.section, suggestion, sectionName).trim();
     const explicitlyTargeted = pendingTarget?.id === suggestion.id;
     // An objective card (a field that is now present, a section that now has content) is

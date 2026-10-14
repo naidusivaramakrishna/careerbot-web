@@ -664,6 +664,38 @@ describe('ResumeContext', () => {
     );
   });
 
+  it('sends the new soft-skill name and marks its card fixed only after the server confirms it', async () => {
+    mockApplyFix.mockResolvedValueOnce({
+      success: true,
+      applied_fixes: [{ suggestion_id: 'soft_skills_low', status: 'applied', undo_available: true }],
+      ats_score: { final_score: 79, section_breakdown: {} },
+    } as never);
+    renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
+    await screen.findByText('Name: Enhanced Avery');
+    await act(async () => {
+      latestContext.syncEnhancedScore({
+        suggestions: [{
+          id: 'soft_skills_low', section: 'Skills', message: 'Add at least 3 soft skills.', fix_type: 'manual',
+        }],
+        ats_score: { final_score: 76, section_breakdown: {} },
+      });
+    });
+
+    await act(async () => {
+      await latestContext.applyManualFix('soft_skills_low', 'Good Communication', 'autosave');
+    });
+
+    expect(mockApplyFix).toHaveBeenCalledWith({
+      enhancer_state: 'enhanced-1',
+      suggestion_id: 'soft_skills_low',
+      fix_type: 'manual',
+      value: 'Good Communication',
+    });
+    expect(latestContext.enhancedSuggestions).toContainEqual(
+      expect.objectContaining({ id: 'soft_skills_low', status: 'fixed' }),
+    );
+  });
+
   it('keeps a confirmed card fixed when a later rescan returns a stale pending copy', async () => {
     renderProvider({ resumeId: 'enhanced-1', source: 'enhanced' });
     await screen.findByText('Name: Enhanced Avery');

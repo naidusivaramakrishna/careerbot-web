@@ -357,6 +357,34 @@ describe("ATS report workspace setup", () => {
     expect(screen.queryByText("Could not prepare ATS fixes")).toBeNull();
   });
 
+  it("asks again, like the upload dialog, when the service keeps the saved fixes on a fresh scan", async () => {
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+    vi.mocked(enhanceResume)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {}, applied_fixes: [{ suggestion_id: "a" }],
+      } as never)
+      .mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {},
+        applied_fixes: [{ suggestion_id: "a" }, { suggestion_id: "b" }],
+      } as never);
+
+    render(<ATSLoginReportPage />);
+    await screen.findByTestId("prior-fixes-dialog");
+    fireEvent.click(screen.getByText("Start with fresh data"));
+    fireEvent.click(screen.getByText("Yes, start fresh"));
+
+    await waitFor(() => expect(enhanceResume).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("Yes, start fresh")).not.toBeDisabled());
+    expect(screen.queryByText("Could not prepare ATS fixes")).toBeNull();
+    expect(screen.getByTestId("prior-fixes-dialog").textContent).toContain("discards the 2 fixes");
+    expect(screen.getByTestId("resume-side")).toBeTruthy();
+    expect(clearStored).not.toHaveBeenCalled(); // the fixes are still saved: keep the browser's copy
+
+    fireEvent.click(screen.getByText("Cancel"));
+    fireEvent.click(screen.getByText("Continue with my changes"));
+    expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+  });
+
   it("ties the fresh scan to the same ATS breakdown the first scan used", async () => {
     window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ ats_breakdown_id: "bd-9" })));
     vi.mocked(enhanceResume)
