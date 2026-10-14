@@ -1,0 +1,29 @@
+/* Shared success/matched and error/missing palette. Keep geometry in component styles.
+   New scale names only: overriding Tailwind's own scales (green, red, ...) or
+   toast colours here would recolour every page, so those belong in a scoped
+   theme or their own PR. The Job Match blue is "jm-brand", not "brand": the
+   resume builder v2 route already uses brand-* classes that have no tokens. */
+@theme {
+  --color-error-50: #FEF3F2;
+  --color-error-100: #FEE4E2;
+  --color-error-200: #FECDCA;
+  --color-error-700: #B42318;
+  --color-warning-50: #FFFAEB;
+  --color-warning-200: #FEDF89;
+  --color-warning-700: #B54708;
+  --color-warning-900: #7A2E0E;
+  --color-info-50: #EFF8FF;
+  --color-info-200: #B2DDFF;
+  --color-info-700: #175CD3;
+  --color-info-900: #194185;
+  --color-jm-brand-50: #EFF4FF;
+  --color-jm-brand-100: #D1E0FF;
+  --color-jm-brand-200: #B2CCFF;
+  --color-jm-brand-600: #155EEF;
+  --color-jm-brand-700: #004EEB;
+  --color-jm-brand-800: #1849A9;
+  --color-success-50: #ECFDF3;
+  --color-success-100: #D1FADF;
+  --color-success-200: #ABEFC6;
+  --color-success-700: #067647;
+}
