@@ -885,6 +885,139 @@ def _one_line(text, n=300):
     return s[:n] + ("…" if len(s) > n else "")
 
 
+# A tag whose text only POINTS at an earlier finding (careerbot-ai #461 at df16dbb4: "**[P1] —
+# carried forward as F1.** Not a new finding; it is the only item that blocks.").
+# It was counted as a second P1 and ledgered with no claim and no location, so
+# the verdict step could never AGREE to it and it blocked every later round. The
+# finding it points at has its own entry. It is one only when the text starts
+# with a reference to an F<n> or a commit and every other word is restatement
+# filler: any other word (a claim, a file:line) may be a finding, so it counts.
+_RESTATEMENT_RE = re.compile(
+    r"[\s*_~|:.(\-–—]*carried(?:[ \t]+(?:forward|over))?[ \t]+(?:as|from)[ \t]+"
+    r"(?:(?:prior|earlier)[ \t]+)?(?:F(\d{1,4})|`?(?=[a-f]*\d)[0-9a-f]{7,40}`?)(?![A-Za-z0-9_])",
+    re.IGNORECASE)
+_RESTATEMENT_FILLER = frozenset((
+    "a", "an", "and", "as", "above", "again", "below", "blocker", "blocking", "blocks", "carried",
+    "counted", "earlier", "finding", "forward", "from", "here", "is", "it", "item", "new", "not",
+    "once", "only", "open", "over", "prior", "restated", "same", "see", "still", "that", "the",
+    "this", "unchanged"))
+RESTATED = "restates an earlier finding; not counted again"
+_F_REF_RE = re.compile(r"(?<![A-Za-z0-9_])F(\d{1,4})(?![A-Za-z0-9_])", re.IGNORECASE)
+
+
+def _restatement_only(text):
+    """Does `text` (what follows a tag) only point at an earlier finding?"""
+    m = _RESTATEMENT_RE.match(text or "")
+    return bool(m) and all(
+        w in _RESTATEMENT_FILLER or re.fullmatch(r"f\d{1,4}|(?=[a-f]*\d)[0-9a-f]{7,40}", w)
+        for w in re.findall(r"[a-z0-9]+", text[m.end():].lower()))
+
+
+def _bare_restatement(f):
+    """A ledger entry that is only such a reference: nothing to check, nothing to fix."""
+    return not f.get("file") and _restatement_only(f.get("title"))
+
+
+# Where a finding's text ends at the latest: the report's own notes and
+# sections that follow the last finding (a restatement written last read
+# "**SDET note:** no tests changed" as its claim; ai #470 / api #383 review).
+_FINDING_END_RE = re.compile(
+    r"[ \t>]*(?:#{1,6}[ \t]|(?:[-*_][ \t]*){3,}$|</?details\b|<summary\b"
+    r"|(?:[-*+][ \t]+)?[*_]*[ \t]*(?:(?:SDET|DELETIONS)(?:[ \t]+notes?)?[*_ \t]*(?:\([^)\n]*\))?[*_ \t]*(?::|[-–—]|$)"
+    r"|PRIOR[ \t]+F\d+[ \t*_]*[:\-–—]|(?:KPI|Verdict)[*_ \t]*:"
+    r"|Carried forward from the review at|Not carried\b))",
+    re.IGNORECASE)
+
+
+def _finding_lines(chunk):
+    """`chunk`'s lines up to (not including) the first heading, `---` rule,
+    SDET/DELETIONS note label, `KPI:` or `Verdict:` line, `PRIOR F<n>:` line,
+    the bot's own carry-forward block or a report <details> line after its
+    first line. Labels only: "Deletions of x.py:3 ..." is a claim."""
+    lines = (chunk or "").split("\n")
+    for i, ln in enumerate(lines[1:], 1):
+        if _FINDING_END_RE.match(ln.rstrip()):
+            return lines[:i]
+    return lines
+
+
+def _finding_head(chunk, lines=3):
+    """A finding's first `lines` non-blank lines, before any _finding_lines
+    stop: what the restatement check reads, and what finding_ledger keeps as
+    the title of a counted finding whose first line is only a reference."""
+    return "\n".join([ln for ln in _finding_lines(chunk) if ln.strip()][:lines])
+
+
+def _head_end(chunk, lines=3):
+    """Offset in `chunk` just past the last line _finding_head(chunk, lines) reads."""
+    pos = end = seen = 0
+    for ln in _finding_lines(chunk):
+        if ln.strip():
+            seen, end = seen + 1, pos + len(ln)
+            if seen == lines:
+                break
+        pos += len(ln) + 1
+    return end
+
+
+def neutralise_restatements(text, prefix_re=None, lines=3, carry=None):
+    """(text, refs) for findings that open with a reference to an earlier one.
+    FAIL-CLOSED: a tag becomes "(Pn, restates ...)" (shown, never counted or
+    ledgered) only when its _finding_head is only a pointer (_restatement_only)
+    and every F<n> it names is a real entry of `carry` (in range, not
+    _bare_restatement) at the same or a higher severity, which carry_forward
+    then counts. No carry, a commit-sha reference, F<n> out of range or bare:
+    it stays counted as written. A counted one that names a real F<n> of a
+    lower severity, or has no location of its own, gets F<n>'s location and
+    title, so it is a checkable finding. `refs`: every real F<n> named by a
+    finding that opens with a reference, hidden or counted; review_one keeps
+    them open this round, at any severity (the model just said so). Codex
+    findings are counted and ledgered as one line (review_one passes lines=1):
+    one is read with its indented lines below, and a counted one that opens
+    with a reference gets them on its line, so its ledger title holds its claim."""
+    text = text or ""
+    hits = _tags(mask_code(text), prefix_re, raw=text)
+    parts, last, refs = [], 0, []
+    for i, (sev, pos, _a, b, _h) in enumerate(hits):
+        stop = hits[i + 1][2] if i + 1 < len(hits) else len(text)
+        tag = _TAG_RE.match(text, pos)
+        more = re.match(r"(?:\n[ \t]+(?!```|~~~)\S[^\n]*){1,2}", text[b:stop]) if lines == 1 else None
+        head = _finding_head(text[tag.end():max(stop, b)], lines) + (more.group(0) if more else "")
+        ns = [int(n) for n in _F_REF_RE.findall(head)]
+        real = [(n, carry[n - 1]) for n in ns if carry and 1 <= n <= len(carry)
+                and not _bare_restatement(carry[n - 1])]
+        only, lead, rest, named = _restatement_only(head), _RESTATEMENT_RE.match(head), head, []
+        while m := _RESTATEMENT_RE.match(rest):   # the F<n> it opens with (a pointer: all)
+            named += [int(m.group(1))] if m.group(1) else []
+            rest = rest[m.end():]
+        real = [(n, f) for n, f in real if only or n in named]
+        refs += [n for n, _f in real] if lead else []
+        low = [(n, f) for n, f in real if f.get("sev") > sev]
+        if only and lead.group(1) and len(real) == len(ns) and not low:   # (only: real is all ns)
+            parts += [text[last:pos], f"({sev}, {RESTATED})"]
+            last = tag.end()
+            continue
+        if more and _RESTATEMENT_RE.match(text, tag.end()):   # counted: claim joins its line
+            parts += [text[last:b], " " + " ".join(more.group(0).split())]
+            last = b + more.end()
+        # Counted, and it opens with a reference to a real F<n>: an escalation, or
+        # no location of its own -> name F<n>'s location and title after its own
+        # text, so its ledger entry keeps its claim first and is something the
+        # verdict step can check (never a stuck pointer).
+        seg = head if lines == 1 else "\n".join(_finding_lines(text[tag.end():max(stop, b)]))
+        target = (low[:1] or ([] if _first_file_ref(seg) else real[:1])) if lead else []
+        if target:
+            n, f = target[0]
+            loc = f" `{f['file']}:{f['line']}`" if f.get("file") else ""
+            quoted = re.sub(r"(?i)prior(?=[ \t*_]+F\d)", "earlier", _one_line(f.get("title"), 160))
+            seg = text[tag.end():tag.end() + _head_end(text[tag.end():max(stop, b)], lines)]
+            at = max(last, b if more or lines == 1 or re.search(r"```|~~~", seg) else
+                     tag.end() + len(seg))   # never inside a code fence
+            parts += [text[last:at], f" (restates F{n} ({f.get('sev')}) at {sev}:{loc} {quoted})"]
+            last = at
+    return "".join(parts) + text[last:], refs
+
+
 def finding_ledger(body):
     """[{sev, file, line, title}] for every finding severity_counts counts in a
     report (Claude's and Codex MISSED), identity (sev, basename, line) as in api.
@@ -898,8 +1031,28 @@ def finding_ledger(body):
         # Location from the title and the two lines under it; the rest of a
         # long last finding can quote other files (e.g. a DELETIONS note).
         key = _first_file_ref("\n".join(chunk.strip().split("\n")[:3]))
+        title = _one_line(chunk.strip().split("\n", 1)[0], 160)
+        head = chunk.strip().split("\n", 1)[0]
+        tag = _TAG_RE.search(head)
+        if tag and _RESTATEMENT_RE.match(head[tag.end():]):
+            # It opens with a reference to an earlier finding and was counted
+            # (neutralise_restatements). With a claim, on this line or below:
+            # keep the claim and not the reference, so no new title is a bare
+            # restatement at any length cut and the next round cannot drop it
+            # (_bare_restatement). With none (a pointer nothing could check):
+            # keep its text as written, so the next round drops it with a note.
+            # Either way its location is read above the report's notes only.
+            full = _finding_head(chunk.strip())
+            key = _first_file_ref("\n".join(_finding_lines(chunk.strip())))
+            if not _restatement_only(full[tag.end():]):
+                if _restatement_only(head[tag.end():]):
+                    head = full
+                rest = head[tag.end():]
+                while m := _RESTATEMENT_RE.match(rest):
+                    rest = rest[m.end():]
+                title = _one_line(f"[{sev}] " + rest.lstrip(" \t*_~.,;:)-–—"), 160)
         item = {"sev": sev, "file": key[0] if key else None, "line": key[1] if key else None,
-                "title": _one_line(chunk.strip().split("\n", 1)[0], 160)}
+                "title": title}
         if item not in items:
             items.append(item)
     return items
@@ -959,8 +1112,11 @@ def prior_findings(since_body):
 
 
 def _ident(f):
+    title = f.get("title") or ""
+    while (m := _RESTATEMENT_RE.match(title)) and not _restatement_only(title):
+        title = title[m.end():].lstrip(" \t*_~.,;:)-–—")   # an old title (finding_ledger)
     return (f.get("sev"), f.get("file"), f.get("line")) if f.get("file") \
-        else (f.get("sev"), None, f.get("title"))
+        else (f.get("sev"), None, title)
 
 
 def ledger_delta(prior_body, current_body, files_changed_since=None):
@@ -972,7 +1128,7 @@ def ledger_delta(prior_body, current_body, files_changed_since=None):
         return [], [], current, []
     prior_ids = {_ident(f) for f in prior}
     cur_ids = {_ident(f) for f in current}
-    closed = [f for f in prior if _ident(f) not in cur_ids]
+    closed = [f for f in prior if _ident(f) not in cur_ids and not _bare_restatement(f)]
     persisting = [f for f in current if _ident(f) in prior_ids]
     fresh = [f for f in current if _ident(f) not in prior_ids]
     if files_changed_since is None:
@@ -1148,7 +1304,8 @@ def blockers_to_verify(prior, claude_text):
     verdict step is asked about (a P2/P3 is cleared by Claude alone)."""
     disp = dispositions(claude_text)
     return [i for i, f in enumerate(prior or (), 1)
-            if f.get("sev") in BLOCKING_SEVERITIES and disp.get(i) in ("FIXED", "MOOT")]
+            if f.get("sev") in BLOCKING_SEVERITIES and disp.get(i) in ("FIXED", "MOOT")
+            and not _bare_restatement(f)]
 
 
 def _prior_listing(prior, ids=None):
@@ -1220,7 +1377,7 @@ def parse_verdicts(text, ids):
     return out, None
 
 
-def carry_forward(prior, claude_text, since, codex_text="", verdict=None):
+def carry_forward(prior, claude_text, since, codex_text="", verdict=None, restated=()):
     """Re-emit every earlier finding still open as a counted [Pn] line.
 
     Claude's FIXED/MOOT clears a P2/P3. An earlier P0/P1 leaves the count only
@@ -1230,7 +1387,12 @@ def carry_forward(prior, claude_text, since, codex_text="", verdict=None):
     cross-check (`codex_text`, even a partial one) keeps it. An AGREE in the
     main cross-check clears nothing: its free text is not parsed for consent,
     and one strict source is simpler to audit than two. No verdict step, a
-    failed one, rejected output, a missing or repeated id: it stays counted."""
+    failed one, rejected output, a missing or repeated id: it stays counted.
+    `restated`: the F<n> a restatement in this review named
+    (neutralise_restatements, Claude's or the cross-check's): each stays open,
+    whatever its severity. An entry that is only a restatement
+    (_bare_restatement) is dropped with a note: it holds no claim the verdict
+    step could check (careerbot-ai #461)."""
     if not prior:
         return ""
     disp = dispositions(claude_text)
@@ -1241,16 +1403,22 @@ def carry_forward(prior, claude_text, since, codex_text="", verdict=None):
     elif not verdict[1]:
         answers, why = {}, "the verdict step failed"
     else:
-        answers, why = parse_verdicts(verdict[0], blockers_to_verify(prior, claude_text))
+        answers, why = parse_verdicts(verdict[0], [i for i in blockers_to_verify(prior, claude_text)
+                                                   if i not in restated])   # what was asked
         why = f"the verdict step gave {why}" if why else None
-    still = []
+    still, dropped = [], []
     for i, f in enumerate(prior, 1):
+        if _bare_restatement(f):
+            dropped.append(f"- F{i} ({f.get('sev')}) {_one_line(f.get('title'), 160)}")
+            continue
         d = disp.get(i)
         cleared = answers.get(i) == "AGREE" and i not in disputed
-        if d in ("FIXED", "MOOT") and (f.get("sev") not in BLOCKING_SEVERITIES or cleared):
+        if d in ("FIXED", "MOOT") and i not in restated \
+                and (f.get("sev") not in BLOCKING_SEVERITIES or cleared):
             continue
         if d in ("FIXED", "MOOT"):
-            d = (f"{d} per Claude, cross-check "
+            d = (f"{d} per Claude, but restated as open in this review" if i in restated else
+                 f"{d} per Claude, cross-check "
                  + ("DISPUTE" if i in disputed or answers.get(i) == "DISPUTE" else
                     "answered it more than once" if answers.get(i) == "REPEATED" else
                     f"gave no AGREE ({why})" if why else "gave no AGREE"))
@@ -1260,8 +1428,11 @@ def carry_forward(prior, claude_text, since, codex_text="", verdict=None):
         still.append(f"- [{f['sev']}] {title} ⟨carried from {since[:8]}: "
                      f"{d or 'no disposition from the model'}⟩")
     return (f"\n\n**Carried forward from the review at `{since[:8]}`** ({len(still)} of "
-            f"{len(prior)} still open; counted in the KPI):\n" + ("\n".join(still) or "- none")
-            + "\n")
+            f"{len(prior) - len(dropped)} still open; counted in the KPI):\n"
+            + ("\n".join(still) or "- none") + "\n"
+            + ("\nNot carried -- dropped: carried item with no claim or location (it only "
+               "pointed at an earlier finding):\n"
+               + "\n".join(dropped) + "\n" if dropped else ""))
 
 
 def verdict_section(asked, verdict):
@@ -2524,13 +2695,19 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
         claude, claude_ok = claude_pass(base, head, context, generated=gen + note_c)
     with _phase(f"#{pr} T1 codex"):
         codex = codex_pass(base, head, claude, context, generated=gen + note_x)
-    asked = blockers_to_verify(carry, claude) if claude_ok else []
+    # Checked against the carry only when it is counted below (carry_forward).
+    checked = carry if claude_ok else None
+    claude, restated = neutralise_restatements(claude, carry=checked)
+    codex, restated_x = neutralise_restatements(codex, _CODEX_PREFIX_RE, lines=1, carry=checked)
+    restated += restated_x
+    asked = [i for i in blockers_to_verify(carry, claude) if i not in restated] \
+        if claude_ok else []   # a restated F<n> stays open whatever it answers
     verdict = None
     if asked:
         with _phase(f"#{pr} T1 codex verdicts ({len(asked)} asked)"):
             verdict = codex_verdicts(carry, asked, plan, base, head)
     if claude_ok and carry is not None:
-        claude += carry_forward(carry, claude, since, codex, verdict)
+        claude += carry_forward(carry, claude, since, codex, verdict, set(restated))
     claude, sup, kept = apply_decisions(claude, entries)
     codex, sup_x, kept_x = apply_decisions(codex, entries, _CODEX_PREFIX_RE)
     codex += verdict_section(asked, verdict)
@@ -2541,7 +2718,8 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
             "\n**Review mode:** " + (f"focused on the changes since `{since[:8]}` (base-branch "
                                      f"merges excluded)" if plan["mode"] == "incremental"
                                      else f"full ({plan['why']})")
-            + (f"; {len(carry)} earlier finding(s) re-checked. Gate count incl. carried: "
+            + (f"; {sum(not _bare_restatement(f) for f in carry)} earlier finding(s) "
+               f"re-checked. Gate count incl. carried: "
                f"{KPI_SLOT}" if carry is not None else "."))
     if sup:
         print(f"::warning::#{pr}: the decisions ledger suppressed {len(sup)} finding(s) ("

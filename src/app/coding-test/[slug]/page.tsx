@@ -901,12 +901,32 @@ export default function CodingProblemDetailPage() {
       {isReady && problem && (
         <>
           {isMaximized && (
-            <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-sm px-3 py-2 text-xs text-slate-100">
+            <div className="fixed top-0 inset-x-0 z-50 flex items-center gap-2 bg-slate-900/95 backdrop-blur-sm px-4 h-10 text-xs text-slate-100 border-b border-slate-700">
               {/* Timer in fullscreen */}
               <Clock className={`h-3.5 w-3.5 shrink-0 ${timerSeconds < 120 ? 'text-red-400' : timerSeconds < 300 ? 'text-amber-400' : 'text-emerald-400'}`} aria-hidden />
               <span className={`font-mono font-semibold tabular-nums ${timerSeconds < 120 ? 'text-red-400' : timerSeconds < 300 ? 'text-amber-400' : 'text-emerald-400'}`}>
                 {formatTimer(timerSeconds)}
               </span>
+              {isPracticeMode && (
+                <button
+                  type="button"
+                  onClick={() => setTimerRunning((r) => !r)}
+                  title={timerRunning ? 'Pause timer' : 'Start timer'}
+                  className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  {timerRunning ? <Pause className="h-3.5 w-3.5" aria-hidden /> : <Play className="h-3.5 w-3.5" aria-hidden />}
+                </button>
+              )}
+              {isPracticeMode && !timerRunning && timerSeconds < TIMER_DEFAULT && (
+                <button
+                  type="button"
+                  onClick={() => setTimerSeconds(TIMER_DEFAULT)}
+                  title="Reset timer"
+                  className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                >
+                  <RotateCw className="h-3 w-3" aria-hidden />
+                </button>
+              )}
               {/* Prev / Next navigation */}
               <span className="mx-1 h-4 w-px bg-slate-600" aria-hidden />
               <button
@@ -963,7 +983,20 @@ export default function CodingProblemDetailPage() {
                 )}
               </div>
               <span className="mx-1 h-4 w-px bg-slate-600" aria-hidden />
-              <span className="hidden sm:inline">Press <kbd className="font-mono font-semibold">Esc</kbd> to exit</span>
+              <span className="ml-auto" />
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                title={copied ? 'Copied!' : 'Copy code'}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-slate-300 hover:bg-slate-700 hover:text-white transition"
+              >
+                {copied
+                  ? <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+                  : <Copy  className="h-3.5 w-3.5"                  aria-hidden />}
+                <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy code'}</span>
+              </button>
+              <span className="mx-1 h-4 w-px bg-slate-600" aria-hidden />
+              <span className="hidden sm:inline text-slate-400">Press <kbd className="font-mono font-semibold text-slate-200">Esc</kbd> to exit</span>
               <button
                 type="button"
                 onClick={() => document.exitFullscreen?.().catch(() => {})}
@@ -977,7 +1010,7 @@ export default function CodingProblemDetailPage() {
           )}
           <div
             ref={containerRef}
-            className={`flex ${isMaximized && isDesktop ? 'flex-row flex-1 overflow-hidden' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
+            className={`flex ${isMaximized ? (isDesktop ? 'flex-row flex-1 overflow-hidden' : 'flex-col') + ' pt-10' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
           >
 
           {/* ── Left panel: problem statement ── */}
@@ -1170,17 +1203,19 @@ export default function CodingProblemDetailPage() {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleCopyCode}
-                  title={copied ? 'Copied!' : 'Copy code'}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-[#3c3c3c] hover:text-slate-200"
-                >
-                  {copied
-                    ? <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
-                    : <Copy  className="h-3.5 w-3.5"                  aria-hidden />}
-                  <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
-                </button>
+                {!isMaximized && (
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    title={copied ? 'Copied!' : 'Copy code'}
+                    className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-[#3c3c3c] hover:text-slate-200"
+                  >
+                    {copied
+                      ? <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+                      : <Copy  className="h-3.5 w-3.5"                  aria-hidden />}
+                    <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
