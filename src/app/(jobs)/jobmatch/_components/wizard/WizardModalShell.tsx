@@ -36,7 +36,7 @@ export default function WizardModalShell({
       {open && (
         <motion.div key="wizard-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className={`${styles.overlay} ${wizardStep === 1 ? styles.resumeOverlay : ""}`}
+          className={`${styles.overlay} ${wizardStep === 1 ? styles.resumeOverlay : styles.followupOverlay}`}
           onClick={wizardStep === 4 ? undefined : onClose}>
           <motion.div key="wizard-card" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={STEP_TITLES[wizardStep]} tabIndex={-1}
             onKeyDown={event => {
@@ -51,7 +51,8 @@ export default function WizardModalShell({
             }}
             initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 16 }}
             transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className={`${styles.dialog} ${wizardStep === 1 ? styles.resumeDialog : ""} ${wizardStep === 4 ? styles.analysisDialog : ""}`}
+            data-step={wizardStep}
+            className={`${styles.dialog} ${wizardStep === 1 ? styles.resumeDialog : styles.followupDialog} ${wizardStep === 4 ? styles.analysisDialog : ""}`}
             onClick={event => event.stopPropagation()}>
             <div className={styles.header}>
               <div>
@@ -66,7 +67,7 @@ export default function WizardModalShell({
             {wizardStep !== 4 && <div className={styles.footer}>
               <button type="button" className={styles.cancel} onClick={wizardStep === 1 ? onClose : onBack}>{wizardStep === 1 ? "Cancel" : <><ArrowLeft aria-hidden="true" /> Back</>}</button>
               <button type="button" className={styles.continue} disabled={continueDisabled} onClick={wizardStep === 3 ? onAnalyzeClick : onContinueClick}>
-                {wizardStep === 3 ? <>Analyze Match <ArrowRight aria-hidden="true" /></> : "Continue"}
+                {wizardStep === 3 ? <>Analyze Match <ArrowRight aria-hidden="true" /></> : <>Continue {wizardStep === 1 && <ArrowRight aria-hidden="true" />}</>}
               </button>
             </div>}
           </motion.div>

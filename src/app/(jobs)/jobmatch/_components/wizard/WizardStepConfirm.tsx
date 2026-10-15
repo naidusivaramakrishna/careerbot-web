@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertCircle, CheckCircle2, FileText, Pencil, RefreshCw } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, FileText, Pencil, RefreshCw } from "lucide-react";
 import styles from "./WizardUpload.module.css";
 
 interface WizardStepConfirmProps {
@@ -37,6 +37,7 @@ export default function WizardStepConfirm({
           <span className={styles.fileTypeIcon}>
             <FileText className={extension === "PDF" ? styles.pdfIcon : styles.reviewFileIcon} aria-hidden="true" />
             {extension === "PDF" && <span className={styles.pdfTag}>PDF</span>}
+            {resumeName && <span className={styles.checkBadge}><Check aria-hidden="true" /></span>}
           </span>
           <div className={styles.reviewFileDetails}>
             <strong title={resumeName || undefined}>{resumeName || "No resume selected"}</strong>

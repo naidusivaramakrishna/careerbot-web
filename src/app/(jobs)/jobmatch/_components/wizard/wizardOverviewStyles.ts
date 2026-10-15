@@ -1,6 +1,6 @@
 export const WIZARD_OVERVIEW_STYLES = `
   .jm-container {
-    max-width: 1600px;
+    width: 100%;
     margin: 0 auto;
     padding: 12px 40px 40px;
   }
@@ -42,11 +42,11 @@ export const WIZARD_OVERVIEW_STYLES = `
     outline-offset: 3px;
   }
   .jm-action-btn:hover {
-    background: #EEF4FF !important;
+    background: #F8FAFC !important;
     border-color: rgba(37,87,167,0.25) !important;
-    color: #2557a7 !important;
+    color: #2557A7 !important;
   }
-  .jm-sample-item:hover { background: #F0F5FF !important; }
+  .jm-sample-item:hover { background: #F8FAFC !important; }
   .jm-start-btn:hover {
     box-shadow: 0 14px 34px rgba(37,87,167,0.34), 0 2px 0 rgba(255,255,255,0.18) inset !important;
     transform: translateY(-2px) !important;
@@ -61,6 +61,6 @@ export const WIZARD_OVERVIEW_STYLES = `
   .jm-task-card:hover {
     transform: translateY(-2px);
     border-color: rgba(37,87,167,0.28) !important;
-    box-shadow: 0 16px 34px rgba(15,23,42,0.08) !important;
+    box-shadow: 0 16px 34px rgba(16,24,40,0.08) !important;
   }
 `;

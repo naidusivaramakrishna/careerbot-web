@@ -28,15 +28,15 @@ export default function LoadingAnimation({ stage }: { readonly stage: LoadingSta
 
   return (
     <section className={styles.content} aria-labelledby="analyzing-match-title" aria-live="polite">
-      <header className={styles.header}>
-        <h1 id="analyzing-match-title">Analyzing Your Match</h1>
+      <header className={styles.analysisHeader}>
+        <h2 id="analyzing-match-title">Analyzing Your Match</h2>
         <p>We’re analyzing your resume against the job description. This may take a few moments.</p>
       </header>
       <div className={styles.activity} aria-label="Analysis progress">
         <div className={styles.gauge} role="img" aria-label={`${percent}% complete`}>
           <svg viewBox="0 0 124 124" aria-hidden="true">
-            <circle cx="62" cy="62" r={radius} fill="none" stroke="#dce8f8" strokeWidth="10" />
-            <circle cx="62" cy="62" r={radius} fill="none" stroke="#08a653" strokeWidth="10" strokeLinecap="round"
+            <circle cx="62" cy="62" r={radius} fill="none" stroke="#DCE7F7" strokeWidth="10" />
+            <circle cx="62" cy="62" r={radius} fill="none" stroke="#12B76A" strokeWidth="10" strokeLinecap="round"
               strokeDasharray={circumference} strokeDashoffset={circumference * (1 - percent / 100)} />
           </svg>
           <div><strong>{percent}%</strong><span>Analyzing...</span></div>

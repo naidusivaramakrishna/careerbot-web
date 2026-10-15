@@ -1,6 +1,8 @@
+import "./neutral-theme.css";
+
 export default function JobMatchPublicLayout({ children }: { readonly children: React.ReactNode }) {
   return (
-    <div className="min-h-screen antialiased">
+    <div className="jobmatchTheme min-h-screen antialiased">
       {children}
     </div>
   );

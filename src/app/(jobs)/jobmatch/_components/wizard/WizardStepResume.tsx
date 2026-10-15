@@ -33,8 +33,8 @@ export default function WizardStepResume({ uploadedFile, sessionResumeName, erro
         <strong>Drag and drop your resume here</strong>
         <span className={styles.or}>or</span>
         <button type="button" className={styles.browse} onClick={() => inputRef.current?.click()} aria-describedby="resume-upload-formats">Browse Files</button>
+        <p id="resume-upload-formats" className={styles.formats}>Supported formats: PDF, DOC, DOCX <span aria-hidden="true">|</span> Max file size: 10 MB</p>
       </div>
-      <p id="resume-upload-formats" className={styles.formats}>Supported formats: PDF, DOC, DOCX <span aria-hidden="true">|</span> Max file size: 10 MB</p>
       <div className={styles.selectionSlot}>
       {fileName ? <div className={`${styles.fileRow} ${styles.selectedResume}`} role="status">
         <span className={styles.fileIcon}>

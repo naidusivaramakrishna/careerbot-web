@@ -11,7 +11,7 @@ export default function JobMatchLoading() {
             100% { background-position: 1000px 0; }
           }
           .animate-shimmer-bg {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background: linear-gradient(90deg, #F8FAFC 25%, #F2F4F7 50%, #F8FAFC 75%);
             background-size: 1000px 100%;
             animation: shimmer 2s infinite;
           }

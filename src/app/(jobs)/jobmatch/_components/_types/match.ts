@@ -2,6 +2,7 @@
 
 export interface AnalysisContentProps {
   readonly jdText: string;
+  readonly initialPreviewTab?: "resume" | "jd";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly matchResults: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

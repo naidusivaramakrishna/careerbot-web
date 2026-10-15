@@ -3,8 +3,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { AlertCircle, Check, FileText, Globe2, Info, Link2, Loader2, UploadCloud } from "lucide-react";
-import { FaLinkedinIn } from "react-icons/fa";
-import { SiGlassdoor, SiIndeed, SiMonster } from "react-icons/si";
 import styles from "./WizardUpload.module.css";
 
 const SKILL_VOCAB = [
@@ -51,7 +49,7 @@ export default function WizardStepJobDescription({
     jdSkills.forEach(s => {
       h = h.replace(
         new RegExp(String.raw`\b(${s.replaceAll("+", String.raw`\+`)})\b`, "gi"),
-        '<mark style="background:rgba(37,87,167,0.12);color:#2557a7;border-radius:3px;padding:0">$1</mark>'
+        '<mark style="background:rgba(37,87,167,0.12);color:#2557A7;border-radius:3px;padding:0">$1</mark>'
       );
     });
     // Sanitize final HTML — only allow <mark> and safe inline styles
@@ -106,14 +104,6 @@ export default function WizardStepJobDescription({
           </form>
           {urlError && <p className={styles.urlError} role="alert">{urlError}</p>}
           {urlAdded && <p className={styles.urlSuccess} role="status">Job link added. Continue to review it before analysis.</p>}
-          <div className={styles.platforms}><strong>Supported Platforms</strong><div>
-            <span><i className={`${styles.platformMark} ${styles.linkedinMark}`}><FaLinkedinIn aria-hidden="true" /></i>LinkedIn</span>
-            <span><i className={`${styles.platformMark} ${styles.indeedMark}`}><SiIndeed aria-hidden="true" /></i>Indeed</span>
-            <span><i className={`${styles.platformMark} ${styles.naukriMark}`} aria-hidden="true">N</i>Naukri</span>
-            <span><i className={`${styles.platformMark} ${styles.glassdoorMark}`}><SiGlassdoor aria-hidden="true" /></i>Glassdoor</span>
-            <span><i className={`${styles.platformMark} ${styles.monsterMark}`}><SiMonster aria-hidden="true" /></i>Monster</span>
-            <span><i className={`${styles.platformMark} ${styles.anyBoardMark}`}><Globe2 aria-hidden="true" /></i>Any Job Board</span>
-          </div><small>Works with most job posting links. Make sure the link is publicly accessible.</small></div>
         </div>
       ) : activeTab === "paste" ? (
         <div id="jd-panel-paste" role="tabpanel" aria-labelledby="jd-tab-paste" className={styles.jdPanel}>
@@ -144,8 +134,8 @@ export default function WizardStepJobDescription({
             <strong>Drag &amp; drop your JD file here</strong>
             <span className={styles.or}>or</span>
             <button type="button" className={styles.browse} onClick={() => jdUploadRef.current?.click()} aria-describedby="job-description-formats">Browse Files</button>
+            <p id="job-description-formats" className={styles.formats}>Supported formats: PDF, DOC, DOCX <span aria-hidden="true">|</span> Max file size: 10 MB</p>
           </div>
-          <p id="job-description-formats" className={styles.formats}>Supported formats: PDF, DOC, DOCX <span aria-hidden="true">|</span> Max file size: 10 MB</p>
           <div className={styles.selectionSlot}>
             {jdFile ? (
               <div className={`${styles.fileRow} ${styles.selectedResume}`} role="status" aria-live="polite" aria-busy={isExtractingJd}>
@@ -158,7 +148,7 @@ export default function WizardStepJobDescription({
                 </span>
                 <div className={styles.fileDetails}>
                   <strong title={jdFile.name}>{jdFile.name}</strong>
-                  <span>{isExtractingJd ? "Extracting text..." : `${(jdFile.size / (1024 * 1024)).toFixed(2)} MB`}</span>
+                  <span>{isExtractingJd ? "Extracting text..." : `${(jdFile.size / (1024 * 1024)).toFixed(2)} MB${error ? "" : " · Text extracted"}`}</span>
                 </div>
                 <button type="button" className={styles.fileRemove} onClick={() => jdUploadRef.current?.click()} aria-label="Replace job description file" title="Replace file"><UploadCloud aria-hidden="true" /> Replace</button>
               </div>
@@ -167,10 +157,10 @@ export default function WizardStepJobDescription({
         </div>
       )}
 
-      <div className={styles.tipsBox}>
+      <div className={styles.tipsBox} data-tab={activeTab}>
         <span className={styles.tipsIcon}><Info aria-hidden="true" /></span>
         <div><strong>Tips for best results:</strong><ul>
-          {activeTab === "url" ? <><li>Use a direct job posting link, not the company homepage.</li><li>Ensure the link is publicly accessible.</li><li>If the link doesn’t work, paste the text or upload a file instead.</li></> : <><li>Include the complete job description (responsibilities, requirements, skills, etc.)</li><li>The more details you provide, the more accurate the analysis will be</li><li>{activeTab === "upload" ? "You can also paste the description or enter a job posting URL." : "You can also upload a JD file or enter a job posting URL."}</li></>}
+          {activeTab === "url" ? <><li>Use a direct job posting link, not the company homepage.</li><li>Ensure the link is publicly accessible.</li><li>If the link doesn’t work, paste the text or upload a file instead.</li></> : activeTab === "upload" ? <><li>Include the complete job description, especially requirements and responsibilities.</li><li>The more details you provide, the more accurate the analysis will be.</li><li>You can also paste the text directly or enter a job posting URL.</li></> : <><li>Include the complete job description (responsibilities, requirements, skills, etc.).</li><li>The more details you provide, the more accurate the analysis will be.</li><li>You can also upload a JD file or enter a job posting URL.</li></>}
         </ul></div>
       </div>
 
