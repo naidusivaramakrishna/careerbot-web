@@ -900,6 +900,13 @@ export default function CoverLetterNewPage() {
     }
   }, [jd, jdFile, jobSourceReady, source, trackerJobId]);
 
+  // Files are complete inputs as soon as they are selected, unlike a typed JD.
+  // Analyze an upload once it is valid; typed descriptions wait for blur.
+  useEffect(() => {
+    if (source !== "upload" || !jobSourceReady) return;
+    void analyzeJobDetails();
+  }, [analyzeJobDetails, jobSourceReady, source]);
+
   const generation = useGenerateCoverLetter({
     onSuccess: (response) => {
       setApiError(null);
