@@ -103,8 +103,6 @@ export default function CoverLetterDetailPage() {
           <DetailSkeleton />
         ) : letter === null && !error ? (
           <NotFoundCard />
-        ) : error ? (
-          <ErrorCard onRetry={() => void refetch()} />
         ) : letter ? (
           letter.status === "failed" ? (
             <>
@@ -137,6 +135,8 @@ export default function CoverLetterDetailPage() {
               }
             />
           )
+        ) : error ? (
+          <ErrorCard onRetry={() => void refetch()} />
         ) : null}
       </div>
 

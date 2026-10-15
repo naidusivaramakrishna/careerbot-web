@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { CL_FIXTURES, CL_ERROR_FIXTURES } from "@/tests/mocks/coverLetter/fixtures";
+import { CL_FIXTURES, CL_ERROR_FIXTURES, CL_GENERATION_PROGRESS_FIXTURE } from "@/tests/mocks/coverLetter/fixtures";
 import type {
   CoverLetterResponse,
   CoverLetterListResponse,
@@ -26,7 +26,20 @@ import type {
   JdMatchStatus,
   JdMatchSummary,
   KeywordReport,
+  CoverLetterGenerationProgress,
 } from "@/types/coverLetter";
+
+describe("cover-letter generation progress contract", () => {
+  it("matches the authenticated backend progress response", () => {
+    const progress: CoverLetterGenerationProgress = CL_GENERATION_PROGRESS_FIXTURE;
+    expect(progress.status).toBe("in_progress");
+    expect(progress.stage).toBe("generating");
+    expect(progress.progress).toBeGreaterThanOrEqual(0);
+    expect(progress.progress).toBeLessThanOrEqual(100);
+    expect(typeof progress.message).toBe("string");
+    expect(new Date(progress.updated_at).getTime()).not.toBeNaN();
+  });
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

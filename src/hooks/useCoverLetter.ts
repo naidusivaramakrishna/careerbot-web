@@ -58,6 +58,12 @@ export function useCoverLetter(
       letterRef.current = result;
     } catch (err) {
       if (mySeq !== requestSeqRef.current) return;
+      // The generation response is valid content for this route. A failed
+      // background verification must not replace it with an error screen.
+      if (letterRef.current !== null) {
+        setError(null);
+        return;
+      }
       setError(
         err instanceof CoverLetterApiError
           ? err
@@ -66,10 +72,7 @@ export function useCoverLetter(
               message: err instanceof Error ? err.message : String(err),
             }),
       );
-      // Keep a completed generation response on screen if only its
-      // background refresh failed. Direct/detail routes have no initial
-      // response and therefore still render the existing error card.
-      if (letterRef.current === null) setLetter(null);
+      setLetter(null);
     } finally {
       if (mySeq === requestSeqRef.current) {
         setIsLoading(false);

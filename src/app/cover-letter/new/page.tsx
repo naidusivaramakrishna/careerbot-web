@@ -56,6 +56,7 @@ const WORD_COUNT_FLOOR = 200;
 const WORD_COUNT_CEIL = 500;
 const COVER_LETTER_TEMPLATE_PREF_KEY = "careerbot:cover-letter-template";
 const COVER_LETTER_REFRESH_DRAFT_KEY = "careerbot:cover-letter-refresh-draft";
+const COVER_LETTER_REFRESH_MARKER_KEY = "careerbot:cover-letter-refresh-pending";
 const JOB_ANALYSIS_TOAST_ID = "cover-letter-job-analysis";
 // The subset of an ExtensionSession this form prefills from. Narrower than the
 // API response on purpose: it is what gets cached in sessionStorage, and
@@ -72,6 +73,7 @@ type CoverLetterRefreshDraft = {
   hiringManagerName: string;
   candidateSignatureName: string;
   autoFilledFields: AutoFilledJobField[];
+  signatureResumeKey: string | null;
 };
 const ALLOWED_RESUME_TYPES = new Set([
   "application/pdf",
@@ -119,10 +121,15 @@ function isWorkArrangement(value: string | undefined): boolean {
   return /^(?:remote|hybrid|on[-\s]?site)$/i.test(value?.trim() ?? "");
 }
 
-function isPageReload(): boolean {
-  if (typeof window === "undefined") return false;
-  const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-  return navigation?.type === "reload";
+function shouldRestoreRefreshDraft(): boolean {
+  try {
+    const wasOnCoverLetterForm = window.sessionStorage.getItem(COVER_LETTER_REFRESH_MARKER_KEY) === "true";
+    window.sessionStorage.removeItem(COVER_LETTER_REFRESH_MARKER_KEY);
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    return wasOnCoverLetterForm && navigation?.type === "reload";
+  } catch {
+    return false;
+  }
 }
 
 function readRefreshDraft(): CoverLetterRefreshDraft | null {
@@ -143,6 +150,7 @@ function readRefreshDraft(): CoverLetterRefreshDraft | null {
       hiringManagerName: text("hiringManagerName", MAX_COMPANY_LOCATION_CHARS),
       candidateSignatureName: text("candidateSignatureName", MAX_COMPANY_LOCATION_CHARS),
       autoFilledFields,
+      signatureResumeKey: typeof value.signatureResumeKey === "string" ? value.signatureResumeKey : null,
     };
   } catch {
     return null;
@@ -386,6 +394,7 @@ export default function CoverLetterNewPage() {
   const userPickedResumeRef = useRef(false);
   const signatureResumeLoadRef = useRef<string | null>(null);
   const signatureResumeKeyRef = useRef<string | null>(null);
+  const restoredSignatureResumeKeyRef = useRef<string | null>(null);
   const [uploadedResume, setUploadedResume] = useState<ParsedResumeBlob | null>(null);
   const [selectedResume, setSelectedResume] = useState<ParsedResumeBlob | null>(null);
   const [resumeOptions, setResumeOptions] = useState<CoverLetterResumeOption[]>([]);
@@ -409,6 +418,7 @@ export default function CoverLetterNewPage() {
   const [jobAnalysisStatus, setJobAnalysisStatus] = useState<JobAnalysisStatus>("idle");
   const jobAnalysisRequestRef = useRef(0);
   const autoFilledJobFieldsRef = useRef(new Set<AutoFilledJobField>());
+  const extensionJobFieldsRef = useRef(new Set<AutoFilledJobField>());
   const clearJobAnalysis = useCallback(() => {
     jobAnalysisRequestRef.current += 1;
     setParsedJdId(null);
@@ -421,6 +431,7 @@ export default function CoverLetterNewPage() {
   const [location, setLocation] = useState("");
   const [hiringManagerName, setHiringManagerName] = useState("");
   const [candidateSignatureName, setCandidateSignatureName] = useState("");
+  const [signatureResumeKey, setSignatureResumeKey] = useState<string | null>(null);
   const [refreshDraftReady, setRefreshDraftReady] = useState(false);
   const [includeContactDetails, setIncludeContactDetails] = useState(false);
   const [tone, setTone] = useState<ToneChoice>("professional");
@@ -506,14 +517,17 @@ export default function CoverLetterNewPage() {
       if (prefill.job_description) setJd(prefill.job_description);
       if (prefill.job_title) {
         autoFilledJobFieldsRef.current.add("title");
+        extensionJobFieldsRef.current.add("title");
         setRoleTitle(prefill.job_title.slice(0, MAX_ROLE_TITLE_CHARS));
       }
       if (prefill.company) {
         autoFilledJobFieldsRef.current.add("company");
+        extensionJobFieldsRef.current.add("company");
         setCompanyName(prefill.company);
       }
       if (prefill.job_location) {
         autoFilledJobFieldsRef.current.add("location");
+        extensionJobFieldsRef.current.add("location");
         setLocation(prefill.job_location.slice(0, MAX_COMPANY_LOCATION_CHARS));
       }
       if (prefill.resume_id) setSessionExtResumeId(prefill.resume_id);
@@ -566,7 +580,7 @@ export default function CoverLetterNewPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (!isPageReload()) {
+    if (!shouldRestoreRefreshDraft()) {
       try {
         window.sessionStorage.removeItem(COVER_LETTER_REFRESH_DRAFT_KEY);
       } catch {
@@ -585,8 +599,22 @@ export default function CoverLetterNewPage() {
       setLocation(draft.location);
       setHiringManagerName(draft.hiringManagerName);
       setCandidateSignatureName(draft.candidateSignatureName);
+      restoredSignatureResumeKeyRef.current = draft.signatureResumeKey;
+      setSignatureResumeKey(draft.signatureResumeKey);
     }
     setRefreshDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    const markRefresh = () => {
+      try {
+        window.sessionStorage.setItem(COVER_LETTER_REFRESH_MARKER_KEY, "true");
+      } catch {
+        // Storage can be unavailable in private or locked-down browser contexts.
+      }
+    };
+    window.addEventListener("pagehide", markRefresh);
+    return () => window.removeEventListener("pagehide", markRefresh);
   }, []);
 
   useEffect(() => {
@@ -604,12 +632,13 @@ export default function CoverLetterNewPage() {
         hiringManagerName,
         candidateSignatureName,
         autoFilledFields: [...autoFilledJobFieldsRef.current],
+        signatureResumeKey,
       };
       window.sessionStorage.setItem(COVER_LETTER_REFRESH_DRAFT_KEY, JSON.stringify(draft));
     } catch {
       // Storage can be unavailable in private or locked-down browser contexts.
     }
-  }, [candidateSignatureName, companyName, hiringManagerName, jd, location, refreshDraftReady, roleTitle]);
+  }, [candidateSignatureName, companyName, hiringManagerName, jd, location, refreshDraftReady, roleTitle, signatureResumeKey]);
 
   const defaultResumeBlob = toDefaultResumeBlob(defaultResume.defaultResume);
   const requestedResumeId = searchParams.get("resume_id") ?? sessionExtResumeId;
@@ -766,6 +795,11 @@ export default function CoverLetterNewPage() {
       // signature. Most picker rows contain only metadata, so clear first and
       // populate after the selected resume's parsed details arrive.
       signatureResumeKeyRef.current = signatureResumeKey;
+      setSignatureResumeKey(signatureResumeKey);
+      if (restoredSignatureResumeKeyRef.current === signatureResumeKey) {
+        restoredSignatureResumeKeyRef.current = null;
+        return;
+      }
       setCandidateSignatureName(signatureName ?? "");
       return;
     }
@@ -823,9 +857,12 @@ export default function CoverLetterNewPage() {
       ) => {
         setValue((current) => {
           const wasAutoFilled = autoFilledJobFieldsRef.current.has(field);
+          // Data scraped by the browser extension is already tied to the job
+          // the user chose. JD analysis may fill blanks but must not clear or
+          // replace that hand-off data.
+          if (extensionJobFieldsRef.current.has(field)) return current;
           if (!value) {
-            if (wasAutoFilled) autoFilledJobFieldsRef.current.delete(field);
-            return wasAutoFilled ? "" : current;
+            return current;
           }
           if (!current.trim() || wasAutoFilled) {
             autoFilledJobFieldsRef.current.add(field);
@@ -863,12 +900,6 @@ export default function CoverLetterNewPage() {
     }
   }, [jd, jdFile, jobSourceReady, source, trackerJobId]);
 
-  useEffect(() => {
-    if (source === "tracker" || !jobSourceReady) return;
-    const delay = source === "jd" ? 700 : 0;
-    const timer = window.setTimeout(() => void analyzeJobDetails(), delay);
-    return () => window.clearTimeout(timer);
-  }, [analyzeJobDetails, jobSourceReady, source]);
   const generation = useGenerateCoverLetter({
     onSuccess: (response) => {
       setApiError(null);
@@ -1013,6 +1044,7 @@ export default function CoverLetterNewPage() {
     setLocation("");
     setHiringManagerName("");
     setCandidateSignatureName("");
+    setSignatureResumeKey(null);
     setIncludeContactDetails(false);
     setWordCountMode("auto");
     setMinWords(250);
@@ -1167,7 +1199,6 @@ export default function CoverLetterNewPage() {
 
   return (
     <main className="min-h-full bg-[#fbfdff] px-4 pb-10 pt-5 text-[#070b33] sm:px-5 lg:px-6 2xl:px-8 2xl:pb-12 2xl:pt-7">
-      {jobAnalysisStatus === "analyzing" && <JobAnalysisPopup />}
       <div className="mx-auto max-w-[1180px] space-y-4 2xl:max-w-[1260px] 2xl:space-y-5">
         <header className="grid items-center gap-4 lg:grid-cols-[1fr_auto]">
           <StepRail
@@ -1204,6 +1235,12 @@ export default function CoverLetterNewPage() {
             {apiError}
           </div>
         )}
+        {jobAnalysisStatus === "analyzing" && (
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#526187]" role="status">
+            <Loader2 className="h-4 w-4 animate-spin text-[#2557a7]" aria-hidden="true" />
+            Analyzing job details… You can continue editing the form.
+          </div>
+        )}
 
         {loadingInitial ? (
           <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-slate-200 bg-white 2xl:min-h-[520px]">
@@ -1227,6 +1264,7 @@ export default function CoverLetterNewPage() {
                 onSourceChange={(s) => { clearJobAnalysis(); setSource(s); setApiError(null); }}
                 jd={jd}
                 onJdChange={(value) => { clearJobAnalysis(); setJd(value); }}
+                onJdBlur={() => void analyzeJobDetails()}
                 jdFile={jdFile}
                 onJdFileChange={(file) => { clearJobAnalysis(); setJdFile(file); }}
                 trackerJobId={trackerJobId}
@@ -1235,16 +1273,19 @@ export default function CoverLetterNewPage() {
                 companyName={companyName}
                 onCompanyNameChange={(value) => {
                   autoFilledJobFieldsRef.current.delete("company");
+                  extensionJobFieldsRef.current.delete("company");
                   setCompanyName(value);
                 }}
                 roleTitle={roleTitle}
                 onRoleTitleChange={(value) => {
                   autoFilledJobFieldsRef.current.delete("title");
+                  extensionJobFieldsRef.current.delete("title");
                   setRoleTitle(value);
                 }}
                 location={location}
                 onLocationChange={(value) => {
                   autoFilledJobFieldsRef.current.delete("location");
+                  extensionJobFieldsRef.current.delete("location");
                   setLocation(value);
                 }}
                 hiringManagerName={hiringManagerName}
@@ -1416,6 +1457,7 @@ function CoverLetterStepOneMock({
   onSourceChange,
   jd,
   onJdChange,
+  onJdBlur,
   jdFile,
   onJdFileChange,
   trackerJobId,
@@ -1464,6 +1506,7 @@ function CoverLetterStepOneMock({
   onSourceChange: (s: CreationSource) => void;
   jd: string;
   onJdChange: (v: string) => void;
+  onJdBlur: () => void;
   jdFile: File | null;
   onJdFileChange: (f: File | null) => void;
   trackerJobId: string;
@@ -1801,6 +1844,7 @@ function CoverLetterStepOneMock({
                 <textarea
                   value={jd}
                   onChange={(e) => onJdChange(e.target.value)}
+                  onBlur={onJdBlur}
                   rows={7}
                   placeholder="Paste the full job description here..."
                   className="min-h-[190px] w-full resize-none rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-5 py-4 text-[15px] font-medium leading-7 text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_12px_30px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100"
@@ -2726,25 +2770,6 @@ function AutocompleteTextField({
   );
 }
 
-function JobAnalysisPopup() {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Analyzing job details"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-white/70 px-4 backdrop-blur-[2px]"
-    >
-      <div className="flex min-w-[250px] flex-col items-center rounded-2xl border border-blue-100 bg-white px-8 py-7 text-center shadow-[0_20px_52px_rgba(37,87,167,0.2)]">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2557a7]">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </span>
-        <p className="mt-4 text-base font-bold text-[#070b33]">Analyzing job details</p>
-        <p className="mt-1 text-sm font-medium text-[#526187]">Finding company, role, and location.</p>
-      </div>
-    </div>
-  );
-}
-
 function JobSourceInput(props: {
   source: Exclude<CreationSource, "jd">;
   jd: string;
@@ -3359,21 +3384,21 @@ function isUnauthorizedError(err: unknown): boolean {
     const code = String(apiError.error_code ?? record.error_code ?? "").toUpperCase();
     const message = String(apiError.message ?? record.message ?? record.detail ?? "").toLowerCase();
     if (code === "HTTP_401" || code === "HTTP_403" || message.includes("not authenticated")) return true;
-    if (message.includes("token") || message.includes("rotation") || message.includes("sign in")) return true;
   }
 
   // When skipLoginRedirect is used, the interceptor rejects with the *refresh
   // endpoint* error instead of the original 401. The refresh response may carry
   // a non-401 status (e.g. 400) but its body signals session expiry.
   const data = (err as { response?: { data?: unknown } })?.response?.data;
-  if (data && typeof data === "object") {
+  const requestUrl = String((err as { config?: { url?: unknown } })?.config?.url ?? "");
+  if (requestUrl.includes("/auth/refresh") && data && typeof data === "object") {
     const record = data as Record<string, unknown>;
     const msg = String(record.message ?? record.detail ?? "").toLowerCase();
     if (msg.includes("token") || msg.includes("rotation") || msg.includes("sign in")) return true;
   }
 
   // Catch cases where the error message itself was built from the server body.
-  if (err instanceof Error) {
+  if (requestUrl.includes("/auth/refresh") && err instanceof Error) {
     const lower = err.message.toLowerCase();
     if (lower.includes("token rotation") || lower.includes("rotation failed") || lower.includes("sign in again")) return true;
   }
