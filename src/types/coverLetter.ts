@@ -17,6 +17,26 @@
 // ── closed enums (Literal types reject unknown values) ─────────
 export type CoverLetterStatus = "ready_to_review" | "needs_review" | "failed";
 
+/** Backend-confirmed stages for an in-flight cover-letter generation. */
+export type CoverLetterGenerationStage =
+  | "queued"
+  | "validating"
+  | "generating"
+  | "persisting"
+  | "finalizing"
+  | "completed"
+  | "failed";
+
+export interface CoverLetterGenerationProgress {
+  status: "in_progress" | "completed" | "failed";
+  stage: CoverLetterGenerationStage;
+  /** The backend advances this only when a workflow phase has completed. */
+  progress: number;
+  message: string;
+  letter_id?: string | null;
+  updated_at: string;
+}
+
 export type CoverLetterTone = "professional" | "warm" | "concise";
 
 export type CoverLetterExportFormat = "pdf" | "docx";

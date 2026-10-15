@@ -305,6 +305,49 @@ export async function parseJDByJob(jobId: string) {
   }
 }
 
+export interface ParsedJDDetails {
+  job_title?: string;
+  company?: string;
+  location?: string;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+/**
+ * Reads the public JD record after parsing. The API has stored parser output in
+ * both `Parsed_Output` and `ai_response.Parsed_Output`, so this intentionally
+ * accepts both current and legacy records while returning one stable shape.
+ */
+function extractParsedJDDetails(response: unknown): ParsedJDDetails {
+  const responseRecord = isObject(response) ? response : {};
+  const document = isObject(responseRecord.data) ? responseRecord.data : responseRecord;
+  const aiResponse = isObject(document.ai_response) ? document.ai_response : {};
+  const candidates = [
+    document.Parsed_Output,
+    aiResponse.Parsed_Output,
+    aiResponse,
+    document,
+  ].filter(isObject);
+
+  for (const candidate of candidates) {
+    const job_title = nonEmptyString(candidate.job_title) ?? nonEmptyString(candidate.title);
+    const company = nonEmptyString(candidate.company) ?? nonEmptyString(candidate.company_name);
+    const location = nonEmptyString(candidate.location) ?? nonEmptyString(candidate.job_location);
+    if (job_title || company || location) return { job_title, company, location };
+  }
+
+  return {};
+}
+
+export async function getParsedJDDetails(jdId: string): Promise<ParsedJDDetails> {
+  const response = await safeGet<unknown>(`/jd/search?id=${encodeURIComponent(jdId)}`, {
+    headers: { "X-Skip-Auth-Redirect": "true" },
+  });
+  return extractParsedJDDetails(response);
+}
+
 /* ========== MATCHING ========== */
 export async function matchResumeAndJD(resume_id: string, jd_id: string, options: { force_refresh?: boolean } = {}) {
   const qs = options.force_refresh ? '?force_refresh=true' : '';

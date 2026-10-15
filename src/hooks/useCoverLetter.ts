@@ -26,28 +26,36 @@ export interface UseCoverLetterResult {
   refetch: () => Promise<void>;
 }
 
-export function useCoverLetter(letterId: string | null): UseCoverLetterResult {
-  const [letter, setLetter] = useState<CoverLetterResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(letterId !== null);
+export function useCoverLetter(
+  letterId: string | null,
+  initialLetter: CoverLetterResponse | null = null,
+): UseCoverLetterResult {
+  const [letter, setLetter] = useState<CoverLetterResponse | null>(initialLetter);
+  const [isLoading, setIsLoading] = useState(letterId !== null && initialLetter === null);
   const [error, setError] = useState<CoverLetterApiError | null>(null);
 
   const requestSeqRef = useRef(0);
+  const letterRef = useRef<CoverLetterResponse | null>(initialLetter);
 
   const load = useCallback(async () => {
     if (!letterId) {
       setLetter(null);
+      letterRef.current = null;
       setIsLoading(false);
       setError(null);
       return;
     }
     const mySeq = ++requestSeqRef.current;
-    setIsLoading(true);
+    // A freshly generated response is already available. Keep it visible
+    // while the route verifies it with the normal persisted-letter GET.
+    setIsLoading(letterRef.current === null);
     setError(null);
     try {
       const result = await getCoverLetter(letterId);
       if (mySeq !== requestSeqRef.current) return;
       // result is null on 404 — caller treats as "not found".
       setLetter(result);
+      letterRef.current = result;
     } catch (err) {
       if (mySeq !== requestSeqRef.current) return;
       setError(
@@ -58,7 +66,10 @@ export function useCoverLetter(letterId: string | null): UseCoverLetterResult {
               message: err instanceof Error ? err.message : String(err),
             }),
       );
-      setLetter(null);
+      // Keep a completed generation response on screen if only its
+      // background refresh failed. Direct/detail routes have no initial
+      // response and therefore still render the existing error card.
+      if (letterRef.current === null) setLetter(null);
     } finally {
       if (mySeq === requestSeqRef.current) {
         setIsLoading(false);
