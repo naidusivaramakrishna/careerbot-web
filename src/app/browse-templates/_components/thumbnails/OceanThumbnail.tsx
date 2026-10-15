@@ -27,8 +27,8 @@ export function OceanThumbnail({ accentColor }: { accentColor?: string }) {
           <div>+919330111234</div>
           <div>testing@example.com</div>
           <div>Hyderabad</div>
-          <div>LinkedIn</div>
-          <div>Portfolio</div>
+          <div className='underline text-blue-700'>LinkedIn</div>
+          <div className='underline text-blue-700'>GitHub</div>
         </div>
       </div>
       <div style={{ borderTop: `0.5px solid ${COLOR_DIVIDER}`, margin: '6px 0' }} />

@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { uploadResume, getResume, deleteResume, ResumeResponse, ResumeUploadResponse, ResumeDeleteResponse } from '@/api/userApi';
 import { toast } from "sonner";
 import { useProfileContext } from '../context/ProfileContext';
@@ -12,35 +12,29 @@ interface ResumeSectionProps {
     setTempProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
 }
 
+// The picked file name, kept as on develop2 until the api's GET /profile/resume
+// returns it (careerbot-api #387); cleared at sign-out (authApi.signOut).
 const RESUME_FILENAME_KEY = 'uploaded_resume_filename';
+const savedFileName = () => (typeof window !== 'undefined' && localStorage.getItem(RESUME_FILENAME_KEY)) || '';
 
 const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
     const { profileData, setProfileData } = useProfileContext();
     const { refreshDashboard } = useDashboard();
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [resumeUrl, setResumeUrl] = useState<string | null>(profileData.resume_url ?? null);
-    const [fileName, setFileName] = useState<string>('');
+    const [fileName, setFileName] = useState<string>(profileData.filename ?? '');
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(!profileData.resume_url);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [isReplacing, setIsReplacing] = useState(false);
 
-    // Initialize fileName from localStorage safely (client-side only)
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            setFileName(localStorage.getItem(RESUME_FILENAME_KEY) || '');
-        }
-    }, []);
-
-    // One-way sync: propagates context resume_url into local state when it becomes truthy
+    // One-way sync: propagates context resume data into local state when it becomes truthy
     // (e.g. sidebar upload). Does NOT clear local state when resume_url goes null —
     // deletion is managed locally by this component's own delete handler.
     useEffect(() => {
         if (profileData.resume_url && profileData.resume_url !== resumeUrl) {
             setResumeUrl(profileData.resume_url);
-            if (typeof window !== 'undefined') {
-                setFileName(localStorage.getItem('uploaded_resume_filename') || '');
-            }
+            setFileName(profileData.filename || savedFileName());
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profileData.resume_url]);
@@ -48,6 +42,7 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
     useEffect(() => {
         // Skip fetch if we already have a URL from context (sidebar upload)
         if (profileData.resume_url) {
+            if (!profileData.filename) setFileName(savedFileName());
             setIsFetching(false);
             return;
         }
@@ -57,8 +52,9 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
                 const response: ResumeResponse = await getResume();
                 if (response.resume_url) {
                     setResumeUrl(response.resume_url);
-                    setTempProfile((prev) => ({ ...prev, resume_url: response.resume_url }));
-                    setProfileData((prev) => ({ ...prev, resume_url: response.resume_url }));
+                    setFileName(response.filename || savedFileName());
+                    setTempProfile((prev) => ({ ...prev, resume_url: response.resume_url, filename: response.filename }));
+                    setProfileData((prev) => ({ ...prev, resume_url: response.resume_url, filename: response.filename }));
                 }
             } catch (error) {
                 const axiosError = error as { response?: { status?: number } };
@@ -93,11 +89,12 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
         try {
             const response: ResumeUploadResponse = await uploadResume(file);
             setResumeUrl(response.resume_url);
+            // The name the user picked: develop2's api answers the storage name
+            // (<user id>_<hex>.pdf) here; careerbot-api #387 answers this same name.
             setFileName(file.name);
             localStorage.setItem(RESUME_FILENAME_KEY, file.name);
-            setIsReplacing(false);
-            setTempProfile((prev) => ({ ...prev, resume_url: response.resume_url }));
-            setProfileData((prev) => ({ ...prev, resume_url: response.resume_url }));
+            setTempProfile((prev) => ({ ...prev, resume_url: response.resume_url, filename: file.name }));
+            setProfileData((prev) => ({ ...prev, resume_url: response.resume_url, filename: file.name }));
             setTimeout(() => { refreshDashboard(); }, 300);
             toast.success(response.message || 'Resume uploaded successfully');
             e.target.value = '';
@@ -118,10 +115,11 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
             setFileName('');
             localStorage.removeItem(RESUME_FILENAME_KEY);
             setShowDeleteModal(false);
-            setTempProfile((prev) => ({ ...prev, resume_url: undefined }));
+            setTempProfile((prev) => ({ ...prev, resume_url: undefined, filename: undefined }));
             setProfileData((prev) => {
                 const newProfile = { ...prev };
                 delete newProfile.resume_url;
+                delete newProfile.filename;
                 return newProfile;
             });
             setTimeout(() => { refreshDashboard(); }, 300);
@@ -149,7 +147,7 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
         <div className="flex flex-col gap-4">
             {/* Upload / Current resume card */}
             <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-5">
-                {resumeUrl && !isReplacing ? (
+                {resumeUrl ? (
                     <div className="flex flex-col gap-4">
                         {/* File indicator */}
                         <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-lg px-4 py-3">
@@ -177,28 +175,27 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
                                 {isDeleting ? 'Deleting...' : 'Delete'}
                             </button>
 
-                            <label className="flex-1">
-                                <input
-                                    type="file"
-                                    data-testid="resume-replace-input"
-                                    id="resume-replace"
-                                    name="resume"
-                                    accept=".pdf,.doc,.docx"
-                                    onChange={handleResumeUpload}
-                                    disabled={isLoading}
-                                    className="hidden"
-                                />
-                                <button
-                                    type="button"
-                                    data-testid="replace-resume-btn"
-                                    onClick={() => setIsReplacing(true)}
-                                    disabled={isLoading}
-                                    className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-white bg-[#2257a7] hover:bg-[#1a4590] rounded-lg px-4 py-2.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <Upload className="w-4 h-4" />
-                                    {isLoading ? 'Uploading...' : 'Replace'}
-                                </button>
-                            </label>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                data-testid="resume-replace-input"
+                                id="resume-replace"
+                                name="resume"
+                                accept=".pdf,.doc,.docx"
+                                onChange={handleResumeUpload}
+                                disabled={isLoading}
+                                className="hidden"
+                            />
+                            <button
+                                type="button"
+                                data-testid="replace-resume-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isLoading}
+                                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-white bg-[#2257a7] hover:bg-[#1a4590] rounded-lg px-4 py-2.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Upload className="w-4 h-4" />
+                                {isLoading ? 'Uploading...' : 'Replace'}
+                            </button>
                         </div>
                     </div>
                 ) : (

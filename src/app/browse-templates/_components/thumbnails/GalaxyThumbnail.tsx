@@ -24,7 +24,7 @@ export function GalaxyThumbnail({ accentColor }: { accentColor?: string }) {
           ANANYA NAIR
         </div>
         <div style={{ fontSize: '6px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          Hyderabad, India | ananyanair@gmail.com | +91 9875463201 | linkedin.com/in/ananyanair | github.com/ananyanair
+          Hyderabad, India | ananyanair@gmail.com | +91 9875463201 | <span className='underline text-blue-700'>LinkedIn</span> | <span className='underline text-blue-700'>GitHub</span>
         </div>
       </div>
 

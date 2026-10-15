@@ -1133,43 +1133,49 @@ export const getResumePreviewImage = async (
   return response.data;
 };
 
-// getTemplatesByCategory function
-export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
+// getTemplatesByCategory: every template, as an array (all callers use it
+// that way). develop2's GET /templates/ ignores offset/limit and returns the
+// whole list; careerbot-api #387 pages it (limit 12 by default, max 100,
+// with `total`). Follow `total` page by page so both return the full list.
+const TEMPLATES_PAGE_SIZE = 100;
+const TEMPLATES_MAX_PAGES = 50;
 
+const parseTemplatesPage = (data: unknown): { templates: TemplateResponse[]; total?: number } => {
+  if (Array.isArray(data)) return { templates: data as TemplateResponse[] };
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.templates)) {
+      return {
+        templates: obj.templates as TemplateResponse[],
+        total: typeof obj.total === 'number' ? obj.total : undefined,
+      };
+    }
+    if (Array.isArray(obj.data)) return { templates: obj.data as TemplateResponse[] };
+  }
+  return { templates: [] };
+};
+
+export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
   try {
     logger.debug("📋 Fetching templates by category:", category);
 
-    const url = category && category !== 'All'
-      ? `/templates/?category=${encodeURIComponent(category.toLowerCase())}`
-      : '/templates/';
+    const templates: TemplateResponse[] = [];
+    for (let page = 0; page < TEMPLATES_MAX_PAGES; page++) {
+      const params = new URLSearchParams();
+      if (category && category !== 'All') params.append('category', category.toLowerCase());
+      params.append('offset', String(templates.length));
+      params.append('limit', String(TEMPLATES_PAGE_SIZE));
 
-    logger.debug("🔍 Request URL:", `${httpClient.defaults.baseURL}${url}`);
-    logger.debug("📌 Category parameter being sent:", category);
+      const response = await httpClient.get<unknown>(`/templates/?${params.toString()}`);
+      const { templates: pageTemplates, total } = parseTemplatesPage(response.data);
+      templates.push(...pageTemplates);
 
-    const response = await httpClient.get<unknown>(url);
-
-    logger.debug("📦 Raw response data:", response.data);
-
-    // Handle different response formats
-    let templates: TemplateResponse[] = [];
-
-    if (Array.isArray(response.data)) {
-      // Response is an array directly
-      templates = response.data;
-    } else if (response.data && typeof response.data === 'object') {
-      const responseObj = response.data as Record<string, unknown>;
-
-      // Check for 'templates' key (main response format)
-      if ('templates' in responseObj && Array.isArray(responseObj.templates)) {
-        templates = responseObj.templates;
-      }
-      // Check for 'data' key (alternative wrapper format)
-      else if ('data' in responseObj && Array.isArray(responseObj.data)) {
-        templates = responseObj.data;
-      }
+      // develop2 returns the whole list with total = its length, so it ends
+      // after one request; an empty page or reaching `total` ends the list.
+      if (total === undefined || pageTemplates.length === 0 || templates.length >= total) break;
     }
 
-    logger.info("✅ Templates fetched:", templates.length, templates);
+    logger.info("✅ Templates fetched:", templates.length);
     return templates;
   } catch (error) {
     logger.error("❌ Error fetching templates by category:", error);

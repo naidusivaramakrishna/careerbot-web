@@ -59,7 +59,7 @@ export default function EducationForm({
 
         {/* Institution */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-gray-600">School / College</label>
+          <label className="text-xs font-medium text-gray-600">School / College <span className="text-red-500">*</span></label>
           <input
             type="text"
             name="institution"
@@ -78,6 +78,7 @@ export default function EducationForm({
         {/* Degree */}
         <SearchableCombobox
           label="Degree"
+          required
           options={degrees}
           value={educationForm.degree || ""}
           onChange={(value) =>
@@ -129,6 +130,7 @@ export default function EducationForm({
           <div key={field} className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-600">
               {field === "start_date" ? "Start Date" : "End Date"}
+              {field === "start_date" && <span className="text-red-500">*</span>}
             </label>
             <input
               type="date"

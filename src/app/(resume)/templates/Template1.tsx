@@ -1011,9 +1011,9 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
             </p>
           )}
-          {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0" }}>{personalInfo.location}</p>}
           <div style={{ display: "flex", justifyContent: "center", gap: "24px", margin: "6px 0" }}>
             {personalInfo.email && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.email}</span>}
+            {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.location}</p>}
             {personalInfo.phone && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.countryCode}{personalInfo.phone}</span>}
             {personalInfo.linkedinUrl && <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>LinkedIn</a>}
             {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>Portfolio</a>}
@@ -1057,9 +1057,9 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
             </p>
           )}
-          {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0" }}>{personalInfo.location}</p>}
           <div style={{ display: "flex", justifyContent: "center", gap: "20px", margin: "4px 0", ...baseTextStyle, fontSize: "11px" }}>
             {personalInfo.email && <span>{personalInfo.email}</span>}
+            {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px"}}>{personalInfo.location}</p>}
             {personalInfo.phone && <span>{personalInfo.countryCode}{personalInfo.phone}</span>}
             {personalInfo.linkedinUrl && <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a>}
             {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a>}

@@ -45,7 +45,7 @@ export default function CertificationForm({
         <div className="flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-gray-600">Certification Name</label>
+                    <label className="text-xs font-medium text-gray-600">Certification Name <span className="text-red-500">*</span></label>
                     <input type="text" name="certification_name" id="cert-name" data-testid="cert-name-input"
                         value={certificationForm.certification_name || ""} onChange={handleChange} className={inputClass("certification_name")} />
                     {getFieldError("certification_name") && <p role="alert" className="text-red-500 text-xs">{getFieldError("certification_name")}</p>}

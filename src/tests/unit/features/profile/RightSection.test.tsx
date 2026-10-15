@@ -83,7 +83,11 @@ vi.mock('@/app/(user)/profile/_components/LinkedinImportModal', () => ({
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import RightSection from '@/app/(user)/profile/_components/RightSection';
-import { uploadResume, getEmploymentInfo, updateEmploymentInfo } from '@/api/userApi';
+import {
+  uploadResume, getEmploymentInfo, updateEmploymentInfo,
+  getEducation, getExperience, getSkills, getProjects, getCertification,
+  deleteEducation, deleteExperience, deleteSkill, deleteProject, deleteCertification,
+} from '@/api/userApi';
 import { extractResume } from '@/api/resumeParsingApi';
 import { mapResumeToProfile } from '@/app/(user)/profile/_utils/resumeMapper';
 
@@ -303,5 +307,58 @@ describe('RightSection — employment status from resume experience', () => {
     await waitFor(() =>
       expect(mockUpdateEmploymentInfo).toHaveBeenCalledWith({ employment_status: 'employed' })
     );
+  });
+});
+
+// PR #227 ai-review (da27bab1) P0: resume import deleted every profile
+// section, even ones the parsed resume does not contain, so importing a resume
+// with no projects or certifications destroyed the ones the user had entered.
+// Import replaces only the sections it carries (the comment above the deletes).
+describe('RightSection — resume import replaces only the sections the resume has', () => {
+  const mockMapResumeToProfile = vi.mocked(mapResumeToProfile);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(extractResume).mockResolvedValue({} as Awaited<ReturnType<typeof extractResume>>);
+    vi.mocked(uploadResume).mockResolvedValue({ resume_url: 'u', message: 'ok', filename: 'resume.pdf' });
+    vi.mocked(getEmploymentInfo).mockResolvedValue({ employment_status: 'student' });
+    vi.mocked(getEducation).mockResolvedValue([{ id: 'edu-1' }] as Awaited<ReturnType<typeof getEducation>>);
+    vi.mocked(getExperience).mockResolvedValue([{ id: 'exp-1' }] as Awaited<ReturnType<typeof getExperience>>);
+    vi.mocked(getSkills).mockResolvedValue([{ id: 'skill-1' }] as Awaited<ReturnType<typeof getSkills>>);
+    vi.mocked(getProjects).mockResolvedValue([{ id: 'proj-1' }] as Awaited<ReturnType<typeof getProjects>>);
+    vi.mocked(getCertification).mockResolvedValue([{ id: 'cert-1' }] as Awaited<ReturnType<typeof getCertification>>);
+  });
+
+  function triggerUpload() {
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File(['content'], 'resume.pdf', { type: 'application/pdf' })], configurable: true,
+    });
+    fireEvent.change(fileInput);
+  }
+
+  it('keeps existing sections the resume does not contain', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      education: [{ school_college: 'X', degree: 'B.Tech', start_date: '2020-01-01' }],
+    } as unknown as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    expect(deleteProject).not.toHaveBeenCalled();
+    expect(deleteCertification).not.toHaveBeenCalled();
+    expect(deleteSkill).not.toHaveBeenCalled();
+    expect(deleteExperience).not.toHaveBeenCalled();
+  });
+
+  it('replaces a section the resume does contain', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      education: [{ school_college: 'X', degree: 'B.Tech', start_date: '2020-01-01' }],
+      projects: [{ title: 'New project' }],
+    } as unknown as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    expect(deleteEducation).toHaveBeenCalledWith('edu-1');
+    expect(deleteProject).toHaveBeenCalledWith('proj-1');
   });
 });

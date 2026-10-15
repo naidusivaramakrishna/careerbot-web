@@ -24,12 +24,12 @@ export function ForestThumbnail({ accentColor }: { accentColor?: string }) {
           Samantha Williams
         </div>
         <div style={{ fontSize: '6.5px', marginBottom: '2px' }}>Senior Sales Associate</div>
-        <div style={{ fontSize: '6.5px', marginBottom: '2px' }}>New York, NY</div>
         <div className="flex gap-2 items-center justify-center">
           <span>samantha.williams@example.com</span>
+          <span>New York, NY</span>
           <span>(555) 789-1234</span>
-          <span>LinkedIn</span>
-          <span>GitHub</span>
+          <span className='underline text-blue-700'>LinkedIn</span>
+          <span className='underline text-blue-700'>GitHub</span>
         </div>
       </div>
 

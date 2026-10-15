@@ -65,7 +65,7 @@ export function useResumeProfileFill(userId?: string) {
     try {
       // ── Step 1: Parse resume + store file in profile concurrently ───
       setStep("parsing");
-      const [parsed] = await Promise.all([
+      const [parsed, uploadResult] = await Promise.all([
         extractResume(file),
         uploadResume(file).catch(() => { /* non-fatal — profile tab will be missing but parse continues */ }),
       ]);
@@ -76,8 +76,9 @@ export function useResumeProfileFill(userId?: string) {
         localStorage.setItem(storageKey, parsed.resume_id);
       }
 
-      // Store resume filename for display in profile resume section
-      localStorage.setItem('uploaded_resume_filename', file.name);
+      // The picked name for the profile's resume section (ResumeSection reads it
+      // until the api returns it); only when the file was actually stored.
+      if (uploadResult) localStorage.setItem('uploaded_resume_filename', file.name);
 
       const profileData = mapResumeToProfile(parsed);
 

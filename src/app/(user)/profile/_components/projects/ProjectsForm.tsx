@@ -91,7 +91,7 @@ Return ONLY the bullet points, one per line, without numbering or dashes.`;
         <div className="flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-gray-600">Project Name</label>
+                    <label className="text-xs font-medium text-gray-600">Project Name <span className="text-red-500">*</span></label>
                     <input type="text" name="project_name" id="proj-name" data-testid="proj-name-input"
                         value={projectsForm.project_name || ""} onChange={handleChange} className={inputClass("project_name")} />
                     {getFieldError("project_name") && <p role="alert" className="text-red-500 text-xs">{getFieldError("project_name")}</p>}

@@ -31,7 +31,6 @@ export function EclipseThumbnail({ sectionBgColor }: { sectionBgColor?: string }
         >
           Howard Jones
         </div>
-        <div style={{ fontSize: '6px', marginBottom: '4px' }}>San Francisco, CA</div>
         <div
           style={{
             display: 'flex',
@@ -43,9 +42,10 @@ export function EclipseThumbnail({ sectionBgColor }: { sectionBgColor?: string }
           }}
         >
           <span>howard.jones@gmail.com</span>
+          <span>San Francisco, CA</span>
           <span>+1 (415) 555-2671</span>
-          <span>linkedin.com/in/hjones</span>
-          <span>github.com/hjones</span>
+          <span className='underline text-blue-700'>LinkedIn</span>
+          <span className='underline text-blue-700'>GitHub</span>
         </div>
       </div>
 

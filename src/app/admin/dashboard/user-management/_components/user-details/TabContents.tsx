@@ -51,7 +51,9 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
         try {
             const backendUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'
             const fullUrl = `${backendUrl}${resume.download_url}`
-            const response = await fetch(fullUrl)
+            const response = await fetch(fullUrl, {
+                credentials: 'include',
+            })
             if (!response.ok) throw new Error('Download failed')
 
             const blob = await response.blob()

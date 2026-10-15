@@ -682,10 +682,11 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 
 /**
  * Get current user's profile picture
+ * Returns null if no picture is set (404)
  */
 export const getProfilePicture = async (
     options?: { skipAuthRedirect?: boolean }
-): Promise<ProfilePictureResponse> => {
+): Promise<ProfilePictureResponse | null> => {
     try {
         const response = await httpClient.get<ProfilePictureResponse>(
             "/profile/picture",
@@ -694,9 +695,11 @@ export const getProfilePicture = async (
         return response.data;
     } catch (error: unknown) {
         const axiosError = error as { response?: { status?: number } };
-        if (axiosError?.response?.status !== 404) {
-            logger.error("Error fetching profile picture:", error);
+        // 404 is expected when user hasn't set a profile picture - return null instead of throwing
+        if (axiosError?.response?.status === 404) {
+            return null;
         }
+        logger.error("Error fetching profile picture:", error);
         throw error;
     }
 };

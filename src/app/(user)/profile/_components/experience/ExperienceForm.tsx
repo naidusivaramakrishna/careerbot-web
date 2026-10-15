@@ -100,13 +100,13 @@ Return ONLY the bullet points, one per line, without numbering or dashes.`;
         <div className="flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-gray-600">Position</label>
+                    <label className="text-xs font-medium text-gray-600">Position <span className="text-red-500">*</span></label>
                     <input type="text" name="job_title" id="exp-job-title" data-testid="exp-job-title-input"
                         value={experienceForm.job_title || ""} onChange={handleChange} className={inputClass("job_title")} />
                     {getFieldError("job_title") && <p role="alert" className="text-red-500 text-xs">{getFieldError("job_title")}</p>}
                 </div>
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-gray-600">Company</label>
+                    <label className="text-xs font-medium text-gray-600">Company <span className="text-red-500">*</span></label>
                     <input type="text" name="company" id="exp-company" data-testid="exp-company-input"
                         value={experienceForm.company || ""} onChange={handleChange} className={inputClass("company")} />
                     {getFieldError("company") && <p role="alert" className="text-red-500 text-xs">{getFieldError("company")}</p>}

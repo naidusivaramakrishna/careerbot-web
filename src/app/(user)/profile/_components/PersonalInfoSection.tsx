@@ -183,10 +183,11 @@ Return ONLY the summary text, no numbering or labels.`;
         inputRef?: React.Ref<HTMLInputElement>,
         disabled = false,
         htmlId?: string,
-        testId?: string
+        testId?: string,
+        required = false
     ) => (
         <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-gray-600">{label}</label>
+            <label className="text-xs font-medium text-gray-600">{label}{required && <span className="text-red-500"> *</span>}</label>
             <input
                 ref={inputRef}
                 type={type}
@@ -209,7 +210,7 @@ Return ONLY the summary text, no numbering or labels.`;
         <div className="flex flex-col gap-5 py-2">
             {/* Row 1: Full name, headline, location */}
             <div className="grid grid-cols-3 gap-4">
-                {renderInputField('Full Name', 'fullName', tempProfile.personalInformation?.fullName || '', 'John Doe', 'text', undefined, false, 'fullname', 'fullname-input')}
+                {renderInputField('Full Name', 'fullName', tempProfile.personalInformation?.fullName || '', 'John Doe', 'text', undefined, false, 'fullname', 'fullname-input', true)}
                 {renderInputField('Headline', 'headline', tempProfile.personalInformation?.headline || '', 'Software Engineer', 'text', undefined, false, 'headline', 'headline-input')}
                 {renderInputField('Location', 'location', tempProfile.personalInformation?.location || '', 'New York, USA', 'text', undefined, false, 'location', 'location-input')}
             </div>

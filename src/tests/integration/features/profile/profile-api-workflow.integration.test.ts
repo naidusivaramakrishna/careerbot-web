@@ -822,13 +822,15 @@ describe('Profile API — getProfilePicture', () => {
 
     const result = await getProfilePicture();
 
-    expect(result.picture_url).toBe('https://cdn.example.com/avatar.png');
+    expect(result?.picture_url).toBe('https://cdn.example.com/avatar.png');
   });
 
-  it('rethrows 404 (no picture uploaded yet)', async () => {
+  it('returns null on 404 (no picture uploaded yet)', async () => {
     vi.spyOn(httpClient, 'get').mockRejectedValueOnce({ response: { status: 404 } });
 
-    await expect(getProfilePicture()).rejects.toMatchObject({ response: { status: 404 } });
+    const result = await getProfilePicture();
+
+    expect(result).toBeNull();
   });
 
   it('rethrows non-404 errors', async () => {

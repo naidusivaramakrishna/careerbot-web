@@ -163,9 +163,13 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 console.warn(
                     `[auth:${isLogin ? 'signin' : 'signup'}] no response (${err.code ?? 'unknown'}): ${err.message}`
                 )
-                newErrors.login = timedOut
+                const errorMessage = timedOut
                     ? "The server took too long to respond. Please try again."
                     : AUTH_ERROR_MESSAGES.NETWORK_ERROR
+                newErrors.login = errorMessage
+                // Highlight both email and password fields on network error
+                newErrors.email = errorMessage
+                newErrors.password = errorMessage
                 setErrors(newErrors)
                 return
             }

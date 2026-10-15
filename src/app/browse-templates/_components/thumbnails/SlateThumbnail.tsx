@@ -27,8 +27,8 @@ export function SlateThumbnail({ accentColor }: { accentColor?: string }) {
         <div className="flex gap-2">
           <span>New York, USA</span>
           <span>(469) 385-2948</span>
-          <span>LinkedIn</span>
-          <span>GitHub</span>
+          <span className='underline text-blue-600'>LinkedIn</span>
+          <span className='underline text-blue-600'>GitHub</span>
         </div>
         <span style={{ flexShrink: 0 }}>email@youremail.com</span>
       </div>

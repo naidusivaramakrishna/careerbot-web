@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type TemplateResponse, getAllResumes, createResumeWithAuth, applyTemplateToResume } from '@/api/resumeApi';
+import { type TemplateResponse, getAllResumes, createResumeWithAuth, applyTemplateToResume, applyCatalogueToResume } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/Button';
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from '../_constants/templateImages';
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
 import { TemplatePreviewRenderer } from '@/components/templates';
-
 interface DomainTemplatesModalProps {
   domainName: string;
   domainFamily: string;
@@ -20,6 +19,7 @@ interface DomainTemplatesModalProps {
   onClose: () => void;
   sourceResumeId?: string;
   source?: string;
+  selectedStyle?: string;
 }
 
 const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager', 'Director', 'Vice President'];
@@ -46,6 +46,7 @@ export default function DomainTemplatesModal({
   onClose,
   sourceResumeId,
   source,
+  selectedStyle = '',
 }: DomainTemplatesModalProps) {
   const router = useRouter();
   const domainFallback = DOMAIN_FAMILY_IMAGES[domainFamily] || FALLBACK_TEMPLATE_IMAGE;
@@ -182,7 +183,15 @@ export default function DomainTemplatesModal({
         }
       }
 
-      // Catalogue is already saved in localStorage by the /templates page selection
+      // Save the selected style/catalogue if one was chosen
+      if (selectedStyle) {
+        try {
+          await applyCatalogueToResume(resumeId, selectedStyle);
+          logger.info('Catalogue applied successfully:', selectedStyle);
+        } catch (catalogueError) {
+          logger.warn('Failed to save the catalogue on the resume:', catalogueError);
+        }
+      }
 
       // Store templateDomain in localStorage for domain-aware features (e.g., domain-specific skills)
       try {
@@ -244,7 +253,7 @@ export default function DomainTemplatesModal({
             </div>
 
             {/* Right: Career Level Templates Grid */}
-            <div className="w-96 flex flex-col overflow-y-auto">
+            <div className="w-[420px] flex flex-col overflow-y-auto">
               {/* Header */}
               <div className="mb-6 relative">
                 <div className="flex items-center gap-2 mb-2">
@@ -259,7 +268,7 @@ export default function DomainTemplatesModal({
               </div>
 
               {/* Career Level Cards Grid (2x2) */}
-              <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="grid grid-cols-2 gap-3 mb-6 px-1">
                 {sortedTemplates.map((template, index) => {
                   const careerLevel = getCareerLevel(template.name);
                   const isSelected = selectedTemplateIndex === index;
@@ -269,13 +278,13 @@ export default function DomainTemplatesModal({
                       <button
                         data-testid={`career-level-btn-${index}`}
                         onClick={() => handleSelectTemplate(index)}
-                        className={`relative rounded-lg overflow-hidden ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${isSelected
+                        className={`relative rounded-lg ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${isSelected
                             ? 'ring-2 ring-[#2257a7] shadow-md'
                             : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
                           }`}
                         style={{ pointerEvents: 'auto' }}
                       >
-                        <div style={{ pointerEvents: 'none' }}>
+                        <div style={{ pointerEvents: 'none' }} className="overflow-hidden rounded-md">
                           <TemplatePreviewRenderer
                           previewHtml={((template as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
                           previewCss={((template as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
@@ -289,9 +298,12 @@ export default function DomainTemplatesModal({
                           fillContainer={true}
                         />
                         </div>
-                        <span className="absolute top-2 left-2 bg-[#2557a7] text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full shadow-sm pointer-events-none">
-                          100% ATS Friendly
-                        </span>
+                        <div className="absolute top-1 left-1 pointer-events-none">
+                          <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 rounded-full shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border border-white/30">
+                            <Star className="w-3.5 h-3.5 fill-white text-white" />
+                            <span className='text-[10px]'>100% ATS</span>
+                          </div>
+                        </div>
                         {isSelected && (
                           <div className="absolute top-2 right-2 bg-linear-to-br from-teal-500 to-sky-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg ring-2 ring-white">
                             <span className="text-sm font-bold">✓</span>

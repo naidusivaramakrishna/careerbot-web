@@ -27,7 +27,7 @@ vi.mock('@/api/userApi', () => ({
 
 const mockSetProfileData = vi.fn();
 vi.mock('@/app/(user)/profile/context/ProfileContext', () => ({
-  useProfileContext: () => ({ profileData: {}, setProfileData: mockSetProfileData }),
+  useProfileContext: vi.fn(() => ({ profileData: {}, setProfileData: mockSetProfileData })),
 }));
 
 vi.mock('@/contexts/DashboardContext', () => ({
@@ -44,6 +44,7 @@ vi.mock('@/lib/logger', () => {
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import ResumeSection from '@/app/(user)/profile/_components/ResumeSection';
+import { useProfileContext } from '@/app/(user)/profile/context/ProfileContext';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 const defaultProps = {
@@ -53,7 +54,9 @@ const defaultProps = {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('ResumeSection — no resume uploaded', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('shows "Upload Your Resume" heading when getResume returns 404', async () => {
     mockGetResume.mockRejectedValueOnce({ response: { status: 404 } });
@@ -75,7 +78,9 @@ describe('ResumeSection — no resume uploaded', () => {
 });
 
 describe('ResumeSection — resume exists', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('shows Delete and Replace buttons when resume exists', async () => {
     mockGetResume.mockResolvedValueOnce({
@@ -93,7 +98,9 @@ describe('ResumeSection — resume exists', () => {
 });
 
 describe('ResumeSection — delete flow', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('shows "Delete Resume?" confirmation modal when Delete is clicked', async () => {
     mockGetResume.mockResolvedValueOnce({
@@ -184,7 +191,9 @@ describe('ResumeSection — delete flow', () => {
 });
 
 describe('ResumeSection — upload validation', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('shows error toast when an invalid file type is selected', async () => {
     mockGetResume.mockRejectedValueOnce({ response: { status: 404 } });
@@ -231,34 +240,35 @@ describe('ResumeSection — upload validation', () => {
   });
 });
 
-describe('ResumeSection — localStorage fileName behavior', () => {
+describe('ResumeSection — fileName from context', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
   });
 
-  it('reads fileName from localStorage on mount when available', async () => {
-    const storedFileName = 'my-resume.pdf';
-    localStorage.setItem('uploaded_resume_filename', storedFileName);
-
-    mockGetResume.mockResolvedValueOnce({
-      resume_url: 'https://storage.example.com/resumes/resume.pdf',
-    });
+  it('initializes fileName from profileData.filename context', async () => {
+    const fileName = 'my-resume.pdf';
+    vi.mocked(useProfileContext).mockReturnValueOnce({
+      profileData: {
+        resume_url: 'https://storage.example.com/resumes/resume.pdf',
+        filename: fileName,
+      },
+      setProfileData: mockSetProfileData,
+    } as unknown as ReturnType<typeof useProfileContext>);
 
     render(<ResumeSection {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText(storedFileName)).toBeInTheDocument();
+      expect(screen.getByText(fileName)).toBeInTheDocument();
     });
   });
 
-  it('shows "Uploaded Resume" fallback when localStorage key is absent', async () => {
-    // Ensure localStorage is empty
-    localStorage.removeItem('uploaded_resume_filename');
-
-    mockGetResume.mockResolvedValueOnce({
-      resume_url: 'https://storage.example.com/resumes/resume.pdf',
-    });
+  it('shows "Uploaded Resume" fallback when filename is absent from context', async () => {
+    vi.mocked(useProfileContext).mockReturnValueOnce({
+      profileData: {
+        resume_url: 'https://storage.example.com/resumes/resume.pdf',
+      },
+      setProfileData: mockSetProfileData,
+    } as unknown as ReturnType<typeof useProfileContext>);
 
     render(<ResumeSection {...defaultProps} />);
 
@@ -267,13 +277,15 @@ describe('ResumeSection — localStorage fileName behavior', () => {
     });
   });
 
-  it('clears fileName from localStorage when delete is confirmed', async () => {
-    const storedFileName = 'my-resume.pdf';
-    localStorage.setItem('uploaded_resume_filename', storedFileName);
-
-    mockGetResume.mockResolvedValueOnce({
-      resume_url: 'https://storage.example.com/resumes/resume.pdf',
-    });
+  it('clears fileName from context via setProfileData when delete is confirmed', async () => {
+    const fileName = 'my-resume.pdf';
+    vi.mocked(useProfileContext).mockReturnValueOnce({
+      profileData: {
+        resume_url: 'https://storage.example.com/resumes/resume.pdf',
+        filename: fileName,
+      },
+      setProfileData: mockSetProfileData,
+    } as unknown as ReturnType<typeof useProfileContext>);
     mockDeleteResume.mockResolvedValueOnce({ message: 'Resume deleted successfully' });
 
     render(<ResumeSection {...defaultProps} />);
@@ -282,13 +294,64 @@ describe('ResumeSection — localStorage fileName behavior', () => {
       expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
     });
 
-    // Open the confirmation modal and delete
     fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
     const [, modalDeleteBtn] = screen.getAllByRole('button', { name: /^delete$/i });
     fireEvent.click(modalDeleteBtn);
 
     await waitFor(() => {
-      expect(localStorage.getItem('uploaded_resume_filename')).toBeNull();
+      expect(mockDeleteResume).toHaveBeenCalledTimes(1);
+      expect(mockSetProfileData).toHaveBeenCalled();
     });
+  });
+});
+
+// PR #227 fix round: the uploaded file's name used to come from localStorage;
+// the PR reads it from the upload response instead. develop2's api answers
+// the STORAGE name there (`<user id>_<hex>.pdf`); only careerbot-api #387
+// answers the original name. Show the name the user picked on both.
+describe('ResumeSection — uploaded file name', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
+
+  // develop2's GET /profile/resume answers only `resume_url`, so after a
+  // reload the picked name must come from what this browser stored at upload.
+  it('shows the picked name after a reload when the api sends no file name', async () => {
+    window.localStorage.setItem('uploaded_resume_filename', 'My CV.pdf');
+    mockGetResume.mockResolvedValueOnce({ resume_url: '/api/v1/profile/resume/download' });
+    render(<ResumeSection {...defaultProps} />);
+    expect(await screen.findByText('My CV.pdf')).toBeInTheDocument();
+  });
+
+  it('prefers the file name the api sends (careerbot-api #387)', async () => {
+    window.localStorage.setItem('uploaded_resume_filename', 'Older.pdf');
+    mockGetResume.mockResolvedValueOnce({ resume_url: '/api/v1/profile/resume/download', filename: 'My CV.pdf' });
+    render(<ResumeSection {...defaultProps} />);
+    expect(await screen.findByText('My CV.pdf')).toBeInTheDocument();
+  });
+
+  it('shows the picked file name, not the storage name develop2 answers', async () => {
+    mockGetResume.mockRejectedValueOnce({ response: { status: 404 } });
+    mockUploadResume.mockResolvedValueOnce({
+      message: 'Resume uploaded successfully',
+      resume_url: '/api/v1/profile/resume/download',
+      filename: 'u123_0123456789abcdef.pdf',
+    });
+    render(<ResumeSection {...defaultProps} />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /choose resume/i })).toBeInTheDocument();
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File(['%PDF'], 'My CV.pdf', { type: 'application/pdf' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    expect(await screen.findByText('My CV.pdf')).toBeInTheDocument();
+    expect(screen.queryByText('u123_0123456789abcdef.pdf')).toBeNull();
+    expect(window.localStorage.getItem('uploaded_resume_filename')).toBe('My CV.pdf');
   });
 });

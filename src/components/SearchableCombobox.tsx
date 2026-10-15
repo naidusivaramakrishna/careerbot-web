@@ -12,6 +12,7 @@ interface SearchableComboboxProps {
   error?: string;
   labelClassName?: string;
   containerClassName?: string;
+  required?: boolean;
 }
 
 export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
@@ -23,6 +24,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   error,
   labelClassName,
   containerClassName,
+  required,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -99,11 +101,15 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
 
   return (
     <div className={containerClassName ?? "flex flex-col gap-3 w-full min-w-0"} ref={containerRef}>
-      <label className={labelClassName ?? "text-sm font-semibold"}>{label}</label>
+      <label className={labelClassName ?? "text-sm font-semibold"}>{label}{required && <span className="text-red-500"> *</span>}</label>
 
       <div className="relative">
         {/* Input Field */}
-        <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50 overflow-hidden hover:border-gray-300 focus-within:ring-2 focus-within:ring-[#2257a7]/20 focus-within:border-[#2257a7] transition">
+        <div className={`flex items-center rounded-lg overflow-hidden transition focus-within:ring-2 ${
+          error
+            ? 'border border-red-400 bg-red-50 focus-within:ring-red-200 focus-within:border-red-400'
+            : 'border border-gray-200 bg-gray-50 hover:border-gray-300 focus-within:ring-[#2257a7]/20 focus-within:border-[#2257a7]'
+        }`}>
           <input
             ref={inputRef}
             type="text"
@@ -111,7 +117,9 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
             placeholder={placeholder}
-            className="flex-1 p-2.5 text-sm outline-none bg-gray-50 focus:bg-white transition"
+            className={`flex-1 p-2.5 text-sm outline-none transition ${
+              error ? 'bg-red-50 focus:bg-red-50' : 'bg-gray-50 focus:bg-white'
+            }`}
           />
 
           {/* Clear Button */}
@@ -194,7 +202,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
       </div>
 
       {/* Error Message */}
-      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
 };

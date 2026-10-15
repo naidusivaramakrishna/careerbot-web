@@ -106,3 +106,22 @@ describe('useResumeProfileFill — employment status write', () => {
     });
   });
 });
+
+// PR #227 routes a certification's `year` through parseResumeDate. On
+// develop2 anything but a bare year passed through unchanged; at da27bab1 a
+// full date such as "2024-12-15" became "2024-12-15-01-01" (not a date).
+describe('mapResumeToProfile — certification end date', () => {
+  const certEnd = (year: string) =>
+    mapResumeToProfile({
+      resume_id: 'r1',
+      parsed_data: { certifications: [{ full_name: 'AWS SA', issuing_organization: 'Amazon', year }] },
+    } as unknown as ResumeExtractResponse).certifications?.[0]?.end_date;
+
+  it('keeps a full ISO date as it is', () => {
+    expect(certEnd('2024-12-15')).toBe('2024-12-15');
+  });
+
+  it('turns a year-month into the first of that month', () => {
+    expect(certEnd('2024-05')).toBe('2024-05-01');
+  });
+});

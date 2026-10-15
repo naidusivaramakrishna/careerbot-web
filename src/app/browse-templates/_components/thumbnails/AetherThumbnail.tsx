@@ -27,7 +27,7 @@ export function AetherThumbnail({ accentColor }: { accentColor?: string }) {
           testing@example.com | +919330111234 | Hyderabad |
         </div>
         <div style={{ fontSize: '6px', marginTop: '1px' }}>
-          linkedin.com/in/aditya | aditya-portfolio.com
+          <span className='underline text-blue-700'>LinkedIn</span> | <span className='underline text-blue-700'>GitHub</span>
         </div>
       </div>
 

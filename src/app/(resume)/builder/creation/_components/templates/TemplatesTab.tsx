@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { X, Star } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
 import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, getTemplateById, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
@@ -785,14 +785,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
               show the general template grid instead of a spinner that never resolves. */}
           {(!careerLevelData || careerLevelData.length === 0) && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-6">
-              {loading ? (
-                <div className="col-span-2 flex items-center justify-center py-12">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-sm text-gray-600">Loading templates...</p>
-                  </div>
-                </div>
-              ) : templates.length > 0 ? (
+              {templates.length > 0 ? (
                 templates.map((tpl) => (
                   <div
                     key={tpl.template_id}
@@ -801,9 +794,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                       } bg-white overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200`}
                   >
                     {tpl.atsFriendly && (
-                      <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-1 rounded-full shadow-sm border border-[#2557a7]">
-                        100% ATS Friendly
-                      </span>
+                      <div className="absolute top-1 right-1 pointer-events-none">
+                        <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 rounded-full shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border border-white/30">
+                          <Star className="w-3.5 h-3.5 fill-white text-white" />
+                          <span className='text-[10px]'>100% ATS</span>
+                        </div>
+                      </div>
                     )}
                     <Image
                       src={tpl.preview_url}
@@ -820,6 +816,13 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                     </div>
                   </div>
                 ))
+              ) : loading ? (
+                <div className="col-span-2 flex items-center justify-center py-12">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm text-gray-600">Loading templates...</p>
+                  </div>
+                </div>
               ) : (
                 <div className="col-span-2 text-sm text-gray-500 text-center py-8">
                   No templates found

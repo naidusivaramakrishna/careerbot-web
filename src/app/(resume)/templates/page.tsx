@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { Search, LayoutTemplate, Sparkles, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
 import { createCataloguePersister } from './_utils/cataloguePersister';
@@ -16,7 +17,7 @@ import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } fro
 import { DOMAIN_DISPLAY_NAMES } from '@/app/browse-templates/_data/constants';
 import Template1 from '@/app/(resume)/templates/Template1';
 import { type ResumeData, type ResumeStyle } from '@/app/(resume)/builder/creation/_context/ResumeContext';
-import { useCatalogues, type CatalogueConfig } from '@/hooks/useCatalogues';
+import { useCatalogues } from '@/hooks/useCatalogues';
 
 const DOMAIN_NAMES: Record<string, string> = {
   core_engineering: 'Core Engineering',
@@ -56,7 +57,7 @@ function TemplatesPageContent() {
   const urlSource = searchParams.get("source") || undefined;
   const [categories, setCategories] = useState<string[]>([]);
   const [templates, setTemplates] = useState<TemplateResponse[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('Catalogues');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDomainModal, setSelectedDomainModal] = useState<DomainModal | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,9 +68,15 @@ function TemplatesPageContent() {
   // Per-catalogue section-header background / accent colour (only meaningful for code-thumbnail catalogues).
   const [hoverBg, setHoverBg] = useState<Record<string, string | undefined>>({});
   const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>({});
+  const [pendingCatalogue, setPendingCatalogue] = useState<string | null>(null);
+  const [pendingColor, setPendingColor] = useState<string | null>(null);
+  // One-step Undo: the style before the last confirmed choice, and the colours
+  // that choice may have changed (the previous style's and the chosen one's).
+  const [previousSelection, setPreviousSelection] = useState<{ catalogue: string; colors: Record<string, string | undefined> } | null>(null);
+  const [catalogueSearchQuery, setCatalogueSearchQuery] = useState('');
 
   // Fetch catalogues from API
-  const { catalogues, loading: cataloguesLoading, getCataloguesMap } = useCatalogues();
+  const { catalogues, getCataloguesMap } = useCatalogues();
 
   // Use API catalogues with fallback to hardcoded STYLE_CATALOGUES during migration.
   // Only API keys with a local style are listed: previews (buildStyleForCatalogue)
@@ -138,43 +145,121 @@ function TemplatesPageContent() {
     return (CATALOGUE_LAYOUT_MAP[catalogue?.template_id || 'clean_simple'] as HeaderLayout) || 'centered';
   };
 
-  const persistColorForBuilder = (catalogueKey: string, color: string | undefined) => {
+  const persistColorForBuilder = useCallback((catalogueKey: string, color: string | undefined) => {
     // Eclipse's chosen colour drives `selected_section_bg` (the builder reads it for the
     // classic-formal section-header background). Other catalogues persist per-key only.
     if (catalogueKey === 'eclipse') {
       if (color) localStorage.setItem('selected_section_bg', color);
       else localStorage.removeItem('selected_section_bg');
     }
-  };
+  }, []);
 
   const [persistToResume] = useState(() =>
     createCataloguePersister((err) => logger.warn(`Failed to apply catalogue via API: ${err}`))
   );
 
   const handleCatalogueSelect = (key: string) => {
-    setSelectedCatalogue(key);
-    localStorage.setItem('selected_catalogue', key);
-    persistColorForBuilder(key, selectedBg[key]);
+    setPendingCatalogue(key);
+  };
 
-    // Persist only for the resume this page was opened for (?resumeId=).
-    // Without it the choice stays local and the builder applies
-    // `selected_catalogue` when it opens; falling back to current_resume_id
-    // wrote to whichever resume was opened last. With ?source=enhanced the id
-    // is an enhanced resume's, which the regular catalogue endpoint answers
-    // 404 for; the shared persister routes it (and orders fast clicks) as
-    // CatalogueTab does.
+  const confirmCatalogueSelection = useCallback(() => {
+    if (!pendingCatalogue) return;
+
+    setPreviousSelection({ catalogue: selectedCatalogue, colors: { [selectedCatalogue]: selectedBg[selectedCatalogue] } });
+    setSelectedCatalogue(pendingCatalogue);
+    localStorage.setItem('selected_catalogue', pendingCatalogue);
+    persistColorForBuilder(pendingCatalogue, selectedBg[pendingCatalogue]);
+
+    // Automatically switch to showing industry templates after catalogue selection
+    setSelectedCategory('All');
+    setPendingCatalogue(null);
+
+    // Success notification
+    toast.success(`${cataloguesMap[pendingCatalogue]?.label} selected!`, {
+      description: 'Your resume style has been updated',
+    });
+
     if (urlResumeId) {
-      persistToResume(urlResumeId, key, urlSource === 'enhanced');
+      persistToResume(urlResumeId, pendingCatalogue, urlSource === 'enhanced');
+    }
+  }, [pendingCatalogue, selectedCatalogue, selectedBg, urlResumeId, urlSource, cataloguesMap, persistColorForBuilder, persistToResume]);
+
+  const cancelCatalogueSelection = () => {
+    setPendingCatalogue(null);
+    setPendingColor(null);
+  };
+
+  const undoLastSelection = () => {
+    if (previousSelection) {
+      const { catalogue, colors } = previousSelection;
+      setSelectedCatalogue(catalogue);
+      setSelectedBg(prev => ({ ...prev, ...colors }));
+      localStorage.setItem('selected_catalogue', catalogue);
+      // Restore every colour the undone choice changed; no saved colour means
+      // the catalogue's default, so the stored one is removed.
+      for (const [key, color] of Object.entries(colors)) {
+        if (color) localStorage.setItem(`selected_color_${key}`, color);
+        else localStorage.removeItem(`selected_color_${key}`);
+        persistColorForBuilder(key, color);
+      }
+      if (urlResumeId) persistToResume(urlResumeId, catalogue, urlSource === 'enhanced');
+      setPreviousSelection(null);
+      toast.success('Undone! Back to previous style');
     }
   };
 
   const handleColorPick = (catalogueKey: string, color: string) => {
-    setSelectedCatalogue(catalogueKey);
-    setSelectedBg(prev => ({ ...prev, [catalogueKey]: color }));
-    localStorage.setItem('selected_catalogue', catalogueKey);
-    localStorage.setItem(`selected_color_${catalogueKey}`, color);
-    persistColorForBuilder(catalogueKey, color);
+    setPendingCatalogue(catalogueKey);
+    setPendingColor(color);
   };
+
+  const confirmColorSelection = useCallback(() => {
+    if (!pendingCatalogue || !pendingColor) return;
+
+    setPreviousSelection({
+      catalogue: selectedCatalogue,
+      colors: { [pendingCatalogue]: selectedBg[pendingCatalogue], [selectedCatalogue]: selectedBg[selectedCatalogue] },
+    });
+    setSelectedCatalogue(pendingCatalogue);
+    setSelectedBg(prev => ({ ...prev, [pendingCatalogue]: pendingColor }));
+    localStorage.setItem('selected_catalogue', pendingCatalogue);
+    localStorage.setItem(`selected_color_${pendingCatalogue}`, pendingColor);
+    persistColorForBuilder(pendingCatalogue, pendingColor);
+
+    // Automatically switch to showing industry templates after colour selection
+    setSelectedCategory('All');
+    setPendingCatalogue(null);
+    setPendingColor(null);
+
+    // Success notification
+    toast.success(`${cataloguesMap[pendingCatalogue]?.label} with custom color selected!`, {
+      description: 'Your resume style has been updated',
+    });
+
+    if (urlResumeId) {
+      persistToResume(urlResumeId, pendingCatalogue, urlSource === 'enhanced');
+    }
+  }, [pendingCatalogue, pendingColor, selectedCatalogue, selectedBg, urlResumeId, urlSource, cataloguesMap, persistColorForBuilder, persistToResume]);
+
+  // Keyboard support: Enter to confirm, Escape to cancel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!pendingCatalogue) return;
+      // Enter on a focused modal button (e.g. Cancel) is that button's own click.
+      const onModalButton = e.target instanceof HTMLButtonElement && !!e.target.closest('[data-confirm-modal]');
+      if (e.key === 'Enter' && !onModalButton) {
+        e.preventDefault();
+        pendingColor ? confirmColorSelection() : confirmCatalogueSelection();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelCatalogueSelection();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pendingCatalogue, pendingColor, confirmColorSelection, confirmCatalogueSelection]);
 
   // Reset pagination when category or search changes
   useEffect(() => {
@@ -296,6 +381,9 @@ function TemplatesPageContent() {
     filteredTemplates.forEach((template) => {
       const family = ((template as unknown) as Record<string, unknown>).domain_family as string || 'other';
       const applicableDomains = ((template as unknown) as Record<string, unknown>).applicable_domains as string[] || [];
+      // A template the search found by its own text stays in all of its domains.
+      const matchesTemplateText = !!query && [template.name, template.subtitle, template.description]
+        .some((text) => (text || '').toLowerCase().includes(query));
 
       if (!groups[family]) {
         groups[family] = {};
@@ -305,8 +393,8 @@ function TemplatesPageContent() {
         applicableDomains.forEach((domain) => {
           const displayName = (DOMAIN_DISPLAY_NAMES[domain] || domain).toLowerCase();
 
-          // If no search query, show all domains
-          if (!query) {
+          // If no search query, or the template's own text matches, show all its domains
+          if (!query || matchesTemplateText) {
             if (!groups[family][domain]) {
               groups[family][domain] = [];
             }
@@ -345,6 +433,17 @@ function TemplatesPageContent() {
       domainName: DOMAIN_DISPLAY_NAMES[domain] || domain,
     });
   };
+
+  // Filter catalogues by search query
+  const filteredCatalogues = useMemo(() => {
+    if (!catalogueSearchQuery.trim()) return Object.entries(cataloguesMap);
+
+    const query = catalogueSearchQuery.toLowerCase();
+    return Object.entries(cataloguesMap).filter(([, catalogue]) =>
+      catalogue.label.toLowerCase().includes(query) ||
+      catalogue.description.toLowerCase().includes(query)
+    );
+  }, [catalogueSearchQuery, cataloguesMap]);
 
   // Paginate results when showing "All Templates"
   const paginatedGroupedTemplates = useMemo(() => {
@@ -439,164 +538,6 @@ function TemplatesPageContent() {
         </div>
       </div>
 
-      {/* ── Catalogue style picker ─────────────────────────────── */}
-      <div className="px-6 py-14 bg-white border-y border-slate-100">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
-            <div>
-              <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100 mb-3">
-                <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
-                Step 1 of 2
-              </div>
-              <h2 className="text-3xl font-extrabold text-slate-900">Choose a Style</h2>
-              <p className="text-slate-500 mt-1.5 text-sm max-w-md leading-relaxed">
-                Pick a colour theme — it will apply automatically when you open the builder.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {selectedCatalogue && cataloguesMap[selectedCatalogue] && (
-                <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
-                  <span>{cataloguesMap[selectedCatalogue]?.label}</span>
-                  <span className="text-blue-300">selected</span>
-                </div>
-              )}
-              <button
-                onClick={() => setShowLivePreview(v => !v)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
-                  showLivePreview
-                    ? 'bg-[#2257a7] text-white border-[#2257a7] shadow-sm'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-800'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" />
-                {showLivePreview ? 'Your Data' : 'Preview with Your Data'}
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-            {Object.entries(cataloguesMap).map(([key, catalogue]) => {
-              const isSelected = selectedCatalogue === key;
-              const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
-              const paletteInfo = CATALOGUE_PALETTES[key];
-              const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor ?? catalogue.default_color;
-              const primarySwatch = catalogue.accent_swatches?.[0] || catalogue.swatches?.[0] || '#000000';
-
-              const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
-              return (
-                <div key={key} className="group flex flex-col">
-                  <div
-                    data-testid={`catalogue-card-${key}`}
-                    className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
-                    style={{
-                      boxShadow: isSelected
-                        ? `0 0 0 2.5px ${primarySwatch}, 0 16px 48px ${primarySwatch}30`
-                        : '0 1px 6px rgba(0,0,0,0.07)',
-                      transform: isSelected ? 'translateY(-3px)' : undefined,
-                    }}
-                    onClick={() => handleCatalogueSelect(key)}
-                  >
-                    <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
-                      <div
-                        ref={isFirst ? cardScaleRef : undefined}
-                        className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
-                        style={{ aspectRatio: '3/4' }}
-                      >
-                        {showLivePreview && liveResumeData ? (
-                          <>
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '595px',
-                                transform: `scale(${cardScale})`,
-                                transformOrigin: 'top left',
-                                pointerEvents: 'none',
-                              }}
-                            >
-                              <Template1
-                                data={liveResumeData}
-                                style={buildStyleForCatalogue(key)}
-                                layoutVariant={getLayoutVariant(key)}
-                                sectionOrder={liveSectionOrder}
-                              />
-                            </div>
-                            {!hasUserData && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
-                                <User className="w-6 h-6 text-slate-300 mb-1" />
-                                <p className="text-[10px] text-slate-400 font-medium text-center px-3">Build your resume to preview here</p>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
-                        )}
-                      </div>
-
-                      {isSelected && (
-                        <div
-                          className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg"
-                          style={{ backgroundColor: primarySwatch }}
-                        >
-                          ✓
-                        </div>
-                      )}
-
-                      <div className="absolute inset-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3 pointer-events-none">
-                        <div
-                          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
-                          style={{ backgroundColor: isSelected ? primarySwatch : '#1e293b' }}
-                        >
-                          {isSelected ? '✓ Selected' : 'Select Style'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="px-3 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
-                      {hasCodeThumbnail && paletteInfo ? (
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          {paletteInfo.palette.slice(0, 5).map(color => {
-                            const isSel = selectedBg[key] === color || (!selectedBg[key] && color === paletteInfo.defaultColor);
-                            return (
-                              <button
-                                key={color}
-                                aria-label={`Select colour ${color}`}
-                                onMouseEnter={() => setHoverBg(prev => ({ ...prev, [key]: color }))}
-                                onMouseLeave={() => setHoverBg(prev => ({ ...prev, [key]: undefined }))}
-                                onClick={e => { e.stopPropagation(); handleColorPick(key, color); }}
-                                className={`w-4 h-4 rounded-full cursor-pointer transition-all duration-150 ${
-                                  isSel
-                                    ? 'ring-2 ring-[#2257a7] ring-offset-1 scale-110'
-                                    : 'ring-1 ring-slate-200 hover:scale-110 hover:ring-slate-400'
-                                }`}
-                                style={{ backgroundColor: color }}
-                              />
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 font-medium">Monochrome</span>
-                      )}
-                      <div className="flex gap-1 shrink-0">
-                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">PDF</span>
-                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">DOCX</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 px-0.5">
-                    <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
-                      {catalogue?.label}
-                    </p>
-                    <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue?.description}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
 
       {/* ── Search + Content unified rail ─────────────────────── */}
       <div className="max-w-7xl mx-auto px-6">
@@ -607,11 +548,27 @@ function TemplatesPageContent() {
           <div className="flex items-center gap-2 mb-4">
             <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
               <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
-              Step 2 of 2
+              {selectedCategory === 'Catalogues' ? 'Choose a Style' : 'Browse Templates'}
             </div>
-            <span className="text-sm font-semibold text-slate-700">Select your industry &amp; career level</span>
+            <span className="text-sm font-semibold text-slate-700">
+              {selectedCategory === 'Catalogues' ? 'Pick a colour theme' : 'Select your industry & career level'}
+            </span>
+            {/* Undo shows in every view: a confirm switches to the industry view. */}
+            {previousSelection && (
+              <button
+                onClick={undoLastSelection}
+                className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
+                title="Undo to previous catalogue"
+              >
+                ↶ Undo
+              </button>
+            )}
           </div>
 
+          {/* The industry search filters industry templates only; the Catalogues
+              view has its own catalogue search below. */}
+          {selectedCategory !== 'Catalogues' && (
+          <>
           <div className="relative group max-w-2xl">
             <div className="absolute inset-0 bg-linear-to-r from-blue-400/15 to-teal-400/15 rounded-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg -m-1" />
             <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
@@ -650,6 +607,8 @@ function TemplatesPageContent() {
               </button>
             ))}
           </div>
+          </>
+          )}
         </div>
       </div>
 
@@ -665,7 +624,175 @@ function TemplatesPageContent() {
         </div>
 
         <div className="flex-1 min-w-0">
-          {loading ? (
+          {selectedCategory === 'Catalogues' && (
+            <div>
+              {/* Search and Controls */}
+              <div className="mb-8 space-y-4">
+                <div className="flex items-center gap-3">
+                  {selectedCatalogue && cataloguesMap[selectedCatalogue] && (
+                    <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
+                      <span>{cataloguesMap[selectedCatalogue]?.label}</span>
+                      <span className="text-blue-300">selected</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowLivePreview(v => !v)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+                      showLivePreview
+                        ? 'bg-[#2257a7] text-white border-[#2257a7] shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-800'
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    {showLivePreview ? 'Your Data' : 'Preview with Your Data'}
+                  </button>
+                </div>
+
+                {/* Search Input for Catalogues */}
+                <div className="relative max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Search catalogues..."
+                    value={catalogueSearchQuery}
+                    onChange={(e) => setCatalogueSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:border-transparent"
+                  />
+                  {catalogueSearchQuery && (
+                    <button
+                      onClick={() => setCatalogueSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+                {filteredCatalogues.map(([key, catalogue]) => {
+                  const isSelected = selectedCatalogue === key;
+                  const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
+                  const paletteInfo = CATALOGUE_PALETTES[key];
+                  const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor ?? catalogue.default_color;
+                  const primarySwatch = catalogue.accent_swatches?.[0] || catalogue.swatches?.[0] || '#000000';
+
+                  const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
+                  return (
+                    <div key={key} className="group flex flex-col">
+                      <div
+                        data-testid={`catalogue-card-${key}`}
+                        className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
+                        style={{
+                          boxShadow: isSelected
+                            ? `0 0 0 2.5px ${primarySwatch}, 0 16px 48px ${primarySwatch}30`
+                            : '0 1px 6px rgba(0,0,0,0.07)',
+                          transform: isSelected ? 'translateY(-3px)' : undefined,
+                        }}
+                        onClick={() => handleCatalogueSelect(key)}
+                      >
+                        <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
+                          <div
+                            ref={isFirst ? cardScaleRef : undefined}
+                            className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
+                            style={{ aspectRatio: '3/4' }}
+                          >
+                            {showLivePreview && liveResumeData ? (
+                              <>
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '595px',
+                                    transform: `scale(${cardScale})`,
+                                    transformOrigin: 'top left',
+                                    pointerEvents: 'none',
+                                  }}
+                                >
+                                  <Template1
+                                    data={liveResumeData}
+                                    style={buildStyleForCatalogue(key)}
+                                    layoutVariant={getLayoutVariant(key)}
+                                    sectionOrder={liveSectionOrder}
+                                  />
+                                </div>
+                                {!hasUserData && (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
+                                    <User className="w-6 h-6 text-slate-300 mb-1" />
+                                    <p className="text-[10px] text-slate-400 font-medium text-center px-3">Build your resume to preview here</p>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
+                            )}
+                          </div>
+
+                          {isSelected && (
+                            <div
+                              className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg"
+                              style={{ backgroundColor: primarySwatch }}
+                            >
+                              ✓
+                            </div>
+                          )}
+
+                          <div className="absolute inset-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3 pointer-events-none">
+                            <div
+                              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
+                              style={{ backgroundColor: isSelected ? primarySwatch : '#1e293b' }}
+                            >
+                              {isSelected ? '✓ Selected' : 'Select Style'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="px-3 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
+                          {hasCodeThumbnail && paletteInfo ? (
+                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              {paletteInfo.palette.slice(0, 5).map(color => {
+                                const isSel = selectedBg[key] === color || (!selectedBg[key] && color === paletteInfo.defaultColor);
+                                return (
+                                  <button
+                                    key={color}
+                                    aria-label={`Select colour ${color}`}
+                                    onMouseEnter={() => setHoverBg(prev => ({ ...prev, [key]: color }))}
+                                    onMouseLeave={() => setHoverBg(prev => ({ ...prev, [key]: undefined }))}
+                                    onClick={e => { e.stopPropagation(); handleColorPick(key, color); }}
+                                    className={`w-4 h-4 rounded-full cursor-pointer transition-all duration-150 ${
+                                      isSel
+                                        ? 'ring-2 ring-[#2257a7] ring-offset-1 scale-110'
+                                        : 'ring-1 ring-slate-200 hover:scale-110 hover:ring-slate-400'
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">Monochrome</span>
+                          )}
+                          <div className="flex gap-1 shrink-0">
+                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">PDF</span>
+                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">DOCX</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 px-0.5">
+                        <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
+                          {catalogue?.label}
+                        </p>
+                        <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue?.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {selectedCategory !== 'Catalogues' && loading && (
             <div className="space-y-8">
               {[...Array(2)].map((_, familyIdx) => (
                 <div key={familyIdx}>
@@ -684,7 +811,9 @@ function TemplatesPageContent() {
                 </div>
               ))}
             </div>
-          ) : filteredTemplates.length === 0 ? (
+          )}
+
+          {selectedCategory !== 'Catalogues' && !loading && filteredTemplates.length === 0 && (
             <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-200/60 flex items-center justify-center mb-3">
                 <LayoutTemplate className="w-8 h-8 text-[#2257a7]" />
@@ -694,7 +823,9 @@ function TemplatesPageContent() {
                 Try adjusting your search or filters. We have over 100 templates across all industries.
               </p>
             </div>
-          ) : (
+          )}
+
+          {selectedCategory !== 'Catalogues' && !loading && filteredTemplates.length > 0 && (
             <div className="space-y-10">
               {Object.entries(paginatedGroupedTemplates).map(([family, domains], idx) => (
                 <div key={family} className="scroll-mt-20">
@@ -736,37 +867,74 @@ function TemplatesPageContent() {
               ))}
 
               {/* Pagination Controls */}
-              {selectedCategory === 'All' && totalPages > 1 && (
-                <div className="flex items-center justify-center gap-4 pt-12 pb-8">
+              {selectedCategory !== 'Catalogues' && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-16 pb-8">
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:text-[#2257a7] hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 transition-all duration-200"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     Previous
                   </button>
 
-                  <div className="flex items-center gap-2">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`w-10 h-10 rounded-lg font-semibold transition-all ${
-                          page === currentPage
-                            ? 'bg-[#2257a7] text-white shadow-md'
-                            : 'border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+                    {(() => {
+                      const pages: (number | string)[] = [];
+                      const leftSibling = currentPage - 1;
+                      const rightSibling = currentPage + 1;
+
+                      // Always show first page
+                      pages.push(1);
+
+                      // Add left ellipsis if needed
+                      if (leftSibling > 2) {
+                        pages.push('...');
+                      }
+
+                      // Add pages around current page
+                      for (let i = Math.max(2, leftSibling); i <= Math.min(totalPages - 1, rightSibling); i++) {
+                        if (!pages.includes(i)) {
+                          pages.push(i);
+                        }
+                      }
+
+                      // Add right ellipsis if needed
+                      if (rightSibling < totalPages - 1) {
+                        pages.push('...');
+                      }
+
+                      // Always show last page if more than 1
+                      if (totalPages > 1 && !pages.includes(totalPages)) {
+                        pages.push(totalPages);
+                      }
+
+                      return pages.map((page, idx) => (
+                        page === '...' ? (
+                          <div key={`ellipsis-${idx}`} className="w-9 h-9 flex items-center justify-center text-slate-300 font-bold text-lg">
+                            ···
+                          </div>
+                        ) : (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page as number)}
+                            className={`w-9 h-9 rounded-lg font-bold text-sm transition-all duration-200 ${
+                              page === currentPage
+                                ? 'bg-linear-to-br from-[#2257a7] to-[#1a4288] text-white shadow-lg shadow-blue-500/30 scale-105'
+                                : 'text-slate-600 hover:bg-slate-100 hover:text-[#2257a7] hover:shadow-md'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        )
+                      ));
+                    })()}
                   </div>
 
                   <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:text-[#2257a7] hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 transition-all duration-200"
                   >
                     Next
                     <ChevronRight className="w-4 h-4" />
@@ -788,6 +956,69 @@ function TemplatesPageContent() {
           sourceResumeId={urlResumeId}
           source={urlSource}
         />
+      )}
+
+      {/* Enhanced Catalogue Confirmation Modal */}
+      {pendingCatalogue && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div data-confirm-modal className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-6">
+              <h3 className="text-xl font-bold text-slate-900">
+                {pendingColor ? 'Confirm Color Selection' : 'Confirm Catalogue Selection'}
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">Review your selection before proceeding</p>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {/* Catalogue Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase">Catalogue</p>
+                  <p className="text-sm font-semibold text-slate-900">{cataloguesMap[pendingCatalogue]?.label}</p>
+                  <p className="text-xs text-slate-600 line-clamp-2">{cataloguesMap[pendingCatalogue]?.description}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase">ATS Level</p>
+                  <p className="text-sm font-semibold text-slate-900 capitalize">{STYLE_CATALOGUES[pendingCatalogue]?.atsLevel || 'safe'}</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase pt-2">Header Layout</p>
+                  <p className="text-sm font-semibold text-slate-900 capitalize">{getLayoutVariant(pendingCatalogue)}</p>
+                </div>
+              </div>
+
+              {/* Before/After Comparison */}
+              {cataloguesMap[selectedCatalogue] && (
+                <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                  <p className="text-sm font-semibold text-slate-700">Previous Selection</p>
+                  <p className="text-sm text-slate-600">{cataloguesMap[selectedCatalogue]?.label}</p>
+                </div>
+              )}
+
+              {/* Keyboard Hints */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-slate-600 space-y-1">
+                <p className="font-semibold text-slate-700">💡 Keyboard Shortcuts</p>
+                <p>Press <kbd className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono">Enter</kbd> to confirm or <kbd className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono">Esc</kbd> to cancel</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 p-6 flex gap-3">
+              <button
+                onClick={cancelCatalogueSelection}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={pendingColor ? confirmColorSelection : confirmCatalogueSelection}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-[#2257a7] text-white font-medium hover:bg-[#1a4288] transition-colors"
+              >
+                Yes, Select
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

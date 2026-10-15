@@ -97,6 +97,13 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
         const parseResumeDate = (dateStr: string): string => {
             if (!dateStr || dateStr.toLowerCase() === 'present') return '';
             try {
+                // Already a full date (YYYY-MM-DD): keep it.
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+                // Handle YYYY-MM format (e.g., "2024-12")
+                if (/^\d{4}-\d{2}$/.test(dateStr)) {
+                    return `${dateStr}-01`;
+                }
+
                 const monthMap: Record<string, string> = {
                     jan: '01', january: '01', feb: '02', february: '02',
                     mar: '03', march: '03', apr: '04', april: '04',
@@ -376,9 +383,9 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                 profileData.certifications = certificationsData.map((cert) => {
                     if (typeof cert === 'object' && cert && 'full_name' in cert) {
                         const certYear = cert.year ? asStr(cert.year) : '';
-                        const formattedEndDate = certYear && /^\d{4}$/.test(certYear)
-                            ? `${certYear}-12-31`
-                            : certYear;
+                        const formattedEndDate = certYear
+                            ? parseResumeDate(certYear)
+                            : '';
                         return {
                             certification_name: cert.full_name || '',
                             issuer: cert.issuing_organization || '',

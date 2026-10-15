@@ -24,6 +24,8 @@ export function PillarThumbnail({ accentColor }: { accentColor?: string }) {
         <div style={{ fontSize: '6px' }}>sumarathod@gmail.com</div>
         <div style={{ fontSize: '6px' }}>+91 9848761230</div>
         <div style={{ fontSize: '6px' }}>Hyderabad, India</div>
+        <div className='underline text-blue-600'>LinkedIn</div>
+        <div className='underline text-blue-600'>GitHub</div>
       </div>
 
       <div style={{ borderTop: `0.5px solid ${COLOR_DIVIDER}`, margin: '4px 0 6px' }} />

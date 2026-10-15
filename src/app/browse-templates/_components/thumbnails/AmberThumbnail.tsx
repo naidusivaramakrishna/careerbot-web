@@ -27,8 +27,8 @@ export function AmberThumbnail({ accentColor }: { accentColor?: string }) {
           <div>testing@example.com</div>
           <div>+919330111234</div>
           <div>Hyderabad</div>
-          <div>linkedin.com/in/arjun</div>
-          <div>arjun-portfolio.com</div>
+          <span className='underline text-blue-600'>LinkedIn</span>
+          <span className='underline text-blue-600'>GitHub</span>
         </div>
       </div>
       <div style={{ borderTop: `0.5px solid ${COLOR_DIVIDER}`, margin: '6px 0' }} />

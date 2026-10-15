@@ -104,4 +104,5 @@ export interface ProfileData {
     }[];
 
     resume_url?: string;
+    filename?: string;
 }

@@ -26,7 +26,7 @@ export function CrimsonThumbnail({ accentColor }: { accentColor?: string }) {
         <div style={{ fontSize: '7px', marginBottom: '3px' }}>Human Resource Manager</div>
         <div style={{ borderTop: `3px solid ${accent}`, margin: '4px 0' }} />
         <div style={{ fontSize: '6px', marginTop: '4px' }}>
-          email@youremail.com{'  •  '}New York, USA{'  •  '}(469) 385-2948{'  •  '}LinkedIn{'  •  '}GitHub
+          email@youremail.com{'  •  '}New York, USA{'  •  '}(469) 385-2948{'  •  '}<span className='underline text-blue-700'>LinkedIn</span>{'  •  '}<span className='underline text-blue-700'>GitHub</span>
         </div>
       </div>
 

@@ -472,7 +472,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // parsed but yielded no sections was never stored.
             uploadResume(file)
                 .then((res) => {
-                    if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url }));
+                    if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url, filename: file.name }));
                     localStorage.setItem('uploaded_resume_filename', file.name);
                 })
                 .catch((err) => {

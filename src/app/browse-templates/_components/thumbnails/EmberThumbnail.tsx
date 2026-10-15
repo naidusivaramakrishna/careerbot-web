@@ -24,6 +24,8 @@ export function EmberThumbnail({ accentColor }: { accentColor?: string }) {
         <div style={{ fontSize: '6px', marginTop: '2px' }}>dhruva@gmail.com</div>
         <div style={{ fontSize: '6px' }}>+91 9785462155</div>
         <div style={{ fontSize: '6px' }}>Hyderabad, India</div>
+        <div className='underline text-blue-600'>LinkedIn</div>
+        <div className='underline text-blue-600'>GitHub</div>
       </div>
       <div style={{ borderTop: `0.5px solid ${COLOR_DIVIDER}`, margin: '5px 0 6px' }} />
 
