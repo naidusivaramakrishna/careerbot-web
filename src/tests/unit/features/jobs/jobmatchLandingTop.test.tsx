@@ -1,6 +1,7 @@
 // Job Match landing (top sections): guards for the redesign in
-// src/app/(jobs)/jobmatch/_components/landing. HeroSection and FeaturesSection
-// are rendered by JobMatchHomePage, so they are live on /jobmatch.
+// src/app/(jobs)/jobmatch/_components/landing. JobMatchHomePage renders
+// HeroSection, ThreeStepsSection and MatchInsightsSection; the bottom sections
+// are covered by jobmatchLandingBottom.test.tsx.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import React from "react";
@@ -37,31 +38,19 @@ vi.mock("framer-motion", () => {
 });
 
 import HeroSection from "@/app/(jobs)/jobmatch/_components/landing/HeroSection";
-import HowItWorks from "@/app/(jobs)/jobmatch/_components/landing/HowItWorks";
 
 const ROOT = path.resolve(__dirname, "../../../../..");
 const LANDING = path.join(ROOT, "src/app/(jobs)/jobmatch/_components/landing");
 const read = (file: string) => readFileSync(path.join(LANDING, file), "utf8");
 
 // ---------------------------------------------------------------------------
-// Tailwind: every utility the landing sections use must generate CSS. The
-// type scale (text-h1 / text-body-sm / ...) is not a Tailwind default; with
-// no @theme for it the classes compile to nothing and headings fall back to
-// the inherited body size.
+// Tailwind type scale: text-h1 / text-body-sm / ... are not Tailwind defaults;
+// with no @theme for them the classes compile to nothing. The rendered landing
+// sections style text with CSS modules; the page shell's utilities are checked
+// in jobmatchLandingBottom.test.tsx.
 // ---------------------------------------------------------------------------
-const UTILITY_SHAPE = /^(?:[a-z0-9-]+:)*-?(?:text|bg|border|from|to|via|ring|shadow|fill|stroke|outline|font|leading|tracking)-[A-Za-z0-9[\]#/.%_()-]+$/;
-const escapeClass = (cls: string) => cls.replace(/[^A-Za-z0-9_-]/g, (ch) => `\\${ch}`);
-
-function utilityCandidates(file: string): string[] {
-  const literals = [...read(file).matchAll(/"([^"\n]*)"|`([^`]*)`/g)].map((m) => m[1] ?? m[2]);
-  const tokens = literals.flatMap((lit) => lit.replace(/\$\{[^}]*\}/g, " ").split(/\s+/));
-  return [...new Set(tokens.filter((t) => UTILITY_SHAPE.test(t)))];
-}
-
-describe("jobmatch landing: Tailwind utilities", () => {
-  const files = ["FeaturesSection.tsx", "HowItWorks.tsx", "StatsLogos.tsx", "StatsSection.tsx"];
-
-  it("generates CSS for every text/bg/border utility in the restyled sections", async () => {
+describe("jobmatch landing: Tailwind type scale", () => {
+  it("defines the type-scale tokens the landing uses", async () => {
     // tailwindcss's own compiler (a declared dependency), resolving @import the
     // way @tailwindcss/postcss does for this file.
     const { compile } = await import("tailwindcss");
@@ -71,14 +60,6 @@ describe("jobmatch landing: Tailwind utilities", () => {
     };
     const cssPath = path.join(ROOT, "src/app/globals.css");
     const compiler = await compile(readFileSync(cssPath, "utf8"), { base: path.dirname(cssPath), loadStylesheet });
-    const missing: string[] = [];
-    for (const file of files) {
-      const candidates = utilityCandidates(file);
-      expect(candidates.length).toBeGreaterThan(0);
-      const css = compiler.build(candidates);
-      for (const cls of candidates) if (!css.includes(`.${escapeClass(cls)}`)) missing.push(`${file}: ${cls}`);
-    }
-    expect(missing).toEqual([]);
     // The scale itself: text-body-sm is 14px / 20px, text-h2 is bold.
     const css = compiler.build(["text-body-sm", "text-h2"]);
     expect(css).toMatch(/--text-body-sm:\s*14px/);
@@ -196,7 +177,7 @@ describe("jobmatch landing: no type-size step-down above 1250px", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Live hero: CTA wiring and the dark-header contrast in HowItWorks.
+// Live hero: CTA wiring.
 // ---------------------------------------------------------------------------
 describe("jobmatch landing: rendered sections", () => {
   it("hero CTA calls onAnalyzeClick and the heading labels the section", () => {
@@ -205,34 +186,5 @@ describe("jobmatch landing: rendered sections", () => {
     fireEvent.click(screen.getByRole("button", { name: /check my resume/i }));
     expect(onAnalyzeClick).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("region", { name: /check your resume/i })).toBeInTheDocument();
-  });
-
-  // Tailwind slate scale (sRGB) and WCAG 2.1 contrast.
-  const SLATE: Record<string, string> = { "300": "#cbd5e1", "400": "#94a3b8", "500": "#64748b", "600": "#475569", "700": "#334155" };
-  const luminance = (hex: string) => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  const contrast = (a: string, b: string) => {
-    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return (hi + 0.05) / (lo + 0.05);
-  };
-  const textHex = (el: HTMLElement) => {
-    const cls = el.className;
-    if (/\btext-white\b/.test(cls)) return "#ffffff";
-    const slate = /\btext-slate-(\d{3})\b/.exec(cls);
-    if (!slate || !SLATE[slate[1]]) throw new Error(`unknown text colour: ${cls}`);
-    return SLATE[slate[1]];
-  };
-
-  // "Senior Frontend Engineer" (white) is the control: it passes before and after.
-  it.each(["Resume Tailoring", "Match", "Senior Frontend Engineer"])("Optimize step dark header: %s has >= 4.5:1 contrast", (label) => {
-    render(<HowItWorks />);
-    fireEvent.click(screen.getByText("Optimize Resume"));
-    const el = screen.getByText(label, { selector: "p" });
-    const header = el.closest('[class*="bg-[#"]') as HTMLElement;
-    const bg = /bg-\[(#[0-9A-Fa-f]{6})\]/.exec(header.className)?.[1] as string;
-    expect(contrast(textHex(el), bg)).toBeGreaterThanOrEqual(4.5);
   });
 });

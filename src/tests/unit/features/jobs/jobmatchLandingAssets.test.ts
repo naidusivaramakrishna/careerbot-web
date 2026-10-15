@@ -38,10 +38,13 @@ const EXPECTED_ASSETS = [
     "tailor-my-resume-icon.svg",
     "takes-about-a-minute-icon.svg",
     "testimonials-icon.svg",
-    "turn-insights-into-a-stronger-resume.png",
+    "turn-insights-into-a-stronger-resume.webp",
     "your-files-stay-private-icon.svg",
   ].map((name) => `jobmatch-reference/${name}`),
 ];
+
+const EDITOR_SCREENSHOT = "turn-insights-into-a-stronger-resume.webp";
+const AVATARS = ["Person1.svg", "Person 2.svg", "Person3.svg"];
 
 function referenceAssets(): string[] {
   return readdirSync(REFERENCE_DIR).map((name) => path.join(REFERENCE_DIR, name));
@@ -64,6 +67,20 @@ describe("jobmatch landing asset budget", () => {
       .filter((file) => statSync(file).size > FILE_BUDGET)
       .map((file) => `${path.basename(file)}: ${statSync(file).size} bytes`);
     expect(over).toEqual([]);
+  });
+
+  // ResumeEditorSection renders this screenshot at most 1096 CSS px wide, and
+  // TestimonialsSection draws each avatar in a circle of at most 66px; unoptimized means
+  // every viewport (390px phones included) downloads these bytes as-is.
+  it("keeps the screenshot ResumeEditorSection renders (2x of 1096px) under 200 KB", () => {
+    const section = readFileSync(path.resolve(__dirname, "../../../../app/(jobs)/jobmatch/_components/landing/ResumeEditorSection.tsx"), "utf8");
+    const src = /src="\/images\/(jobmatch-reference\/turn-insights[^"]+)"/.exec(section)?.[1];
+    expect(src).toBe(`jobmatch-reference/${EDITOR_SCREENSHOT}`);
+    expect(statSync(path.join(PUBLIC_IMAGES, src as string)).size).toBeLessThanOrEqual(200 * KB);
+  });
+
+  it.each(AVATARS)("keeps the testimonial avatar %s under 20 KB", (name) => {
+    expect(statSync(path.join(PUBLIC_IMAGES, name)).size).toBeLessThanOrEqual(20 * KB);
   });
 
   it("ships exactly the asset paths the landing components reference (control)", () => {
