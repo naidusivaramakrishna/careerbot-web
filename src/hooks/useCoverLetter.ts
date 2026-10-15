@@ -46,9 +46,14 @@ export function useCoverLetter(
       return;
     }
     const mySeq = ++requestSeqRef.current;
-    // A freshly generated response is already available. Keep it visible
-    // while the route verifies it with the normal persisted-letter GET.
-    setIsLoading(letterRef.current === null);
+    // A freshly generated response is already available only for its own
+    // route. Never keep letter A visible while loading a different letter B.
+    const hasCurrentLetter = letterRef.current?.letter_id === letterId;
+    if (!hasCurrentLetter) {
+      letterRef.current = null;
+      setLetter(null);
+    }
+    setIsLoading(!hasCurrentLetter);
     setError(null);
     try {
       const result = await getCoverLetter(letterId);
@@ -60,7 +65,7 @@ export function useCoverLetter(
       if (mySeq !== requestSeqRef.current) return;
       // The generation response is valid content for this route. A failed
       // background verification must not replace it with an error screen.
-      if (letterRef.current !== null) {
+      if (letterRef.current?.letter_id === letterId) {
         setError(null);
         return;
       }

@@ -38,4 +38,21 @@ describe("useCoverLetter", () => {
     expect(result.current.letter).toEqual(cachedLetter);
     expect(result.current.error).toBeNull();
   });
+
+  it("clears a previous letter and exposes the error when the requested id changes", async () => {
+    mockGetCoverLetter.mockResolvedValueOnce(cachedLetter);
+    const { result, rerender } = renderHook(
+      ({ letterId }) => useCoverLetter(letterId),
+      { initialProps: { letterId: "letter-1" } },
+    );
+
+    await waitFor(() => expect(result.current.letter?.letter_id).toBe("letter-1"));
+    mockGetCoverLetter.mockRejectedValueOnce(new Error("network unavailable"));
+    rerender({ letterId: "letter-2" });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.letter).toBeNull();
+    expect(result.current.error?.message).toBe("network unavailable");
+  });
+
 });

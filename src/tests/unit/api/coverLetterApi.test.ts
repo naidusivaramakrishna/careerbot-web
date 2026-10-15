@@ -48,6 +48,7 @@ import {
   generateCoverLetter,
   getDefaultCoverLetterResume,
   getCoverLetter,
+  getCoverLetterGenerationProgress,
   listCoverLetters,
   updateCoverLetter,
   deleteCoverLetter,
@@ -414,6 +415,44 @@ describe("getCoverLetter()", () => {
 });
 
 // ── listCoverLetters() ────────────────────────────────────────────────────
+
+describe("getCoverLetterGenerationProgress()", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reads the authenticated progress endpoint and preserves the skip-redirect header", async () => {
+    const data = {
+      status: "in_progress", stage: "generating", progress: 25,
+      message: "Creating your tailored cover letter.", letter_id: null,
+      updated_at: "2026-10-15T00:00:00Z",
+    };
+    mockHttpClient.get.mockResolvedValueOnce({ data });
+
+    await expect(getCoverLetterGenerationProgress("key with spaces")).resolves.toEqual(data);
+    expect(mockHttpClient.get).toHaveBeenCalledWith(
+      "/cover-letter/generation-progress/key%20with%20spaces",
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
+    );
+  });
+
+  it("returns null while the backend has not created the progress row", async () => {
+    mockHttpClient.get.mockRejectedValueOnce(makeAxiosError(404));
+    await expect(getCoverLetterGenerationProgress("pending-key")).resolves.toBeNull();
+  });
+
+  it("requests the backend force-refresh progress key when asked", async () => {
+    mockHttpClient.get.mockResolvedValueOnce({ data: {} });
+    await getCoverLetterGenerationProgress("refresh-key", { forceRefresh: true });
+    expect(mockHttpClient.get).toHaveBeenCalledWith(
+      "/cover-letter/generation-progress/refresh-key",
+      {
+        headers: { "X-Skip-Auth-Redirect": "true" },
+        params: { force_refresh: true },
+      },
+    );
+  });
+});
 
 describe("listCoverLetters()", () => {
   beforeEach(() => {

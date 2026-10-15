@@ -318,11 +318,15 @@ export async function generateCoverLetter(
  */
 export async function getCoverLetterGenerationProgress(
   idempotencyKey: string,
+  options: { forceRefresh?: boolean } = {},
 ): Promise<CoverLetterGenerationProgress | null> {
   try {
     const { data } = await httpClient.get<CoverLetterGenerationProgress>(
       `${BASE}/generation-progress/${encodeURIComponent(idempotencyKey)}`,
-      { headers: { "X-Skip-Auth-Redirect": "true" } },
+      {
+        headers: { "X-Skip-Auth-Redirect": "true" },
+        ...(options.forceRefresh && { params: { force_refresh: true } }),
+      },
     );
     return data;
   } catch (err) {

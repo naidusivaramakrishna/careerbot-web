@@ -7,6 +7,19 @@ import type { ParseResumeResponse, ParseFromProfileResponse, ParseJDResponse, Re
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
   __raw: unknown;
+  status?: number;
+  config?: AxiosRequestConfig;
+}
+
+function wrapAxiosError(err: import("axios").AxiosError): ApiErrorWithRaw {
+  const raw = err.response?.data ?? err.message;
+  const apiError = new Error(
+    typeof raw === "string" ? raw : JSON.stringify(raw),
+  ) as ApiErrorWithRaw;
+  apiError.__raw = raw;
+  apiError.status = err.response?.status;
+  apiError.config = err.config;
+  return apiError;
 }
 
 async function safePost<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
@@ -19,10 +32,7 @@ async function safePost<T = unknown>(url: string, data?: unknown, config?: Axios
   } catch (err: unknown) {
     logApiError('POST', url, err);
     if (axios.isAxiosError(err)) {
-      const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
-      apiError.__raw = raw;
-      throw apiError;
+      throw wrapAxiosError(err);
     }
     throw err;
   }
@@ -37,10 +47,7 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
   } catch (err: unknown) {
     logApiError('GET', url, err);
     if (axios.isAxiosError(err)) {
-      const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
-      apiError.__raw = raw;
-      throw apiError;
+      throw wrapAxiosError(err);
     }
     throw err;
   }
@@ -56,10 +63,7 @@ async function safePut<T = unknown>(url: string, data?: unknown, config?: AxiosR
   } catch (err: unknown) {
     logApiError('PUT', url, err);
     if (axios.isAxiosError(err)) {
-      const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
-      apiError.__raw = raw;
-      throw apiError;
+      throw wrapAxiosError(err);
     }
     throw err;
   }
@@ -74,10 +78,7 @@ async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig)
   } catch (err: unknown) {
     logApiError('DELETE', url, err);
     if (axios.isAxiosError(err)) {
-      const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
-      apiError.__raw = raw;
-      throw apiError;
+      throw wrapAxiosError(err);
     }
     throw err;
   }

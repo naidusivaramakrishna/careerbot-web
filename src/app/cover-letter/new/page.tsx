@@ -394,7 +394,10 @@ export default function CoverLetterNewPage() {
   const userPickedResumeRef = useRef(false);
   const signatureResumeLoadRef = useRef<string | null>(null);
   const signatureResumeKeyRef = useRef<string | null>(null);
-  const restoredSignatureResumeKeyRef = useRef<string | null>(null);
+  const restoredSignatureRef = useRef<{
+    key: string | null;
+    name: string;
+  } | null>(null);
   const [uploadedResume, setUploadedResume] = useState<ParsedResumeBlob | null>(null);
   const [selectedResume, setSelectedResume] = useState<ParsedResumeBlob | null>(null);
   const [resumeOptions, setResumeOptions] = useState<CoverLetterResumeOption[]>([]);
@@ -599,7 +602,10 @@ export default function CoverLetterNewPage() {
       setLocation(draft.location);
       setHiringManagerName(draft.hiringManagerName);
       setCandidateSignatureName(draft.candidateSignatureName);
-      restoredSignatureResumeKeyRef.current = draft.signatureResumeKey;
+      restoredSignatureRef.current = {
+        key: draft.signatureResumeKey,
+        name: draft.candidateSignatureName,
+      };
       setSignatureResumeKey(draft.signatureResumeKey);
     }
     setRefreshDraftReady(true);
@@ -739,29 +745,40 @@ export default function CoverLetterNewPage() {
 
   useEffect(() => {
     if (
-      resumeSource !== "parser"
-      || !parsedResumeId
+      !parsedResumeId
       || getResumeSignatureName(resume)
-      || signatureResumeLoadRef.current === parsedResumeId
+      || signatureResumeLoadRef.current === `${resumeSource}:${parsedResumeId}`
     ) {
       return;
     }
 
     let cancelled = false;
-    signatureResumeLoadRef.current = parsedResumeId;
-    getParsedResume(parsedResumeId)
-      .then((parsedResume) => {
+    const loadKey = `${resumeSource}:${parsedResumeId}`;
+    signatureResumeLoadRef.current = loadKey;
+    const loadResume = resumeSource === "builder"
+      ? getResumeById(parsedResumeId)
+      : getParsedResume(parsedResumeId);
+    loadResume
+      .then((loadedResume) => {
         if (cancelled) return;
-        const response = getNestedRecord(parsedResume);
+        const response = getNestedRecord(loadedResume);
         const responseData = getNestedRecord(response.data);
         const details = Object.keys(responseData).length > 0 ? responseData : response;
 
         setSelectedResume((current) => {
-          // Default parser resumes live in `fallbackResume`, so `current` can
-          // still be null here. Merge into that active fallback unless the
-          // user selected a different resume while this request was pending.
+          // Default resumes live in fallbackResume, so current can still be
+          // null here. Merge only while this is still the active resume.
           const activeResume = current ?? activeResumeRef.current;
           if (getCoverLetterParsedResumeId(activeResume) !== parsedResumeId) return current;
+          if (resumeSource === "builder") {
+            return {
+              ...activeResume,
+              builder_resume: details,
+              personalInfo: details.personalInfo,
+              personal_info: details.personal_info,
+              contact: details.contact,
+            };
+          }
           return {
             ...activeResume,
             parsed_data: details.parsed_data ?? details,
@@ -781,7 +798,7 @@ export default function CoverLetterNewPage() {
     return () => {
       cancelled = true;
     };
-  }, [parsedResumeId, resumeSource]);
+  }, [parsedResumeId, resume, resumeSource]);
 
   useEffect(() => {
     const signatureResumeKey = parsedResumeId && resumeSource
@@ -791,22 +808,38 @@ export default function CoverLetterNewPage() {
 
     const signatureName = getResumeSignatureName(resume);
     if (signatureResumeKeyRef.current !== signatureResumeKey) {
+      // A refresh draft belongs to one exact resume. While the default-resume
+      // request is still resolving, do not let a transient latest-resume
+      // fallback overwrite the saved signature.
+      const restored = restoredSignatureRef.current;
+      signatureResumeKeyRef.current = signatureResumeKey;
+      setSignatureResumeKey(signatureResumeKey);
+      if (restored?.key === signatureResumeKey) {
+        restoredSignatureRef.current = null;
+        setCandidateSignatureName(restored.name);
+        return;
+      }
+      if (restored && defaultResume.isLoading) return;
+      if (restored) restoredSignatureRef.current = null;
       // A newly selected resume must never retain the preceding resume's
       // signature. Most picker rows contain only metadata, so clear first and
       // populate after the selected resume's parsed details arrive.
-      signatureResumeKeyRef.current = signatureResumeKey;
-      setSignatureResumeKey(signatureResumeKey);
-      if (restoredSignatureResumeKeyRef.current === signatureResumeKey) {
-        restoredSignatureResumeKeyRef.current = null;
-        return;
-      }
+      setCandidateSignatureName(signatureName ?? "");
+      return;
+    }
+    const restored = restoredSignatureRef.current;
+    if (restored && !defaultResume.isLoading && restored.key !== signatureResumeKey) {
+      // The saved resume did not resolve and the fallback is now final. Do
+      // not retain this draft-specific restoration marker for a later resume
+      // selection.
+      restoredSignatureRef.current = null;
       setCandidateSignatureName(signatureName ?? "");
       return;
     }
     if (signatureName) {
       setCandidateSignatureName((current) => current.trim() || signatureName);
     }
-  }, [parsedResumeId, resume, resumeSource]);
+  }, [defaultResume.isLoading, parsedResumeId, resume, resumeSource]);
 
   const selectedTemplate = templateStyles.find((template) => template.id === selectedTemplateId) ?? templateStyles[1];
   const jdReady = jd.trim().length >= MIN_JD_CHARS;
@@ -824,6 +857,10 @@ export default function CoverLetterNewPage() {
     if (!jobSourceReady) return null;
 
     const fingerprint = getJobSourceFingerprint(source, { jd, jdFile, trackerJobId });
+    // Blur is an explicit request to analyze typed text, but it must not
+    // repeat a successful parse when the source has not changed.
+    if (parsedJdFingerprint === fingerprint && parsedJdId) return parsedJdId;
+
     const requestId = ++jobAnalysisRequestRef.current;
     setJobAnalysisStatus("analyzing");
 
@@ -832,13 +869,34 @@ export default function CoverLetterNewPage() {
       if (!parsedJd.jd_id) {
         throw new Error("Could not analyze this job description.");
       }
-      const details = await getParsedJDDetails(parsedJd.jd_id);
       if (requestId !== jobAnalysisRequestRef.current || jobSourceFingerprintRef.current !== fingerprint) {
         return null;
       }
 
+      // Parsing creates the ID required for generation. Persist it before the
+      // optional detail lookup so a transient lookup failure cannot force the
+      // user to re-parse an otherwise valid job description.
       setParsedJdId(parsedJd.jd_id);
       setParsedJdFingerprint(fingerprint);
+
+      let details: Awaited<ReturnType<typeof getParsedJDDetails>>;
+      try {
+        details = await getParsedJDDetails(parsedJd.jd_id);
+      } catch (detailError) {
+        if (requestId === jobAnalysisRequestRef.current && jobSourceFingerprintRef.current === fingerprint) {
+          setJobAnalysisStatus("incomplete");
+          toast.info(
+            "Job description analyzed. Enter company name, job title, and location if they are not already filled.",
+            { id: JOB_ANALYSIS_TOAST_ID },
+          );
+          logger.debug("[cover-letter/job-analysis] detail lookup failed after parse", { detailError });
+        }
+        return parsedJd.jd_id;
+      }
+      if (requestId !== jobAnalysisRequestRef.current || jobSourceFingerprintRef.current !== fingerprint) {
+        return null;
+      }
+
       const inferredRoleTitle = source === "jd" ? inferRoleTitleFromJd(jd) : undefined;
       const inferredCompanyName = source === "jd" ? inferCompanyNameFromJd(jd) : undefined;
       const inferredLocation = source === "jd" ? inferLocationFromJd(jd) : undefined;
@@ -861,9 +919,7 @@ export default function CoverLetterNewPage() {
           // the user chose. JD analysis may fill blanks but must not clear or
           // replace that hand-off data.
           if (extensionJobFieldsRef.current.has(field)) return current;
-          if (!value) {
-            return current;
-          }
+          if (!value) return current;
           if (!current.trim() || wasAutoFilled) {
             autoFilledJobFieldsRef.current.add(field);
             return value;
@@ -898,7 +954,7 @@ export default function CoverLetterNewPage() {
       }
       return null;
     }
-  }, [jd, jdFile, jobSourceReady, source, trackerJobId]);
+  }, [jd, jdFile, jobSourceReady, parsedJdFingerprint, parsedJdId, source, trackerJobId]);
 
   // Files are complete inputs as soon as they are selected, unlike a typed JD.
   // Analyze an upload once it is valid; typed descriptions wait for blur.
@@ -3374,7 +3430,8 @@ function useCoverLetterResumeUpload(
 }
 
 function isUnauthorizedError(err: unknown): boolean {
-  const status = (err as { response?: { status?: number } })?.response?.status;
+  const status = (err as { status?: number; response?: { status?: number } })?.status
+    ?? (err as { response?: { status?: number } })?.response?.status;
   if (status === 401 || status === 403) return true;
 
   // parserApi preserves the server body on a wrapped error as `__raw`.
