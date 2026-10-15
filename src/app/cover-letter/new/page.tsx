@@ -740,13 +740,17 @@ export default function CoverLetterNewPage() {
   const resume = uploadedResume ?? selectedResume ?? fallbackResume;
   const parsedResumeId = getCoverLetterParsedResumeId(resume);
   const resumeSource = getCoverLetterResumeSource(resume);
+  // `toDefaultResumeBlob` intentionally returns a new object for a default
+  // resume. Effects that load its details must therefore depend on this
+  // stable fact, not on the object identity itself.
+  const hasResumeSignature = Boolean(getResumeSignatureName(resume));
   const activeResumeRef = useRef<ParsedResumeBlob | null>(resume);
   activeResumeRef.current = resume;
 
   useEffect(() => {
     if (
       !parsedResumeId
-      || getResumeSignatureName(resume)
+      || hasResumeSignature
       || signatureResumeLoadRef.current === `${resumeSource}:${parsedResumeId}`
     ) {
       return;
@@ -797,8 +801,13 @@ export default function CoverLetterNewPage() {
 
     return () => {
       cancelled = true;
+      // A cancelled lookup must be allowed to restart. This is important when
+      // its resume is replaced while the request is in flight.
+      if (signatureResumeLoadRef.current === loadKey) {
+        signatureResumeLoadRef.current = null;
+      }
     };
-  }, [parsedResumeId, resume, resumeSource]);
+  }, [hasResumeSignature, parsedResumeId, resumeSource]);
 
   useEffect(() => {
     const signatureResumeKey = parsedResumeId && resumeSource
