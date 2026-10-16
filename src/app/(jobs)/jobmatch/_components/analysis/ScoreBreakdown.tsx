@@ -4,6 +4,9 @@ import React, { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle2,
+  Check,
+  Minus,
+  AlertCircle,
   ChevronDown,
   ChevronUp,
   CircleAlert,
@@ -29,15 +32,12 @@ import {
   Plus,
   Loader2,
 } from "lucide-react";
+import { resultColor } from "./resultsSummary";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseScore(raw: any): number {
-  if (typeof raw === "number") return Math.min(100, Math.max(0, raw));
-  if (typeof raw === "string") {
-    const n = Number.parseFloat(raw.replace("%", ""));
-    return Number.isNaN(n) ? 0 : Math.min(100, Math.max(0, n));
-  }
-  return 0;
+function parseScore(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number.parseFloat(raw.replace("%", "")) : NaN;
+  return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null;
 }
 
 function prettify(value: string): string {
@@ -49,21 +49,22 @@ function prettify(value: string): string {
 }
 
 type PriorityLevel = "high" | "medium" | "low";
+const ExpandAllContext = React.createContext<boolean | null>(null);
 
 // Card-level priority accent — icon circle, badge colors. Text labels stay
 // exactly what each call site passes; this only drives color/icon.
 const PRIORITY_STYLES: Record<PriorityLevel, { Icon: LucideIcon; text: string; bg: string; border: string }> = {
-  high:   { Icon: Flame, text: "#b32b47", bg: "#FEF3F2", border: "#fecaca" },
-  medium: { Icon: Star,  text: "#8a5a10", bg: "#FFFBEB", border: "#fde68a" },
-  low:    { Icon: Info,  text: "#2257A7", bg: "#EEF3FB", border: "#bfdbfe" },
+  high:   { Icon: Flame, text: "#B42318", bg: "#FEF3F2", border: "#B42318" },
+  medium: { Icon: Star,  text: "#B54708", bg: "#FFFAEB", border: "#FEDF89" },
+  low:    { Icon: Info,  text: "#475467", bg: "#F2F4F7", border: "#EAECF0" },
 };
 
 type ChipTone = "red" | "blue" | "green";
 
 const CHIP_TONE_STYLES: Record<ChipTone, { text: string; chipBg: string; chipBorder: string; dot: string }> = {
-  red:   { text: "text-[#c2413a]", chipBg: "bg-[#fff5f4]", chipBorder: "border-[#f5d5d2]", dot: "bg-[#df5b54]" },
-  blue:  { text: "text-[#3A4F7A]", chipBg: "bg-[#f3f6fb]", chipBorder: "border-[#dce5f1]", dot: "bg-[#5d759f]" },
-  green: { text: "text-[#16803c]", chipBg: "bg-[#f0fdf4]", chipBorder: "border-[#bbf7d0]", dot: "bg-[#167044]" },
+  red:   { text: "text-[#B42318]", chipBg: "bg-[#FEF3F2]", chipBorder: "border-[#B20C0C26]", dot: "bg-[#B42318]" },
+  blue:  { text: "text-[#475467]", chipBg: "bg-[#F8FAFC]", chipBorder: "border-[#EAECF0]", dot: "bg-[#2557A7]" },
+  green: { text: "text-[#067647]", chipBg: "bg-[#F8FAFC]", chipBorder: "border-[#D1FADF]", dot: "bg-[#067647]" },
 };
 
 /** Points + suggestion id an individual missing-skill chip can be added from, looked up by skill name. */
@@ -105,9 +106,9 @@ function SkillChipGroup({
 
   return (
     <div>
-      <p className={`mb-2 flex items-center gap-1.5 text-[12px] font-bold ${s.text}`}>
+      <p className={`mb-2 flex items-center gap-1.5 text-body-sm font-bold ${s.text}`}>
         <Icon className="h-3.5 w-3.5" />
-        {heading} <span className="font-semibold text-slate-400">· {count}</span>
+        {heading} <span className="font-semibold text-slate-600">· {count}</span>
       </p>
       <div className="flex flex-wrap gap-2">
         {items.map((item, index) => {
@@ -119,7 +120,7 @@ function SkillChipGroup({
             return (
               <span
                 key={`${item}-${index}`}
-                className={`inline-flex items-center gap-1.5 rounded-full border ${s.chipBorder} ${s.chipBg} px-3 py-1.5 text-[12.5px] font-medium text-[#2f2f2f]`}
+                className={`inline-flex items-center gap-1.5 rounded-full border ${s.chipBorder} ${s.chipBg} px-3 py-1.5 text-body-sm font-medium text-[#101828]`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
                 {item}
@@ -133,17 +134,17 @@ function SkillChipGroup({
               type="button"
               onClick={() => handleAdd(item, addInfo)}
               disabled={isAdded || isLoading}
-              className={`inline-flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1.5 text-body-sm font-medium transition-colors ${
                 isAdded
-                  ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#16803c]"
-                  : `${s.chipBorder} ${s.chipBg} text-[#2f2f2f] hover:brightness-95`
+                  ? "border-[#D1FADF] bg-[#F8FAFC] text-[#067647] text-label"
+                  : `${s.chipBorder} ${s.chipBg} text-[#101828] hover:brightness-95`
               }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${isAdded ? "bg-[#167044]" : s.dot}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${isAdded ? "bg-[#067647]" : s.dot}`} />
               {item}
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
-                  isAdded ? "bg-[#167044] text-white" : "bg-white/70 text-[#526174]"
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-body-sm font-bold ${
+                  isAdded ? "bg-[#067647] text-white" : "bg-white/70 text-[#475467]"
                 }`}
               >
                 {isLoading ? (
@@ -169,12 +170,13 @@ interface SectionCardProps {
   readonly icon: LucideIcon;
   readonly priorityLabel: string;
   readonly priorityLevel: PriorityLevel;
-  readonly score: number;
+  readonly score: number | null;
   readonly passText: string;
   readonly children?: React.ReactNode;
   readonly missingCount?: number;
   /** This check crashed server-side — the score is not a real measurement, so render as a recoverable state instead of "0% failed". */
   readonly errorMessage?: string;
+  readonly defaultExpanded?: boolean;
 }
 
 // The errorMessage early-return branch of SectionCard, below, used to be a
@@ -194,50 +196,54 @@ function ErrorSectionCard({
   readonly errorMessage: string;
 }) {
   return (
-    <div className="bg-[#fffdf7] px-4 py-3.5">
+    <div className="bg-[#F8FAFC] px-4 py-3.5">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
-          <Icon className="h-4 w-4 text-amber-600" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-50">
+          <Icon className="h-4 w-4 text-warning-700" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-bold leading-tight text-slate-900">{label}</p>
-          <p className="mt-0.5 truncate text-[12px] text-[#526174]">{subtitle}</p>
+          <p className="text-body-sm text-slate-900">{label}</p>
+          <p className="mt-0.5 truncate text-body-sm text-[#475467]">{subtitle}</p>
         </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-[12px] font-bold text-amber-800">
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-body-sm text-warning-700">
           <Info className="h-3 w-3" />
-          Couldn&apos;t check
+          Not evaluated
         </span>
       </div>
 
-      <div className="mt-3 ml-12 flex items-start gap-2.5 rounded-lg border border-dashed border-amber-300 bg-white/70 px-4 py-3">
-        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100">
-          <MessageCircle className="h-3 w-3 text-amber-600" />
+      <div className="mt-3 ml-12 flex items-start gap-2.5 rounded-lg border border-dashed border-warning-200 bg-warning-50 px-4 py-3">
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning-50">
+          <MessageCircle className="h-3 w-3 text-warning-700" />
         </span>
-        <p className="text-[12.5px] leading-relaxed text-slate-700">{errorMessage}</p>
+        <p className="text-body-sm text-warning-900">{errorMessage}</p>
       </div>
     </div>
   );
 }
 
-// scoreColor: SectionCard used to compute this with a nested ternary inline
-// (passed ? A : score >= 60 ? B : C). Same three-way logic, same literal
-// values, just named and taken out of the render body so the ternary
-// nesting doesn't count against SectionCard's own complexity.
-function scoreColor(score: number, passed: boolean): string {
-  if (passed) return "#076b4e";
-  if (score >= 60) return "#8a5a10";
-  return "#b32b47";
-}
+// Uses Job Match's shared score bands (resultColor: 85/70/55) so a section's
+// color always matches how the overview and detailed-analysis header judge
+// the same score.
+const scoreColor = resultColor;
 
 // One compact row (icon + title + meta on the left, score % + chevron on the
 // right) — collapsed by default so the list reads as a single dense scan,
 // matching the reference layout's row height. Expanding a row reveals the
 // same detail content as before, indented under it.
 function SectionCard({
-  label, subtitle, icon: Icon, priorityLevel, score, passText, children, missingCount, errorMessage,
+  label, subtitle, icon: Icon, priorityLevel, score, passText, children, missingCount, errorMessage, defaultExpanded = false,
 }: SectionCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const expandAll = React.useContext(ExpandAllContext);
   const prio = PRIORITY_STYLES[priorityLevel];
+
+  const unavailable = score == null;
+  const passed = score != null && score >= 100;
+  const hasDetails = !!children && !passed && !unavailable;
+
+  React.useEffect(() => {
+    if (hasDetails && expandAll !== null) setExpanded(expandAll);
+  }, [expandAll, hasDetails]);
 
   // Recoverable AI-processing issue (e.g. Soft Skills scoring crashed) — warm,
   // calm amber treatment, not a red "error" state.
@@ -245,50 +251,52 @@ function SectionCard({
     return <ErrorSectionCard label={label} subtitle={subtitle} icon={Icon} errorMessage={errorMessage} />;
   }
 
-  const passed = score >= 100;
-  const hasDetails = !!children && !passed;
-
-  const color     = scoreColor(score, passed);
+  const color     = scoreColor(score);
 
   let meta: React.ReactNode;
-  if (passed) {
+  if (unavailable) {
+    meta = <span className="text-body-sm text-[#475467]">No usable score was returned for this check.</span>;
+  } else if (passed) {
     meta = (
-      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-green-700">
+      <span className="inline-flex items-center gap-1 text-body-sm text-[#067647]">
         <CheckCircle2 className="h-3 w-3 shrink-0" /> {passText}
       </span>
     );
   } else if (missingCount !== undefined) {
-    meta = <span className="text-[12px] text-[#526174]">{missingCount} missing</span>;
+    meta = <span className="text-body-sm text-[#475467]">{missingCount} missing · Needs attention</span>;
   } else {
-    meta = <p className="text-[12px] leading-4 text-[#526174]">{subtitle}</p>;
+    meta = <p className="text-body-sm text-[#475467]">{subtitle}</p>;
   }
 
   return (
-    <div data-analysis-section className="overflow-hidden rounded-md border border-[#DCE3EB] bg-white">
+    <div data-analysis-section className="overflow-hidden rounded-md border border-[#EAECF0] bg-white">
       <div
         role={hasDetails ? "button" : undefined}
         aria-expanded={hasDetails ? expanded : undefined}
+        aria-label={hasDetails ? `${label}: ${score}%. Needs attention. ${priorityLevel} impact. Expand for findings and suggested changes.` : undefined}
         tabIndex={hasDetails ? 0 : undefined}
         onClick={hasDetails ? () => setExpanded((v) => !v) : undefined}
         onKeyDown={hasDetails ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded((v) => !v); } } : undefined}
         className={`flex items-center gap-2.5 bg-white px-3 ${passed ? "min-h-12 py-2" : "min-h-16 py-2.5"} ${hasDetails ? "cursor-pointer hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600" : ""}`}
       >
-        <div data-analysis-icon className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EEF3FB] text-[#2257A7]">
+        <div data-analysis-icon data-status={unavailable ? "unavailable" : passed ? "matched" : "attention"} title={unavailable ? "Not evaluated" : passed ? "Matched" : "Needs attention"} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#F8FAFC] text-[#2557A7]">
           <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+          <span data-status-mark aria-hidden="true">{unavailable ? <Minus /> : passed ? <Check /> : <AlertCircle />}</span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="text-[14px] font-semibold leading-tight text-slate-800">{label}</p>
-            {!passed && <span data-analysis-impact className="rounded px-2 py-1 text-[12px] font-semibold" style={{ background: prio.bg, color: prio.text }}>{priorityLevel === "high" ? "High Impact" : priorityLevel === "medium" ? "Medium Impact" : "Low Impact"}</span>}
+            <p className="text-body-sm text-slate-800">{label}{unavailable && <span className="ml-2 text-body-sm text-[#475467]">Not evaluated</span>}</p>
+            {!passed && !unavailable && <span data-analysis-impact className="rounded px-2 py-1 text-body-sm" style={{ background: prio.bg, color: prio.text }}>{priorityLevel === "high" ? "High Impact" : priorityLevel === "medium" ? "Medium Impact" : "Low Impact"}</span>}
           </div>
           <div className="mt-0.5">{meta}</div>
         </div>
         <div className="flex w-[76px] shrink-0 items-center justify-between gap-2">
-          <span className="min-w-10 text-right text-[16px] font-bold tabular-nums" style={{ color }}>{Math.round(score)}%</span>
+          <span className="min-w-10 text-right text-body-lg tabular-nums" style={{ color }}>{score == null ? "N/A" : `${Math.round(score)}%`}</span>
           {hasDetails && (
             <span
               aria-hidden="true"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400"
+              data-analysis-chevron
+              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600"
             >
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </span>
@@ -298,7 +306,8 @@ function SectionCard({
 
       {/* Details */}
       {hasDetails && expanded && (
-        <div className="border-t border-[#DCE3EB] bg-white p-3 sm:p-4">
+        <div className="border-t border-[#EAECF0] bg-white p-3 sm:p-4">
+          <p data-section-guidance>{priorityLevel === "high" ? "High impact: prioritize this gap when it reflects your experience." : priorityLevel === "medium" ? "Medium impact: review this area after the highest-priority gaps." : "Low impact: a useful refinement after the main gaps are addressed."} Review the findings below and apply only changes that are accurate. Analyze your updated resume again to refresh this score.</p>
           {children}
         </div>
       )}
@@ -307,7 +316,7 @@ function SectionCard({
 }
 
 export default function ScoreBreakdown({
-  matchResult, currentSummary = "", onAddSkill, appliedSuggestionIds,
+  matchResult, currentSummary = "", onAddSkill, appliedSuggestionIds, expandAll = null,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly matchResult: any;
@@ -315,6 +324,7 @@ export default function ScoreBreakdown({
   /** When given, missing Hard/Soft Skill chips below become one-click "+pts / Add" buttons instead of plain pills. */
   readonly onAddSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   readonly appliedSuggestionIds?: string[];
+  readonly expandAll?: boolean | null;
 }) {
   if (!matchResult) return null;
 
@@ -356,19 +366,19 @@ export default function ScoreBreakdown({
   const levelAlignment = careerProg.level_alignment ?? {};
   const leadership    = matchResult.Leadership_Check ?? {};
 
-  const techScore = parseScore(tech.match_score);
-  const softScore = parseScore(soft.match_score);
-  const capScore  = parseScore(cap.match_score);
-  const starScore = parseScore(star.match_score);
-  const summaryScore = parseScore(summary.match_score);
-  const reqScore = parseScore(req.match_score);
-  const expScore  = parseScore(exp.match_score);
-  const eduScore  = parseScore(edu.match_score);
-  const jobScore  = parseScore(job.match_score);
-  const certScore = parseScore(cert.match_score);
-  const fmtScore  = parseScore(fmt.match_score);
-  const careerProgScore = parseScore(careerProg.match_score);
-  const leadershipScore = parseScore(leadership.match_score);
+  const techScore = parseScore(tech.execution_failed ? null : tech.match_score);
+  const softScore = parseScore(soft.execution_failed ? null : soft.match_score);
+  const capScore  = parseScore(cap.execution_failed ? null : cap.match_score);
+  const starScore = parseScore(star.execution_failed ? null : star.match_score);
+  const summaryScore = parseScore(summary.execution_failed ? null : summary.match_score);
+  const reqScore = parseScore(req.execution_failed ? null : req.match_score);
+  const expScore  = parseScore(exp.execution_failed ? null : exp.match_score);
+  const eduScore  = parseScore(edu.execution_failed ? null : edu.match_score);
+  const jobScore  = parseScore(job.execution_failed ? null : job.match_score);
+  const certScore = parseScore(cert.execution_failed ? null : cert.match_score);
+  const fmtScore  = parseScore(fmt.execution_failed ? null : fmt.match_score);
+  const careerProgScore = parseScore(careerProg.execution_failed ? null : careerProg.match_score);
+  const leadershipScore = parseScore(leadership.execution_failed ? null : leadership.match_score);
 
   const missingTech: { skill: string; importance: string }[] = [
     ...(tech.missing_critical_skills ?? []).map((s: { skill: string }) => ({ skill: s.skill, importance: "required" })),
@@ -378,21 +388,69 @@ export default function ScoreBreakdown({
   const requiredTech = missingTech.filter((item) => item.importance !== "nice to have");
   const optionalTech = missingTech.filter((item) => item.importance === "nice to have");
   const missingSoft: string[] = soft.missing_skills ?? [];
-  // A crashed check (execution_failed) returns match_score: null, which parseScore
-  // silently reads as 0% — indistinguishable from "genuinely zero soft skills
-  // matched" unless we check execution_failed explicitly and say so.
+  // Preserve failed checks as unavailable rather than displaying a false zero.
   const softError: string | undefined = soft.execution_failed
-    ? "We couldn't score this section this time. It won't affect your other results."
+    ? "This section could not be evaluated. Run a new analysis to try again."
     : undefined;
   const missingCap: string[] = (cap.missing_capabilities ?? []).map((c: { capability: string }) => c.capability);
-  const weakBullets: { original: string; improved: string }[] = star.weak_bullets ?? [];
+  // STAR rewrites have used a few field names across matcher versions. Read
+  // the text already returned by the backend instead of leaving the After
+  // panel empty when the payload uses improved_bullet/after_example.
+  const firstText = (...values: unknown[]): string => {
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
+  };
+  const weakBullets: { original: string; improved: string }[] = (star.weak_bullets ?? []).map(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (bullet: any, index: number) => {
+      const original = firstText(
+        bullet.original,
+        bullet.original_bullet,
+        bullet.bullet,
+        bullet.text,
+        bullet.before,
+        bullet.before_example,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchingPenalty = penalties.find((penalty: any) =>
+        (bullet.suggestion_id && penalty.suggestion_id === bullet.suggestion_id) ||
+        (original && penalty.before_example === original)
+      );
+      return {
+        original: firstText(original, matchingPenalty?.before_example),
+        improved: firstText(
+          bullet.improved,
+          bullet.improved_bullet,
+          bullet.improved_version,
+          bullet.suggested,
+          bullet.suggested_text,
+          bullet.suggested_bullet,
+          bullet.suggested_version,
+          bullet.suggested_improvement,
+          bullet.rewrite,
+          bullet.rewritten_bullet,
+          bullet.recommended_rewrite,
+          bullet.after,
+          bullet.after_example,
+          bullet.recommendation?.text,
+          bullet.recommendation?.rewrite,
+          star.improved_bullets?.[index],
+          star.suggested_bullets?.[index],
+          matchingPenalty?.after_example,
+        ),
+      };
+    }
+  ).filter((bullet: { original: string; improved: string }) => bullet.original || bullet.improved);
   const starSuggestion: string = star.suggestion ?? "";
   const starSeniority: string  = star.seniority ?? "";
   const missingVerbs: string[] = (req.missing_verbs ?? []).map((v: { verb: string }) => v.verb);
 
   return (
-    <section aria-label="Score breakdown by category">
-      <div className="space-y-2">
+    <ExpandAllContext.Provider value={expandAll}>
+    <section data-score-breakdown aria-label="Score breakdown by category" className="overflow-hidden rounded-lg border border-[#EAECF0] bg-white">
+      <div className="divide-y divide-[#EAECF0]">
         <SectionCard
           label="Hard Skills"
           subtitle="Skills & technical abilities"
@@ -402,6 +460,7 @@ export default function ScoreBreakdown({
           score={techScore}
           passText="Your resume includes all of the Hard skills."
           missingCount={missingTech.length}
+          defaultExpanded
         >
           {missingTech.length > 0 && (
             <div className="space-y-4">
@@ -486,12 +545,12 @@ export default function ScoreBreakdown({
               {(starSuggestion || starSeniority) && (
                 <div className="flex items-start justify-between gap-3">
                   {starSuggestion && (
-                    <p className="text-[14px] text-gray-600 leading-relaxed flex-1">
+                    <p className="text-body-sm text-gray-600 flex-1">
                       <span className="font-semibold text-gray-800">Tip:</span> {starSuggestion}
                     </p>
                   )}
                   {starSeniority && (
-                    <span className="shrink-0 text-[12px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                    <span className="shrink-0 text-body-sm px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
                       {starSeniority}
                     </span>
                   )}
@@ -501,13 +560,13 @@ export default function ScoreBreakdown({
                 <ul className="space-y-3">
                   {weakBullets.map((b, i) => (
                     <li key={`${b.original}-${i}`} className="rounded-lg overflow-hidden border border-gray-100 shadow-sm">
-                      <div className="flex items-start gap-2 px-3.5 py-2.5 bg-red-50 border-b border-red-100">
-                        <span className="text-[12px] font-bold text-red-400 uppercase tracking-wider mt-0.5 shrink-0">Before</span>
-                        <p className="text-[12px] text-red-500 line-through leading-snug">{b.original}</p>
+                      <div className="flex items-start gap-2 px-3.5 py-2.5 bg-[#FEF3F2] border-b border-[#B20C0C26]">
+                        <span className="text-body-sm text-[#B42318] uppercase tracking-wider mt-0.5 shrink-0">Before</span>
+                        <p className="text-body-sm text-[#B42318] line-through">{b.original}</p>
                       </div>
-                      <div className="flex items-start gap-2 px-3.5 py-2.5 bg-green-50">
-                        <span className="text-[12px] font-bold text-green-600 uppercase tracking-wider mt-0.5 shrink-0">After</span>
-                        <p className="text-[12px] text-green-700 leading-snug font-medium">{b.improved}</p>
+                      <div className="flex items-start gap-2 px-3.5 py-2.5 bg-success-50">
+                        <span className="text-body-sm text-success-700 uppercase tracking-wider mt-0.5 shrink-0">After</span>
+                        <p className="text-body-sm text-success-700">{b.improved || "No suggested rewrite was returned for this bullet."}</p>
                       </div>
                     </li>
                   ))}
@@ -549,20 +608,20 @@ export default function ScoreBreakdown({
           {(summary.reason || summary.suggested_summary) && (
             <div className="space-y-3">
               {summary.reason && (
-                <p className="text-[14px] text-gray-600 leading-relaxed">{summary.reason}</p>
+                <p className="text-body-sm text-gray-600">{summary.reason}</p>
               )}
               {summary.suggested_summary && (
                 <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
                   {currentSummary && (
-                    <div className="rounded-lg border border-[#f3d3d0] bg-[#fff6f5] px-4 py-3">
-                      <p className="mb-1.5 text-[12px] font-extrabold uppercase tracking-[0.08em] text-[#c2413a]">Before · Current</p>
-                      <p className="text-[12px] leading-relaxed text-[#6d3a37]">{currentSummary}</p>
+                    <div className="rounded-lg border border-[#B20C0C26] bg-[#FEF3F2] px-4 py-3">
+                      <p className="mb-1.5 text-body-sm uppercase tracking-[0.08em] text-[#B42318]">Before · Current</p>
+                      <p className="text-body-sm text-[#B42318]">{currentSummary}</p>
                     </div>
                   )}
-                  {currentSummary && <div className="hidden items-center text-[#90a0b8] md:flex">→</div>}
-                  <div className="rounded-lg border border-[#ccebd8] bg-[#f1fbf5] px-4 py-3">
-                    <p className="mb-1.5 text-[12px] font-extrabold uppercase tracking-[0.08em] text-[#16803c]">After · Suggested</p>
-                    <p className="text-[12px] font-medium leading-relaxed text-[#245a38]">{summary.suggested_summary}</p>
+                  {currentSummary && <div className="hidden items-center text-[#475467] md:flex">→</div>}
+                  <div className="rounded-lg border border-[#ABEFC6] bg-[#F8FAFC] px-4 py-3">
+                    <p className="mb-1.5 text-body-sm uppercase tracking-[0.08em] text-[#067647]">After · Suggested</p>
+                    <p className="text-body-sm text-[#245a38]">{summary.suggested_summary}</p>
                   </div>
                 </div>
               )}
@@ -586,12 +645,12 @@ export default function ScoreBreakdown({
           {(job.reason || job.matched_title || job.jd_title) && (
             <div className="space-y-1.5">
               {job.reason && (
-                <p className="text-[14px] text-gray-600 leading-relaxed">{job.reason}</p>
+                <p className="text-body-sm text-gray-600">{job.reason}</p>
               )}
               {(job.matched_title || job.jd_title) && (
-                <p className="text-[12px] text-gray-500">
+                <p className="text-body-sm text-gray-600">
                   Your title <span className="font-bold text-gray-800">{job.matched_title || "—"}</span>
-                  {job.jd_title && <> vs. the JD&apos;s <span className="font-bold text-green-700">{job.jd_title}</span></>}
+                  {job.jd_title && <> vs. the JD&apos;s <span className="font-bold text-success-700">{job.jd_title}</span></>}
                 </p>
               )}
             </div>
@@ -607,7 +666,7 @@ export default function ScoreBreakdown({
           score={expScore}
           passText="Your experience level matches the role requirements."
         >
-          {exp.reason && expScore < 100 && <p className="text-[14px] text-gray-600 leading-relaxed">{exp.reason}</p>}
+          {exp.reason && (expScore ?? 0) < 100 && <p className="text-body-sm text-gray-600">{exp.reason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -619,7 +678,7 @@ export default function ScoreBreakdown({
           score={eduScore}
           passText="Your education meets the role requirements."
         >
-          {edu.reason && eduScore < 100 && <p className="text-[14px] text-gray-600 leading-relaxed">{edu.reason}</p>}
+          {edu.reason && (eduScore ?? 0) < 100 && <p className="text-body-sm text-gray-600">{edu.reason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -631,7 +690,7 @@ export default function ScoreBreakdown({
           score={certScore}
           passText="Your certifications meet the role requirements."
         >
-          {cert.reason && certScore < 100 && <p className="text-[14px] text-gray-600 leading-relaxed">{cert.reason}</p>}
+          {cert.reason && (certScore ?? 0) < 100 && <p className="text-body-sm text-gray-600">{cert.reason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -643,10 +702,10 @@ export default function ScoreBreakdown({
           score={fmtScore}
           passText="Your resume formatting is ATS-friendly."
         >
-          {fmt.reason && fmtScore < 100 && (
+          {fmt.reason && (fmtScore ?? 0) < 100 && (
             <ul className="space-y-2">
               {fmt.reason.split(".,").filter(Boolean).map((r: string, i: number) => (
-                <li key={`${r}-${i}`} className="flex items-start gap-2 text-[14px] text-gray-600 leading-relaxed">
+                <li key={`${r}-${i}`} className="flex items-start gap-2 text-body-sm text-gray-600">
                   <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                   {r.trim().replace(/\.$/, "")}
                 </li>
@@ -665,27 +724,27 @@ export default function ScoreBreakdown({
             score={careerProgScore}
             passText="Your career shows strong, stable progression."
           >
-            {careerProg.reason && careerProgScore < 100 && (
+            {careerProg.reason && (careerProgScore ?? 0) < 100 && (
               <div className="space-y-1.5">
-                <p className="text-[14px] text-gray-600 leading-relaxed">{careerProg.reason}</p>
+                <p className="text-body-sm text-gray-600">{careerProg.reason}</p>
                 {(growthQuality.progression_type || growthQuality.job_stability) && (
                   <div className="flex flex-wrap gap-1.5">
                     {growthQuality.progression_type && (
-                      <span className="text-[12px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                      <span className="text-body-sm px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
                         {prettify(growthQuality.progression_type)}
                       </span>
                     )}
                     {growthQuality.job_stability && (
-                      <span className="text-[12px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="text-body-sm px-2.5 py-1 rounded-full bg-blue-50 text-brand-600 border border-blue-200">
                         {prettify(growthQuality.job_stability)} job stability
                       </span>
                     )}
                   </div>
                 )}
                 {(levelAlignment.candidate_current_level && levelAlignment.jd_expected_level) && (
-                  <p className="text-[12px] text-gray-500">
+                  <p className="text-body-sm text-gray-600">
                     Your level <span className="font-bold text-gray-800">{prettify(levelAlignment.candidate_current_level)}</span>
-                    {" "}vs. the JD&apos;s <span className="font-bold text-green-700">{prettify(levelAlignment.jd_expected_level)}</span>
+                    {" "}vs. the JD&apos;s <span className="font-bold text-success-700">{prettify(levelAlignment.jd_expected_level)}</span>
                   </p>
                 )}
               </div>
@@ -693,11 +752,7 @@ export default function ScoreBreakdown({
           </SectionCard>
         )}
 
-        {/* Rendered only when the payload carries a leadership score. The AI
-            layer emits Leadership_Check (careerbot-ai match_engine.py), but it
-            can be an empty block, and parseScore turns a missing or null score
-            into 0 -- a fabricated red "0% Leadership". `!= null` covers both
-            undefined and null, as the Career Progression guard above does. */}
+        {/* Optional checks appear only when a score is included in the payload. */}
         {leadership.match_score != null && (
           <SectionCard
             label="Leadership"
@@ -708,12 +763,13 @@ export default function ScoreBreakdown({
             score={leadershipScore}
             passText="Your resume shows leadership and ownership where it's needed."
           >
-            {leadership.reason && leadershipScore < 100 && (
-              <p className="text-[13px] text-gray-600 leading-relaxed">{leadership.reason}</p>
+            {leadership.reason && (leadershipScore ?? 0) < 100 && (
+              <p className="text-body-sm text-gray-600">{leadership.reason}</p>
             )}
           </SectionCard>
         )}
       </div>
     </section>
+    </ExpandAllContext.Provider>
   );
 }

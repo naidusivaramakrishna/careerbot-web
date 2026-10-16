@@ -8,7 +8,7 @@ import {
   CircleAlert, Sparkles, Settings, Lightbulb, FileText as RecommendationIcon, Circle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { resultScore } from "./resultsSummary";
+import { resultScore, resultColor } from "./resultsSummary";
 import recommendationStyles from "./Recommendations.module.css";
 
 interface Penalty {
@@ -159,17 +159,17 @@ export function hasAutomaticFixes(matchResult: any, appliedIds: string[]): boole
 // Same category set ScoreBreakdown.tsx uses (Hard Skills/Soft Skills/etc.) —
 // same icons reused here so the two tabs read as one consistent system.
 const CATEGORY_META: Record<string, { label: string; color: string; lightBg: string; border: string; icon: LucideIcon }> = {
-  technical_skills: { label: "Technical Fixes", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: Code2 },
-  soft_skills:      { label: "Soft Skills", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: UsersRound },
-  star_pattern:     { label: "STAR Bullets", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: ListChecks },
-  capabilities:     { label: "Capabilities", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: Target },
-  job_title:        { label: "Job Title", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: Tag },
-  requirements:     { label: "Action Verbs", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: Zap },
-  experience:       { label: "Experience", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: Briefcase },
-  summary:          { label: "Summary", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: FileText },
-  education:        { label: "Education", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: GraduationCap },
-  certifications:   { label: "Certifications", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: Award },
-  formatting:       { label: "ATS Formatting", color: "#2257A7", lightBg: "#EEF3FB", border: "#DCE3EB", icon: FileCheck2 },
+  technical_skills: { label: "Technical Fixes", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: Code2 },
+  soft_skills:      { label: "Soft Skills", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: UsersRound },
+  star_pattern:     { label: "STAR Bullets", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: ListChecks },
+  capabilities:     { label: "Capabilities", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: Target },
+  job_title:        { label: "Job Title", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: Tag },
+  requirements:     { label: "Action Verbs", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: Zap },
+  experience:       { label: "Experience", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: Briefcase },
+  summary:          { label: "Summary", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: FileText },
+  education:        { label: "Education", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: GraduationCap },
+  certifications:   { label: "Certifications", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: Award },
+  formatting:       { label: "ATS Formatting", color: "#2557A7", lightBg: "#F8FAFC", border: "#EAECF0", icon: FileCheck2 },
 };
 
 function prettifyCategory(category: string): string {
@@ -181,9 +181,9 @@ function prettifyCategory(category: string): string {
 }
 
 const SEVERITY_META: Record<string, { label: string; color: string; bg: string }> = {
-  critical:     { label: "critical",     color: "#B42318", bg: "#fef2f2" },
-  important:    { label: "important",    color: "#92400E", bg: "#fffbeb" },
-  nice_to_have: { label: "nice to have", color: "#167044", bg: "#f0fdf4" },
+  critical:     { label: "critical",     color: "#B42318", bg: "#FEF3F2" },
+  important:    { label: "important",    color: "#B54708", bg: "#FFFAEB" },
+  nice_to_have: { label: "nice to have", color: "#067647", bg: "#ECFDF3" },
 };
 
 // Severity, reframed as the "Impact" filter/badge the reference design uses
@@ -191,8 +191,8 @@ const SEVERITY_META: Record<string, { label: string; color: string; bg: string }
 // friendlier label — no new information invented.
 const IMPACT_META: Record<string, { label: string; filter: "high" | "medium" | "low"; color: string; bg: string }> = {
   critical:     { label: "High Impact",   filter: "high",   color: "#B42318", bg: "#FEF3F2" },
-  important:    { label: "Medium Impact", filter: "medium", color: "#92400E", bg: "#FFFBEB" },
-  nice_to_have: { label: "Low Impact",    filter: "low",    color: "#2257A7", bg: "#EEF3FB" },
+  important:    { label: "Medium Impact", filter: "medium", color: "#B54708", bg: "#FFFAEB" },
+  nice_to_have: { label: "Low Impact",    filter: "low",    color: "#2557A7", bg: "#F8FAFC" },
 };
 const SEVERITY_RANK: Record<string, number> = { critical: 3, important: 2, nice_to_have: 1 };
 
@@ -309,29 +309,29 @@ function PenaltyRow({
         <td><span className={recommendationStyles.priority} data-level={p.severity === "critical" ? "high" : p.severity === "important" ? "medium" : "low"}>{p.severity === "critical" ? "High" : p.severity === "important" ? "Medium" : "Low"}</span></td>
         <td className={recommendationStyles.impact}>{points === null ? "Not provided" : `+${points} pts`}</td>
       </> : <>
-      {compact && <td className="font-semibold">{p.target || meta.label}</td>}
-      <td className="min-w-[140px] px-4 py-3 align-top text-[14px] leading-snug text-slate-700">
+      {compact && <td className="text-body">{p.target || meta.label}</td>}
+      <td className="min-w-[140px] px-4 py-3 align-top text-body text-slate-700">
         {issueGapText(p, isSkillActionable)}
       </td>
-      <td className="min-w-[160px] px-4 py-3 align-top text-[14px] leading-snug text-[#526174]">
+      <td className="min-w-[160px] px-4 py-3 align-top text-body text-[#475467]">
         {suggestedImprovementText(p, isSkillActionable)}
       </td>
-      <td className="whitespace-nowrap px-4 py-3 align-top text-[14px] font-bold text-green-700">
+      <td className="whitespace-nowrap px-4 py-3 align-top text-body text-[#067647]">
         {points !== null ? compact ? `+${points} pts` : `+${points.toFixed(1)}` : <span className="font-normal text-slate-300">—</span>}
       </td>
       </>}
-      <td className="px-4 py-3 align-top">
+      <td className="px-4 py-3 align-top text-body">
         {!hasAction ? (
-          <span className="text-[12px] text-slate-300">—</span>
+          <span className="text-body-sm text-slate-300">—</span>
         ) : readOnly ? (
-          isAdded && <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-green-600"><CheckCircle2 className="h-3.5 w-3.5" /> Added</span>
+          isAdded && <span className="inline-flex items-center gap-1 text-body-sm text-[#067647]"><CheckCircle2 className="h-3.5 w-3.5" /> Added</span>
         ) : (
           <div className="flex flex-wrap items-center gap-1.5">
             {suggestionType === "manual" && manualSectionKey && onOpenSection ? (
               <button
                 type="button"
                 onClick={() => onOpenSection(manualSectionKey)}
-                className="flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-bold text-white shadow-sm transition-all hover:opacity-90"
+                className="flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-label text-white shadow-sm transition-all hover:opacity-90"
                 style={{ background: meta.color }}
               >
                 <Pencil className="w-3 h-3" /> Edit {prettifySectionKey(manualSectionKey)}
@@ -342,8 +342,8 @@ function PenaltyRow({
                   type="button"
                   onClick={onAdd}
                   disabled={isAdded || isLoading}
-                  className="flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-80"
-                  style={{ background: isAdded ? "#167044" : meta.color }}
+                  className="flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-label text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-80"
+                  style={{ background: isAdded ? "#067647" : meta.color }}
                 >
                   {(compact || recommendationIndex !== undefined) && !isLoading && !isAdded ? "Apply Fix" : actionButtonContent(isLoading, isAdded, isBulkUnverified, false)}
                 </button>
@@ -355,7 +355,7 @@ function PenaltyRow({
                 disabled={isRemoving}
                 aria-label="Undo applied fix"
                 onClick={isSkillActionable ? onRemoveSkillClick : onRemoveTextFix}
-                className="flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11.5px] font-bold text-[#526174] transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-label text-[#475467] transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="h-3 w-3" aria-hidden="true" />}
               </button>
@@ -431,7 +431,7 @@ function CategoryGroup({
   const [bulkLoadingKey, setBulkLoadingKey] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
-  const meta = CATEGORY_META[category] ?? { label: prettifyCategory(category), color: "#475569", lightBg: "#f8fafc", border: "#e2e8f0", icon: CircleAlert };
+  const meta = CATEGORY_META[category] ?? { label: prettifyCategory(category), color: "#475467", lightBg: "#F8FAFC", border: "#EAECF0", icon: CircleAlert };
   // A category can carry MORE THAN ONE bulk parent — e.g. technical_skills
   // ships "suggest_add_critical_all_skills" AND "suggest_add_nice_to_have_all_skills"
   // side by side. Each bulk parent's `severity` matches the severity of the
@@ -649,7 +649,7 @@ function CategoryGroup({
   const Icon = compact && category === "technical_skills" ? Settings : meta.icon;
 
   return (
-    <div data-fix-group data-compact={compact} className="overflow-hidden rounded-md border border-[#DCE3EB] bg-white">
+    <div data-fix-group data-compact={compact} className="overflow-hidden rounded-md border border-[#EAECF0] bg-white">
       {/* Compact row header — icon, label, suggestion count, impact badge,
           total recoverable points, chevron. Matches ScoreBreakdown's row
           style so the two tabs read as one system. */}
@@ -661,26 +661,26 @@ function CategoryGroup({
         onKeyDown={e => {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(v => !v); }
         }}
-        className="flex min-h-16 w-full cursor-pointer items-center gap-2.5 bg-[#f7fafc] px-3 py-2.5 hover:bg-[#eef4fa]"
+        className="flex min-h-16 w-full cursor-pointer items-center gap-2.5 bg-[#F8FAFC] px-3 py-2.5 hover:bg-[#F8FAFC]"
       >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md" style={{ background: meta.lightBg }}>
           <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" style={{ color: meta.color }} />
         </div>
         <div className="min-w-0 flex-1">
-          <div data-fix-title><p className="text-[14px] font-semibold leading-tight text-[#182230]">{compact ? category === "technical_skills" ? "Technical Skills" : category === "soft_skills" ? "Soft Skills" : prettifyCategory(category) : meta.label}</p>
-          {compact && <span data-priority style={{color: impact.filter === "low" ? "#008453" : impact.color, background: impact.filter === "low" ? "#d9fae9" : impact.bg}}>{impact.label.replace("Impact", "Priority")}</span>}</div>
-          <p className="mt-0.5 text-[12px] text-[#526174]">
+          <div data-fix-title><p className="text-body-sm text-[#101828]">{compact ? category === "technical_skills" ? "Technical Skills" : category === "soft_skills" ? "Soft Skills" : prettifyCategory(category) : meta.label}</p>
+          {compact && <span data-priority style={{color: impact.filter === "low" ? "#067647" : impact.color, background: impact.filter === "low" ? "#ECFDF3" : impact.bg}}>{impact.label.replace("Impact", "Priority")}</span>}</div>
+          <p className="mt-0.5 text-body-sm text-[#475467]">
             {pending > 0 ? `${pending} suggestion${pending === 1 ? "" : "s"}` : "All applied"}
           </p>
         </div>
         {!compact && <span
-          className="hidden shrink-0 rounded px-2 py-1 text-[12px] font-semibold sm:inline-block"
+          className="hidden shrink-0 rounded px-2 py-1 text-body-sm sm:inline-block"
           style={{ color: impact.color, background: impact.bg }}
         >
           {impact.label}
         </span>}
-        <span className="shrink-0 text-[17px] font-extrabold text-green-700" style={compact ? {color: sectionScore == null ? "#74819c" : sectionScore >= 70 ? "#00ad7c" : sectionScore >= 60 ? "#ffb000" : "#f00043"} : undefined}>{compact ? sectionScore == null ? "N/A" : `${sectionScore}%` : `+${totalPts.toFixed(1)}`}</span>
-        <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center text-slate-400">
+        <span className="shrink-0 text-h3" style={{color: compact ? resultColor(sectionScore ?? null) : "#067647"}}>{compact ? sectionScore == null ? "N/A" : `${sectionScore}%` : `+${totalPts.toFixed(1)}`}</span>
+        <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center text-slate-600">
           {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </span>
       </div>
@@ -704,8 +704,8 @@ function CategoryGroup({
                     type="button"
                     onClick={() => handleGroupBulkAdd(sg.items, sg.parent)}
                     disabled={isGroupLoading || groupAllAdded}
-                    className="flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-80"
-                    style={{ background: groupAllAdded ? "#167044" : meta.color }}
+                    className="flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-label text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-80"
+                    style={{ background: groupAllAdded ? "#067647" : meta.color }}
                   >
                     {bulkButtonContent(isGroupLoading, groupAllAdded, multiBulk ? `${bulkActionLabel} (${sevMeta.label})` : bulkActionLabel)}
                   </button>
@@ -717,12 +717,12 @@ function CategoryGroup({
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 bg-[#f1f5f9] text-left text-[12px] font-semibold text-[#526174]">
+                <tr className="border-b border-slate-200 bg-[#F2F4F7] text-left text-body-sm text-[#475467]">
                   {compact && <th scope="col">Skill / Issue</th>}
-                  <th className="px-4 py-2 font-bold">{compact ? "Issue" : "Issue / Gap"}</th>
-                  <th className="px-4 py-2 font-bold">Suggested Improvement</th>
-                  <th className="px-4 py-2 font-bold">Est. Points</th>
-                  <th className="px-4 py-2 font-bold">Action</th>
+                  <th className="px-4 py-2 text-overline uppercase">{compact ? "Issue" : "Issue / Gap"}</th>
+                  <th className="px-4 py-2 text-overline uppercase">Suggested Improvement</th>
+                  <th className="px-4 py-2 text-overline uppercase">Est. Points</th>
+                  <th className="px-4 py-2 text-overline uppercase">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -853,12 +853,12 @@ export default function MatchPenalties({ recommendations, compact, expandAll, ma
       {/* Header */}
       {!compact && <div className="flex items-center justify-between px-1">
         <div>
-          <h3 className="flex items-center gap-1.5 text-[17px] font-extrabold text-[#182230]">
-            <Sparkles className="h-4 w-4 text-[#3A4F7A]" /> Actionable fixes
+          <h3 className="flex items-center gap-1.5 text-h3 text-[#101828]">
+            <Sparkles className="h-4 w-4 text-[#475467]" /> Actionable fixes
           </h3>
-          <p className="mt-0.5 text-[12.5px] text-[#526174]">Apply the highest-impact changes directly to your resume.</p>
+          <p className="mt-0.5 text-body-sm text-[#475467]">Apply the highest-impact changes directly to your resume.</p>
         </div>
-        <span className="text-[12px] font-bold text-green-700 bg-[#f1fbf5] border border-[#ccebd8] px-3 py-1 rounded-full">
+        <span className="text-body-sm text-[#067647] bg-[#ECFDF3] px-3 py-1 rounded-full">
           Recover up to +{totalPenalty.toFixed(1)} pts
         </span>
       </div>}
@@ -891,7 +891,7 @@ export default function MatchPenalties({ recommendations, compact, expandAll, ma
           />
         ))}
         {visibleCategories.length === 0 && (
-          <p className="px-1 py-6 text-center text-[14px] text-slate-400">No suggestions at this impact level.</p>
+          <p className="px-1 py-6 text-center text-body-sm text-slate-600">No suggestions at this impact level.</p>
         )}
       </div>
     </section>

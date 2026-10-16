@@ -1,14 +1,15 @@
 "use client";
 
+import { getScoreBand } from "./resultsSummary";
+import { BANDS, bandStyles, bandColors } from "@/lib/job-match/bands";
 import { TbTargetArrow } from "react-icons/tb";
 
-const SEGMENTS = [
-  { from: 0, to: 20, color: "#ef4444", label: "Needs improvement" },
-  { from: 20, to: 40, color: "#fb923c", label: "Low match" },
-  { from: 40, to: 60, color: "#facc15", label: "Fair match" },
-  { from: 60, to: 80, color: "#a3e635", label: "Good match" },
-  { from: 80, to: 100, color: "#22c55e", label: "Excellent match" },
-];
+const SEGMENTS = BANDS.map(({ min, band }, index) => ({
+  from: min,
+  to: index === 0 ? 100 : BANDS[index - 1].min,
+  color: bandColors[band].text,
+  label: bandStyles[band].label,
+})).reverse();
 
 const CENTER_X = 160;
 const CENTER_Y = 142;
@@ -32,26 +33,11 @@ function arcPath(from: number, to: number) {
   return `M ${start.x} ${start.y} A ${RADIUS} ${RADIUS} 0 0 1 ${end.x} ${end.y}`;
 }
 
-// Derived from SEGMENTS so the caption and the aria-label can never disagree
-// with the arc the needle is sitting in. They previously used independent
-// bands (30/50/70/85 vs 20/40/60/80) and a label — "Strong match" — that no
-// segment carried, so e.g. a score of 82 rendered inside the green
-// "Excellent match · 80–100%" arc while the caption read "Strong match".
-function getScoreLabel(score: number) {
-  const segment = SEGMENTS.find((s) => score >= s.from && score < s.to);
-  return (segment ?? SEGMENTS.at(-1)!).label;
-}
-
 export default function JobMatchScoreGauge({ value, targetRole }: { readonly value: number; readonly targetRole?: string }) {
-  const score = Math.min(100, Math.max(0, Math.round(value)));
+  const score = Math.min(100, Math.max(0, value));
   const needleAngle = 270 + score * 1.8;
-  const label = getScoreLabel(score);
-  let scoreColor: string;
-  if (score < 20) scoreColor = "#ef4444";
-  else if (score < 40) scoreColor = "#f97316";
-  else if (score < 60) scoreColor = "#ca8a04";
-  else if (score < 80) scoreColor = "#65a30d";
-  else scoreColor = "#16a34a";
+  const label = getScoreBand(score).label;
+  const scoreColor = getScoreBand(score).text;
 
   return (
     <div className="w-full">
@@ -93,8 +79,8 @@ export default function JobMatchScoreGauge({ value, targetRole }: { readonly val
             }
             return (
               <g key={tick}>
-                <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="#64748b" strokeWidth="1.5" />
-                <text x={labelPt.x + endpointOffset} y={labelPt.y + 4} textAnchor={textAnchor} className="fill-slate-600 text-[10px] font-semibold">
+                <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="#475467" strokeWidth="1.5" />
+                <text x={labelPt.x + endpointOffset} y={labelPt.y + 4} textAnchor={textAnchor} className="fill-slate-600 text-body-sm">
                   {tick}%
                 </text>
               </g>
@@ -102,25 +88,25 @@ export default function JobMatchScoreGauge({ value, targetRole }: { readonly val
           })}
 
           <g style={{ transform: `rotate(${needleAngle}deg)`, transformOrigin: `${CENTER_X}px ${CENTER_Y}px`, transition: "transform 900ms cubic-bezier(0.22, 1, 0.36, 1)" }}>
-            <path d={`M ${CENTER_X - 7} ${CENTER_Y + 2} L ${CENTER_X} 58 L ${CENTER_X + 7} ${CENTER_Y + 2} Z`} fill="#6b7280" />
+            <path d={`M ${CENTER_X - 7} ${CENTER_Y + 2} L ${CENTER_X} 58 L ${CENTER_X + 7} ${CENTER_Y + 2} Z`} fill="#475467" />
           </g>
-          <circle cx={CENTER_X} cy={CENTER_Y} r="13" fill="#6b7280" />
+          <circle cx={CENTER_X} cy={CENTER_Y} r="13" fill="#475467" />
 
-          <text x={CENTER_X} y="195" textAnchor="middle" fill={scoreColor} className="text-[31px] font-medium">
+          <text x={CENTER_X} y="195" textAnchor="middle" fill={scoreColor} className="text-h1">
             {score}%
           </text>
         </svg>
-        <p className="-mt-1 text-center text-[16px] font-bold" style={{ color: scoreColor }}>
+        <p className="-mt-1 text-center text-body-lg" style={{ color: scoreColor }}>
           {label}
         </p>
       </div>
       {targetRole && (
-        <div className="mt-2.5 space-y-2 border-t border-[#eef1f6] pt-2.5">
+        <div className="mt-2.5 space-y-2 border-t border-[#F8FAFC] pt-2.5">
           <div className="flex items-center gap-2.5">
-            <TbTargetArrow className="h-6 w-6 shrink-0 text-[#2557a7]" />
+            <TbTargetArrow className="h-6 w-6 shrink-0 text-[#2557A7]" />
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.04em] text-[#2557a7]">Target Role</p>
-              <p className="truncate text-[13px] font-semibold text-[#1f2937]">{targetRole}</p>
+              <p className="text-body-sm uppercase tracking-[0.04em] text-[#2557A7]">Target Role</p>
+              <p className="truncate text-body-sm text-[#101828]">{targetRole}</p>
             </div>
           </div>
         </div>

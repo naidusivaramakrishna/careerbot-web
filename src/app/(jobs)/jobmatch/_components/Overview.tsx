@@ -263,6 +263,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   });
 
   const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
+  const [detailedPreviewTab, setDetailedPreviewTab] = useState<"resume" | "jd">("resume");
   const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
     // Restore an existing analysis for the lifetime of this browser tab. The
     // previous implementation deleted these values on every route remount,
@@ -513,6 +514,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           parsedResumeData={parsedResumeData}
           parsedJDData={parsedJDData}
           matchResults={matchResults}
+          initialPreviewTab={detailedPreviewTab}
           onBackToUpload={() => setShowDetailedAnalysis(false)}
         /> : <MatchResultsOverview
           matchResults={matchResults}
@@ -523,7 +525,9 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           analyzedAt={analyzedAt ?? undefined}
           jdText={jdText}
           onBack={() => { setActiveTab("upload"); try { sessionStorage.setItem("jm_activeTab", "upload"); } catch {} setWizardStep(0); setShowDetailedAnalysis(false); }}
-          onDetails={() => setShowDetailedAnalysis(true)}
+          // MatchResultsOverview passes onDetails straight to onClick, so the first argument can be a
+          // click event; only an explicit "jd" selects the JD tab.
+          onDetails={(previewTab?: unknown) => { setDetailedPreviewTab(previewTab === "jd" ? "jd" : "resume"); setShowDetailedAnalysis(true); }}
         />}
         <ErrorPopupModal
           error={error}

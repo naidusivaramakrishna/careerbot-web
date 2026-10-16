@@ -1,7 +1,8 @@
 "use client";
-
 import React from "react";
 import styles from "./AnalysisContent.module.css";
+import AnalysisTour from "./AnalysisTour";
+import AnalysisHelp from "./AnalysisHelp";
 import ResumePreview from "../resume/ResumePreview";
 import { AnalysisContentProps } from "../_types";
 import {
@@ -27,9 +28,9 @@ const ANALYSIS_DRAFT_KEY = "jm_analysisDraft";
 // Match-score band shown in the RIGHT column's header card (donut + label +
 // blurb): the shared Job Match bands (lib/job-match/bands.ts via
 // getScoreBand), so it always agrees with the results overview.
-function matchBand(score: number): { label: string; color: string; description: string } {
+function matchBand(score: number): { label: string; color: string; background: string; description: string } {
   const band = getScoreBand(score);
-  return { label: band.label, color: band.text, description: band.description };
+  return { label: band.label, color: band.text, background: band.bg, description: band.description };
 }
 
 // Contact fields (email/phone/location) can only be written back onto a
@@ -432,6 +433,7 @@ export default function AnalysisContent({
   matchResults,
   parsedResumeData,
   onBackToUpload,
+  initialPreviewTab = "resume",
 }: AnalysisContentProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [liveMatchResults] = React.useState<any>(matchResults);
@@ -451,10 +453,14 @@ export default function AnalysisContent({
   const [isSavingSection, setIsSavingSection] = React.useState(false);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const fixesRef = React.useRef<HTMLElement>(null);
+  const guidanceScopeRef = React.useRef<HTMLDivElement>(null);
+  const [guideOpen, setGuideOpen] = React.useState(false);
+  const previousGuideView = React.useRef({ compare: false, edit: false });
 
   // Resume / Job Description tab (merged preview panel) — see the toolbar
   // below.
-  const [previewTab, setPreviewTab] = React.useState<"resume" | "jd">("resume");
+  const [previewTab, setPreviewTab] = React.useState<"resume" | "jd">(initialPreviewTab);
+  const [expandAllBreakdown, setExpandAllBreakdown] = React.useState<boolean | null>(null);
   const [zoomPct, setZoomPct] = React.useState(100);
   const [compareDocuments, setCompareDocuments] = React.useState(false);
   const [jdZoomPct, setJdZoomPct] = React.useState(100);
@@ -1200,9 +1206,14 @@ export default function AnalysisContent({
   ];
 
   return (
-    <div className={`${styles.analysis} relative flex min-h-[calc(100vh-3.5rem)] w-full flex-col bg-[#F4F8FC]`}>
+    <div ref={guidanceScopeRef} className={`${styles.analysis} relative flex min-h-[calc(100vh-3.5rem)] w-full flex-col bg-[#F8FAFC]`}>
 
 
+      {guideOpen && <AnalysisTour scopeRef={guidanceScopeRef} onClose={() => {
+        setGuideOpen(false);
+        setCompareDocuments(previousGuideView.current.compare);
+        setIsEditMode(previousGuideView.current.edit);
+      }} />}
       {/* ONE grid for the whole page body — header row (title block + score
           card) and content row (resume-preview card + analysis panel) are
           all direct children of this same grid, sharing the same two column
@@ -1225,20 +1236,26 @@ export default function AnalysisContent({
             stacking into a much wider gutter in the middle of the page than
             on the outer left/right edges. */}
         <div className={styles.pageHeading}>
+          <button type="button" className={styles.guideButton} aria-haspopup="dialog" onClick={() => {
+            previousGuideView.current = { compare: compareDocuments, edit: isEditMode };
+            setCompareDocuments(false);
+            setIsEditMode(false);
+            setGuideOpen(true);
+          }}><BookOpen size={14} aria-hidden="true" /> Guide me</button>
           <div>
           {onBackToUpload && (
             <button
               type="button"
               onClick={onBackToUpload}
-              className="mb-2 flex w-fit items-center gap-1.5 text-[14px] font-semibold text-[#2257A7] hover:underline"
+              className="mb-2 flex w-fit items-center gap-1.5 text-label text-[#2557A7] hover:underline"
             >
               <ArrowLeft className="w-[18px] h-[18px]" /> Back to Results
             </button>
           )}
-          <h1 className="text-[28px] font-bold leading-tight text-[#182230]">
+          <h1 className="text-h1 text-[#101828]">
             Detailed Analysis
           </h1>
-          <p className="mt-1 text-[14px] leading-5 text-[#526174]">
+          <p className="mt-1 text-body-sm text-[#475467]">
             In-depth insights on how your resume matches with the job description.
           </p>
           </div>
@@ -1264,28 +1281,28 @@ export default function AnalysisContent({
                 }
               }}
             />
-          <div className="absolute top-0 right-0 h-full z-50 w-[320px] bg-white border-l border-gray-100 overflow-y-auto flex flex-col animate-slide-in-right shadow-2xl" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+          <div className="absolute top-0 right-0 h-full z-50 w-[320px] bg-white border-l border-gray-100 overflow-y-auto flex flex-col animate-slide-in-right shadow-2xl" style={{ scrollbarWidth: "thin", scrollbarColor: "#EAECF0 transparent" }}>
             {/* Sidebar Header */}
             <div className="px-5 pt-5 pb-4 border-b border-gray-100 bg-white shrink-0">
               <button
                 type="button"
                 onClick={() => setIsEditMode(false)}
-                className="flex items-center gap-1.5 text-[12px] font-semibold text-gray-400 hover:text-[#2257A7] mb-4 transition-colors"
+                className="flex items-center gap-1.5 text-label text-gray-600 hover:text-[#2557A7] mb-4 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to Preview
               </button>
               <div className="flex items-center gap-2.5">
-                <div className="w-1.5 h-6 rounded-full bg-[#2257A7]" />
+                <div className="w-1.5 h-6 rounded-full bg-[#2557A7]" />
                 <div>
-                  <p className="text-[16px] font-bold text-gray-900">Resume Sections</p>
-                  <p className="text-[12px] text-gray-400 mt-0.5">Click a section to edit its content</p>
+                  <p className="text-body-lg text-gray-900">Resume Sections</p>
+                  <p className="text-body-sm text-gray-600 mt-0.5">Click a section to edit its content</p>
                 </div>
               </div>
             </div>
 
             {/* Active sections */}
             <div className="px-4 py-3 space-y-1.5">
-              <p className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-2">Your Sections</p>
+              <p className="text-body-sm text-gray-600 uppercase tracking-widest mb-2">Your Sections</p>
               {allActiveSections.map((section) => (
                 <div
                   key={section.id}
@@ -1301,21 +1318,21 @@ export default function AnalysisContent({
                   className="group flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all duration-150"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-white border border-gray-200 group-hover:border-blue-200 group-hover:bg-blue-100 text-gray-500 group-hover:text-[#2257A7] transition-all">
+                    <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-white border border-gray-200 group-hover:border-blue-200 group-hover:bg-blue-100 text-gray-600 group-hover:text-[#2557A7] transition-all">
                       <section.icon className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-[14px] font-semibold text-gray-700 group-hover:text-[#2257A7] transition-colors">
+                    <span className="text-body-sm text-gray-700 group-hover:text-[#2557A7] transition-colors">
                       {section.label}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {section.hasAI && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 text-[12px] bg-violet-50 font-semibold text-violet-600 rounded-full border border-violet-100">
+                      <span className="inline-flex items-center px-1.5 py-0.5 text-body-sm bg-violet-50 text-violet-600 rounded-full border border-violet-100">
                         <Sparkles size={12} className="mr-0.5" />AI
                       </span>
                     )}
-                    <CheckCircle2 size={16} className="text-[#167044]" />
-                    <ChevronRight size={14} className="text-gray-300 group-hover:text-[#2257A7] transition-colors" />
+                    <CheckCircle2 size={16} className="text-[#067647]" />
+                    <ChevronRight size={14} className="text-gray-300 group-hover:text-[#2557A7] transition-colors" />
                   </div>
                 </div>
               ))}
@@ -1323,7 +1340,7 @@ export default function AnalysisContent({
 
             {/* Add New Sections */}
             <div className="px-4 py-3 border-t border-gray-100">
-              <p className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Sections</p>
+              <p className="text-body-sm text-gray-600 uppercase tracking-widest mb-2">Add Sections</p>
               <div className="space-y-1.5">
                 {additionalPredefined.map((section) => (
                   <div
@@ -1340,20 +1357,20 @@ export default function AnalysisContent({
                     }}
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-50 border border-gray-200 group-hover:bg-blue-100 group-hover:border-blue-200 text-gray-400 group-hover:text-[#2257A7] transition-all">
+                      <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-50 border border-gray-200 group-hover:bg-blue-100 group-hover:border-blue-200 text-gray-600 group-hover:text-[#2557A7] transition-all">
                         <section.icon className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-[14px] font-semibold text-gray-500 group-hover:text-[#2257A7]">
+                      <span className="text-body-sm text-gray-600 group-hover:text-[#2557A7]">
                         {section.label}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
                       {section.hasAI && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 text-[12px] bg-violet-50 font-semibold text-violet-600 rounded-full border border-violet-100">
+                        <span className="inline-flex items-center px-1.5 py-0.5 text-body-sm bg-violet-50 text-violet-600 rounded-full border border-violet-100">
                           <Sparkles size={12} className="mr-0.5" />AI
                         </span>
                       )}
-                      <Plus size={14} className="text-gray-300 group-hover:text-[#2257A7] transition-colors" />
+                      <Plus size={14} className="text-gray-300 group-hover:text-[#2557A7] transition-colors" />
                     </div>
                   </div>
                 ))}
@@ -1362,7 +1379,7 @@ export default function AnalysisContent({
 
             {/* Custom Sections */}
             <div className="px-4 py-3 border-t border-gray-100">
-              <p className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-2">Custom Sections</p>
+              <p className="text-body-sm text-gray-600 uppercase tracking-widest mb-2">Custom Sections</p>
               {showCustomInput ? (
                 <div className="space-y-2">
                   <input
@@ -1372,18 +1389,18 @@ export default function AnalysisContent({
                     onChange={(e) => setCustomName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { addCustomSection(); } if (e.key === "Escape") { setShowCustomInput(false); } }}
                     placeholder="e.g. Patents, Volunteer Work"
-                    className="w-full px-3 py-2 text-[14px] border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                    className="w-full px-3 py-2 text-body-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 bg-white"
                   />
                   <div className="flex gap-2">
-                    <button type="button" onClick={addCustomSection} className="flex-1 py-2 text-[12px] font-semibold bg-[#2257A7] text-white rounded-lg hover:bg-[#1A4589] transition-colors">Add</button>
-                    <button type="button" onClick={() => { setShowCustomInput(false); setCustomName(""); }} className="flex-1 py-2 text-[12px] font-semibold border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+                    <button type="button" onClick={addCustomSection} className="flex-1 py-2 text-label bg-[#2557A7] text-white rounded-lg hover:bg-[#2557A7] transition-colors">Add</button>
+                    <button type="button" onClick={() => { setShowCustomInput(false); setCustomName(""); }} className="flex-1 py-2 text-label border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
                   </div>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => setShowCustomInput(true)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold text-[#2257A7] border border-dashed border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-label text-[#2557A7] border border-dashed border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                 >
                   <Plus size={13} /> Add Custom Section
                 </button>
@@ -1409,7 +1426,7 @@ export default function AnalysisContent({
             instead of the page). */}
         <div className={styles.documentColumn}>
           <div className="w-full h-full">
-          <div ref={documentViewerRef} className={styles.documentCard}>
+          <div ref={documentViewerRef} className={styles.documentCard} data-jobmatch-tour="resume">
             {/* Tab bar */}
             <div className={styles.documentTabs}>
               <div className="flex items-center gap-1.5">
@@ -1424,8 +1441,8 @@ export default function AnalysisContent({
                     aria-pressed={(compareDocuments ? "resume" : previewTab) === tab.id}
                     className={`flex min-h-11 items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-[14px] font-semibold transition-colors ${
                       (compareDocuments ? "resume" : previewTab) === tab.id
-                        ? "border-[#2257A7] text-[#2257A7]"
-                        : "border-transparent text-[#526174] hover:text-slate-800"
+                        ? "border-[#2557A7] text-[#2557A7] text-label"
+                        : "border-transparent text-[#475467] hover:text-slate-800 text-label"
                     }`}
                   >
                     {tab.label}
@@ -1448,7 +1465,8 @@ export default function AnalysisContent({
                   type="button"
                   onClick={() => setIsEditMode((v) => !v)}
                   aria-pressed={isEditMode}
-                  className={`flex shrink-0 min-h-9 items-center gap-1.5 px-3.5 py-2 text-[14px] font-bold rounded-lg border transition-all ${isEditMode ? "bg-[#2257A7] text-white border-[#2257A7] hover:bg-[#1A4589]" : "text-[#2257A7] border-[#c7d9f5] hover:bg-blue-50"}`}
+                  data-action="edit-resume"
+                  className={`flex shrink-0 min-h-9 items-center gap-1.5 px-3.5 py-2 text-[14px] font-bold rounded-lg border transition-all ${isEditMode ? "bg-[#2557A7] text-white border-[#2557A7] hover:bg-[#2557A7] text-label" : "text-[#2557A7] border-[#D0D5DD] hover:bg-blue-50 text-label"}`}
                 >
                   <Pencil className="w-4 h-4" />
                   {isEditMode ? "Close Editor" : "Edit Resume"}
@@ -1457,11 +1475,11 @@ export default function AnalysisContent({
               </div>
             )}
             {previewTab === "jd" && !compareDocuments && (
-              <div className={`${styles.documentFile} flex items-center justify-between gap-3 px-5 py-4 border-b border-[#e5eaf1] bg-white`}>
+              <div className={`${styles.documentFile} flex items-center justify-between gap-3 px-5 py-4 border-b border-[#F2F4F7] bg-white`}>
                 <button
                   type="button"
                   onClick={() => { navigator.clipboard.writeText(jdText).catch(() => {}); }}
-                  className="flex min-h-9 items-center gap-1.5 rounded-lg border border-[#c7d9f5] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#2257A7] shadow-sm transition-all hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2257A7] focus-visible:ring-offset-2"
+                  className="flex min-h-9 items-center gap-1.5 rounded-lg border border-[#D0D5DD] bg-white px-3 py-1.5 text-label text-[#2557A7] shadow-sm transition-all hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2557A7] focus-visible:ring-offset-2"
                 >
                   <Copy className="w-3 h-3" /> Copy
                 </button>
@@ -1504,15 +1522,15 @@ export default function AnalysisContent({
                 {jdText ? (
                   <JDHighlighter
                     text={jdText}
-                    matchedSkills={matchedTechSkills}
-                    missingSkills={missingTechSkills}
-                    matchedSoftSkills={matchedSoftSkills}
-                    missingSoftSkills={missingSoftSkills}
+                    matchedSkills={[...matchedTechSkills, ...addedSkillFields]}
+                    missingSkills={pendingSkills}
+                    matchedSoftSkills={[...matchedSoftSkills, ...addedSkillFields]}
+                    missingSoftSkills={pendingSoftSkills}
                     matchedCapabilities={matchedCapabilities}
                     onMissingSkillClick={directAddSkill}
                   />
                 ) : (
-                  <p className="text-gray-400 text-sm">No job description available</p>
+                  <p className="text-gray-600 text-body-sm">No job description available</p>
                 )}
               </div>
             )}
@@ -1548,15 +1566,15 @@ export default function AnalysisContent({
             column's width; a max-w here would just silently override it. */}
         <div className={styles.rightColumn}>
           <div className={styles.scoreCards}>
-            <section className={styles.currentScore} aria-label="Current match score">
+            <section className={styles.currentScore} aria-label="Current match score" data-jobmatch-tour="score">
               <div className={styles.scoreGauge} title={scoreBand.description}>
-                <svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r={scoreRingRadius} fill="none" stroke="#e5e7eb" strokeWidth="7"/><circle cx="36" cy="36" r={scoreRingRadius} fill="none" stroke={scoreBand.color} strokeWidth="7" strokeLinecap="round" strokeDasharray={scoreRingCirc} strokeDashoffset={scoreRingDash}/></svg>
-                <strong>{Math.round(score)}%</strong>
+                <svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r={scoreRingRadius} fill="none" stroke="#EAECF0" strokeWidth="7"/><circle cx="36" cy="36" r={scoreRingRadius} fill="none" stroke={scoreBand.color} strokeWidth="7" strokeLinecap="round" strokeDasharray={scoreRingCirc} strokeDashoffset={scoreRingDash}/></svg>
+                <strong>{score}%</strong>
               </div>
-              <div><h2>Current Match Score</h2><span className={styles.scoreBadge} style={{color: scoreBand.color, background: `color-mix(in srgb, ${scoreBand.color} 12%, white)`}}>{scoreBand.label}</span><p>Based on your current resume</p></div>
+              <div><h2><AnalysisHelp trigger="Current Match Score" label="About the current match score">Your latest reported overall score. Accepted changes may update this number, while section scores still reflect the last full analysis. Analyze again to refresh the complete report.</AnalysisHelp></h2><span className={styles.scoreBadge} style={{color: scoreBand.color, background: scoreBand.background}}>{scoreBand.label}</span><p>Based on your current resume</p></div>
             </section>
-            <section className={styles.potentialScore}><h2>Potential Match Score</h2><strong>{Math.round(potentialScore)}%</strong><p>Estimated with suggested fixes (+{potentialGain} pts)</p></section>
-            <section className={styles.downloadCard}><h2>{appliedSuggestionIds.length} of {Math.max(fixCounts.all, appliedSuggestionIds.length)} applied</h2><progress aria-label="Applied fixes" value={appliedSuggestionIds.length} max={Math.max(1, fixCounts.all, appliedSuggestionIds.length)}/><button type="button" className={appliedSuggestionIds.length > 0 ? styles.hasFixes : undefined} onClick={handleDownload} disabled={downloadDisabled}>{isDownloading ? <Loader2 className="animate-spin"/> : <Download/>}{isDownloading ? "Downloading..." : "Download Updated Resume"} <span>({appliedSuggestionIds.length} fixes)</span></button><p>{isSavingSection ? "Saving changes..." : "Review your changes before downloading."}</p></section>
+            <section className={styles.potentialScore}><h2><AnalysisHelp trigger="Potential Match Score" label="About the potential match score">An estimate based on the suggested improvements. It is not a guaranteed score or hiring outcome. Apply only accurate changes and analyze the updated resume to measure the result.</AnalysisHelp></h2><strong>{Math.round(potentialScore)}%</strong><p>Estimated, not guaranteed (+{potentialGain} pts)</p></section>
+            <section className={styles.downloadCard} data-jobmatch-tour="download"><h2>{appliedSuggestionIds.length} of {Math.max(fixCounts.all, appliedSuggestionIds.length)} applied</h2><progress aria-label="Applied fixes" value={appliedSuggestionIds.length} max={Math.max(1, fixCounts.all, appliedSuggestionIds.length)}/><button type="button" className={appliedSuggestionIds.length > 0 ? styles.hasFixes : undefined} onClick={handleDownload} disabled={downloadDisabled}>{isDownloading ? <Loader2 className="animate-spin"/> : <Download/>}{isDownloading ? "Downloading..." : "Download Updated Resume"} <span>({appliedSuggestionIds.length} fixes)</span></button><p>{isSavingSection ? "Saving changes..." : "Review changes; re-analyze for full results."}</p></section>
           </div>
         {compareDocuments ? (
           <section className={`${styles.documentColumn} ${styles.comparisonJd}`} aria-label="Job description comparison">
@@ -1573,15 +1591,15 @@ export default function AnalysisContent({
                 {jdText ? (
                   <JDHighlighter
                     text={jdText}
-                    matchedSkills={matchedTechSkills}
-                    missingSkills={missingTechSkills}
-                    matchedSoftSkills={matchedSoftSkills}
-                    missingSoftSkills={missingSoftSkills}
+                    matchedSkills={[...matchedTechSkills, ...addedSkillFields]}
+                    missingSkills={pendingSkills}
+                    matchedSoftSkills={[...matchedSoftSkills, ...addedSkillFields]}
+                    missingSoftSkills={pendingSoftSkills}
                     matchedCapabilities={matchedCapabilities}
                     onMissingSkillClick={directAddSkill}
                   />
                 ) : (
-                  <p className="text-gray-400 text-sm">No job description available</p>
+                  <p className="text-gray-600 text-body-sm">No job description available</p>
                 )}
               </div>
             </div>
@@ -1604,12 +1622,13 @@ export default function AnalysisContent({
                 <button
                   key={tab.id}
                   type="button"
+                  data-jobmatch-tour={tab.id}
                   aria-pressed={tab.id === "all" ? !["sections", "keywords"].includes(rightTab) : rightTab === tab.id}
                   onClick={() => setRightTab(tab.id)}
-                  className={`min-h-11 shrink-0 border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors ${
+                  className={`min-h-11 shrink-0 border-b-2 px-3 py-2.5 text-body-sm font-semibold transition-colors ${
                     (tab.id === "all" ? !["sections", "keywords"].includes(rightTab) : rightTab === tab.id)
-                      ? "border-[#2257A7] text-[#2257A7]"
-                      : "border-transparent text-[#526174] hover:text-slate-800"
+                      ? "border-[#2557A7] text-[#2557A7] text-label"
+                      : "border-transparent text-[#475467] hover:text-slate-800 text-label"
                   }`}
                 >
                   {tab.label}
@@ -1620,8 +1639,9 @@ export default function AnalysisContent({
             </div>
             <fieldset className={styles.analysisBody}>
               {rightTab === "sections" && (
-                <>
-                <p className="mb-2 flex items-start gap-2 px-2 py-2 text-[12px] leading-5 text-[#526174]"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Section scores reflect the last full analysis.{appliedSuggestionIds.length > 0 && " Analyze your updated resume again to refresh these scores."}</span></p>
+                <section className={styles.breakdownView}>
+                <div className={styles.detailHeading}><h2>Detailed Analysis</h2><button type="button" aria-expanded={expandAllBreakdown === true} onClick={() => setExpandAllBreakdown(value => value !== true)}>{expandAllBreakdown === true ? "Collapse All" : "Expand All"} <ChevronRight aria-hidden="true" /></button></div>
+                <p className={styles.breakdownDescription}><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Section scores reflect the last full analysis.{appliedSuggestionIds.length > 0 && " Analyze your updated resume again to refresh these scores."}</span></p>
                 <ScoreBreakdown
                   matchResult={matchResult}
                   currentSummary={
@@ -1631,8 +1651,9 @@ export default function AnalysisContent({
                   }
                   onAddSkill={addSkillFromSuggestionChip}
                   appliedSuggestionIds={appliedSuggestionIds}
+                  expandAll={expandAllBreakdown}
                 />
-                </>
+                </section>
               )}
               {rightTab === "keywords" && <KeywordAnalysis matchResult={matchResult}/>}
               {rightTab !== "sections" && rightTab !== "keywords" && (
@@ -1788,22 +1809,22 @@ export default function AnalysisContent({
             className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
           >
             <div className="mb-3 flex items-start justify-between">
-              <h3 className="text-[15px] font-bold text-gray-900">Fill in the number</h3>
+              <h3 className="text-h3 text-gray-900">Fill in the number</h3>
               <button
                 type="button"
                 onClick={() => { numberPromptState.resolve(null); setNumberPromptState(null); }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-600 hover:text-gray-600 text-label"
                 aria-label="Cancel"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             {numberPromptState.blankText && (
-              <p className="mb-3 rounded-lg bg-slate-50 p-2.5 text-[12.5px] italic text-gray-600">
+              <p className="mb-3 rounded-lg bg-slate-50 p-2.5 text-body-sm italic text-gray-600">
                 &quot;{numberPromptState.blankText}&quot;
               </p>
             )}
-            <label htmlFor="jm-number-fix-value" className="mb-1 block text-[12px] font-semibold text-gray-700">
+            <label htmlFor="jm-number-fix-value" className="mb-1 block text-label text-gray-700">
               This fix needs a real number to replace the blank — e.g. 20
             </label>
             <input
@@ -1813,19 +1834,19 @@ export default function AnalysisContent({
               inputMode="decimal"
               autoFocus
               placeholder="20"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-body-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => { numberPromptState.resolve(null); setNumberPromptState(null); }}
-                className="rounded-lg border border-gray-200 px-3.5 py-2 text-[14px] font-semibold text-gray-600 hover:bg-gray-50"
+                className="rounded-lg border border-gray-200 px-3.5 py-2 text-label text-gray-600 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-[#2257A7] px-3.5 py-2 text-[14px] font-semibold text-white hover:opacity-90"
+                className="rounded-lg bg-[#2557A7] px-3.5 py-2 text-label text-white hover:opacity-90"
               >
                 Apply fix
               </button>
