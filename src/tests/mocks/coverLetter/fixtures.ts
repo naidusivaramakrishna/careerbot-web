@@ -21,6 +21,7 @@
 import type {
   CoverLetterResponse,
   CoverLetterListResponse,
+  CoverLetterGenerationProgress,
 } from "@/types/coverLetter";
 
 import readyJson from "./fixtures/cl_ready_to_review.json";
@@ -30,6 +31,7 @@ import failedNoModelJson from "./fixtures/cl_failed_no_model.json";
 import listEmptyJson from "./fixtures/cl_list_empty.json";
 import list3ItemsJson from "./fixtures/cl_list_3_items.json";
 import listWithCursorJson from "./fixtures/cl_list_with_next_cursor.json";
+import generationProgressJson from "./fixtures/generation_progress_generating.json";
 
 // Backend-error response shape (wrapped: { success: false, error: ... }).
 // Not a CL-1.2 success shape; declared here for the api-client test
@@ -81,3 +83,5 @@ export const CL_ERROR_FIXTURES = {
   unavailable503: error503Json as unknown as BackendErrorResponse,
   timeout504: error504Json as unknown as BackendErrorResponse,
 } as const;
+
+export const CL_GENERATION_PROGRESS_FIXTURE = generationProgressJson as unknown as CoverLetterGenerationProgress;

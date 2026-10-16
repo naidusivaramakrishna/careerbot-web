@@ -23,6 +23,10 @@ import { toast } from "sonner";
 import { useCoverLetter } from "@/hooks/useCoverLetter";
 import { useDeleteCoverLetter } from "@/hooks/useDeleteCoverLetter";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
+import {
+  clearCachedGeneratedCoverLetter,
+  getCachedGeneratedCoverLetter,
+} from "@/lib/coverLetterNavigationCache";
 import CoverLetterView from "../_components/CoverLetterView";
 import FailureCard from "../_components/FailureCard";
 import DeleteConfirmModal from "../_components/DeleteConfirmModal";
@@ -41,7 +45,11 @@ export default function CoverLetterDetailPage() {
       ? decodeURIComponent(params.letterId)
       : "";
 
-  const { letter, isLoading, error, refetch } = useCoverLetter(letterId);
+  const cachedGeneratedLetter = getCachedGeneratedCoverLetter(letterId);
+  const { letter, isLoading, error, refetch } = useCoverLetter(
+    letterId,
+    cachedGeneratedLetter,
+  );
   const router = useRouter();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -66,6 +74,12 @@ export default function CoverLetterDetailPage() {
     }
   }, [error, letterId]);
 
+  useEffect(() => {
+    if (letter?.letter_id === letterId) {
+      clearCachedGeneratedCoverLetter(letterId);
+    }
+  }, [letter?.letter_id, letterId]);
+
   return (
     <div className="min-h-full px-4 pb-10 pt-5 text-slate-900 lg:px-5 2xl:pt-6">
       <div className="mx-auto max-w-[1180px] 2xl:max-w-[1320px]">
@@ -89,8 +103,6 @@ export default function CoverLetterDetailPage() {
           <DetailSkeleton />
         ) : letter === null && !error ? (
           <NotFoundCard />
-        ) : error ? (
-          <ErrorCard onRetry={() => void refetch()} />
         ) : letter ? (
           letter.status === "failed" ? (
             <>
@@ -123,6 +135,8 @@ export default function CoverLetterDetailPage() {
               }
             />
           )
+        ) : error ? (
+          <ErrorCard onRetry={() => void refetch()} />
         ) : null}
       </div>
 

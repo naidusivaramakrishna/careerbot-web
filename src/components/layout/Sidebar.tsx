@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
 import { getEnhancementHistory } from "@/api/enhancerApi";
 import { useDashboard } from "@/contexts/DashboardContext";
@@ -167,7 +168,7 @@ const COLLEGE_NAV_GROUP: (typeof NAV_GROUPS)[number] = {
   ],
 };
 
-const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/prep"];
+const SIDEBAR_EXPANDED_STORAGE_KEY = "careerbot:sidebar-expanded";
 
 /* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
    cursor can cross the gap between icon and panel without it disappearing. */
@@ -257,15 +258,30 @@ export default function Sidebar() {
   const router   = useRouter();
   const pathname = usePathname();
 
-  const [isExpanded, setIsExpanded] = useState(
-    EXPANDED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
-  );
+  // Sidebar visibility is a user preference. It must not depend on the route:
+  // navigating from one feature to another should preserve the choice until the
+  // user uses this control again.
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [sidebarPreferenceLoaded, setSidebarPreferenceLoaded] = useState(false);
 
   useEffect(() => {
-    setIsExpanded(
-      EXPANDED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
-    );
-  }, [pathname]);
+    try {
+      setIsExpanded(window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY) !== "false");
+    } catch {
+      // Storage can be unavailable; keep the default expanded navigation.
+    } finally {
+      setSidebarPreferenceLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarPreferenceLoaded) return;
+    try {
+      window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, String(isExpanded));
+    } catch {
+      // Storage failure must not prevent users from toggling the sidebar.
+    }
+  }, [isExpanded, sidebarPreferenceLoaded]);
 
   useEffect(() => {
     document.documentElement.style.setProperty(
@@ -370,11 +386,7 @@ export default function Sidebar() {
       aria-controls="dashboard-sidebar"
         style={{ position: "fixed", top: 58, left: 50, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
       >
-        {/* Expand icon: filled strip on the right */}
-        <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
-          <rect x="0.7" y="0.7" width="13.6" height="11.6" rx="2" stroke="#2557a7" strokeWidth="1.3" />
-          <rect x="10.2" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
-        </svg>
+        <PanelLeftOpen size={18} strokeWidth={1.9} aria-hidden="true" className="text-[#2557a7]" />
       </button>
       <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
         id="dashboard-sidebar"
@@ -530,11 +542,7 @@ export default function Sidebar() {
       aria-controls="dashboard-sidebar"
       style={{ position: "fixed", top: 58, left: 186, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
     >
-      {/* Collapse icon: filled strip on the left */}
-      <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
-        <rect x="0.7" y="0.7" width="13.6" height="11.6" rx="2" stroke="#2557a7" strokeWidth="1.3" />
-        <rect x="0.7" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
-      </svg>
+      <PanelLeftClose size={18} strokeWidth={1.9} aria-hidden="true" className="text-[#2557a7]" />
     </button>
     <div className="fixed top-14 left-0 h-[calc(100vh-56px)] bg-white flex flex-col z-30 overflow-hidden"
       id="dashboard-sidebar"

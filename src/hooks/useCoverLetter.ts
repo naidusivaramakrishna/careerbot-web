@@ -26,30 +26,49 @@ export interface UseCoverLetterResult {
   refetch: () => Promise<void>;
 }
 
-export function useCoverLetter(letterId: string | null): UseCoverLetterResult {
-  const [letter, setLetter] = useState<CoverLetterResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(letterId !== null);
+export function useCoverLetter(
+  letterId: string | null,
+  initialLetter: CoverLetterResponse | null = null,
+): UseCoverLetterResult {
+  const [letter, setLetter] = useState<CoverLetterResponse | null>(initialLetter);
+  const [isLoading, setIsLoading] = useState(letterId !== null && initialLetter === null);
   const [error, setError] = useState<CoverLetterApiError | null>(null);
 
   const requestSeqRef = useRef(0);
+  const letterRef = useRef<CoverLetterResponse | null>(initialLetter);
 
   const load = useCallback(async () => {
     if (!letterId) {
       setLetter(null);
+      letterRef.current = null;
       setIsLoading(false);
       setError(null);
       return;
     }
     const mySeq = ++requestSeqRef.current;
-    setIsLoading(true);
+    // A freshly generated response is already available only for its own
+    // route. Never keep letter A visible while loading a different letter B.
+    const hasCurrentLetter = letterRef.current?.letter_id === letterId;
+    if (!hasCurrentLetter) {
+      letterRef.current = null;
+      setLetter(null);
+    }
+    setIsLoading(!hasCurrentLetter);
     setError(null);
     try {
       const result = await getCoverLetter(letterId);
       if (mySeq !== requestSeqRef.current) return;
       // result is null on 404 — caller treats as "not found".
       setLetter(result);
+      letterRef.current = result;
     } catch (err) {
       if (mySeq !== requestSeqRef.current) return;
+      // The generation response is valid content for this route. A failed
+      // background verification must not replace it with an error screen.
+      if (letterRef.current?.letter_id === letterId) {
+        setError(null);
+        return;
+      }
       setError(
         err instanceof CoverLetterApiError
           ? err

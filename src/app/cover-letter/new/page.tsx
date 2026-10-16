@@ -8,11 +8,9 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   Clipboard,
-  Clock3,
   FileText,
   GraduationCap,
   History,
-  Link2,
   Loader2,
   PenLine,
   RotateCcw,
@@ -25,9 +23,9 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
-import { listCoverLetterResumeOptions, setDefaultCoverLetterResume } from "@/api/coverLetterApi";
+import { getCoverLetterGenerationProgress, listCoverLetterResumeOptions, setDefaultCoverLetterResume } from "@/api/coverLetterApi";
 import { getExtensionSession, type ExtensionSession } from "@/api/extensionApi";
-import { parseJDByJob, parseJDFile, parseJDText, parseJDUrl } from "@/api/parserApi";
+import { getParsedJDDetails, getResume as getParsedResume, parseJDByJob, parseJDFile, parseJDText } from "@/api/parserApi";
 import { getResumeById } from "@/api/resumeApi";
 import { extractResume } from "@/api/resumeParsingApi";
 import SignUpModal from "@/components/SignUpModal";
@@ -43,8 +41,9 @@ import { mintIdempotencyKey } from "@/lib/idempotencyKey";
 import { getCorrelationId } from "@/lib/correlationId";
 import { logger } from "@/lib/logger";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
+import { cacheGeneratedCoverLetter } from "@/lib/coverLetterNavigationCache";
 import { getCoverLetterParsedResumeId, getCoverLetterResumeSource } from "@/lib/coverLetterResume";
-import type { CoverLetterFormSubmit, CoverLetterResumeOption, CoverLetterTemplate, CoverLetterTemplateId } from "@/types/coverLetter";
+import type { CoverLetterFormSubmit, CoverLetterGenerationProgress, CoverLetterResumeOption, CoverLetterTemplate, CoverLetterTemplateId } from "@/types/coverLetter";
 
 const MAX_RESUME_UPLOAD_MB = 10;
 const MIN_JD_CHARS = 50;
@@ -52,12 +51,15 @@ const MAX_NOTE_CHARS = 300;
 // Mirrors ApplicationContext caps in the CL-1.2 API schema.
 const MAX_ROLE_TITLE_CHARS = 300;  // ApplicationContext.role_title is max_length=300 API-side
 const MAX_COMPANY_LOCATION_CHARS = 200;
-const MAX_WHY_COMPANY_CHARS = 1_000;
-const MAX_HIGHLIGHT_ACHIEVEMENT_CHARS = 1_000;
 // Mirrors the backend GenerateOptions bounds exactly (ge=200, le=500).
 const WORD_COUNT_FLOOR = 200;
 const WORD_COUNT_CEIL = 500;
 const COVER_LETTER_TEMPLATE_PREF_KEY = "careerbot:cover-letter-template";
+const COVER_LETTER_REFRESH_DRAFT_KEY = "careerbot:cover-letter-refresh-draft";
+const COVER_LETTER_REFRESH_MARKER_KEY = "careerbot:cover-letter-refresh-pending";
+const JOB_ANALYSIS_TOAST_ID = "cover-letter-job-analysis";
+// Consecutive empty progress reads (e.g. an API without the progress route) before polling stops.
+const MAX_PROGRESS_MISSES = 15;
 // The subset of an ExtensionSession this form prefills from. Narrower than the
 // API response on purpose: it is what gets cached in sessionStorage, and
 // user_id / profile have no business being persisted there.
@@ -65,6 +67,18 @@ type ExtensionPrefill = Pick<
   ExtensionSession,
   "job_description" | "job_title" | "company" | "job_location" | "resume_id"
 >;
+type CoverLetterRefreshDraft = {
+  source?: CreationSource;
+  trackerJobId?: string;
+  jd: string;
+  companyName: string;
+  roleTitle: string;
+  location: string;
+  hiringManagerName: string;
+  candidateSignatureName: string;
+  autoFilledFields: AutoFilledJobField[];
+  signatureResumeKey: string | null;
+};
 const ALLOWED_RESUME_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -78,8 +92,10 @@ const ALLOWED_JD_FILE_TYPES = new Set([
 
 type ParsedResumeBlob = Record<string, unknown>;
 type BuilderStep = "resume" | "generate";
-type CreationSource = "jd" | "tracker" | "url" | "upload";
+type CreationSource = "jd" | "tracker" | "upload";
 type ToneChoice = "professional" | "warm" | "concise";
+type JobAnalysisStatus = "idle" | "analyzing" | "ready" | "incomplete" | "failed";
+type AutoFilledJobField = "company" | "title" | "location";
 type TemplateStyleId =
   | "classic"
   | "modern"
@@ -87,6 +103,89 @@ type TemplateStyleId =
   | "executive"
   | "minimal"
   | "signature";
+
+function getJobSourceFingerprint(
+  source: CreationSource,
+  values: { jd: string; jdFile: File | null; trackerJobId: string },
+): string {
+  if (source === "jd") return `jd:${values.jd.trim()}`;
+  if (source === "upload") {
+    const file = values.jdFile;
+    return file ? `upload:${file.name}:${file.size}:${file.lastModified}` : "upload:";
+  }
+  return `tracker:${values.trackerJobId.trim()}`;
+}
+
+function inferJdHeaderValue(text: string, header: string, maxLength: number): string | undefined {
+  const value = new RegExp(`(?:^|\\n)\\s*${header}\\s*:\\s*([^\\r\\n]+)`, "i").exec(text)?.[1]?.trim();
+  return value ? value.slice(0, maxLength) : undefined;
+}
+
+function isWorkArrangement(value: string | undefined): boolean {
+  return /^(?:remote|hybrid|on[-\s]?site)$/i.test(value?.trim() ?? "");
+}
+
+function shouldRestoreRefreshDraft(): boolean {
+  try {
+    const wasOnCoverLetterForm = window.sessionStorage.getItem(COVER_LETTER_REFRESH_MARKER_KEY) === "true";
+    window.sessionStorage.removeItem(COVER_LETTER_REFRESH_MARKER_KEY);
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    return wasOnCoverLetterForm && navigation?.type === "reload";
+  } catch {
+    return false;
+  }
+}
+
+function readRefreshDraft(): CoverLetterRefreshDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(COVER_LETTER_REFRESH_DRAFT_KEY);
+    const value = raw ? JSON.parse(raw) as Record<string, unknown> : null;
+    if (!value || typeof value !== "object") return null;
+    const text = (field: string, maxLength: number) =>
+      typeof value[field] === "string" ? value[field].slice(0, maxLength) : "";
+    const autoFilledFields = Array.isArray(value.autoFilledFields)
+      ? value.autoFilledFields.filter((field): field is AutoFilledJobField => field === "company" || field === "title" || field === "location")
+      : [];
+    const source = value.source === "jd" || value.source === "tracker" || value.source === "upload" ? value.source : undefined;
+    return {
+      source,
+      trackerJobId: text("trackerJobId", MAX_COMPANY_LOCATION_CHARS),
+      jd: text("jd", 50_000),
+      companyName: text("companyName", MAX_COMPANY_LOCATION_CHARS),
+      roleTitle: text("roleTitle", MAX_ROLE_TITLE_CHARS),
+      location: text("location", MAX_COMPANY_LOCATION_CHARS),
+      hiringManagerName: text("hiringManagerName", MAX_COMPANY_LOCATION_CHARS),
+      candidateSignatureName: text("candidateSignatureName", MAX_COMPANY_LOCATION_CHARS),
+      autoFilledFields,
+      signatureResumeKey: typeof value.signatureResumeKey === "string" ? value.signatureResumeKey : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Extracts an explicitly stated role title when the stored parser record has no title. */
+function inferRoleTitleFromJd(text: string): string | undefined {
+  const candidates = [
+    /what does an?\s+(.+?)\s+do here\?/i,
+    /(?:^|\n)\s*role\s*:\s*([^\n]+)/im,
+    /(?:^|\n)\s*job title\s*:\s*([^\n]+)/im,
+  ];
+
+  for (const pattern of candidates) {
+    const value = pattern.exec(text)?.[1]?.trim();
+    if (value) return value.slice(0, MAX_ROLE_TITLE_CHARS);
+  }
+  return undefined;
+}
+
+function inferCompanyNameFromJd(text: string): string | undefined {
+  return inferJdHeaderValue(text, "company(?:\\s+name)?", MAX_COMPANY_LOCATION_CHARS);
+}
+
+function inferLocationFromJd(text: string): string | undefined {
+  return inferJdHeaderValue(text, "(?:job\\s+)?location", MAX_COMPANY_LOCATION_CHARS);
+}
 
 function rememberGeneratedLetterTemplate(letterId: string, templateId: TemplateStyleId) {
   if (typeof window === "undefined") return;
@@ -121,12 +220,6 @@ const sourceOptions: Array<{
     label: "Import from tracker",
     description: "Use a saved role.",
     icon: BriefcaseBusiness,
-  },
-  {
-    id: "url",
-    label: "Use job URL",
-    description: "Extract from a link.",
-    icon: Link2,
   },
   {
     id: "upload",
@@ -182,9 +275,6 @@ const jobTitleSuggestions = [
 ];
 
 const locationSuggestions = [
-  "Remote",
-  "Hybrid",
-  "On-site",
   "Bengaluru, India",
   "Hyderabad, India",
   "Chennai, India",
@@ -308,6 +398,13 @@ export default function CoverLetterNewPage() {
   const defaultTemplate = useDefaultCoverLetterTemplate();
   const templateCatalog = useCoverLetterTemplates();
   const { userId } = useCurrentUserId();
+  const userPickedResumeRef = useRef(false);
+  const signatureResumeLoadRef = useRef<string | null>(null);
+  const signatureResumeKeyRef = useRef<string | null>(null);
+  const restoredSignatureRef = useRef<{
+    key: string | null;
+    name: string;
+  } | null>(null);
   const [uploadedResume, setUploadedResume] = useState<ParsedResumeBlob | null>(null);
   const [selectedResume, setSelectedResume] = useState<ParsedResumeBlob | null>(null);
   const [resumeOptions, setResumeOptions] = useState<CoverLetterResumeOption[]>([]);
@@ -325,17 +422,39 @@ export default function CoverLetterNewPage() {
   );
   const [jd, setJd] = useState(searchParams.get("jd") ?? "");
   const [jdFile, setJdFile] = useState<File | null>(null);
-  const [jobUrl, setJobUrl] = useState("");
   const [trackerJobId, setTrackerJobId] = useState("");
+  const [parsedJdId, setParsedJdId] = useState<string | null>(null);
+  const [parsedJdFingerprint, setParsedJdFingerprint] = useState<string | null>(null);
+  const [jobAnalysisStatus, setJobAnalysisStatus] = useState<JobAnalysisStatus>("idle");
+  // False while the JD came from ?jd=, the extension or a refresh draft; typing sets it.
+  const jdTypedRef = useRef(false);
+  const jobAnalysisRequestRef = useRef(0);
+  const autoFilledJobFieldsRef = useRef(new Set<AutoFilledJobField>());
+  const extensionJobFieldsRef = useRef(new Set<AutoFilledJobField>());
   const [companyName, setCompanyName] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [location, setLocation] = useState("");
+  const clearJobAnalysis = useCallback(() => {
+    jobAnalysisRequestRef.current += 1;
+    setParsedJdId(null);
+    setParsedJdFingerprint(null);
+    setJobAnalysisStatus("idle");
+    toast.dismiss(JOB_ANALYSIS_TOAST_ID);
+    // Values auto-filled from the previous job must not be sent with the next
+    // one. Typed and extension values stay.
+    const setters = { company: setCompanyName, title: setRoleTitle, location: setLocation };
+    for (const field of autoFilledJobFieldsRef.current) {
+      if (!extensionJobFieldsRef.current.has(field)) setters[field]("");
+    }
+    autoFilledJobFieldsRef.current = new Set([...autoFilledJobFieldsRef.current].filter((field) => extensionJobFieldsRef.current.has(field)));
+  }, []);
   const [hiringManagerName, setHiringManagerName] = useState("");
   const [candidateSignatureName, setCandidateSignatureName] = useState("");
+  const [signatureResumeKey, setSignatureResumeKey] = useState<string | null>(null);
+  // Bumped when the user picks a resume, so a failed signature lookup can retry for the same resume.
+  const [resumePickCount, setResumePickCount] = useState(0);
+  const [refreshDraftReady, setRefreshDraftReady] = useState(false);
   const [includeContactDetails, setIncludeContactDetails] = useState(false);
-  const [experienceLevel, setExperienceLevel] = useState("");
-  const [whyCompany, setWhyCompany] = useState("");
-  const [highlightAchievement, setHighlightAchievement] = useState("");
   const [tone, setTone] = useState<ToneChoice>("professional");
   // "auto" (default/recommended) omits min_words/max_words entirely so the
   // AI service applies its own candidate-level-aware word-count range
@@ -357,8 +476,11 @@ export default function CoverLetterNewPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [generatedLetterId, setGeneratedLetterId] = useState<string | null>(null);
+  const [generationAttemptKey, setGenerationAttemptKey] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<CoverLetterGenerationProgress | null>(null);
   const uploader = useCoverLetterResumeUpload(
     async (resume) => {
+      userPickedResumeRef.current = true;
       setUploadedResume(resume);
       await Promise.all([gate.refetch(), latest.refetch(), defaultResume.refetch()]);
     },
@@ -413,16 +535,29 @@ export default function CoverLetterNewPage() {
       // (extension/background/service-worker.js), which is over
       // MAX_COMPANY_LOCATION_CHARS, and these values are read back into
       // application_context on the generate request.
-      if (prefill.job_description) setJd(prefill.job_description);
-      if (prefill.job_title) setRoleTitle(prefill.job_title.slice(0, MAX_ROLE_TITLE_CHARS));
-      if (prefill.company) setCompanyName(prefill.company);
-      if (prefill.job_location) setLocation(prefill.job_location.slice(0, MAX_COMPANY_LOCATION_CHARS));
+      if (prefill.job_description) {
+        // A job analyzed while the session loaded must not leave its values behind.
+        clearJobAnalysis();
+        setJd(prefill.job_description);
+      }
+      if (prefill.job_title) {
+        autoFilledJobFieldsRef.current.add("title");
+        extensionJobFieldsRef.current.add("title");
+        setRoleTitle(prefill.job_title.slice(0, MAX_ROLE_TITLE_CHARS));
+      }
+      if (prefill.company) {
+        autoFilledJobFieldsRef.current.add("company");
+        extensionJobFieldsRef.current.add("company");
+        setCompanyName(prefill.company.slice(0, MAX_COMPANY_LOCATION_CHARS));
+      }
+      if (prefill.job_location) {
+        autoFilledJobFieldsRef.current.add("location");
+        extensionJobFieldsRef.current.add("location");
+        setLocation(prefill.job_location.slice(0, MAX_COMPANY_LOCATION_CHARS));
+      }
       if (prefill.resume_id) setSessionExtResumeId(prefill.resume_id);
-      // Signature name is deliberately left for the user to type in —
-      // neither the account profile name nor a resume-parsed name can be
-      // trusted to match the resume actually being used (e.g. testing
-      // with someone else's resume), and a wrong auto-filled name is
-      // worse than an empty field.
+      // Extension data has no signature name. The selected resume's parsed
+      // personal name is applied separately, and the user can always edit it.
     };
 
     let cached: ExtensionPrefill | null = null;
@@ -467,7 +602,76 @@ export default function CoverLetterNewPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [clearJobAnalysis, sessionId]);
+
+  useEffect(() => {
+    if (!shouldRestoreRefreshDraft()) {
+      try {
+        window.sessionStorage.removeItem(COVER_LETTER_REFRESH_DRAFT_KEY);
+      } catch {
+        // Storage can be unavailable in private or locked-down browser contexts.
+      }
+      setRefreshDraftReady(true);
+      return;
+    }
+
+    const draft = readRefreshDraft();
+    if (draft) {
+      autoFilledJobFieldsRef.current = new Set(draft.autoFilledFields);
+      if (draft.source) setSource(draft.source);
+      setTrackerJobId(draft.trackerJobId ?? "");
+      setJd(draft.jd);
+      setCompanyName(draft.companyName);
+      setRoleTitle(draft.roleTitle);
+      setLocation(draft.location);
+      setHiringManagerName(draft.hiringManagerName);
+      setCandidateSignatureName(draft.candidateSignatureName);
+      restoredSignatureRef.current = {
+        key: draft.signatureResumeKey,
+        name: draft.candidateSignatureName,
+      };
+      setSignatureResumeKey(draft.signatureResumeKey);
+    }
+    setRefreshDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    const markRefresh = () => {
+      try {
+        window.sessionStorage.setItem(COVER_LETTER_REFRESH_MARKER_KEY, "true");
+      } catch {
+        // Storage can be unavailable in private or locked-down browser contexts.
+      }
+    };
+    window.addEventListener("pagehide", markRefresh);
+    return () => window.removeEventListener("pagehide", markRefresh);
+  }, []);
+
+  useEffect(() => {
+    if (!refreshDraftReady) return;
+    try {
+      // Tracker and upload sources leave the JD empty; keep their typed details too.
+      if (![jd, trackerJobId, companyName, roleTitle, location, hiringManagerName].some((value) => value.trim())) {
+        window.sessionStorage.removeItem(COVER_LETTER_REFRESH_DRAFT_KEY);
+        return;
+      }
+      const draft: CoverLetterRefreshDraft = {
+        source,
+        trackerJobId,
+        jd,
+        companyName,
+        roleTitle,
+        location,
+        hiringManagerName,
+        candidateSignatureName,
+        autoFilledFields: [...autoFilledJobFieldsRef.current],
+        signatureResumeKey,
+      };
+      window.sessionStorage.setItem(COVER_LETTER_REFRESH_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Storage can be unavailable in private or locked-down browser contexts.
+    }
+  }, [candidateSignatureName, companyName, hiringManagerName, jd, location, refreshDraftReady, roleTitle, signatureResumeKey, source, trackerJobId]);
 
   const defaultResumeBlob = toDefaultResumeBlob(defaultResume.defaultResume);
   const requestedResumeId = searchParams.get("resume_id") ?? sessionExtResumeId;
@@ -478,7 +682,9 @@ export default function CoverLetterNewPage() {
       : null;
 
   useEffect(() => {
-    if (!requestedResumeId || !requestedResumeSource || uploadedResume) {
+    // Once the user picks a resume themselves, the URL-requested one (from the
+    // builder hand-off) must not be re-applied over their choice.
+    if (!requestedResumeId || !requestedResumeSource || uploadedResume || userPickedResumeRef.current) {
       return;
     }
 
@@ -491,7 +697,7 @@ export default function CoverLetterNewPage() {
     let cancelled = false;
     listCoverLetterResumeOptions()
       .then(async (result) => {
-        if (cancelled || uploadedResume) return;
+        if (cancelled || uploadedResume || userPickedResumeRef.current) return;
         const requestedResume = result.resumes.find(
           (option) => option.resume_id === requestedResumeId && option.source === requestedResumeSource,
         );
@@ -503,6 +709,7 @@ export default function CoverLetterNewPage() {
           if (requestedResume.source === "builder") {
             try {
               const builderResume = await getResumeById(requestedResume.resume_id);
+              if (cancelled || userPickedResumeRef.current) return;
               const builderDisplayName = getBuilderResumeDisplayName(builderResume) ?? requestedResume.display_name;
               setSelectedResume({
                 ...selectedBlob,
@@ -560,6 +767,118 @@ export default function CoverLetterNewPage() {
   const resume = uploadedResume ?? selectedResume ?? fallbackResume;
   const parsedResumeId = getCoverLetterParsedResumeId(resume);
   const resumeSource = getCoverLetterResumeSource(resume);
+  // `toDefaultResumeBlob` intentionally returns a new object for a default
+  // resume. Effects that load its details must therefore depend on this
+  // stable fact, not on the object identity itself.
+  const hasResumeSignature = Boolean(getResumeSignatureName(resume));
+  const activeResumeRef = useRef<ParsedResumeBlob | null>(resume);
+  activeResumeRef.current = resume;
+
+  useEffect(() => {
+    if (
+      !parsedResumeId
+      || hasResumeSignature
+      || signatureResumeLoadRef.current === `${resumeSource}:${parsedResumeId}`
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadKey = `${resumeSource}:${parsedResumeId}`;
+    signatureResumeLoadRef.current = loadKey;
+    const loadResume = resumeSource === "builder"
+      ? getResumeById(parsedResumeId)
+      : getParsedResume(parsedResumeId);
+    loadResume
+      .then((loadedResume) => {
+        if (cancelled) return;
+        const response = getNestedRecord(loadedResume);
+        const responseData = getNestedRecord(response.data);
+        const details = Object.keys(responseData).length > 0 ? responseData : response;
+
+        setSelectedResume((current) => {
+          // Default resumes live in fallbackResume, so current can still be
+          // null here. Merge only while this is still the active resume.
+          const activeResume = current ?? activeResumeRef.current;
+          if (getCoverLetterParsedResumeId(activeResume) !== parsedResumeId) return current;
+          if (resumeSource === "builder") {
+            return {
+              ...activeResume,
+              builder_resume: details,
+              personalInfo: details.personalInfo,
+              personal_info: details.personal_info,
+              contact: details.contact,
+            };
+          }
+          return {
+            ...activeResume,
+            parsed_data: details.parsed_data ?? details,
+            personalInfo: details.personalInfo,
+            personal_info: details.personal_info,
+            contact: details.contact,
+          };
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          signatureResumeLoadRef.current = null;
+          if (isUnauthorizedError(err)) setShowSignIn(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      // A cancelled lookup must be allowed to restart. This is important when
+      // its resume is replaced while the request is in flight.
+      if (signatureResumeLoadRef.current === loadKey) {
+        signatureResumeLoadRef.current = null;
+      }
+    };
+  }, [hasResumeSignature, parsedResumeId, resumePickCount, resumeSource]);
+
+  useEffect(() => {
+    const signatureResumeKey = parsedResumeId && resumeSource
+      ? `${resumeSource}:${parsedResumeId}`
+      : null;
+    if (!signatureResumeKey) return;
+
+    const signatureName = getResumeSignatureName(resume);
+    if (signatureResumeKeyRef.current !== signatureResumeKey) {
+      // A refresh draft belongs to one exact resume. While the default-resume
+      // request is still resolving, do not let a transient latest-resume
+      // fallback overwrite the saved signature.
+      const restored = restoredSignatureRef.current;
+      signatureResumeKeyRef.current = signatureResumeKey;
+      setSignatureResumeKey(signatureResumeKey);
+      if (restored?.key === signatureResumeKey) {
+        restoredSignatureRef.current = null;
+        setCandidateSignatureName(restored.name);
+        return;
+      }
+      // Hold the restored signature only for the automatic default; a resume the
+      // user picked gets its own signature at once.
+      if (restored && defaultResume.isLoading && !userPickedResumeRef.current) return;
+      if (restored) restoredSignatureRef.current = null;
+      // A newly selected resume must never retain the preceding resume's
+      // signature. Most picker rows contain only metadata, so clear first and
+      // populate after the selected resume's parsed details arrive.
+      setCandidateSignatureName(signatureName ?? "");
+      return;
+    }
+    const restored = restoredSignatureRef.current;
+    if (restored && (!defaultResume.isLoading || userPickedResumeRef.current) && restored.key !== signatureResumeKey) {
+      // The saved resume did not resolve and the fallback is now final (or the
+      // user picked this resume). Do not retain this draft-specific
+      // restoration marker for a later resume selection.
+      restoredSignatureRef.current = null;
+      setCandidateSignatureName(signatureName ?? "");
+      return;
+    }
+    if (signatureName) {
+      setCandidateSignatureName((current) => current.trim() || signatureName);
+    }
+  }, [defaultResume.isLoading, parsedResumeId, resume, resumeSource]);
+
   const selectedTemplate = templateStyles.find((template) => template.id === selectedTemplateId) ?? templateStyles[1];
   const jdReady = jd.trim().length >= MIN_JD_CHARS;
   const jobSourceReady =
@@ -567,12 +886,139 @@ export default function CoverLetterNewPage() {
       ? jdReady
       : source === "upload"
         ? Boolean(jdFile && !validateJdUpload(jdFile))
-        : source === "url"
-          ? isValidHttpUrl(jobUrl)
-          : trackerJobId.trim().length > 0;
+        : trackerJobId.trim().length > 0;
+  const jobSourceFingerprint = getJobSourceFingerprint(source, { jd, jdFile, trackerJobId });
+  const jobSourceFingerprintRef = useRef(jobSourceFingerprint);
+  jobSourceFingerprintRef.current = jobSourceFingerprint;
+
+  const analyzeJobDetails = useCallback(async () => {
+    if (!jobSourceReady) return null;
+
+    const fingerprint = getJobSourceFingerprint(source, { jd, jdFile, trackerJobId });
+    // Blur is an explicit request to analyze typed text, but it must not
+    // repeat a successful parse when the source has not changed.
+    if (parsedJdFingerprint === fingerprint && parsedJdId) return parsedJdId;
+
+    const requestId = ++jobAnalysisRequestRef.current;
+    setJobAnalysisStatus("analyzing");
+
+    try {
+      const parsedJd = await resolveParsedJdId({ source, jd, jdFile, trackerJobId });
+      if (!parsedJd.jd_id) {
+        throw new Error("Could not analyze this job description.");
+      }
+      if (requestId !== jobAnalysisRequestRef.current || jobSourceFingerprintRef.current !== fingerprint) {
+        return null;
+      }
+
+      // Parsing creates the ID required for generation. Persist it before the
+      // optional detail lookup so a transient lookup failure cannot force the
+      // user to re-parse an otherwise valid job description.
+      setParsedJdId(parsedJd.jd_id);
+      setParsedJdFingerprint(fingerprint);
+
+      let details: Awaited<ReturnType<typeof getParsedJDDetails>>;
+      try {
+        details = await getParsedJDDetails(parsedJd.jd_id);
+      } catch (detailError) {
+        if (requestId === jobAnalysisRequestRef.current && jobSourceFingerprintRef.current === fingerprint) {
+          setJobAnalysisStatus("incomplete");
+          // The jd_id stays valid, but an expired session must still ask the user to sign in.
+          if (isUnauthorizedError(detailError)) {
+            toast.error("Your session has expired. Please sign in to analyze the job description.", { id: JOB_ANALYSIS_TOAST_ID });
+            setShowSignIn(true);
+            return parsedJd.jd_id;
+          }
+          toast.info(
+            "Job description analyzed. Enter company name, job title, and location if they are not already filled.",
+            { id: JOB_ANALYSIS_TOAST_ID },
+          );
+          logger.debug("[cover-letter/job-analysis] detail lookup failed after parse", { detailError });
+        }
+        return parsedJd.jd_id;
+      }
+      if (requestId !== jobAnalysisRequestRef.current || jobSourceFingerprintRef.current !== fingerprint) {
+        return null;
+      }
+
+      const inferredRoleTitle = source === "jd" ? inferRoleTitleFromJd(jd) : undefined;
+      const inferredCompanyName = source === "jd" ? inferCompanyNameFromJd(jd) : undefined;
+      const inferredLocation = source === "jd" ? inferLocationFromJd(jd) : undefined;
+      const roleTitle = details.job_title ?? inferredRoleTitle;
+      const companyName = details.company ?? inferredCompanyName;
+      const location = isWorkArrangement(details.location) ? inferredLocation : details.location ?? inferredLocation;
+      const missingFields = [
+        !companyName && "company name",
+        !roleTitle && "job title",
+        !location && "location",
+      ].filter(Boolean) as string[];
+      const applyAutoFilledJobField = (
+        field: AutoFilledJobField,
+        parsedValue: string | undefined,
+        setValue: (updater: (current: string) => string) => void,
+      ) => {
+        // Parsed values get the same caps as the typed inputs (API max_length).
+        const value = parsedValue?.slice(0, field === "title" ? MAX_ROLE_TITLE_CHARS : MAX_COMPANY_LOCATION_CHARS);
+        setValue((current) => {
+          const wasAutoFilled = autoFilledJobFieldsRef.current.has(field);
+          // Data scraped by the browser extension is already tied to the job
+          // the user chose. JD analysis may fill blanks but must not clear or
+          // replace that hand-off data.
+          if (extensionJobFieldsRef.current.has(field)) return current;
+          if (!value) {
+            // A value auto-filled from an earlier job must not outlive it.
+            if (!wasAutoFilled) return current;
+            autoFilledJobFieldsRef.current.delete(field);
+            return "";
+          }
+          if (!current.trim() || wasAutoFilled) {
+            autoFilledJobFieldsRef.current.add(field);
+            return value;
+          }
+          return current;
+        });
+      };
+      applyAutoFilledJobField("company", companyName, setCompanyName);
+      applyAutoFilledJobField("title", roleTitle, setRoleTitle);
+      applyAutoFilledJobField("location", location, setLocation);
+      setJobAnalysisStatus(companyName || roleTitle || location ? "ready" : "incomplete");
+      if (missingFields.length > 0) {
+        toast.info(`Job description analyzed. Enter ${missingFields.join(" and ")}.`, { id: JOB_ANALYSIS_TOAST_ID });
+      } else {
+        toast.success("Job details filled from the description.", { id: JOB_ANALYSIS_TOAST_ID });
+      }
+      return parsedJd.jd_id;
+    } catch (err) {
+      if (requestId === jobAnalysisRequestRef.current && jobSourceFingerprintRef.current === fingerprint) {
+        setParsedJdId(null);
+        setParsedJdFingerprint(null);
+        setJobAnalysisStatus("failed");
+        if (isUnauthorizedError(err)) {
+          toast.error("Your session has expired. Please sign in to analyze the job description.", { id: JOB_ANALYSIS_TOAST_ID });
+          setShowSignIn(true);
+        } else {
+          toast.error(err instanceof Error ? err.message : "Could not analyze this job description.", {
+            id: JOB_ANALYSIS_TOAST_ID,
+            action: { label: "Retry", onClick: () => void analyzeJobDetails() },
+          });
+        }
+      }
+      return null;
+    }
+  }, [jd, jdFile, jobSourceReady, parsedJdFingerprint, parsedJdId, source, trackerJobId]);
+
+  // Files are complete inputs as soon as they are selected, unlike a typed JD.
+  // Analyze an upload once it is valid, and a JD that arrived without typing
+  // (?jd=, extension, refresh draft); typed descriptions wait for blur.
+  useEffect(() => {
+    if (!jobSourceReady || !(source === "upload" || (source === "jd" && !jdTypedRef.current))) return;
+    void analyzeJobDetails();
+  }, [analyzeJobDetails, jobSourceReady, source]);
+
   const generation = useGenerateCoverLetter({
     onSuccess: (response) => {
       setApiError(null);
+      cacheGeneratedCoverLetter(response);
       rememberGeneratedLetterTemplate(response.letter_id, pendingTemplateIdRef.current);
       setGeneratedLetterId(response.letter_id);
     },
@@ -600,6 +1046,47 @@ export default function CoverLetterNewPage() {
     },
   });
 
+  useEffect(() => {
+    if (!generationAttemptKey || activeStep !== "generate") return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+    let misses = 0;
+    const poll = async () => {
+      let terminal = false;
+      try {
+        const progress = await getCoverLetterGenerationProgress(generationAttemptKey);
+        if (cancelled) return;
+        if (progress) {
+          misses = 0;
+          terminal = progress.status === "completed" || progress.status === "failed";
+          // Never move an in-progress ring backwards; a terminal status always wins.
+          setGenerationProgress((current) => (
+            current && !terminal && current.progress > progress.progress ? current : progress
+          ));
+        } else {
+          misses += 1;
+        }
+      } catch (err) {
+        if (cancelled) return;
+        misses += 1;
+        // Progress is supplementary. The generate request remains the source
+        // of truth for success and failure, so an unavailable status endpoint
+        // must not interrupt the letter request or create a fake percentage.
+        logger.debug("[cover-letter/generation-progress] polling failed", { err });
+      }
+      // One request at a time. Stop on a terminal status, or when the API keeps
+      // returning nothing (no progress route yet): the ring stays indeterminate.
+      if (!terminal && misses < MAX_PROGRESS_MISSES) timer = window.setTimeout(() => void poll(), 1_000);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeStep, generationAttemptKey]);
+
   async function handleSubmit() {
     if (!parsedResumeId) {
       setActiveStep("resume");
@@ -609,6 +1096,15 @@ export default function CoverLetterNewPage() {
     if (!jobSourceReady) {
       setActiveStep("resume");
       setApiError(getJobSourceMissingMessage(source));
+      return;
+    }
+    const currentJdId = parsedJdFingerprint === jobSourceFingerprint ? parsedJdId : null;
+    // A parsed jd_id is enough: a still-pending optional details lookup must
+    // not block generation (changing the job clears its auto-filled values).
+    if (!currentJdId) {
+      if (jobAnalysisStatus !== "analyzing") void analyzeJobDetails();
+      setActiveStep("resume");
+      setApiError("Analyzing the job description. Review the filled details, then generate the letter.");
       return;
     }
     if (
@@ -631,24 +1127,16 @@ export default function CoverLetterNewPage() {
     pendingTemplateIdRef.current = selectedTemplateId;
     setApiError(null);
     setGeneratedLetterId(null);
+    setGenerationAttemptKey(attemptKey);
+    setGenerationProgress(null);
     setIsPreparing(true);
     setActiveStep("generate");
     try {
-      const parsedJd = await resolveParsedJdId({
-        source,
-        jd,
-        jdFile,
-        jobUrl,
-        trackerJobId,
-      });
-      if (!parsedJd.jd_id) {
-        throw new Error("Could not prepare this job source. Please check the selected job details and try again.");
-      }
       await generation.mutate({
         body: {
           parsed_resume_id: parsedResumeId,
           resume_source: resumeSource,
-          jd_id: parsedJd.jd_id,
+          jd_id: currentJdId,
           ...(request.application_context && {
             application_context: request.application_context,
           }),
@@ -669,11 +1157,49 @@ export default function CoverLetterNewPage() {
     }
   }
 
+  const resetFormAfterGeneration = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(COVER_LETTER_REFRESH_DRAFT_KEY);
+    } catch {
+      // Storage can be unavailable in private or locked-down browser contexts.
+    }
+
+    userPickedResumeRef.current = false;
+    signatureResumeLoadRef.current = null;
+    signatureResumeKeyRef.current = null;
+    autoFilledJobFieldsRef.current.clear();
+    jdTypedRef.current = false;
+    clearJobAnalysis();
+    setSource("jd");
+    setJd("");
+    setJdFile(null);
+    setTrackerJobId("");
+    setCompanyName("");
+    setRoleTitle("");
+    setLocation("");
+    setHiringManagerName("");
+    setCandidateSignatureName("");
+    setSignatureResumeKey(null);
+    setIncludeContactDetails(false);
+    setWordCountMode("auto");
+    setMinWords(250);
+    setMaxWords(400);
+    setUploadedResume(null);
+    setSelectedResume(null);
+    setApiError(null);
+    setActiveStep("resume");
+    setIsPreparing(false);
+    setGeneratedLetterId(null);
+    setGenerationAttemptKey(null);
+    setGenerationProgress(null);
+  }, [clearJobAnalysis]);
+
   const completeGenerationNavigation = useCallback(() => {
     if (!generatedLetterId) return;
+    resetFormAfterGeneration();
     toast.success("Cover letter generated.");
     router.push(`/cover-letter/${encodeURIComponent(generatedLetterId)}`);
-  }, [generatedLetterId, router]);
+  }, [generatedLetterId, resetFormAfterGeneration, router]);
 
   function buildRequest(): CoverLetterFormSubmit {
     const noteParts = [
@@ -684,16 +1210,13 @@ export default function CoverLetterNewPage() {
       ...(companyName.trim() && { company_name: companyName.trim() }),
       ...(location.trim() && { company_location: location.trim() }),
       ...(roleTitle.trim() && { role_title: roleTitle.trim() }),
-      ...(experienceLevel.trim() && { experience_level: experienceLevel.trim() }),
       ...(hiringManagerName.trim() && { hiring_manager_name: hiringManagerName.trim() }),
       ...(candidateSignatureName.trim() && { candidate_signature_name: candidateSignatureName.trim() }),
-      ...(whyCompany.trim() && { why_company: whyCompany.trim() }),
-      ...(highlightAchievement.trim() && { highlight_achievement: highlightAchievement.trim() }),
       ...(includeContactDetails && { include_contact_details: true }),
     };
 
     return {
-      job_description: getJobSourceSummary(source, { jd, jdFile, jobUrl, trackerJobId }),
+      job_description: getJobSourceSummary(source, { jd, jdFile, trackerJobId }),
       ...(Object.keys(appCtxFields).length > 0 && {
         application_context: { ...appCtxFields, source: "user" as const },
       }),
@@ -724,6 +1247,8 @@ export default function CoverLetterNewPage() {
   }
 
   function useResumeOption(option: CoverLetterResumeOption) {
+    userPickedResumeRef.current = true;
+    setResumePickCount((count) => count + 1);
     setUploadedResume(null);
     setSelectedResume(toResumeOptionBlob(option));
     setResumePickerOpen(false);
@@ -737,6 +1262,8 @@ export default function CoverLetterNewPage() {
         resume_id: option.resume_id,
         resume_source: option.source,
       });
+      userPickedResumeRef.current = true;
+      setResumePickCount((count) => count + 1);
       setUploadedResume(null);
       setSelectedResume(
         toDefaultResumeBlob({
@@ -845,6 +1372,12 @@ export default function CoverLetterNewPage() {
             {apiError}
           </div>
         )}
+        {jobAnalysisStatus === "analyzing" && (
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#526187]" role="status">
+            <Loader2 className="h-4 w-4 animate-spin text-[#2557a7]" aria-hidden="true" />
+            Analyzing job details… You can continue editing the form.
+          </div>
+        )}
 
         {loadingInitial ? (
           <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-slate-200 bg-white 2xl:min-h-[520px]">
@@ -865,31 +1398,37 @@ export default function CoverLetterNewPage() {
                 onMakeCurrentDefault={() => void makeCurrentResumeDefault()}
                 isSettingDefaultResume={settingDefaultResume}
                 source={source}
-                onSourceChange={(s) => { setSource(s); setApiError(null); }}
+                onSourceChange={(s) => { clearJobAnalysis(); setSource(s); setApiError(null); }}
                 jd={jd}
-                onJdChange={setJd}
+                onJdChange={(value) => { jdTypedRef.current = true; clearJobAnalysis(); setJd(value); }}
+                onJdBlur={() => void analyzeJobDetails()}
                 jdFile={jdFile}
-                onJdFileChange={setJdFile}
-                jobUrl={jobUrl}
-                onJobUrlChange={setJobUrl}
+                onJdFileChange={(file) => { clearJobAnalysis(); setJdFile(file); }}
                 trackerJobId={trackerJobId}
-                onTrackerJobIdChange={setTrackerJobId}
+                onTrackerJobIdChange={(value) => { clearJobAnalysis(); setTrackerJobId(value); }}
+                onAnalyzeTrackerJob={() => void analyzeJobDetails()}
                 companyName={companyName}
-                onCompanyNameChange={setCompanyName}
+                onCompanyNameChange={(value) => {
+                  autoFilledJobFieldsRef.current.delete("company");
+                  extensionJobFieldsRef.current.delete("company");
+                  setCompanyName(value);
+                }}
                 roleTitle={roleTitle}
-                onRoleTitleChange={setRoleTitle}
+                onRoleTitleChange={(value) => {
+                  autoFilledJobFieldsRef.current.delete("title");
+                  extensionJobFieldsRef.current.delete("title");
+                  setRoleTitle(value);
+                }}
                 location={location}
-                onLocationChange={setLocation}
+                onLocationChange={(value) => {
+                  autoFilledJobFieldsRef.current.delete("location");
+                  extensionJobFieldsRef.current.delete("location");
+                  setLocation(value);
+                }}
                 hiringManagerName={hiringManagerName}
                 onHiringManagerNameChange={setHiringManagerName}
                 candidateSignatureName={candidateSignatureName}
                 onCandidateSignatureNameChange={setCandidateSignatureName}
-                experienceLevel={experienceLevel}
-                onExperienceLevelChange={setExperienceLevel}
-                whyCompany={whyCompany}
-                onWhyCompanyChange={setWhyCompany}
-                highlightAchievement={highlightAchievement}
-                onHighlightAchievementChange={setHighlightAchievement}
                 includeContactDetails={includeContactDetails}
                 onIncludeContactDetailsChange={setIncludeContactDetails}
                 jdReady={jobSourceReady}
@@ -923,13 +1462,16 @@ export default function CoverLetterNewPage() {
                 isPreparing={isPreparing}
                 isGenerating={generation.isLoading}
                 isComplete={Boolean(generatedLetterId)}
+                progress={generationProgress}
                 onComplete={completeGenerationNavigation}
-                onCancel={() => {
+                onReturnToForm={() => {
                   if (generatedLetterId) return;
                   generation.abort();
                   setActiveStep("resume");
                   setIsPreparing(false);
                   setGeneratedLetterId(null);
+                  setGenerationAttemptKey(null);
+                  setGenerationProgress(null);
                 }}
                 selectedTemplate={selectedTemplate.name}
                 roleTitle={roleTitle}
@@ -1052,12 +1594,12 @@ function CoverLetterStepOneMock({
   onSourceChange,
   jd,
   onJdChange,
+  onJdBlur,
   jdFile,
   onJdFileChange,
-  jobUrl,
-  onJobUrlChange,
   trackerJobId,
   onTrackerJobIdChange,
+  onAnalyzeTrackerJob,
   companyName,
   onCompanyNameChange,
   roleTitle,
@@ -1068,12 +1610,6 @@ function CoverLetterStepOneMock({
   onHiringManagerNameChange,
   candidateSignatureName,
   onCandidateSignatureNameChange,
-  experienceLevel,
-  onExperienceLevelChange,
-  whyCompany,
-  onWhyCompanyChange,
-  highlightAchievement,
-  onHighlightAchievementChange,
   includeContactDetails,
   onIncludeContactDetailsChange,
   jdReady,
@@ -1107,12 +1643,12 @@ function CoverLetterStepOneMock({
   onSourceChange: (s: CreationSource) => void;
   jd: string;
   onJdChange: (v: string) => void;
+  onJdBlur: () => void;
   jdFile: File | null;
   onJdFileChange: (f: File | null) => void;
-  jobUrl: string;
-  onJobUrlChange: (v: string) => void;
   trackerJobId: string;
   onTrackerJobIdChange: (v: string) => void;
+  onAnalyzeTrackerJob: () => void;
   companyName: string;
   onCompanyNameChange: (v: string) => void;
   roleTitle: string;
@@ -1123,12 +1659,6 @@ function CoverLetterStepOneMock({
   onHiringManagerNameChange: (v: string) => void;
   candidateSignatureName: string;
   onCandidateSignatureNameChange: (v: string) => void;
-  experienceLevel: string;
-  onExperienceLevelChange: (v: string) => void;
-  whyCompany: string;
-  onWhyCompanyChange: (v: string) => void;
-  highlightAchievement: string;
-  onHighlightAchievementChange: (v: string) => void;
   includeContactDetails: boolean;
   onIncludeContactDetailsChange: (v: boolean) => void;
   jdReady: boolean;
@@ -1444,14 +1974,6 @@ function CoverLetterStepOneMock({
                   <Upload className="h-4 w-4" />
                   Upload JD
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onSourceChange("url")}
-                  className={["inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-bold transition", source === "url" ? "border-[#2557a7] bg-blue-50 text-[#2557a7]" : "border-[#dfe6f5] bg-white text-[#263363] hover:border-[#2557a7]/40"].join(" ")}
-                >
-                  <Link2 className="h-4 w-4" />
-                  Import URL
-                </button>
               </div>
             </div>
             {source === "jd" ? (
@@ -1459,6 +1981,7 @@ function CoverLetterStepOneMock({
                 <textarea
                   value={jd}
                   onChange={(e) => onJdChange(e.target.value)}
+                  onBlur={onJdBlur}
                   rows={7}
                   placeholder="Paste the full job description here..."
                   className="min-h-[190px] w-full resize-none rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-5 py-4 text-[15px] font-medium leading-7 text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_12px_30px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100"
@@ -1474,10 +1997,9 @@ function CoverLetterStepOneMock({
                 onJdChange={onJdChange}
                 jdFile={jdFile}
                 onJdFileChange={onJdFileChange}
-                jobUrl={jobUrl}
-                onJobUrlChange={onJobUrlChange}
                 trackerJobId={trackerJobId}
                 onTrackerJobIdChange={onTrackerJobIdChange}
+                onTrackerJobIdBlur={onAnalyzeTrackerJob}
                 ready={jdReady}
               />
             )}
@@ -1540,50 +2062,6 @@ function CoverLetterStepOneMock({
                 placeholder="e.g. Ananya Rao"
                 className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
               />
-            </div>
-            <div>
-              <label className="text-sm font-black text-[#070b33]">
-                Experience level <span className="font-semibold text-[#6b789c]">(optional)</span>
-              </label>
-              <select
-                value={experienceLevel}
-                onChange={(e) => onExperienceLevelChange(e.target.value)}
-                className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
-              >
-                <option value="">Let AI infer from resume</option>
-                <option value="fresher">Fresher</option>
-                <option value="junior">Junior</option>
-                <option value="mid level">Mid level</option>
-                <option value="senior">Senior</option>
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-sm font-black text-[#070b33]">
-                Why this company? <span className="font-semibold text-[#6b789c]">(optional)</span>
-              </label>
-              <textarea
-                value={whyCompany}
-                onChange={(e) => onWhyCompanyChange(e.target.value)}
-                maxLength={MAX_WHY_COMPANY_CHARS}
-                rows={2}
-                placeholder="e.g. Their focus on developer tooling matches the products I want to keep building."
-                className="mt-2 w-full resize-y rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 py-2.5 text-sm font-semibold text-[#070b33] outline-none transition placeholder:font-medium placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:text-[15px]"
-              />
-              <p className="mt-1 text-right text-xs font-semibold text-slate-500">{whyCompany.length}/{MAX_WHY_COMPANY_CHARS}</p>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-sm font-black text-[#070b33]">
-                Achievement to highlight <span className="font-semibold text-[#6b789c]">(optional)</span>
-              </label>
-              <textarea
-                value={highlightAchievement}
-                onChange={(e) => onHighlightAchievementChange(e.target.value)}
-                maxLength={MAX_HIGHLIGHT_ACHIEVEMENT_CHARS}
-                rows={2}
-                placeholder="e.g. Led the migration that cut deployment time by 40%."
-                className="mt-2 w-full resize-y rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 py-2.5 text-sm font-semibold text-[#070b33] outline-none transition placeholder:font-medium placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:text-[15px]"
-              />
-              <p className="mt-1 text-right text-xs font-semibold text-slate-500">{highlightAchievement.length}/{MAX_HIGHLIGHT_ACHIEVEMENT_CHARS}</p>
             </div>
             <label className="flex cursor-pointer items-start gap-4 rounded-lg border border-[#d8e0ef] bg-[#f8fbff] px-4 py-4 transition hover:border-[#2557a7] hover:bg-blue-50/40 sm:col-span-2">
               <input
@@ -1849,6 +2327,44 @@ function getResumeDisplayName(resume: ParsedResumeBlob | null): string {
     (resume.parsed_data as Record<string, unknown> | undefined)?.file_name,
   ].find((value) => typeof value === "string" && value.trim().length > 0);
   return typeof directName === "string" ? directName : "Resume";
+}
+
+/** Returns a person's parsed name only; it never uses a resume file or display name as a signature. */
+function getResumeSignatureName(resume: ParsedResumeBlob | null): string | undefined {
+  if (!resume) return undefined;
+
+  const parsedData = getNestedRecord(resume.parsed_data);
+  const parserLlmData = getNestedRecord(parsedData.llm_data);
+  const builderResume = getNestedRecord(resume.builder_resume);
+  const records = [
+    getNestedRecord(resume.personalInfo),
+    getNestedRecord(resume.personal_info),
+    getNestedRecord(resume.contact),
+    parsedData,
+    getNestedRecord(parsedData.personalInfo),
+    getNestedRecord(parsedData.personal_info),
+    getNestedRecord(parsedData.contact),
+    parserLlmData,
+    getNestedRecord(parserLlmData.personalInfo),
+    getNestedRecord(parserLlmData.personal_info),
+    getNestedRecord(parserLlmData.contact),
+    getNestedRecord(builderResume.personalInfo),
+    getNestedRecord(builderResume.personal_info),
+    getNestedRecord(builderResume.contact),
+  ];
+
+  for (const record of records) {
+    const name = [record.full_name, record.fullname, record.name]
+      .map((value) => {
+        if (typeof value === "string") return value.trim();
+        const nestedValue = getNestedRecord(value).value;
+        return typeof nestedValue === "string" ? nestedValue.trim() : undefined;
+      })
+      .find((value): value is string => Boolean(value));
+    if (name) return name.slice(0, MAX_COMPANY_LOCATION_CHARS);
+  }
+
+  return undefined;
 }
 
 function getBuilderResumeDisplayName(resume: unknown): string | null {
@@ -2397,10 +2913,9 @@ function JobSourceInput(props: {
   onJdChange: (value: string) => void;
   jdFile: File | null;
   onJdFileChange: (file: File | null) => void;
-  jobUrl: string;
-  onJobUrlChange: (value: string) => void;
   trackerJobId: string;
   onTrackerJobIdChange: (value: string) => void;
+  onTrackerJobIdBlur: () => void;
   ready: boolean;
 }) {
   const [isDraggingUpload, setIsDraggingUpload] = useState(false);
@@ -2495,40 +3010,6 @@ function JobSourceInput(props: {
     );
   }
 
-  if (props.source === "url") {
-    return (
-      <div className="mt-5 rounded-lg border border-[#dfe6f5] bg-[#fbfdff] p-4 shadow-[0_10px_28px_rgba(18,42,94,0.04)]">
-        <label htmlFor="cover-letter-job-url" className="text-sm font-black text-slate-950">
-          Job posting URL <span className="text-red-500">*</span>
-        </label>
-        <p className="mt-1 text-xs text-slate-500">
-          Use a public company careers or job-board link. The backend extracts the posting text.
-        </p>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-          <input
-            id="cover-letter-job-url"
-            type="url"
-            value={props.jobUrl}
-            onChange={(event) => props.onJobUrlChange(event.target.value)}
-            placeholder="https://company.com/careers/software-engineer"
-            className="min-w-0 flex-1 rounded-lg border border-[#d8e0ef] bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:ring-4 focus:ring-blue-100"
-          />
-          <button
-            type="button"
-            onClick={() => navigator.clipboard?.readText().then(props.onJobUrlChange).catch(() => toast.info("Clipboard access is unavailable."))}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-blue-50 hover:text-[#2557a7]"
-          >
-            <Clipboard className="h-4 w-4" />
-            Paste URL
-          </button>
-        </div>
-        <p className={["mt-2 text-xs", props.ready ? "font-bold text-emerald-600" : "text-slate-500"].join(" ")}>
-          {props.ready ? "URL ready to extract" : "Enter a valid http or https URL."}
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="mt-5 rounded-lg border border-[#dfe6f5] bg-[#fbfdff] p-4 shadow-[0_10px_28px_rgba(18,42,94,0.04)]">
       <label htmlFor="cover-letter-tracker-job" className="text-sm font-black text-slate-950">
@@ -2542,6 +3023,7 @@ function JobSourceInput(props: {
         type="text"
         value={props.trackerJobId}
         onChange={(event) => props.onTrackerJobIdChange(event.target.value)}
+        onBlur={props.onTrackerJobIdBlur}
         placeholder="e.g. 557ac932ccd40e7a27cdd22c"
         className="mt-3 w-full rounded-lg border border-[#d8e0ef] bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:ring-4 focus:ring-blue-100"
       />
@@ -2673,8 +3155,9 @@ function GeneratingModal({
   isPreparing,
   isGenerating,
   isComplete,
+  progress,
   onComplete,
-  onCancel,
+  onReturnToForm,
   selectedTemplate,
   roleTitle,
   companyName,
@@ -2682,191 +3165,175 @@ function GeneratingModal({
   isPreparing: boolean;
   isGenerating: boolean;
   isComplete: boolean;
+  progress: CoverLetterGenerationProgress | null;
   onComplete: () => void;
-  onCancel: () => void;
+  onReturnToForm: () => void;
   selectedTemplate: string;
   roleTitle: string;
   companyName: string;
 }) {
-  const progressStates = [
-    { label: "Job Details Validated", active: "Validating job details...", detail: "Validating job details..." },
-    { label: "Resume Matched", active: "Matching resume evidence...", detail: "Matching resume evidence..." },
-    { label: "Letter Drafted", active: "Writing your tailored letter...", detail: "Writing your tailored letter..." },
-    { label: "Template Applied", active: `Applying ${selectedTemplate} template...`, detail: `Applying ${selectedTemplate} template...` },
-    { label: "Export Ready", active: "Preparing review page...", detail: "Preparing review page..." },
-  ];
-
-  const [progress, setProgress] = useState(0);
+  const [hasWaited, setHasWaited] = useState(false);
   const completedRef = useRef(false);
 
-  // Keep the visual process behind the backend until the draft is ready.
   useEffect(() => {
-    const target = isComplete ? 100 : isPreparing ? 24 : isGenerating ? 86 : 94;
-    const interval = setInterval(() => {
-      setProgress((current) => {
-        if (current >= target) return current;
-        return Math.min(current + (isComplete ? 2 : 1), target);
-      });
-    }, 70);
-    return () => clearInterval(interval);
-  }, [isComplete, isGenerating, isPreparing]);
-
-  useEffect(() => {
-    if (!isComplete || progress < 100 || completedRef.current) return;
-    completedRef.current = true;
-    const timer = window.setTimeout(onComplete, 450);
+    if (!isGenerating || isComplete) {
+      setHasWaited(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setHasWaited(true), 15_000);
     return () => window.clearTimeout(timer);
-  }, [isComplete, onComplete, progress]);
+  }, [isComplete, isGenerating]);
 
-  const activeIndex = Math.min(
-    progressStates.length - 1,
-    Math.floor((progress / 100) * progressStates.length),
-  );
-  const activeState = progressStates[activeIndex];
-  const secondsLeft = Math.max(0, Math.ceil((100 - progress) / 8));
+  useEffect(() => {
+    if (!isComplete || completedRef.current) return;
+    completedRef.current = true;
+    const timer = window.setTimeout(onComplete, 350);
+    return () => window.clearTimeout(timer);
+  }, [isComplete, onComplete]);
+
+  const confirmedProgress = isComplete ? 100 : progress?.progress ?? null;
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
+  const strokeDashoffset = confirmedProgress === null
+    ? circumference
+    : circumference - (confirmedProgress / 100) * circumference;
+
+  const status = isComplete
+    ? {
+        label: "Draft complete",
+        title: "Your cover letter is ready",
+        description: "Opening your draft for review…",
+      }
+    : progress
+      ? {
+          label: `${progress.progress}% complete`,
+          title: getGenerationStageTitle(progress.stage),
+          description: hasWaited && progress.stage === "generating"
+            ? "Generation is still in progress. Detailed job descriptions can take a little longer."
+            : progress.message,
+        }
+      : isPreparing
+      ? {
+          label: "Preparing request",
+          title: "Getting everything ready",
+          description: "Checking the details for your cover letter…",
+        }
+      : hasWaited
+        ? {
+            label: "Still working",
+            title: "Creating your tailored draft",
+            description: "Detailed job descriptions can take a little longer. Your letter is still being generated.",
+          }
+        : {
+            label: "Generating",
+            title: "Creating your tailored draft",
+            description: "Using your selected resume and job details to write the letter…",
+          };
 
   return (
-    <div className="flex min-h-[calc(100dvh-170px)] items-start justify-center px-4 py-4 sm:items-center sm:py-6">
-      <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.30),0_8px_20px_rgba(15,23,42,0.10)]">
-          <div className="p-3.5 sm:p-4">
-            {/* Title */}
-            <p className="text-center text-[15px] font-bold text-[#1f5eff]">
-              Premium Cover Letter Generation
-            </p>
-
-            {/* Icon */}
-            <div className="relative mx-auto mt-1.5 h-[124px] w-[124px]">
-              <div className="absolute inset-4 rounded-full bg-blue-50 shadow-[inset_0_0_28px_rgba(37,87,167,0.12)]" />
-              <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 140 140" aria-hidden="true">
-                <circle cx="70" cy="70" r={radius} fill="none" stroke="#dbeafe" strokeWidth="14" />
-                <circle
-                  cx="70"
-                  cy="70"
-                  r={radius}
-                  fill="none"
-                  stroke="url(#cover-letter-progress)"
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={strokeDashoffset}
-                  className="transition-all duration-300 ease-out"
-                />
-                <defs>
-                  <linearGradient id="cover-letter-progress" x1="0" x2="1" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#60a5fa" />
-                    <stop offset="100%" stopColor="#2557a7" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-                <span className="text-[30px] font-black leading-none tracking-tight text-slate-950 tabular-nums">
-                  {progress}%
-                </span>
-                <span className="text-[12px] font-medium text-slate-500">
-                  {isComplete ? "finishing..." : `${secondsLeft} sec left`}
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-1.5 text-center text-[13px] font-bold text-[#1f5eff]">
-              {progress >= 100 ? "Opening your draft..." : activeState.detail}
-            </p>
-
-            {/* 4 cycling progress states */}
-            <div className="mt-2.5 space-y-1">
-              {progressStates.map((state, index) => {
-                const itemThreshold = ((index + 1) / progressStates.length) * 100;
-                const done = progress >= itemThreshold || progress >= 100;
-                const active = !done && index === activeIndex;
-                return (
-                  <div
-                    key={state.label}
-                    className={[
-                      "flex items-center justify-between gap-2 rounded-lg px-3 py-1 transition-all duration-200",
-                      done ? "bg-emerald-50" : active ? "bg-blue-50" : "bg-slate-50",
-                    ].join(" ")}
-                  >
-                    <span
-                      className={[
-                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all duration-300",
-                        done
-                          ? "bg-emerald-500 text-white"
-                          : active
-                            ? "bg-[#2557a7] text-white"
-                            : "bg-slate-200 text-slate-400",
-                      ].join(" ")}
-                    >
-                      {done ? (
-                        <CheckCircle2 className="h-3 w-3" />
-                      ) : active ? (
-                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                      ) : (
-                        <Clock3 className="h-2.5 w-2.5" />
-                      )}
-                    </span>
-                    <p
-                      className={[
-                        "min-w-0 flex-1 truncate text-[12px] font-semibold transition-colors duration-200",
-                        done
-                          ? "text-emerald-700"
-                          : active
-                            ? "text-[#2557a7]"
-                            : "text-slate-400",
-                      ].join(" ")}
-                    >
-                      {state.label}
-                    </p>
-                    <span
-                      className={[
-                        "shrink-0 text-[11px] font-bold",
-                        done ? "text-emerald-600" : active ? "text-amber-500" : "text-slate-400",
-                      ].join(" ")}
-                    >
-                      {done ? "Done" : active ? "Processing" : "Queued"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Role / template summary strip */}
-            <div className="mt-2.5 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-              <div className="text-[11px]">
-                <p className="font-bold text-slate-400">Template</p>
-                <p className="mt-0.5 font-black text-slate-950">{selectedTemplate}</p>
-              </div>
-              {roleTitle && (
-                <div className="max-w-32 text-right text-[11px]">
-                  <p className="font-bold text-slate-400">Role</p>
-                  <p className="mt-0.5 truncate font-black text-slate-950">{roleTitle}</p>
-                </div>
-              )}
-              {companyName && (
-                <div className="max-w-24 text-right text-[11px]">
-                  <p className="font-bold text-slate-400">Company</p>
-                  <p className="mt-0.5 truncate font-black text-slate-950">{companyName}</p>
-                </div>
-              )}
-            </div>
-
-            {!isComplete && (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="mt-2.5 w-full rounded-lg border border-slate-200 bg-white py-1.5 text-[12px] font-bold text-slate-600 transition hover:border-red-200 hover:text-red-600"
-              >
-                Cancel generation
-              </button>
+    <div className="fixed inset-0 z-[10000] flex min-h-[100dvh] items-start justify-center overflow-y-auto bg-[#fbfdff]/95 px-4 py-8 backdrop-blur-sm sm:items-center sm:py-10">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Cover letter generation in progress"
+        aria-busy={!isComplete}
+        aria-live="polite"
+        className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.18),0_8px_20px_rgba(15,23,42,0.08)] sm:p-8"
+      >
+        <div className="relative mx-auto h-[132px] w-[132px]">
+          <div className="absolute inset-4 rounded-full bg-blue-50 shadow-[inset_0_0_28px_rgba(37,87,167,0.12)]" />
+          <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 140 140" aria-hidden="true">
+            <circle cx="70" cy="70" r={radius} fill="none" stroke="#dbeafe" strokeWidth="14" />
+            {confirmedProgress !== null && (
+              <circle
+                cx="70"
+                cy="70"
+                r={radius}
+                fill="none"
+                stroke="url(#cover-letter-progress)"
+                strokeWidth="14"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                className="transition-[stroke-dashoffset] duration-500 ease-out"
+              />
+            )}
+            <defs>
+              <linearGradient id="cover-letter-progress" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stopColor="#60a5fa" />
+                <stop offset="100%" stopColor="#2557a7" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            {confirmedProgress === null ? (
+              <Loader2 className="h-9 w-9 animate-spin text-[#2557a7]" aria-label="Starting generation" />
+            ) : isComplete ? (
+              <CheckCircle2 className="h-10 w-10 text-emerald-500" aria-hidden="true" />
+            ) : (
+              <span className="text-[30px] font-bold leading-none tracking-tight text-slate-950 tabular-nums">
+                {confirmedProgress}%
+              </span>
             )}
           </div>
         </div>
-      </div>
+
+        <p className="mt-7 text-sm font-bold text-[#2557a7]">{status.label}</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#070b33]">{status.title}</h1>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-600">{status.description}</p>
+
+        <div className="mt-7 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Your letter</p>
+          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="font-medium text-slate-500">Template</dt>
+              <dd className="mt-1 truncate font-bold text-slate-950">{selectedTemplate}</dd>
+            </div>
+            {roleTitle && (
+              <div>
+                <dt className="font-medium text-slate-500">Role</dt>
+                <dd className="mt-1 truncate font-bold text-slate-950">{roleTitle}</dd>
+              </div>
+            )}
+            {companyName && (
+              <div>
+                <dt className="font-medium text-slate-500">Company</dt>
+                <dd className="mt-1 truncate font-bold text-slate-950">{companyName}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
+
+        {!isComplete && (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={onReturnToForm}
+              className="text-sm font-bold text-slate-600 underline decoration-slate-300 underline-offset-4 transition hover:text-[#2557a7]"
+            >
+              Return to form
+            </button>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              This stops waiting here. If the request finishes, the letter will appear in History.
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   );
+}
+
+function getGenerationStageTitle(stage: CoverLetterGenerationProgress["stage"]): string {
+  const titles: Record<CoverLetterGenerationProgress["stage"], string> = {
+    queued: "Request accepted",
+    validating: "Checking your details",
+    generating: "Creating your tailored draft",
+    persisting: "Saving your draft",
+    finalizing: "Finalizing your draft",
+    completed: "Your cover letter is ready",
+    failed: "We could not create your letter",
+  };
+  return titles[stage];
 }
 
 function DocumentPreview({
@@ -2886,13 +3353,11 @@ async function resolveParsedJdId({
   source,
   jd,
   jdFile,
-  jobUrl,
   trackerJobId,
 }: {
   source: CreationSource;
   jd: string;
   jdFile: File | null;
-  jobUrl: string;
   trackerJobId: string;
 }): Promise<Awaited<ReturnType<typeof parseJDText>>> {
   if (source === "jd") {
@@ -2914,14 +3379,6 @@ async function resolveParsedJdId({
     return parseJDFile(jdFile);
   }
 
-  if (source === "url") {
-    const url = jobUrl.trim();
-    if (!isValidHttpUrl(url)) {
-      throw new Error(getJobSourceMissingMessage(source));
-    }
-    return parseJDUrl(url);
-  }
-
   const jobId = trackerJobId.trim();
   if (!jobId) {
     throw new Error(getJobSourceMissingMessage(source));
@@ -2934,13 +3391,11 @@ function getJobSourceSummary(
   values: {
     jd: string;
     jdFile: File | null;
-    jobUrl: string;
     trackerJobId: string;
   },
 ): string {
   if (source === "jd") return values.jd.trim();
   if (source === "upload") return values.jdFile ? `Uploaded JD file: ${values.jdFile.name}` : "";
-  if (source === "url") return values.jobUrl.trim();
   return values.trackerJobId.trim();
 }
 
@@ -2948,22 +3403,10 @@ function getJobSourceMissingMessage(source: CreationSource): string {
   if (source === "upload") {
     return "Upload a PDF, DOCX, DOC, or TXT job description before continuing.";
   }
-  if (source === "url") {
-    return "Enter a valid http or https job posting URL before continuing.";
-  }
   if (source === "tracker") {
     return "Enter a saved job tracker ID before continuing.";
   }
   return `Paste at least ${MIN_JD_CHARS} characters of job description before continuing.`;
-}
-
-function isValidHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function getInitialBuilderStep(step: string | null): BuilderStep {
@@ -3061,21 +3504,39 @@ function useCoverLetterResumeUpload(
 }
 
 function isUnauthorizedError(err: unknown): boolean {
-  const status = (err as { response?: { status?: number } })?.response?.status;
+  const status = (err as { status?: number; response?: { status?: number } })?.status
+    ?? (err as { response?: { status?: number } })?.response?.status;
   if (status === 401 || status === 403) return true;
+
+  // parserApi preserves the server body on a wrapped error as `__raw`.
+  // Inspect it as well as Axios's response body so parser calls get the same
+  // session-expiry behavior as the rest of the cover-letter flow.
+  const bodies = [
+    (err as { response?: { data?: unknown } })?.response?.data,
+    (err as { __raw?: unknown })?.__raw,
+  ];
+  for (const data of bodies) {
+    if (!data || typeof data !== "object") continue;
+    const record = data as Record<string, unknown>;
+    const apiError = getNestedRecord(record.error);
+    const code = String(apiError.error_code ?? record.error_code ?? "").toUpperCase();
+    const message = String(apiError.message ?? record.message ?? record.detail ?? "").toLowerCase();
+    if (code === "HTTP_401" || code === "HTTP_403" || message.includes("not authenticated")) return true;
+  }
 
   // When skipLoginRedirect is used, the interceptor rejects with the *refresh
   // endpoint* error instead of the original 401. The refresh response may carry
   // a non-401 status (e.g. 400) but its body signals session expiry.
   const data = (err as { response?: { data?: unknown } })?.response?.data;
-  if (data && typeof data === "object") {
+  const requestUrl = String((err as { config?: { url?: unknown } })?.config?.url ?? "");
+  if (requestUrl.includes("/auth/refresh") && data && typeof data === "object") {
     const record = data as Record<string, unknown>;
     const msg = String(record.message ?? record.detail ?? "").toLowerCase();
     if (msg.includes("token") || msg.includes("rotation") || msg.includes("sign in")) return true;
   }
 
   // Catch cases where the error message itself was built from the server body.
-  if (err instanceof Error) {
+  if (requestUrl.includes("/auth/refresh") && err instanceof Error) {
     const lower = err.message.toLowerCase();
     if (lower.includes("token rotation") || lower.includes("rotation failed") || lower.includes("sign in again")) return true;
   }

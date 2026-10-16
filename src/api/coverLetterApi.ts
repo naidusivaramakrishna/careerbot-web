@@ -26,6 +26,7 @@ import type {
   CoverLetterDefaultTemplateRequest,
   CoverLetterDefaultTemplateResponse,
   CoverLetterGenerateRequest,
+  CoverLetterGenerationProgress,
   CoverLetterListResponse,
   CoverLetterResumeOptionsResponse,
   CoverLetterResponse,
@@ -309,6 +310,32 @@ export async function generateCoverLetter(
   }
 }
 
+/**
+ * Reads backend-confirmed progress for the in-flight request identified by
+ * its Idempotency-Key. A short 404 is expected while the POST handler is
+ * creating its progress record, so callers can keep an indeterminate state
+ * until the first real value arrives.
+ */
+export async function getCoverLetterGenerationProgress(
+  idempotencyKey: string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<CoverLetterGenerationProgress | null> {
+  try {
+    const { data } = await httpClient.get<CoverLetterGenerationProgress>(
+      `${BASE}/generation-progress/${encodeURIComponent(idempotencyKey)}`,
+      {
+        headers: { "X-Skip-Auth-Redirect": "true" },
+        ...(options.forceRefresh && { params: { force_refresh: true } }),
+      },
+    );
+    return data;
+  } catch (err) {
+    const mapped = mapError(err);
+    if (mapped.status === 404) return null;
+    throw mapped;
+  }
+}
+
 // ── 2. retrieve (GET /{letter_id}) ─────────────────────────────
 /**
  * Returns the letter, OR null on a 404 (treat "deleted / not
@@ -322,6 +349,10 @@ export async function getCoverLetter(
     const { data } = await httpClient.get<CoverLetterResponse>(
       `${BASE}/${encodeURIComponent(letterId)}`,
       {
+        // A detail read is a database lookup, not an AI operation. Bound it
+        // so an unavailable API cannot leave the detail screen loading until
+        // the shared client's two-minute timeout expires.
+        timeout: 30_000,
         headers: {
           "X-Skip-Auth-Redirect": "true",
         },

@@ -11,13 +11,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const SESSION_ID = "sess-1";
 
-const { mockSearchParams, mockGetExtensionSession } = vi.hoisted(() => ({
+const { mockSearchParams, mockGetExtensionSession, mockParseJDText, mockGetParsedJDDetails, mockGetResume } = vi.hoisted(() => ({
   mockSearchParams: vi.fn(),
   mockGetExtensionSession: vi.fn(),
+  mockParseJDText: vi.fn(),
+  mockGetParsedJDDetails: vi.fn(),
+  mockGetResume: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -29,6 +32,14 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/api/extensionApi", () => ({
   getExtensionSession: mockGetExtensionSession,
+}));
+
+vi.mock("@/api/parserApi", () => ({
+  parseJDText: mockParseJDText,
+  parseJDFile: vi.fn(),
+  parseJDByJob: vi.fn(),
+  getParsedJDDetails: mockGetParsedJDDetails,
+  getResume: mockGetResume,
 }));
 
 vi.mock("@/hooks/useHasParsedResume", () => ({
@@ -124,6 +135,9 @@ describe("/cover-letter/new — browser extension session prefill", () => {
     sessionStorage.clear();
     mockSearchParams.mockReturnValue(new URLSearchParams(`session=${SESSION_ID}`));
     mockGetExtensionSession.mockResolvedValue(session());
+    mockParseJDText.mockResolvedValue({ jd_id: "jd-from-analysis" });
+    mockGetParsedJDDetails.mockResolvedValue({});
+    mockGetResume.mockResolvedValue({ data: {} });
   });
 
   it("prefills JD, job title, company and location from the session", async () => {
@@ -156,6 +170,36 @@ describe("/cover-letter/new — browser extension session prefill", () => {
     render(<CoverLetterNewPage />);
 
     await waitFor(() => expect(roleField()).toHaveValue("T".repeat(MAX_ROLE_TITLE_CHARS)), WAIT);
+  });
+
+  it("truncates a scraped company to the company-location cap", async () => {
+    mockGetExtensionSession.mockResolvedValue(session({ company: "C".repeat(300) }));
+    render(<CoverLetterNewPage />);
+
+    await waitFor(() => expect(companyField()).toHaveValue("C".repeat(MAX_COMPANY_LOCATION_CHARS)), WAIT);
+  });
+
+  it("analyzes the extension JD without waiting for a blur", async () => {
+    render(<CoverLetterNewPage />);
+
+    await waitFor(() => expect(jdField()).toHaveValue(BASE_SESSION.job_description), WAIT);
+    await waitFor(() => expect(mockParseJDText).toHaveBeenCalledTimes(1), WAIT);
+  });
+
+  it("clears values auto-filled from a job analyzed before the session resolved", async () => {
+    let resolveSession!: (value: unknown) => void;
+    mockGetExtensionSession.mockReturnValue(new Promise((resolve) => { resolveSession = resolve; }));
+    mockParseJDText.mockResolvedValueOnce({ jd_id: "jd-a" });
+    mockGetParsedJDDetails.mockResolvedValueOnce({ location: "Pune, India" });
+    render(<CoverLetterNewPage />);
+    fireEvent.change(jdField(), { target: { value: `${BASE_SESSION.job_description} Typed job A.` } });
+    fireEvent.blur(jdField());
+    await waitFor(() => expect(locationField()).toHaveValue("Pune, India"), WAIT);
+
+    resolveSession(session({ job_location: null }));
+
+    await waitFor(() => expect(jdField()).toHaveValue(BASE_SESSION.job_description), WAIT);
+    expect(locationField()).toHaveValue("");
   });
 
   it("truncates a scraped location to the company-location cap", async () => {
@@ -216,5 +260,17 @@ describe("/cover-letter/new — browser extension session prefill", () => {
 
     await waitFor(() => expect(companyField()).toHaveValue(BASE_SESSION.company), WAIT);
     expect(locationField()).toHaveValue("");
+  });
+
+  it("keeps extension-prefilled job details when JD analysis finds no replacements", async () => {
+    render(<CoverLetterNewPage />);
+
+    await waitFor(() => expect(jdField()).toHaveValue(BASE_SESSION.job_description), WAIT);
+    fireEvent.blur(jdField());
+
+    await waitFor(() => expect(mockGetParsedJDDetails).toHaveBeenCalledWith("jd-from-analysis"), WAIT);
+    expect(companyField()).toHaveValue(BASE_SESSION.company);
+    expect(roleField()).toHaveValue(BASE_SESSION.job_title);
+    expect(locationField()).toHaveValue(BASE_SESSION.job_location);
   });
 });
