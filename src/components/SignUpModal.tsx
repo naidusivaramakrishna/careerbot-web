@@ -205,24 +205,36 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             if (res?.data?.error?.details?.validation_errors) {
                 const validationErrors: Array<{ field: string; message: string }> =
                     res.data.error.details.validation_errors
+                let anyMapped = false
                 for (const v of validationErrors) {
                     const field = normaliseField(v.field)
                     if (field in newErrors && !newErrors[field as keyof ErrorState]) {
                         newErrors[field as keyof ErrorState] = cleanMessage(v.message)
+                        anyMapped = true
                         if (isLogin) break // For login, only show first error
                     }
+                }
+                // If no errors mapped to a field, show the first one in login field
+                if (!anyMapped && validationErrors.length > 0) {
+                    newErrors.login = cleanMessage(validationErrors[0].message)
                 }
                 setErrors(newErrors)
             }
             // Handle FastAPI 422 validation format (detail array) — applies to login & signup
             else if (res?.status === 422 && Array.isArray(res.data.detail)) {
+                let anyMapped = false
                 for (const d of res.data.detail) {
                     const rawField = d.loc[d.loc.length - 1]
                     const field = normaliseField(rawField)
                     if (field in newErrors && !newErrors[field as keyof ErrorState]) {
                         newErrors[field as keyof ErrorState] = cleanMessage(d.msg)
+                        anyMapped = true
                         if (isLogin) break // For login, only show first error
                     }
+                }
+                // If no errors mapped to a field, show the first one in login field
+                if (!anyMapped && res.data.detail.length > 0) {
+                    newErrors.login = cleanMessage(res.data.detail[0].msg)
                 }
                 setErrors(newErrors)
             }
@@ -256,8 +268,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     newErrors.username = safeMessage
                 } else if (!isLogin && rawMsg.includes('email')) {
                     newErrors.email = safeMessage
-                } else if (isLogin && res?.status === 401) {
-                    // For login failures (401 Unauthorized), highlight both fields
+                } else if (isLogin && (res?.status === 401 || (res?.status && res.status >= 500))) {
+                    // For login failures (401 Unauthorized) or server errors (5xx), highlight both fields
                     newErrors.email = safeMessage
                     newErrors.password = safeMessage
                 } else {

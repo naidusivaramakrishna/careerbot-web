@@ -42,6 +42,7 @@ const DOMAIN_NAMES: Record<string, string> = {
 
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from './_constants/templateImages';
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
+import { TemplatePreviewRenderer } from '@/components/templates';
 
 const TRUST_BADGES = ['100% ATS Friendly', '18 Industries', '100+ Templates'];
 
@@ -114,7 +115,7 @@ function TemplatesPageContent() {
 
     const savedResume = localStorage.getItem('resumeData');
     if (savedResume) {
-      try { setLiveResumeData(JSON.parse(savedResume)); } catch {}
+      try { setLiveResumeData(JSON.parse(savedResume)); } catch { }
     }
   }, []);
 
@@ -542,409 +543,510 @@ function TemplatesPageContent() {
       {/* ── Search + Content unified rail ─────────────────────── */}
       <div className="max-w-7xl mx-auto px-6">
 
-      {/* Search */}
-      <div className="py-8 bg-linear-to-b from-white to-[#f8fafc] border-b border-slate-100">
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
-              <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
-              {selectedCategory === 'Catalogues' ? 'Choose a Style' : 'Browse Templates'}
-            </div>
-            <span className="text-sm font-semibold text-slate-700">
-              {selectedCategory === 'Catalogues' ? 'Pick a colour theme' : 'Select your industry & career level'}
-            </span>
-            {/* Undo shows in every view: a confirm switches to the industry view. */}
-            {previousSelection && (
-              <button
-                onClick={undoLastSelection}
-                className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
-                title="Undo to previous catalogue"
-              >
-                ↶ Undo
-              </button>
-            )}
-          </div>
-
-          {/* The industry search filters industry templates only; the Catalogues
-              view has its own catalogue search below. */}
-          {selectedCategory !== 'Catalogues' && (
-          <>
-          <div className="relative group max-w-2xl">
-            <div className="absolute inset-0 bg-linear-to-r from-blue-400/15 to-teal-400/15 rounded-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg -m-1" />
-            <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
-              <Search className="absolute left-3.5 w-4 h-4 text-slate-400 group-focus-within:text-[#2257a7] transition-colors" />
-              <input
-                data-testid="template-search-input"
-                type="text"
-                placeholder="Search by role, industry, or template..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-9 py-3 bg-transparent border-0 focus:outline-none text-slate-900 placeholder-slate-400 text-sm"
-              />
-              {searchQuery && (
+        {/* Search */}
+        <div className="py-8 bg-linear-to-b from-white to-[#f8fafc] border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2257a7] bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                <span className="w-1.5 h-1.5 bg-[#2257a7] rounded-full animate-pulse" />
+                {selectedCategory === 'Catalogues' ? 'Choose a Style' : 'Browse Templates'}
+              </div>
+              <span className="text-sm font-semibold text-slate-700">
+                {selectedCategory === 'Catalogues' ? 'Pick a colour theme' : 'Select your industry & career level'}
+              </span>
+              {/* Undo shows in every view: a confirm switches to the industry view. */}
+              {previousSelection && (
                 <button
-                  data-testid="clear-search-btn"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-colors"
-                  aria-label="Clear search"
+                  onClick={undoLastSelection}
+                  className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
+                  title="Undo to previous catalogue"
                 >
-                  <span className="text-xs font-bold leading-none">✕</span>
+                  ↶ Undo
                 </button>
               )}
             </div>
-          </div>
 
-          <div className="flex flex-wrap gap-2 mt-3">
-            <span className="text-xs text-slate-400 font-medium mt-1">Try:</span>
-            {['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education'].map(q => (
-              <button
-                key={q}
-                data-testid={`quick-search-${q.toLowerCase().replace(/\s+/g, '-')}`}
-                onClick={() => setSearchQuery(q)}
-                className="text-xs px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#2257a7] hover:text-[#2257a7] transition-colors font-medium shadow-sm"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-          </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Content area ──────────────────────────────────────── */}
-      <div className="flex gap-6 py-8">
-        <div className="shrink-0">
-          <CategorySidebar
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
-            loading={categoriesLoading}
-          />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {selectedCategory === 'Catalogues' && (
-            <div>
-              {/* Search and Controls */}
-              <div className="mb-8 space-y-4">
-                <div className="flex items-center gap-3">
-                  {selectedCatalogue && cataloguesMap[selectedCatalogue] && (
-                    <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
-                      <span>{cataloguesMap[selectedCatalogue]?.label}</span>
-                      <span className="text-blue-300">selected</span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => setShowLivePreview(v => !v)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
-                      showLivePreview
-                        ? 'bg-[#2257a7] text-white border-[#2257a7] shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-800'
-                    }`}
-                  >
-                    <User className="w-3.5 h-3.5" />
-                    {showLivePreview ? 'Your Data' : 'Preview with Your Data'}
-                  </button>
-                </div>
-
-                {/* Search Input for Catalogues */}
-                <div className="relative max-w-md">
-                  <input
-                    type="text"
-                    placeholder="Search catalogues..."
-                    value={catalogueSearchQuery}
-                    onChange={(e) => setCatalogueSearchQuery(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:border-transparent"
-                  />
-                  {catalogueSearchQuery && (
-                    <button
-                      onClick={() => setCatalogueSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-                {filteredCatalogues.map(([key, catalogue]) => {
-                  const isSelected = selectedCatalogue === key;
-                  const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
-                  const paletteInfo = CATALOGUE_PALETTES[key];
-                  const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor ?? catalogue.default_color;
-                  const primarySwatch = catalogue.accent_swatches?.[0] || catalogue.swatches?.[0] || '#000000';
-
-                  const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
-                  return (
-                    <div key={key} className="group flex flex-col">
-                      <div
-                        data-testid={`catalogue-card-${key}`}
-                        className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
-                        style={{
-                          boxShadow: isSelected
-                            ? `0 0 0 2.5px ${primarySwatch}, 0 16px 48px ${primarySwatch}30`
-                            : '0 1px 6px rgba(0,0,0,0.07)',
-                          transform: isSelected ? 'translateY(-3px)' : undefined,
-                        }}
-                        onClick={() => handleCatalogueSelect(key)}
+            {/* The industry search filters industry templates only; the Catalogues
+              view has its own catalogue search below. */}
+            {selectedCategory !== 'Catalogues' && (
+              <>
+                <div className="relative group max-w-2xl">
+                  <div className="absolute inset-0 bg-linear-to-r from-blue-400/15 to-teal-400/15 rounded-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-lg -m-1" />
+                  <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
+                    <Search className="absolute left-3.5 w-4 h-4 text-slate-400 group-focus-within:text-[#2257a7] transition-colors" />
+                    <input
+                      data-testid="template-search-input"
+                      type="text"
+                      placeholder="Search by role, industry, or template..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-9 py-3 bg-transparent border-0 focus:outline-none text-slate-900 placeholder-slate-400 text-sm"
+                    />
+                    {searchQuery && (
+                      <button
+                        data-testid="clear-search-btn"
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-colors"
+                        aria-label="Clear search"
                       >
-                        <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
-                          <div
-                            ref={isFirst ? cardScaleRef : undefined}
-                            className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
-                            style={{ aspectRatio: '3/4' }}
-                          >
-                            {showLivePreview && liveResumeData ? (
-                              <>
-                                <div
-                                  style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '595px',
-                                    transform: `scale(${cardScale})`,
-                                    transformOrigin: 'top left',
-                                    pointerEvents: 'none',
-                                  }}
-                                >
-                                  <Template1
-                                    data={liveResumeData}
-                                    style={buildStyleForCatalogue(key)}
-                                    layoutVariant={getLayoutVariant(key)}
-                                    sectionOrder={liveSectionOrder}
-                                  />
-                                </div>
-                                {!hasUserData && (
-                                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
-                                    <User className="w-6 h-6 text-slate-300 mb-1" />
-                                    <p className="text-[10px] text-slate-400 font-medium text-center px-3">Build your resume to preview here</p>
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
-                            )}
-                          </div>
-
-                          {isSelected && (
-                            <div
-                              className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg"
-                              style={{ backgroundColor: primarySwatch }}
-                            >
-                              ✓
-                            </div>
-                          )}
-
-                          <div className="absolute inset-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3 pointer-events-none">
-                            <div
-                              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
-                              style={{ backgroundColor: isSelected ? primarySwatch : '#1e293b' }}
-                            >
-                              {isSelected ? '✓ Selected' : 'Select Style'}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="px-3 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
-                          {hasCodeThumbnail && paletteInfo ? (
-                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                              {paletteInfo.palette.slice(0, 5).map(color => {
-                                const isSel = selectedBg[key] === color || (!selectedBg[key] && color === paletteInfo.defaultColor);
-                                return (
-                                  <button
-                                    key={color}
-                                    aria-label={`Select colour ${color}`}
-                                    onMouseEnter={() => setHoverBg(prev => ({ ...prev, [key]: color }))}
-                                    onMouseLeave={() => setHoverBg(prev => ({ ...prev, [key]: undefined }))}
-                                    onClick={e => { e.stopPropagation(); handleColorPick(key, color); }}
-                                    className={`w-4 h-4 rounded-full cursor-pointer transition-all duration-150 ${
-                                      isSel
-                                        ? 'ring-2 ring-[#2257a7] ring-offset-1 scale-110'
-                                        : 'ring-1 ring-slate-200 hover:scale-110 hover:ring-slate-400'
-                                    }`}
-                                    style={{ backgroundColor: color }}
-                                  />
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 font-medium">Monochrome</span>
-                          )}
-                          <div className="flex gap-1 shrink-0">
-                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">PDF</span>
-                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">DOCX</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 px-0.5">
-                        <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
-                          {catalogue?.label}
-                        </p>
-                        <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue?.description}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {selectedCategory !== 'Catalogues' && loading && (
-            <div className="space-y-8">
-              {[...Array(2)].map((_, familyIdx) => (
-                <div key={familyIdx}>
-                  <Skeleton className="h-7 w-48 mb-4 rounded-lg" />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[...Array(8)].map((_, i) => (
-                      <div key={i} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                        <Skeleton className="w-full h-56 rounded-none" />
-                        <div className="p-5 space-y-3">
-                          <Skeleton className="h-4 w-3/4 rounded" />
-                          <Skeleton className="h-3 w-1/2 rounded" />
-                        </div>
-                      </div>
-                    ))}
+                        <span className="text-xs font-bold leading-none">✕</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {selectedCategory !== 'Catalogues' && !loading && filteredTemplates.length === 0 && (
-            <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-200/60 flex items-center justify-center mb-3">
-                <LayoutTemplate className="w-8 h-8 text-[#2257a7]" />
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className="text-xs text-slate-400 font-medium mt-1">Try:</span>
+                  {['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education'].map(q => (
+                    <button
+                      key={q}
+                      data-testid={`quick-search-${q.toLowerCase().replace(/\s+/g, '-')}`}
+                      onClick={() => setSearchQuery(q)}
+                      className="text-xs px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#2257a7] hover:text-[#2257a7] transition-colors font-medium shadow-sm"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── Content area ──────────────────────────────────────── */}
+        <div className="flex gap-6 py-8">
+          <div className="shrink-0">
+            <CategorySidebar
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+              loading={categoriesLoading}
+            />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            {selectedCategory === 'Catalogues' && (
+              <div>
+                {/* Search and Controls */}
+                <div className="mb-8 space-y-4">
+                  <div className="flex items-center gap-3">
+                    {selectedCatalogue && cataloguesMap[selectedCatalogue] && (
+                      <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
+                        <span>{cataloguesMap[selectedCatalogue]?.label}</span>
+                        <span className="text-blue-300">selected</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setShowLivePreview(v => !v)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${showLivePreview
+                        ? 'bg-[#2257a7] text-white border-[#2257a7] shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-800'
+                        }`}
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      {showLivePreview ? 'Your Data' : 'Preview with Your Data'}
+                    </button>
+                  </div>
+
+                  {/* Search Input for Catalogues */}
+                  <div className="relative max-w-md">
+                    <input
+                      type="text"
+                      placeholder="Search catalogues..."
+                      value={catalogueSearchQuery}
+                      onChange={(e) => setCatalogueSearchQuery(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:border-transparent"
+                    />
+                    {catalogueSearchQuery && (
+                      <button
+                        onClick={() => setCatalogueSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+                  {filteredCatalogues.map(([key, catalogue]) => {
+                    const isSelected = selectedCatalogue === key;
+                    const hasCodeThumbnail = CODE_THUMBNAIL_CATALOGUES.has(key);
+                    const paletteInfo = CATALOGUE_PALETTES[key];
+                    const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor ?? catalogue.default_color;
+                    const primarySwatch = catalogue.accent_swatches?.[0] || catalogue.swatches?.[0] || '#000000';
+
+                    const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
+                    return (
+                      <div key={key} className="group flex flex-col">
+                        <div
+                          data-testid={`catalogue-card-${key}`}
+                          className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
+                          style={{
+                            boxShadow: isSelected
+                              ? `0 0 0 2.5px ${primarySwatch}, 0 16px 48px ${primarySwatch}30`
+                              : '0 1px 6px rgba(0,0,0,0.07)',
+                            transform: isSelected ? 'translateY(-3px)' : undefined,
+                          }}
+                          onClick={() => handleCatalogueSelect(key)}
+                        >
+                          <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
+                            <div
+                              ref={isFirst ? cardScaleRef : undefined}
+                              className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
+                              style={{ aspectRatio: '3/4' }}
+                            >
+                              {showLivePreview && liveResumeData ? (
+                                <>
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      top: 0,
+                                      left: 0,
+                                      width: '595px',
+                                      transform: `scale(${cardScale})`,
+                                      transformOrigin: 'top left',
+                                      pointerEvents: 'none',
+                                    }}
+                                  >
+                                    <Template1
+                                      data={liveResumeData}
+                                      style={buildStyleForCatalogue(key)}
+                                      layoutVariant={getLayoutVariant(key)}
+                                      sectionOrder={liveSectionOrder}
+                                    />
+                                  </div>
+                                  {!hasUserData && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
+                                      <User className="w-6 h-6 text-slate-300 mb-1" />
+                                      <p className="text-[10px] text-slate-400 font-medium text-center px-3">Build your resume to preview here</p>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
+                              )}
+                            </div>
+
+                            {isSelected && (
+                              <div
+                                className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg"
+                                style={{ backgroundColor: primarySwatch }}
+                              >
+                                ✓
+                              </div>
+                            )}
+
+                            <div className="absolute inset-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3 pointer-events-none">
+                              <div
+                                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
+                                style={{ backgroundColor: isSelected ? primarySwatch : '#1e293b' }}
+                              >
+                                {isSelected ? '✓ Selected' : 'Select Style'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="px-3 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
+                            {hasCodeThumbnail && paletteInfo ? (
+                              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                {paletteInfo.palette.slice(0, 5).map(color => {
+                                  const isSel = selectedBg[key] === color || (!selectedBg[key] && color === paletteInfo.defaultColor);
+                                  return (
+                                    <button
+                                      key={color}
+                                      aria-label={`Select colour ${color}`}
+                                      onMouseEnter={() => setHoverBg(prev => ({ ...prev, [key]: color }))}
+                                      onMouseLeave={() => setHoverBg(prev => ({ ...prev, [key]: undefined }))}
+                                      onClick={e => { e.stopPropagation(); handleColorPick(key, color); }}
+                                      className={`w-4 h-4 rounded-full cursor-pointer transition-all duration-150 ${isSel
+                                        ? 'ring-2 ring-[#2257a7] ring-offset-1 scale-110'
+                                        : 'ring-1 ring-slate-200 hover:scale-110 hover:ring-slate-400'
+                                        }`}
+                                      style={{ backgroundColor: color }}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-medium">Monochrome</span>
+                            )}
+                            <div className="flex gap-1 shrink-0">
+                              <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">PDF</span>
+                              <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">DOCX</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 px-0.5">
+                          <p className={`text-xl font-bold tracking-tight transition-colors duration-200 ${isSelected ? 'text-[#2257a7]' : 'text-slate-900 group-hover:text-slate-700'}`}>
+                            {catalogue?.label}
+                          </p>
+                          <p className="text-xs text-[#2e404a] mt-1 leading-relaxed line-clamp-2">{catalogue?.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-1">No templates found</h3>
-              <p className="text-slate-500 text-sm max-w-md">
-                Try adjusting your search or filters. We have over 100 templates across all industries.
-              </p>
-            </div>
-          )}
+            )}
 
-          {selectedCategory !== 'Catalogues' && !loading && filteredTemplates.length > 0 && (
-            <div className="space-y-10">
-              {Object.entries(paginatedGroupedTemplates).map(([family, domains], idx) => (
-                <div key={family} className="scroll-mt-20">
-                  <div className="mb-5">
+            {selectedCategory !== 'Catalogues' && loading && (
+              <div className="space-y-8">
+                {[...Array(2)].map((_, familyIdx) => (
+                  <div key={familyIdx}>
+                    <Skeleton className="h-7 w-48 mb-4 rounded-lg" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[...Array(8)].map((_, i) => (
+                        <div key={i} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                          <Skeleton className="w-full h-56 rounded-none" />
+                          <div className="p-5 space-y-3">
+                            <Skeleton className="h-4 w-3/4 rounded" />
+                            <Skeleton className="h-3 w-1/2 rounded" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedCategory !== 'Catalogues' && !loading && filteredTemplates.length === 0 && (
+              <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-200/60 flex items-center justify-center mb-3">
+                  <LayoutTemplate className="w-8 h-8 text-[#2257a7]" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-1">No templates found</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  Try adjusting your search or filters. We have over 100 templates across all industries.
+                </p>
+              </div>
+            )}
+
+            {selectedCategory !== 'Catalogues' && !loading && filteredTemplates.length > 0 && (
+              <div>
+                {/* Popular Templates Section - Only show for "All" category */}
+                {selectedCategory === 'All' && (
+                <div className="mb-12">
+                  <div className="mb-8">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
                       <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-                        {DOMAIN_NAMES[family] || family}
+                        Popular Templates
                       </h2>
                       <span className="px-2.5 py-0.5 bg-[#c9dcf2] text-[#2257a7] text-xs font-semibold rounded-full ring-1 ring-[#a5c6eb]">
-                        {Object.keys(domains).length} templates
+                        Trending
                       </span>
                     </div>
-                    {idx > 0 && <div className="h-px bg-linear-to-r from-slate-200 via-slate-100 to-transparent mt-4 -mb-4" />}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Object.entries(domains).map(([domain, domainTemplates]) => {
-                      const earlyCareerTemplate = domainTemplates.find(t =>
-                        t.name?.toLowerCase().includes('early') &&
-                        t.name?.toLowerCase().includes('career')
-                      ) || domainTemplates[0];
-                      return (
-                        <DomainCard
-                          key={domain}
-                          domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
-                          templateCount={domainTemplates.length}
-                          previewImage={resolveTemplateImageUrl(
-                            earlyCareerTemplate?.preview_url
-                          ) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
-                          previewHtml={((earlyCareerTemplate as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
-                          previewCss={((earlyCareerTemplate as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
-                          onClick={() => openDomainModal(family, domain)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              {/* Pagination Controls */}
-              {selectedCategory !== 'Catalogues' && totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3 pt-16 pb-8">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:text-[#2257a7] hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 transition-all duration-200"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Previous
-                  </button>
-
-                  <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
                     {(() => {
-                      const pages: (number | string)[] = [];
-                      const leftSibling = currentPage - 1;
-                      const rightSibling = currentPage + 1;
+                      // Most popular/in-demand applicable_domains (specific roles) based on real-world usage
+                      const popularApplicableDomains = [
+                        'software_engineering', 'data_science', 'cloud_computing', 'product_management',
+                        'devops_engineering', 'full_stack_development', 'ux_ui_design', 'financial_analysis',
+                        'doctor_physician', 'security_engineers'
+                      ];
+                      const selectedTemplates: TemplateResponse[] = [];
+                      const usedTemplateIds = new Set<string | number>();
 
-                      // Always show first page
-                      pages.push(1);
+                      for (const applicableDomain of popularApplicableDomains) {
+                        if (selectedTemplates.length >= 10) break;
 
-                      // Add left ellipsis if needed
-                      if (leftSibling > 2) {
-                        pages.push('...');
-                      }
+                        // Find templates that have this applicable_domain and haven't been used yet
+                        const templatesWithDomain = templates.filter(t => {
+                          const templateId = t.id as string | number | undefined;
+                          if (!templateId || usedTemplateIds.has(templateId)) return false;
+                          const applicableDomains = ((t as unknown) as Record<string, unknown>).applicable_domains as string[] || [];
+                          return applicableDomains.includes(applicableDomain);
+                        });
 
-                      // Add pages around current page
-                      for (let i = Math.max(2, leftSibling); i <= Math.min(totalPages - 1, rightSibling); i++) {
-                        if (!pages.includes(i)) {
-                          pages.push(i);
+                        // Prefer Early Career template, fall back to first
+                        const earlyCareerTemplate = templatesWithDomain.find(t =>
+                          t.name?.toLowerCase().includes('early') &&
+                          t.name?.toLowerCase().includes('career')
+                        ) || templatesWithDomain[0];
+
+                        if (earlyCareerTemplate) {
+                          const templateId = earlyCareerTemplate.id as string | number | undefined;
+                          if (templateId) {
+                            // Store both template and the matching applicable_domain for display
+                            const templateWithDomain = earlyCareerTemplate as unknown as Record<string, unknown>;
+                            templateWithDomain.__displayDomain = applicableDomain;
+                            selectedTemplates.push(earlyCareerTemplate);
+                            usedTemplateIds.add(templateId);
+                          }
                         }
                       }
 
-                      // Add right ellipsis if needed
-                      if (rightSibling < totalPages - 1) {
-                        pages.push('...');
-                      }
+                      return selectedTemplates.map((template) => {
+                        const family = ((template as unknown) as Record<string, unknown>).domain_family as string || 'other';
+                        // Use the matching applicable_domain we stored, not the first one
+                        const displayDomain = ((template as unknown) as Record<string, unknown>).__displayDomain as string || '';
+                        // Use the same domain display pattern as DomainCard
+                        const displayName = DOMAIN_DISPLAY_NAMES[displayDomain] || displayDomain;
 
-                      // Always show last page if more than 1
-                      if (totalPages > 1 && !pages.includes(totalPages)) {
-                        pages.push(totalPages);
-                      }
-
-                      return pages.map((page, idx) => (
-                        page === '...' ? (
-                          <div key={`ellipsis-${idx}`} className="w-9 h-9 flex items-center justify-center text-slate-300 font-bold text-lg">
-                            ···
-                          </div>
-                        ) : (
+                        return (
                           <button
-                            key={page}
-                            onClick={() => setCurrentPage(page as number)}
-                            className={`w-9 h-9 rounded-lg font-bold text-sm transition-all duration-200 ${
-                              page === currentPage
-                                ? 'bg-linear-to-br from-[#2257a7] to-[#1a4288] text-white shadow-lg shadow-blue-500/30 scale-105'
-                                : 'text-slate-600 hover:bg-slate-100 hover:text-[#2257a7] hover:shadow-md'
-                            }`}
+                            key={template.id}
+                            onClick={() => openDomainModal(family, displayDomain)}
+                            className="relative bg-white rounded-xl ring-1 ring-slate-200 overflow-hidden shadow-sm hover:ring-[#2257a7] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group cursor-pointer text-left flex flex-col p-0"
                           >
-                            {page}
+                            <div className="absolute top-0 right-0 z-10">
+                              <div className="px-3 py-1.5 bg-[#2257a7]/90 backdrop-blur text-white text-xs font-bold tracking-wide rounded-tr-xl rounded-bl-xl shadow-lg border-l border-b border-white/20">
+                                ⭐ Trending
+                              </div>
+                            </div>
+
+                            <div className="relative w-full bg-linear-to-br from-slate-50 to-slate-100/60 overflow-hidden flex-1" style={{ minHeight: "480px" }}>
+                              <TemplatePreviewRenderer
+                                previewHtml={((template as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
+                                previewCss={((template as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
+                                fallbackImage={resolveTemplateImageUrl(template.preview_url) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
+                                errorFallbackImage={DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
+                                title={template.name}
+                                width="100%"
+                                height="100%"
+                                scale={0.65}
+                                hideScroll={true}
+                                fillContainer={true}
+                              />
+                              <div className="absolute inset-0 bg-linear-to-t from-slate-900/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+
+                            <h3 className="absolute bottom-0 left-0 right-0 font-semibold text-slate-800 group-hover:text-[#2257a7] transition-colors text-xs leading-tight text-center py-2 px-2 border-t border-slate-100 bg-white">
+                              {displayName}
+                            </h3>
                           </button>
-                        )
-                      ));
+                        );
+                      });
                     })()}
                   </div>
-
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:text-[#2257a7] hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 transition-all duration-200"
-                  >
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
                 </div>
-              )}
-            </div>
-          )}
+                )}
+
+                {/* Industry Templates Section */}
+                <div className="space-y-10">
+                  {Object.entries(paginatedGroupedTemplates).map(([family, domains], idx) => (
+                    <div key={family} className="scroll-mt-20">
+                      <div className="mb-5">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
+                          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                            {DOMAIN_NAMES[family] || family}
+                          </h2>
+                          <span className="px-2.5 py-0.5 bg-[#c9dcf2] text-[#2257a7] text-xs font-semibold rounded-full ring-1 ring-[#a5c6eb]">
+                            {Object.keys(domains).length} templates
+                          </span>
+                        </div>
+                        {idx > 0 && <div className="h-px bg-linear-to-r from-slate-200 via-slate-100 to-transparent mt-4 -mb-4" />}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(domains).map(([domain, domainTemplates]) => {
+                          const earlyCareerTemplate = domainTemplates.find(t =>
+                            t.name?.toLowerCase().includes('early') &&
+                            t.name?.toLowerCase().includes('career')
+                          ) || domainTemplates[0];
+                          return (
+                            <DomainCard
+                              key={domain}
+                              domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
+                              templateCount={domainTemplates.length}
+                              previewImage={resolveTemplateImageUrl(
+                                earlyCareerTemplate?.preview_url
+                              ) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
+                              previewHtml={((earlyCareerTemplate as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
+                              previewCss={((earlyCareerTemplate as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
+                              onClick={() => openDomainModal(family, domain)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Pagination Controls */}
+                  {selectedCategory !== 'Catalogues' && totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-3 pt-16 pb-8">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:text-[#2257a7] hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 transition-all duration-200"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Previous
+                      </button>
+
+                      <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+                        {(() => {
+                          const pages: (number | string)[] = [];
+                          const leftSibling = currentPage - 1;
+                          const rightSibling = currentPage + 1;
+
+                          // Always show first page
+                          pages.push(1);
+
+                          // Add left ellipsis if needed
+                          if (leftSibling > 2) {
+                            pages.push('...');
+                          }
+
+                          // Add pages around current page
+                          for (let i = Math.max(2, leftSibling); i <= Math.min(totalPages - 1, rightSibling); i++) {
+                            if (!pages.includes(i)) {
+                              pages.push(i);
+                            }
+                          }
+
+                          // Add right ellipsis if needed
+                          if (rightSibling < totalPages - 1) {
+                            pages.push('...');
+                          }
+
+                          // Always show last page if more than 1
+                          if (totalPages > 1 && !pages.includes(totalPages)) {
+                            pages.push(totalPages);
+                          }
+
+                          return pages.map((page, idx) => (
+                            page === '...' ? (
+                              <div key={`ellipsis-${idx}`} className="w-9 h-9 flex items-center justify-center text-slate-300 font-bold text-lg">
+                                ···
+                              </div>
+                            ) : (
+                              <button
+                                key={page}
+                                onClick={() => setCurrentPage(page as number)}
+                                className={`w-9 h-9 rounded-lg font-bold text-sm transition-all duration-200 ${page === currentPage
+                                  ? 'bg-linear-to-br from-[#2257a7] to-[#1a4288] text-white shadow-lg shadow-blue-500/30 scale-105'
+                                  : 'text-slate-600 hover:bg-slate-100 hover:text-[#2257a7] hover:shadow-md'
+                                  }`}
+                              >
+                                {page}
+                              </button>
+                            )
+                          ));
+                        })()}
+                      </div>
+
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:text-[#2257a7] hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 transition-all duration-200"
+                      >
+                        Next
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
       </div>{/* end unified rail */}
 
       {selectedDomainModal && (

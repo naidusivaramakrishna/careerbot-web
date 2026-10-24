@@ -131,6 +131,8 @@ function isRequiredField(key: string): boolean {
     // Personal Info
     "linkedin url",
     "portfolio url",
+    "notice_period_days",
+    "work_mode",
 
     // General
     "currentlyworking",
@@ -730,6 +732,8 @@ const EditorTab: React.FC<Props> = ({
         "linkedinUrl",
         "githubUrl",
         "portfolioUrl",
+        "notice_period_days",
+        "work_mode",
       ];
 
       // Template-specific fields grouped by domain
@@ -801,6 +805,8 @@ const EditorTab: React.FC<Props> = ({
             lowerKey.includes("linkedinurl") ||
             lowerKey.includes("githuburl") ||
             lowerKey.includes("portfoliourl") ||
+            lowerKey.includes("notice_period_days") ||
+            lowerKey.includes("work_mode") ||
             // Template-specific fields
             lowerKey.includes("dateofbirth") ||
             lowerKey.includes("nationality") ||
@@ -951,6 +957,8 @@ const EditorTab: React.FC<Props> = ({
             linkedinUrl: live.personalInfo?.linkedinUrl || "",
             githubUrl: live.personalInfo?.githubUrl || "",
             portfolioUrl: live.personalInfo?.portfolioUrl || "",
+            work_mode: live.personalInfo?.work_mode || null,
+            notice_period_days: live.personalInfo?.notice_period_days || null,
             dateOfBirth: live.personalInfo?.dateOfBirth || null,
             nationality: live.personalInfo?.nationality || null,
             category: live.personalInfo?.category || null,
@@ -1389,6 +1397,8 @@ const EditorTab: React.FC<Props> = ({
         linkedinUrl: formData["linkedinUrl"] || "",
         githubUrl: formData["githubUrl"] || "",
         portfolioUrl: formData["portfolioUrl"] || "",
+        notice_period_days: formData["notice_period_days"] || null,
+        work_mode: formData["work_mode"] || null,
         // Common optional fields
         dateOfBirth: formData["dateOfBirth"] || null,
         nationality: formData["nationality"] || null,

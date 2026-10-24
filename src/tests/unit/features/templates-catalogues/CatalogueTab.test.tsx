@@ -39,15 +39,21 @@ vi.mock('@/app/browse-templates/_components/CatalogueThumbnail', () => ({
 // ─── STYLE_CATALOGUES mock ────────────────────────────────────────────────────
 vi.mock('@/app/(resume)/builder/creation/_utils/templateStyles', () => ({
   STYLE_CATALOGUES: {
-    galaxy:  { label: 'Galaxy',  swatches: ['#1a1a1a', '#4b5563'], style: { fontFamily: 'arial',            headingColor: '#1a1a1a' } },
+    galaxy:  { label: 'Galaxy',  swatches: ['#1a1a1a', '#4b5563'], style: { fontFamily: 'arial',            headingColor: '#000000' } },
     eclipse: { label: 'Eclipse', swatches: ['#ececec', '#d1d5db'], style: { fontFamily: 'helvetica',        sectionHeaderBg: '#ececec' } },
-    ocean:   { label: 'Ocean',   swatches: ['#0369a1', '#0c4a6e'], style: { fontFamily: 'arial',            headingColor: '#0369a1' } },
-    classic: { label: 'Classic', swatches: ['#1A1A1A', '#4b5563'], style: { fontFamily: 'times new roman',  headingColor: '#1A1A1A', bodyColor: '#4b5563' } },
+    ocean:   { label: 'Ocean',   swatches: ['#0369a1', '#0c4a6e'], style: { fontFamily: 'arial',            headingColor: '#000000' } },
+    classic: { label: 'Classic', swatches: ['#1A1A1A', '#4b5563'], style: { fontFamily: 'times new roman',  headingColor: '#000000', bodyColor: '#4b5563' } },
   },
 }));
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import CatalogueTab from '@/app/(resume)/builder/creation/_components/templates/CatalogueTab';
+import { STYLE_CATALOGUES } from '@/app/(resume)/builder/creation/_utils/templateStyles';
+
+// Get real STYLE_CATALOGUES for test assertions (not the mock)
+const realSTYLE_CATALOGUES = await vi.importActual<typeof import('@/app/(resume)/builder/creation/_utils/templateStyles')>(
+  '@/app/(resume)/builder/creation/_utils/templateStyles'
+).then(m => m.STYLE_CATALOGUES);
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -121,23 +127,23 @@ describe('CatalogueTab — catalogue selection', () => {
     expect(mockSetResumeStyle).toHaveBeenCalledTimes(1);
   });
 
-  it('ocean (galaxy-type): headingColor is "#1A1A1A" and accentColor is the palette default', () => {
+  it('ocean: headingColor matches style and accentColor is the palette default', () => {
     render(<CatalogueTab />);
     fireEvent.click(screen.getByTestId('thumbnail-ocean'));
 
     const updater = mockSetResumeStyle.mock.calls[0][0] as (prev: object) => Record<string, unknown>;
     const result = updater({});
-    expect(result.headingColor).toBe('#1A1A1A');
+    expect(result.headingColor).toBe(realSTYLE_CATALOGUES.ocean.style.headingColor);
     expect(result.accentColor).toBe('#0369a1'); // ocean palette defaultColor
   });
 
-  it('galaxy (galaxy-type): headingColor is "#1A1A1A" and accentColor is the palette default', () => {
+  it('galaxy: headingColor matches style and accentColor is the palette default', () => {
     render(<CatalogueTab />);
     fireEvent.click(screen.getByTestId('thumbnail-galaxy'));
 
     const updater = mockSetResumeStyle.mock.calls[0][0] as (prev: object) => Record<string, unknown>;
     const result = updater({});
-    expect(result.headingColor).toBe('#1A1A1A');
+    expect(result.headingColor).toBe(realSTYLE_CATALOGUES.galaxy.style.headingColor);
     expect(result.accentColor).toBe('#ff0000'); // galaxy palette defaultColor
   });
 
@@ -184,7 +190,7 @@ describe('CatalogueTab — colour swatch selection', () => {
     const updater = mockSetResumeStyle.mock.calls[0][0] as (prev: object) => Record<string, unknown>;
     const result = updater({});
     expect(result.accentColor).toBe('#0369a1');
-    expect(result.headingColor).toBe('#1A1A1A'); // ocean is galaxy-type → heading stays dark
+    expect(result.headingColor).toBe(realSTYLE_CATALOGUES.ocean.style.headingColor); // ocean style headingColor
   });
 
   it('clicking a second swatch changes the selected colour', () => {

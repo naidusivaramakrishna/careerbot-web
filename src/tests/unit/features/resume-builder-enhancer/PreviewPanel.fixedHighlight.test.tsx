@@ -18,7 +18,7 @@ vi.mock("@/app/(resume)/builder/creation/_context/ScoreContext", () => ({
 vi.mock("@/app/(resume)/builder/creation/_hooks/useResumeScorePreview", () => ({
   useResumeScorePreview: () => ({ score: 0, breakdown: {} }),
 }));
-vi.mock("@/api/resumeApi", () => ({ getResumePreviewImage: vi.fn(), downloadResume: vi.fn() }));
+vi.mock("@/api/resumeApi", () => ({ downloadResume: vi.fn() }));
 vi.mock("@/api/enhancerApi", () => ({ downloadEnhancedResume: vi.fn() }));
 vi.mock("@/api/userApi", () => ({ getProfile: vi.fn().mockResolvedValue({ email: "t@example.com" }) }));
 vi.mock("@/utils/careerLevelDetection", () => ({ detectCareerLevel: vi.fn(() => "mid") }));

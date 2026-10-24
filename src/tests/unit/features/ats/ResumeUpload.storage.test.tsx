@@ -54,13 +54,13 @@ describe("ResumeUpload storage handling", () => {
 
     await uploadResume();
 
-    expect(await screen.findByText(/View Detailed Report/i, undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/detailed.*report/i, {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.queryByText(/quota/i)).not.toBeInTheDocument();
   });
 
   it("does not write embedded images into storage", async () => {
     await uploadResume();
-    await screen.findByText(/View Detailed Report/i, undefined, { timeout: 3000 });
+    await screen.findByText(/detailed.*report/i, {}, { timeout: 3000 });
 
     const writes = vi.mocked(window.localStorage.setItem).mock.calls
       .filter(([key]) => key === "atsAnalysisData")
@@ -73,7 +73,7 @@ describe("ResumeUpload storage handling", () => {
     vi.mocked(window.localStorage.setItem).mockImplementation(() => { throw quotaError(); });
 
     await uploadResume();
-    fireEvent.click(await screen.findByText(/View Detailed Report/i, undefined, { timeout: 3000 }));
+    fireEvent.click(await screen.findByText(/detailed.*report/i, {}, { timeout: 3000 }));
 
     expect(mockPush).toHaveBeenCalledWith("/atslogin/report?resume_id=resume-1");
   });

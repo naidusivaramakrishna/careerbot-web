@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { X, Star } from "lucide-react";
+import { X, Star, Medal, CircleCheck, Briefcase, Building2 } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
 import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, getTemplateById, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
@@ -10,11 +10,48 @@ import { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } from "../../_utils/template
 import CatalogueTab from "./CatalogueTab";
 import { getProfile } from "@/api/userApi";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
+import { getSectionOrderByDomainAndCareer, getSectionOrderFromTemplate, addCareerLevelSections, SECTION_KEY_TO_DISPLAY_NAME, getDomainSectionOrder } from "@/app/(resume)/templates/_utils/domainSectionOrder";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from "@/app/(resume)/templates/_constants/templateImages";
 import { resolveTemplateImageUrl } from "@/lib/imageUtils";
 import { TemplatePreviewRenderer } from "@/components/templates";
+
+// Format backend level strings to display format
+const formatBackendLevel = (backendLevel?: string): string | undefined => {
+  if (!backendLevel) return undefined;
+  const level = backendLevel.toLowerCase();
+  if (level === 'fresher' || level === 'entry_level') return 'Fresher';
+  if (level === 'early_career') return 'Early Career';
+  if (level === 'mid_level' || level === 'mid-level') return 'Mid-Level';
+  if (level === 'senior_level' || level === 'senior-level') return 'Senior-Level';
+  if (level === 'lead') return 'Lead';
+  if (level === 'architect') return 'Architect';
+  if (level === 'manager') return 'Manager';
+  if (level === 'director') return 'Director';
+  if (level === 'vice_president' || level === 'vp') return 'Vice President';
+  return undefined;
+};
+
+// Get career level from template, preferring backend level
+const getCareerLevel = (template: TransformedTemplate): string => {
+  const backendLevel = (template as unknown as Record<string, unknown>).level as string | undefined;
+  if (backendLevel) {
+    return formatBackendLevel(backendLevel) || 'Custom';
+  }
+
+  const name = template.name || '';
+  const nameStr = name.toLowerCase();
+  if (nameStr.includes('early') && nameStr.includes('career')) return 'Early Career';
+  if (nameStr.includes('fresher')) return 'Fresher';
+  if (nameStr.includes('architect')) return 'Architect';
+  if (nameStr.includes('manager')) return 'Manager';
+  if (nameStr.includes('lead')) return 'Lead';
+  if (nameStr.includes('senior')) return 'Senior-Level';
+  if (nameStr.includes('director')) return 'Director';
+  if (nameStr.includes('vice') || nameStr.includes('vp')) return 'Vice President';
+  if (nameStr.includes('mid')) return 'Mid-Level';
+  return 'Custom';
+};
 
 // Interface updated with mongoId (_id)
 interface TransformedTemplate {
@@ -29,68 +66,12 @@ interface TransformedTemplate {
   category: string;
   domain_family?: string;
   domain_display_name?: string;
+  level?: string;  // e.g., 'early_career', 'mid_level', 'senior_level'
+  experience_years?: string;  // e.g., '0-2', '1-3'
   preview_html?: string;
   preview_css?: string;
+  sections?: Record<string, Record<string, unknown>>;
 }
-
-// Default templates using MongoDB _ids
-const DEFAULT_TEMPLATES: TransformedTemplate[] = [
-  {
-    id: "compact_professional",
-    mongoId: "698c12085d07f07c24604031",
-    template_id: "compact_professional",
-    name: "Compact Professional",
-    subtitle: "Modern",
-    preview_url: "/assets/templates/template-1.png",
-    atsFriendly: true,
-    description: "Clean and modern design perfect for tech professionals",
-    category: "modern"
-  },
-  {
-    id: "clean_simple",
-    mongoId: "698c12085d07f07c24604033",
-    template_id: "clean_simple",
-    name: "Clean Simple",
-    subtitle: "Minimalist",
-    preview_url: "/assets/templates/template-2.png",
-    atsFriendly: true,
-    description: "Traditional professional layout for corporate roles",
-    category: "minimalist"
-  },
-  {
-    id: "minimalist_classic",
-    mongoId: "69bcda650380c25aee737346",
-    template_id: "minimalist_classic",
-    name: "Classic Horizontal Dividers",
-    subtitle: "Modern",
-    preview_url: "/assets/templates/template-3.png",
-    atsFriendly: true,
-    description: "Modern professional resume with horizontal line dividers",
-    category: "modern"
-  },
-  {
-    id: "professional_classic",
-    mongoId: "697ca4b084d83306028ce5b0",
-    template_id: "professional_classic",
-    name: "Classic Professional",
-    subtitle: "Professional",
-    preview_url: "/assets/templates/template-4.png",
-    atsFriendly: true,
-    description: "Clean professional layout with left-aligned header, strong section dividers, and structured single-column format",
-    category: "professional"
-  },
-  {
-    id: "classic_professional",
-    mongoId: "698b4219fb7a5d9a92ce520a",
-    template_id: "classic_professional",
-    name: "Classic Professional",
-    subtitle: "Professional",
-    preview_url: "/assets/templates/template-4.png",
-    atsFriendly: true,
-    description: "Clean professional layout with left-aligned header, strong section dividers, and structured single-column format",
-    category: "professional"
-  }
-];
 
 interface TemplatesTabProps {
   onTemplateSelect?: () => void;
@@ -127,7 +108,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
   const source = searchParams.get("source");
   const [activePanel, setActivePanel] = useState<"templates" | "style">("templates");
   const [previewTemplate, setPreviewTemplate] = useState<TransformedTemplate | null>(null);
-  const [templates, setTemplates] = useState<TransformedTemplate[]>(DEFAULT_TEMPLATES);
+  const [templates, setTemplates] = useState<TransformedTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
   const [careerLevelData, setCareerLevelData] = useState<Array<{
@@ -427,16 +408,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
             });
           logger.info("Templates transformed:", transformedTemplates.length, transformedTemplates);
           setTemplates(transformedTemplates);
-        } else {
-          logger.warn("No templates returned from API");
-          setTemplates(DEFAULT_TEMPLATES);
         }
       } catch (error) {
         logger.error("Error fetching templates:", error);
-        // The four built-in templates are intentionally available offline.
-        // A catalogue/network failure must not make the Templates drawer look
-        // broken or block the user from changing the resume layout.
-        setTemplates(DEFAULT_TEMPLATES);
       } finally {
         setLoading(false);
       }
@@ -574,6 +548,66 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
           const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
           localStorage.setItem(selectedTemplateKey, previewTemplate.id);
 
+          // Extract and store section order from backend template config
+          const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+
+          // Preserve current sections to restore user-added extras later
+          const currentSectionOrder = sectionOrder;
+
+          // First, detect career level from template name
+          const templateName = previewTemplate.name || '';
+          let careerLevel: string | undefined;
+          const nameStr = templateName.toLowerCase();
+          if (nameStr.includes('early') && nameStr.includes('career')) {
+            careerLevel = 'early career';
+          } else if (nameStr.includes('fresher')) {
+            careerLevel = 'fresher';
+          } else if (nameStr.includes('architect')) {
+            careerLevel = 'architect';
+          } else if (nameStr.includes('manager')) {
+            careerLevel = 'manager';
+          } else if (nameStr.includes('lead')) {
+            careerLevel = 'lead';
+          } else if (nameStr.includes('senior')) {
+            careerLevel = 'senior-level';
+          } else if (nameStr.includes('mid')) {
+            careerLevel = 'mid-level';
+          }
+
+          let newSectionOrder: string[] = [];
+
+          // Try to get section order from template's sections config
+          if (previewTemplate.sections) {
+            newSectionOrder = getSectionOrderFromTemplate(previewTemplate.sections);
+          }
+
+          // Fallback to domain/career level logic if template doesn't have sections
+          if (newSectionOrder.length === 0) {
+            const correctDomainFamily = previewTemplate.domain_family;
+            newSectionOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
+          }
+
+          // Add career-level specific sections (e.g., Internships for Freshers)
+          newSectionOrder = addCareerLevelSections(newSectionOrder, careerLevel);
+
+          // Preserve only custom sections (not sections from old or new template).
+          // Get old template's sections from stored domain, compute what it had, and filter those out.
+          const oldDomainFamily = typeof window !== 'undefined' ? localStorage.getItem(`domainFamily_${userEmail}`) : null;
+          const oldTemplateOrder = oldDomainFamily ? getDomainSectionOrder(oldDomainFamily) : [];
+          const newOrderSet = new Set(newSectionOrder);
+          const oldOrderSet = new Set(oldTemplateOrder);
+          const preservedExtras = currentSectionOrder.filter(
+            name => !oldOrderSet.has(name) && !newOrderSet.has(name)
+          );
+          const finalOrder = [...newSectionOrder, ...preservedExtras];
+
+          // Store section order
+          if (finalOrder.length > 0) {
+            localStorage.setItem(sectionOrderKey, JSON.stringify(finalOrder));
+            setSectionOrder(finalOrder);
+            logger.info('Stored sectionOrder from career-level template with preserved extras:', finalOrder);
+          }
+
           // Clear style-template flags — domain templates take over
           const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
           localStorage.removeItem(styleKey);
@@ -664,11 +698,15 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                           const sectionOrderKey = _lsEmail ? `sectionOrder_${_lsEmail}` : 'sectionOrder';
                           const domainFamilyKey = _lsEmail ? `domainFamily_${_lsEmail}` : 'domainFamily';
 
-                          // Preserve any extra sections the user had added before switching template.
-                          // Read from context (sectionOrder) — always up-to-date, avoids stale localStorage reads.
-                          const addableExtras = new Set(['Achievements', 'Publications', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References']);
+                          // Preserve only custom sections (not sections from old or new template).
+                          // Get old template's sections and filter those out along with new template sections.
+                          const oldDomainFamily = _lsEmail ? localStorage.getItem(`domainFamily_${_lsEmail}`) : null;
+                          const oldTemplateOrder = oldDomainFamily ? getDomainSectionOrder(oldDomainFamily) : [];
                           const newOrderSet = new Set(newSectionOrder);
-                          const preservedExtras = sectionOrder.filter(name => addableExtras.has(name) && !newOrderSet.has(name));
+                          const oldOrderSet = new Set(oldTemplateOrder);
+                          const preservedExtras = sectionOrder.filter(
+                            name => !oldOrderSet.has(name) && !newOrderSet.has(name)
+                          );
                           const finalOrder = [...newSectionOrder, ...preservedExtras];
 
                           // Write to localStorage FIRST so that ResumeContext's useEffect([selectedTemplate])
@@ -701,6 +739,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                             domain_display_name: careerTpl.domain_display_name,
                             preview_html: fullTemplate.preview_html,
                             preview_css: fullTemplate.preview_css,
+                            sections: ((fullTemplate as unknown) as Record<string, unknown>).sections as Record<string, Record<string, unknown>> | undefined,
                           };
                           setPreviewTemplate(previewData);
                           logger.info('Career level template with full details:', fullTemplate.name, 'Has preview:', !!fullTemplate.preview_html);
@@ -728,9 +767,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                         : "border-gray-200 hover:shadow-md"
                         } bg-white overflow-hidden`}
                     >
-                      <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-2 py-1 rounded-full shadow-sm">
-                        100% ATS Friendly
-                      </span>
+                      <div className="absolute top-0 right-0 pointer-events-none">
+                        <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 py-1 rounded-tr-xl rounded-bl-xl shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border-l border-b border-white/30">
+                          <Star className="w-3 h-3 fill-white text-white" />
+                          <span className="text-[10px]">100% ATS</span>
+                        </div>
+                      </div>
                       <div className="w-full h-44 mt-6 bg-gray-100 pointer-events-none">
                         <TemplatePreviewRenderer
                           previewHtml={careerTpl.preview_html}
@@ -794,9 +836,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                       } bg-white overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200`}
                   >
                     {tpl.atsFriendly && (
-                      <div className="absolute top-1 right-1 pointer-events-none">
-                        <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 rounded-full shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border border-white/30">
-                          <Star className="w-3.5 h-3.5 fill-white text-white" />
+                      <div className="absolute top-0 right-0 pointer-events-none">
+                        <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 rounded-tr-xl rounded-bl-xl shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border-l border-b border-white/30">
+                          <Star className="w-3 h-3 fill-white text-white" />
                           <span className='text-[10px]'>100% ATS</span>
                         </div>
                       </div>
@@ -889,35 +931,11 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                   <div>
                     <h3 className="text-2xl font-bold text-gray-800 mb-2">
                       {(() => {
-                        if (previewTemplate.category !== 'career-level') {
-                          return previewTemplate.name;
+                        const careerLevel = getCareerLevel(previewTemplate);
+                        if (careerLevel && careerLevel !== 'Custom') {
+                          return `${previewTemplate.domain_display_name || 'Resume'} ${careerLevel} Template`;
                         }
-
-                        const templateName = previewTemplate.name || '';
-                        const nameStr = templateName.toLowerCase();
-
-                        let careerLevel = '';
-                        if (nameStr.includes('early') && nameStr.includes('career')) {
-                          careerLevel = 'Early Career';
-                        } else if (nameStr.includes('fresher')) {
-                          careerLevel = 'Fresher';
-                        } else if (nameStr.includes('architect')) {
-                          careerLevel = 'Architect';
-                        } else if (nameStr.includes('manager')) {
-                          careerLevel = 'Manager';
-                        } else if (nameStr.includes('lead')) {
-                          careerLevel = 'Lead';
-                        } else if (nameStr.includes('senior')) {
-                          careerLevel = 'Senior-Level';
-                        } else if (nameStr.includes('mid')) {
-                          careerLevel = 'Mid-Level';
-                        }
-
-                        if (careerLevel && previewTemplate.domain_display_name) {
-                          return `${previewTemplate.domain_display_name} ${careerLevel} Template`;
-                        }
-
-                        return previewTemplate.domain_display_name || previewTemplate.name;
+                        return previewTemplate.name;
                       })()}
                     </h3>
                     {previewTemplate.atsFriendly && (
@@ -928,30 +946,93 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId,
                   </div>
 
                   <div className="pt-4 border-t border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Description</h4>
-                    <p className="text-sm text-gray-600 leading-relaxed">{previewTemplate.description}</p>
+                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Template Details</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-200 flex items-start gap-2">
+                        <div className="bg-gray-100 rounded-md p-1.5 shrink-0">
+                          <CircleCheck className="w-3 h-3 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-gray-500 font-semibold">ATS</div>
+                          <div className="text-xs font-bold text-gray-700">Optimized</div>
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-200 flex items-start gap-2">
+                        <div className="bg-gray-100 rounded-md p-1.5 shrink-0">
+                          <Medal className="w-3 h-3 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-gray-500 font-semibold">Career Level</div>
+                          <div className="text-xs font-bold text-gray-700">
+                            {getCareerLevel(previewTemplate)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-200 flex items-start gap-2">
+                        <div className="bg-gray-100 rounded-md p-1.5 shrink-0">
+                          <Briefcase className="w-3 h-3 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-gray-500 font-semibold">Experience</div>
+                          <div className="text-xs font-bold text-gray-700">
+                            {((previewTemplate as unknown as Record<string, unknown>).experience_years as string) || '0-2'} yrs
+                          </div>
+                        </div>
+                      </div>
+                      {previewTemplate.domain_display_name && (
+                        <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-200 flex items-start gap-2">
+                          <div className="bg-gray-100 rounded-md p-1.5 shrink-0">
+                            <Building2 className="w-3 h-3 text-black" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs text-gray-500 font-semibold">Domain</div>
+                            <div className="text-xs font-bold text-gray-700 truncate">{previewTemplate.domain_display_name}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-4 border-t border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Features</h4>
-                    <ul className="space-y-2">
-                      <li className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-green-500 mt-0.5">✓</span>
-                        <span>Professional layout</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-green-500 mt-0.5">✓</span>
-                        <span>Easy to customize</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-green-500 mt-0.5">✓</span>
-                        <span>ATS optimized</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-green-500 mt-0.5">✓</span>
-                        <span>Print friendly</span>
-                      </li>
+                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Why Choose This Template</h4>
+                    <ul className="space-y-1.5">
+                      {(() => {
+                        const description = previewTemplate.description;
+                        const sentences = description
+                          .split('. ')
+                          .slice(0, 3)
+                          .map((sentence) => sentence.trim().replace(/\.$/, ''));
+
+                        return sentences.map((sentence, index) => (
+                          <li key={index} className="text-xs text-gray-600 flex gap-1.5">
+                            <span className="text-gray-400 shrink-0 mt-0.5">•</span>
+                            <span>{sentence}.</span>
+                          </li>
+                        ));
+                      })()}
                     </ul>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200">
+                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Best Suited For</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-block bg-white border border-gray-300 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700">
+                        {(() => {
+                          const level = getCareerLevel(previewTemplate);
+                          if (level === 'Fresher') return 'Fresher candidates';
+                          if (level === 'Early Career') return 'Early career professionals';
+                          return `${level} professionals`;
+                        })()}
+                      </span>
+                      <span className="inline-block bg-white border border-gray-300 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700">
+                        {((previewTemplate as unknown as Record<string, unknown>).experience_years as string) || '0-2'} years experience
+                      </span>
+                      {previewTemplate.domain_display_name && (
+                        <span className="inline-block bg-white border border-gray-300 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 truncate">
+                          {previewTemplate.domain_display_name} roles
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-6">

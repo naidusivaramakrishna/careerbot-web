@@ -484,19 +484,21 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading(getSectionTitle("Certifications"))}
             <div style={sectionBorderStyle("12px")} />
-            {certifications.map((cert, idx) => (
-              <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", display: "flex", alignItems: "flex-start", fontSize: "12px" }}>
-                <span style={{ marginRight: "8px" }}>•</span>
-                <div>
-                  <span style={{ ...titleStyle }}>{cert.name || cert.issuer}</span>
-                  {cert.name && cert.issuer && <span> - {cert.issuer}</span>}
-                  {((cert.issueDate) || cert.expiryDate) && <span> | </span>}
-                  {(cert.issueDate) && <span>{cert.issueDate}</span>}
-                  {(cert.issueDate) && cert.expiryDate && <span> – </span>}
-                  {cert.expiryDate && <span>{cert.expiryDate}</span>}
+            {certifications.map((cert, idx) => {
+              const restParts = [];
+              if (cert.issuer) restParts.push(cert.issuer);
+              if (cert.issueDate) restParts.push(cert.issueDate);
+              if (cert.credentialId) restParts.push(`Credential ID: ${cert.credentialId}`);
+              return (
+                <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", display: "flex", alignItems: "flex-start", fontSize: "12px" }}>
+                  <span style={{ marginRight: "8px" }}>•</span>
+                  <div>
+                    <span style={{ ...titleStyle }}>{cert.name || cert.issuer}</span>
+                    {restParts.length > 0 && <span>, {restParts.join(", ")}</span>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null;
 
@@ -1019,6 +1021,13 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>Portfolio</a>}
             {personalInfo.githubUrl && <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>GitHub</a>}
           </div>
+          {(personalInfo.work_mode || personalInfo.notice_period_days) && (
+            <p style={{ ...baseTextStyle, fontSize: "10px", margin: "4px 0 0 0", textAlign: "center" }}>
+              {personalInfo.work_mode && <span>Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span></span>}
+              {personalInfo.work_mode && personalInfo.notice_period_days && <span style={{ margin: "0 24px" }}>         </span>}
+              {personalInfo.notice_period_days && <span>Notice: {personalInfo.notice_period_days} days</span>}
+            </p>
+          )}
           <hr style={{ border: "none", borderTop: `1px solid ${style.bodyColor}`, margin: "8px 0 16px 0" }} />
         </div>
       );
@@ -1028,6 +1037,8 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       if (personalInfo.email) contactParts.push(personalInfo.email);
       if (personalInfo.location) contactParts.push(personalInfo.location);
       if (personalInfo.phone) contactParts.push(`${personalInfo.countryCode}${personalInfo.phone}`);
+      if (personalInfo.work_mode) contactParts.push(`Open to ${personalInfo.work_mode.charAt(0).toUpperCase() + personalInfo.work_mode.slice(1)}`);
+      if (personalInfo.notice_period_days) contactParts.push(`Notice: ${personalInfo.notice_period_days} days`);
       return (
         <div style={{ textAlign: "center", marginBottom: "4px" }}>
           <h1 style={{ ...nameStyle, textAlign: "center", fontSize: "26px", marginBottom: "4px", textTransform: "none" }}>{displayName}</h1>
@@ -1065,6 +1076,13 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a>}
             {personalInfo.githubUrl && <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>}
           </div>
+          {(personalInfo.work_mode || personalInfo.notice_period_days) && (
+            <p style={{ ...baseTextStyle, fontSize: "10px", margin: "4px 0 0 0", textAlign: "center" }}>
+              {personalInfo.work_mode && <span>Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span></span>}
+              {personalInfo.work_mode && personalInfo.notice_period_days && <span style={{ margin: "0 24px" }}>         </span>}
+              {personalInfo.notice_period_days && <span>Notice: {personalInfo.notice_period_days} days</span>}
+            </p>
+          )}
           <hr style={{ border: "none", borderTop: `1px solid #d1d5db`, margin: "10px 0 16px 0" }} />
         </div>
       );
@@ -1074,6 +1092,8 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       if (personalInfo.email) contactParts.push(personalInfo.email);
       if (personalInfo.phone) contactParts.push(`${personalInfo.countryCode}${personalInfo.phone}`);
       if (personalInfo.location) contactParts.push(personalInfo.location);
+      if (personalInfo.work_mode) contactParts.push(`Open to ${personalInfo.work_mode.charAt(0).toUpperCase() + personalInfo.work_mode.slice(1)}`);
+      if (personalInfo.notice_period_days) contactParts.push(`Notice: ${personalInfo.notice_period_days} days`);
       return (
         <div style={{ marginBottom: "16px" }}>
           <h1 style={{ fontSize: "26px", fontWeight: "bold", color: accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
@@ -1143,6 +1163,16 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>
               </p>
             )}
+            {personalInfo.work_mode && (
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span>
+              </p>
+            )}
+            {personalInfo.notice_period_days && (
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                Notice: {personalInfo.notice_period_days} days
+              </p>
+            )}
           </div>
           <hr style={{ border: "none", borderTop: "1px solid #d1d5db", margin: "0 0 16px 0" }} />
         </div>
@@ -1191,6 +1221,16 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>
               </p>
             )}
+            {personalInfo.work_mode && (
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span>
+              </p>
+            )}
+            {personalInfo.notice_period_days && (
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                Notice: {personalInfo.notice_period_days} days
+              </p>
+            )}
           </div>
           <hr style={{ border: "none", borderTop: "1px solid #d1d5db", margin: "10px 0 16px 0" }} />
         </div>
@@ -1218,6 +1258,13 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {personalInfo.email && <span>{personalInfo.email}</span>}
             </div>
           )}
+          {(personalInfo.work_mode || personalInfo.notice_period_days) && (
+            <p style={{ ...baseTextStyle, fontSize: "10px", margin: "4px 0 0 0", textAlign: "left" }}>
+              {personalInfo.work_mode && <span>Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span></span>}
+              {personalInfo.work_mode && personalInfo.notice_period_days && <span style={{ margin: "0 24px" }}>         </span>}
+              {personalInfo.notice_period_days && <span>Notice: {personalInfo.notice_period_days} days</span>}
+            </p>
+          )}
         </div>
       );
     }
@@ -1241,6 +1288,8 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {personalInfo.linkedinUrl && <div><a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></div>}
               {personalInfo.portfolioUrl && <div><a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></div>}
               {personalInfo.githubUrl && <div><a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></div>}
+              {personalInfo.work_mode && <div>Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span></div>}
+              {personalInfo.notice_period_days && <div>Notice: {personalInfo.notice_period_days} days</div>}
             </div>
           </div>
           <hr style={{ border: "none", borderTop: `2px solid ${style.headingColor}`, margin: "0 0 16px 0" }} />
@@ -1263,11 +1312,13 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 {personalInfo.email && <div>{personalInfo.email}</div>}
                 {personalInfo.location && <div>{personalInfo.location}</div>}
                 {personalInfo.portfolioUrl && <div><a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></div>}
+                {personalInfo.work_mode && <div style={{ marginTop: "4px" }}>Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span></div>}
               </div>
               <div>
                 {personalInfo.phone && <div>{personalInfo.countryCode}{personalInfo.phone}</div>}
                 {personalInfo.linkedinUrl && <div><a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></div>}
                 {personalInfo.githubUrl && <div><a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></div>}
+                {personalInfo.notice_period_days && <div style={{ marginTop: "4px" }}>Notice: {personalInfo.notice_period_days} days</div>}
               </div>
             </div>
           </div>
@@ -1290,6 +1341,13 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           {personalInfo.portfolioUrl && <>{(personalInfo.location || personalInfo.email || personalInfo.phone || personalInfo.linkedinUrl) ? " | " : ""}<a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></>}
           {personalInfo.githubUrl && <>{(personalInfo.location || personalInfo.email || personalInfo.phone || personalInfo.linkedinUrl || personalInfo.portfolioUrl) ? " | " : ""}<a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></>}
         </p>
+        {(personalInfo.work_mode || personalInfo.notice_period_days) && (
+          <p style={{ ...baseTextStyle, fontSize: "10px", margin: "2px 0 0 0", textAlign: "center" }}>
+            {personalInfo.work_mode && <span>Open to <span style={{ textTransform: "capitalize" }}>{personalInfo.work_mode}</span></span>}
+            {personalInfo.work_mode && personalInfo.notice_period_days && <span> | </span>}
+            {personalInfo.notice_period_days && <span>Notice: {personalInfo.notice_period_days} days</span>}
+          </p>
+        )}
       </div>
     );
   };

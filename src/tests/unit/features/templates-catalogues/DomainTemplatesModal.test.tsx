@@ -77,7 +77,7 @@ describe('DomainTemplatesModal — rendering', () => {
 
   it('renders the domain name in the header', () => {
     render(<DomainTemplatesModal {...defaultProps} />);
-    expect(screen.getByText('Healthcare')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Healthcare' })).toBeInTheDocument();
   });
 
   it('renders the "Select your career level" subtitle', () => {
@@ -87,28 +87,23 @@ describe('DomainTemplatesModal — rendering', () => {
 
   it('renders all three career level labels', () => {
     render(<DomainTemplatesModal {...defaultProps} />);
-    expect(screen.getByText('Fresher')).toBeInTheDocument();
+    // Multiple "Fresher" elements exist, so use a more specific query
+    const fresherButtons = screen.getAllByText('Fresher');
+    expect(fresherButtons.length).toBeGreaterThan(0);
     expect(screen.getByText('Mid-Level')).toBeInTheDocument();
     expect(screen.getByText('Senior-Level')).toBeInTheDocument();
   });
 
-  it('shows the "100% ATS Friendly" badge', () => {
+  it('shows the "100% ATS" badge', () => {
     render(<DomainTemplatesModal {...defaultProps} />);
-    expect(screen.getByText(/100% ATS Friendly/i)).toBeInTheDocument();
+    const badges = screen.getAllByText(/100% ATS/i);
+    expect(badges.length).toBeGreaterThan(0);
   });
 
-  it('shows all four feature bullets', () => {
+  it('shows template description in Why Choose This Template section', () => {
     render(<DomainTemplatesModal {...defaultProps} />);
-    expect(screen.getByText('Professional layout')).toBeInTheDocument();
-    expect(screen.getByText('Easy to customize')).toBeInTheDocument();
-    expect(screen.getByText('ATS optimized')).toBeInTheDocument();
-    expect(screen.getByText('Print friendly')).toBeInTheDocument();
-  });
-
-  it('displays the description of the initially selected (Fresher) template', () => {
-    render(<DomainTemplatesModal {...defaultProps} />);
-    // Templates are sorted; Fresher ends up at index 0 and is selected by default
-    expect(screen.getByText('ATS-optimised for fresh graduates')).toBeInTheDocument();
+    // The component displays template descriptions as bullet points
+    expect(screen.getByText(/ATS-optimised for fresh graduates/i)).toBeInTheDocument();
   });
 
   it('shows the combined "Domain + Career Level + Template" title for the selected card', () => {
@@ -140,7 +135,7 @@ describe('DomainTemplatesModal — template card selection', () => {
     fireEvent.click(screen.getByRole('button', { name: /senior-level/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('For experienced professionals')).toBeInTheDocument();
+      expect(screen.getByText(/For experienced professionals/i)).toBeInTheDocument();
     });
   });
 

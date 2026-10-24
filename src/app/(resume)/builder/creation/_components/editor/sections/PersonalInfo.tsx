@@ -9,11 +9,12 @@ import { getActiveTemplateDomain, useAccountEmail } from "@/app/(resume)/templat
 
 interface Field {
   field: string;
-  key: "fullname" | "email" | "phone" | "countryCode" | "location" | "linkedinUrl" | "githubUrl" | "portfolioUrl" | "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex";
+  key: "fullname" | "email" | "phone" | "countryCode" | "location" | "linkedinUrl" | "githubUrl" | "portfolioUrl" | "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex" | "notice_period_days" | "work_mode";
   required: boolean;
   type?: string;
   maxLength?: number;
   readOnly?: boolean;
+  options?: Array<{ label: string; value: string }>;
 }
 
 interface PersonalInfoProps {
@@ -116,11 +117,34 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     { field: "LinkedIn URL", key: "linkedinUrl", required: false, type: "url" },
     { field: "GitHub URL", key: "githubUrl", required: false, type: "url" },
     { field: "Portfolio URL", key: "portfolioUrl", required: false, type: "url" },
+    { field: "Notice Period (Days)", key: "notice_period_days", required: false, type: "number", maxLength: 3 },
+    {
+      field: "Work Type",
+      key: "work_mode",
+      required: false,
+      type: "select",
+      options: [
+        { label: "Onsite", value: "onsite" },
+        { label: "Remote", value: "remote" },
+        { label: "Hybrid", value: "hybrid" },
+      ]
+    },
   ];
 
-  type DomainFieldKey = "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex";
+  type DomainFieldKey = "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex" | "notice_period_days" | "work_mode";
 
   const handleChange = (field: Field["key"] | DomainFieldKey, value: string) => {
+    // Validate numeric fields
+    if (field === "notice_period_days" && value !== "") {
+      if (!/^\d{1,3}$/.test(value)) {
+        return; // Reject non-integer input (decimals, exponents, non-digits)
+      }
+      const numValue = parseInt(value, 10);
+      if (numValue > 365) {
+        return; // Reject out-of-range values
+      }
+    }
+
     // Once per resume is enough: the flag only says "entered here", so skip the write per keystroke.
     if (field === "email" && emailEditable.current && isEnhancedResume && emailRememberedFor.current !== resumeKey) {
       rememberEmailEnteredHere(resumeKey);
@@ -219,29 +243,61 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     );
   };
 
-  const renderField = (f: Field) => (
-    <div key={f.key} className="flex flex-col gap-1 w-full">
-      <label className="text-sm font-semibold text-[#3b3b3b]">
-        {f.field} {f.required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        name={f.key}
-        type={f.type ?? "text"}
-        value={formData[f.key] || ""}
-        placeholder={`Enter ${f.field}`}
-        onChange={(e) => !f.readOnly && handleChange(f.key, e.target.value)}
-        onBlur={() => !f.readOnly && handleBlur(f)}
-        maxLength={f.readOnly ? undefined : f.maxLength}
-        readOnly={f.readOnly}
-        className={`w-full px-2 py-3.5 rounded-md text-sm border-2 focus:outline-none transition-all duration-200 ${f.readOnly ? "bg-gray-100 text-gray-400 cursor-not-allowed border-transparent select-none" : `text-[#7b7b7a] bg-[#faf9f8] hover:bg-[#f3f2f1] ${errors[f.key] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}`}
-      />
-      {errors[f.key] && (
-        <span className="text-xs text-red-500">
-          {errors[f.key]}
-        </span>
-      )}
-    </div>
-  );
+  const renderField = (f: Field) => {
+    if (f.type === "select" && f.options) {
+      return (
+        <div key={f.key} className="flex flex-col gap-1 w-full">
+          <label className="text-sm font-semibold text-[#3b3b3b]">
+            {f.field} {f.required && <span className="text-red-500">*</span>}
+          </label>
+          <select
+            name={f.key}
+            value={formData[f.key] || ""}
+            onChange={(e) => handleChange(f.key, e.target.value)}
+            onBlur={() => handleBlur(f)}
+            className={`w-full px-2 py-3.5 rounded-md text-sm border-2 focus:outline-none transition-all duration-200 text-[#7b7b7a] bg-[#faf9f8] hover:bg-[#f3f2f1] ${errors[f.key] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
+          >
+            <option value="">Select {f.field}</option>
+            {f.options.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {errors[f.key] && (
+            <span className="text-xs text-red-500">
+              {errors[f.key]}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div key={f.key} className="flex flex-col gap-1 w-full">
+        <label className="text-sm font-semibold text-[#3b3b3b]">
+          {f.field} {f.required && <span className="text-red-500">*</span>}
+        </label>
+        <input
+          name={f.key}
+          type={f.type ?? "text"}
+          value={formData[f.key] || ""}
+          placeholder={`Enter ${f.field}`}
+          onChange={(e) => !f.readOnly && handleChange(f.key, e.target.value)}
+          onBlur={() => !f.readOnly && handleBlur(f)}
+          maxLength={f.readOnly ? undefined : f.maxLength}
+          readOnly={f.readOnly}
+          {...(f.type === "number" && { min: "0", max: "365", step: "1" })}
+          className={`w-full px-2 py-3.5 rounded-md text-sm border-2 focus:outline-none transition-all duration-200 ${f.readOnly ? "bg-gray-100 text-gray-400 cursor-not-allowed border-transparent select-none" : `text-[#7b7b7a] bg-[#faf9f8] hover:bg-[#f3f2f1] ${errors[f.key] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}`}
+        />
+        {errors[f.key] && (
+          <span className="text-xs text-red-500">
+            {errors[f.key]}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   const renderPhoneField = () => (
     <div className="flex flex-col gap-1 w-full min-w-0">
@@ -329,6 +385,12 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         {/* Row 4: Portfolio URL */}
         <div className="flex gap-10">
           {renderField(fields[5])}
+        </div>
+
+        {/* Row 5: Notice Period + Work Type */}
+        <div className="flex gap-10">
+          {renderField(fields[6])}
+          {renderField(fields[7])}
         </div>
 
         {/* Government Standard Template Fields */}

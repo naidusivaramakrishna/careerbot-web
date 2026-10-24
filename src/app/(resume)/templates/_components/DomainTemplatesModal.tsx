@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { X, Star } from 'lucide-react';
+import { X, Star, Medal, CircleCheck, Briefcase, Building2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type TemplateResponse, getAllResumes, createResumeWithAuth, applyTemplateToResume, applyCatalogueToResume } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
-import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
+import { getSectionOrderByDomainAndCareer, getSectionOrderFromTemplate, addCareerLevelSections } from '../_utils/domainSectionOrder';
 import { detectCareerLevel as detectCareerLevelUtil } from '@/utils/careerLevelDetection';
 import { Button } from '@/components/ui/Button';
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from '../_constants/templateImages';
@@ -24,8 +24,29 @@ interface DomainTemplatesModalProps {
 
 const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager', 'Director', 'Vice President'];
 
-// Canonical career-level detection — use shared utility for consistency
-const detectCareerLevel = (name: string): string | undefined => {
+// Format backend level strings to display format
+const formatBackendLevel = (backendLevel?: string): string | undefined => {
+  if (!backendLevel) return undefined;
+  const level = backendLevel.toLowerCase();
+  if (level === 'fresher' || level === 'entry_level') return 'Fresher';
+  if (level === 'early_career') return 'Early Career';
+  if (level === 'mid_level' || level === 'mid-level') return 'Mid-Level';
+  if (level === 'senior_level' || level === 'senior-level') return 'Senior-Level';
+  if (level === 'lead') return 'Lead';
+  if (level === 'architect') return 'Architect';
+  if (level === 'manager') return 'Manager';
+  if (level === 'director') return 'Director';
+  if (level === 'vice_president' || level === 'vp') return 'Vice President';
+  return undefined;
+};
+
+// Canonical career-level detection — use shared utility or backend level for consistency
+const detectCareerLevel = (name: string, backendLevel?: string): string | undefined => {
+  // Prefer backend level if available
+  if (backendLevel) {
+    return formatBackendLevel(backendLevel);
+  }
+
   const n = (name || '').toLowerCase();
   // Use shared utility for most common levels
   const detected = detectCareerLevelUtil(n);
@@ -54,8 +75,8 @@ export default function DomainTemplatesModal({
   // Sort templates by career level
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
-      const aLevel = detectCareerLevel(a.name || '');
-      const bLevel = detectCareerLevel(b.name || '');
+      const aLevel = detectCareerLevel(a.name || '', (a as unknown as Record<string, unknown>).level as string | undefined);
+      const bLevel = detectCareerLevel(b.name || '', (b as unknown as Record<string, unknown>).level as string | undefined);
       const aLevelIndex = aLevel ? CAREER_LEVELS.indexOf(aLevel) : -1;
       const bLevelIndex = bLevel ? CAREER_LEVELS.indexOf(bLevel) : -1;
 
@@ -71,8 +92,9 @@ export default function DomainTemplatesModal({
   const [isLoading, setIsLoading] = useState(false);
   const selectedTemplate = sortedTemplates[selectedTemplateIndex];
 
-  const getCareerLevel = (templateName: string) => {
-    return detectCareerLevel(templateName) || 'Custom';
+  const getCareerLevel = (template: TemplateResponse) => {
+    const backendLevel = (template as unknown as Record<string, unknown>).level as string | undefined;
+    return detectCareerLevel(template.name || '', backendLevel) || 'Custom';
   };
 
   const handleSelectTemplate = (index: number) => {
@@ -126,7 +148,8 @@ export default function DomainTemplatesModal({
         localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData));
         logger.info('Stored careerLevelTemplates successfully with key:', careerLevelKey);
 
-        // ✅ ALSO: Compute and store sectionOrder based on career level AND domain family
+        // ✅ ALSO: Compute and store sectionOrder based on backend template or career level + domain family
+        // First, detect career level from template name
         const templateName = selectedTemplate.name || '';
         let careerLevel: string | undefined;
         const nameStr = templateName.toLowerCase();
@@ -145,7 +168,19 @@ export default function DomainTemplatesModal({
         } else if (nameStr.includes('mid')) {
           careerLevel = 'mid-level';
         }
-        const newDomainOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
+
+        // Try to use section order from the template's backend config
+        const templateSections = (selectedTemplate as unknown as Record<string, unknown>).sections as Record<string, Record<string, unknown>> | undefined;
+        let newDomainOrder = getSectionOrderFromTemplate(templateSections);
+
+        // Fallback: use domain + career level logic if template doesn't have section config
+        if (newDomainOrder.length === 0) {
+          newDomainOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
+        }
+
+        // Add career-level specific sections (e.g., Internships for Freshers)
+        newDomainOrder = addCareerLevelSections(newDomainOrder, careerLevel);
+
         // Preserve extra sections the user had added before opening this modal
         const addableExtras = new Set(['Achievements', 'Publications', 'Patents', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References']);
         const existingOrderStr = localStorage.getItem(sectionOrderKey);
@@ -270,7 +305,7 @@ export default function DomainTemplatesModal({
               {/* Career Level Cards Grid (2x2) */}
               <div className="grid grid-cols-2 gap-3 mb-6 px-1">
                 {sortedTemplates.map((template, index) => {
-                  const careerLevel = getCareerLevel(template.name);
+                  const careerLevel = getCareerLevel(template);
                   const isSelected = selectedTemplateIndex === index;
 
                   return (
@@ -279,27 +314,27 @@ export default function DomainTemplatesModal({
                         data-testid={`career-level-btn-${index}`}
                         onClick={() => handleSelectTemplate(index)}
                         className={`relative rounded-lg ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${isSelected
-                            ? 'ring-2 ring-[#2257a7] shadow-md'
-                            : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
+                          ? 'ring-2 ring-[#2257a7] shadow-md'
+                          : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
                           }`}
                         style={{ pointerEvents: 'auto' }}
                       >
                         <div style={{ pointerEvents: 'none' }} className="overflow-hidden rounded-md">
                           <TemplatePreviewRenderer
-                          previewHtml={((template as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
-                          previewCss={((template as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
-                          fallbackImage={resolveTemplateImageUrl(template.preview_url) || domainFallback}
-                          errorFallbackImage={domainFallback}
-                          title={careerLevel}
-                          height="200px"
-                          width="100%"
-                          scale={0.35}
-                          hideScroll={true}
-                          fillContainer={true}
-                        />
+                            previewHtml={((template as unknown) as Record<string, unknown>)?.preview_html as string | undefined}
+                            previewCss={((template as unknown) as Record<string, unknown>)?.preview_css as string | undefined}
+                            fallbackImage={resolveTemplateImageUrl(template.preview_url) || domainFallback}
+                            errorFallbackImage={domainFallback}
+                            title={careerLevel}
+                            height="200px"
+                            width="100%"
+                            scale={0.35}
+                            hideScroll={true}
+                            fillContainer={true}
+                          />
                         </div>
-                        <div className="absolute top-1 left-1 pointer-events-none">
-                          <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 rounded-full shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border border-white/30">
+                        <div className="absolute top-0 left-0 pointer-events-none">
+                          <div className="bg-linear-to-r from-blue-500 to-blue-700 text-white font-bold px-3 rounded-tl-xl rounded-br-xl shadow-lg flex items-center gap-1.5 text-[10px] backdrop-blur-sm border-r border-b border-white/30">
                             <Star className="w-3.5 h-3.5 fill-white text-white" />
                             <span className='text-[10px]'>100% ATS</span>
                           </div>
@@ -321,70 +356,124 @@ export default function DomainTemplatesModal({
 
               {/* Template Details */}
               {selectedTemplate && (
-                <div className="space-y-4">
-                  {/* Title and ATS Badge */}
+                <div className="space-y-6">
+                  {/* Title and Subtitle */}
                   <div>
-                    <h3 className="text-lg font-bold tracking-tight text-slate-900 mb-3">
+                    <h3 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
                       {(() => {
-                        const templateName = selectedTemplate.name || '';
-                        const nameStr = templateName.toLowerCase();
-
-                        let careerLevel = '';
-                        if (nameStr.includes('early') && nameStr.includes('career')) {
-                          careerLevel = 'Early Career';
-                        } else if (nameStr.includes('fresher')) {
-                          careerLevel = 'Fresher';
-                        } else if (nameStr.includes('architect')) {
-                          careerLevel = 'Architect';
-                        } else if (nameStr.includes('manager')) {
-                          careerLevel = 'Manager';
-                        } else if (nameStr.includes('lead')) {
-                          careerLevel = 'Lead';
-                        } else if (nameStr.includes('senior')) {
-                          careerLevel = 'Senior-Level';
-                        } else if (nameStr.includes('mid')) {
-                          careerLevel = 'Mid-Level';
-                        }
-
-                        if (careerLevel) {
+                        const careerLevel = getCareerLevel(selectedTemplate);
+                        if (careerLevel && careerLevel !== 'Custom') {
                           return `${domainName} ${careerLevel} Template`;
                         }
-
                         return selectedTemplate.name;
                       })()}
                     </h3>
-                    <div className="inline-block bg-emerald-50 text-emerald-700 text-xs font-semibold px-4 py-1.5 rounded-full ring-1 ring-emerald-200">
-                      ✓ 100% ATS Friendly
+                    <p className="text-sm text-slate-500">
+                      {domainName} · Professional style
+                    </p>
+                  </div>
+
+                  {/* Recommendation Banner */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                    <div className="bg-white rounded-md p-2 shrink-0">
+                      <Star className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 mb-1">Recommended for you</p>
+                      <p className="text-xs text-amber-800">Perfect match for your career level and experience</p>
                     </div>
                   </div>
 
-                  {/* Description */}
-                  {selectedTemplate.description && (
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 mb-2">Description</h4>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {selectedTemplate.description}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Features */}
+                  {/* Template Details Grid */}
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800 mb-2">Features</h4>
-                    <ul className="space-y-1.5">
-                      <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> Professional layout
-                      </li>
-                      <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> Easy to customize
-                      </li>
-                      <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> ATS optimized
-                      </li>
-                      <li className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="text-[#2257a7]">✓</span> Print friendly
-                      </li>
-                    </ul>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Template Details</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-white rounded-lg p-3.5 border border-slate-200 flex items-start gap-2.5">
+                        <div className="bg-slate-100 rounded-md p-2 shrink-0">
+                          <CircleCheck className="w-4 h-4 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-slate-500 font-semibold mb-1">ATS</div>
+                          <div className="text-sm font-bold text-slate-900">Optimized</div>
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3.5 border border-slate-200 flex items-start gap-2.5">
+                        <div className="bg-slate-100 rounded-md p-2 shrink-0">
+                          <Medal className="w-4 h-4 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-slate-500 font-semibold mb-1">Career Level</div>
+                          <div className="text-sm font-bold text-slate-900">
+                            {getCareerLevel(selectedTemplate)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3.5 border border-slate-200 flex items-start gap-2.5">
+                        <div className="bg-slate-100 rounded-md p-2 shrink-0">
+                          <Briefcase className="w-4 h-4 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-slate-500 font-semibold mb-1">Experience</div>
+                          <div className="text-sm font-bold text-slate-900">
+                            {((selectedTemplate as unknown as Record<string, unknown>).experience_years as string) || '0-2'} yrs
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3.5 border border-slate-200 flex items-start gap-2.5">
+                        <div className="bg-slate-100 rounded-md p-2 shrink-0">
+                          <Building2 className="w-4 h-4 text-black" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-slate-500 font-semibold mb-1">Industry</div>
+                          <div className="text-sm font-bold text-slate-900 truncate">{domainName}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Why Choose This Template */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Why Choose This Template</h4>
+                    <div className="bg-white rounded-xl p-4 border border-slate-200">
+                      <ul className="space-y-2.5">
+                        {(() => {
+                          const description = (selectedTemplate as unknown as Record<string, unknown>).description as string | undefined;
+                          if (!description) return null;
+                          const sentences = description
+                            .split('. ')
+                            .slice(0, 3)
+                            .map((sentence) => sentence.trim().replace(/\.$/, ''));
+
+                          return sentences.map((sentence, index) => (
+                            <li key={index} className="text-xs text-slate-700 flex gap-2.5">
+                              <span className="text-slate-400 shrink-0 mt-1">•</span>
+                              <span>{sentence}.</span>
+                            </li>
+                          ));
+                        })()}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Best Suited For */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Best Suited For</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-block bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs font-medium text-slate-700">
+                        {(() => {
+                          const level = getCareerLevel(selectedTemplate);
+                          if (level === 'Fresher') return 'Fresher candidates';
+                          if (level === 'Early Career') return 'Early career professionals';
+                          return `${level} professionals`;
+                        })()}
+                      </span>
+                      <span className="inline-block bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs font-medium text-slate-700">
+                        {((selectedTemplate as unknown as Record<string, unknown>).experience_years as string) || '0-2'} years experience
+                      </span>
+                      <span className="inline-block bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs font-medium text-slate-700 truncate">
+                        {domainName} roles
+                      </span>
+                    </div>
                   </div>
 
                   {/* Apply and Cancel Buttons */}
@@ -394,8 +483,8 @@ export default function DomainTemplatesModal({
                       onClick={handleApplyTemplate}
                       disabled={isLoading}
                       className={`w-full text-white font-semibold py-3 rounded-lg cursor-pointer transition-all shadow-sm ${isLoading
-                          ? 'bg-slate-300 cursor-not-allowed'
-                          : 'bg-[#2257a7] hover:bg-[#184284] '
+                        ? 'bg-slate-300 cursor-not-allowed'
+                        : 'bg-[#2257a7] hover:bg-[#184284] '
                         }`}
                     >
                       {isLoading ? (
@@ -412,8 +501,8 @@ export default function DomainTemplatesModal({
                       onClick={onClose}
                       disabled={isLoading}
                       className={`w-full font-semibold py-2 rounded-lg cursor-pointer transition-colors ring-1 ${isLoading
-                          ? 'bg-slate-50 text-slate-400 ring-slate-200 cursor-not-allowed'
-                          : 'bg-white hover:bg-slate-50 text-slate-700 ring-slate-200'
+                        ? 'bg-slate-50 text-slate-400 ring-slate-200 cursor-not-allowed'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 ring-slate-200'
                         }`}
                     >
                       Cancel

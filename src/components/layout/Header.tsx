@@ -609,7 +609,7 @@ export default function Header() {
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                 >
                   <LogOut size={15} className="shrink-0" />
-                  {isLoggingOut ? 'Logging outâ€¦' : 'Logout'}
+                  {isLoggingOut ? 'Logging out...' : 'Logout'}
                 </button>
               </div>
             )}

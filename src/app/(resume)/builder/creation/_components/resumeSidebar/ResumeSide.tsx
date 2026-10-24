@@ -314,6 +314,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["linkedinUrl"] = resumeData.personalInfo?.linkedinUrl || "";
       newFormData["githubUrl"] = resumeData.personalInfo?.githubUrl || "";
       newFormData["portfolioUrl"] = resumeData.personalInfo?.portfolioUrl || "";
+      newFormData["notice_period_days"] = resumeData.personalInfo?.notice_period_days || "";
+      newFormData["work_mode"] = resumeData.personalInfo?.work_mode || "";
 
       // Government Standard Fields
       newFormData["dateOfBirth"] = resumeData.personalInfo?.dateOfBirth || "";

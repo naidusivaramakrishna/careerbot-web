@@ -30,3 +30,21 @@ describe("isFieldRequiredForSection (Location is optional everywhere)", () => {
     expect(isFieldRequiredForSection("linkedin url", "Personal Info")).toBe(false);
   });
 });
+
+describe("isFieldRequiredForSection (notice_period_days and work_mode are optional)", () => {
+  it("keeps notice_period_days optional in Personal Info", () => {
+    expect(isFieldRequiredForSection("notice_period_days", "Personal Info")).toBe(false);
+  });
+
+  it("keeps work_mode optional in Personal Info", () => {
+    expect(isFieldRequiredForSection("work_mode", "Personal Info")).toBe(false);
+  });
+
+  it("is case-insensitive for notice_period_days", () => {
+    expect(isFieldRequiredForSection("Notice_Period_Days", "Personal Info")).toBe(false);
+  });
+
+  it("is case-insensitive for work_mode", () => {
+    expect(isFieldRequiredForSection("Work_Mode", "Personal Info")).toBe(false);
+  });
+});

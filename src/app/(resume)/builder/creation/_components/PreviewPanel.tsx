@@ -22,13 +22,11 @@ import TemplateFive from "./templates/TemplateFive";
 import Template2 from "../../../templates/Template2";
 import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
-import { downloadResume, getResumePreviewImage } from "../../../../../api/resumeApi";
+import { downloadResume } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
-import { isSectionKnownEmpty } from "../_utils/sectionPayloadKeys";
-import { useSavedResumeSnapshot } from "../_hooks/useSavedResumeSnapshot";
 import { getEnhancedCurrentScore } from "../_utils/enhancedScore";
 import { useCatalogues } from "@/hooks/useCatalogues";
 import { getAppliedCareerTemplate, resolveAccountEmail } from "../../../templates/_utils/activeTemplateDomain";
@@ -91,8 +89,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   expandPreview = false,
   pageScrollPreview = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, resumeSavedVersion, sectionOrder, previewCatalogueKey, isLoadingResume } = useResume();
-  const savedResumeData = useSavedResumeSnapshot(resumeData, isLoadingResume, resumeSavedVersion, enhancedDataVersion);
+  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, sectionOrder, previewCatalogueKey, isLoadingResume } = useResume();
   const { canonicalScore, canonicalStatus, setCanonicalScore, markScoreStale } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
   const { getCataloguesMap } = useCatalogues();
@@ -320,131 +317,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setIsDownloading(false);
     }
   };
-
-  // Backend-rendered preview: fetches a PNG rendered server-side from the
-  // exact same PDF the Export button downloads, instead of the separate
-  // React template components below (a second, hand-written renderer that
-  // kept drifting out of sync with the real export -- e.g. missing custom-
-  // section field labels). An in-browser attempt using react-pdf/pdfjs-dist
-  // to embed the actual PDF hit a persistent, environment-specific webpack
-  // bundling crash ("undefined is not a non-null object") that survived
-  // several independent fixes; rendering to a plain image server-side and
-  // showing it in a normal <img> sidesteps that whole class of problem.
-  // Debounced so it doesn't fire a backend render on every keystroke.
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
-  const [previewLoadFailed, setPreviewLoadFailed] = useState(false);
-  const previewImageUrlRef = useRef<string | null>(null);
-
-  // ResumeContext polls localStorage every ~1s and calls setSectionOrder()
-  // with a freshly JSON.parse'd array on every tick, even when the content
-  // is unchanged -- a new reference each time, not a new value. Depending on
-  // sectionOrder directly means this effect's cleanup would fire and restart
-  // the 1s debounce on every single poll tick, so the timer could never
-  // survive long enough to actually run. Comparing serialized content
-  // instead of object identity avoids that.
-  //
-  // Keyed on resumeSavedVersion, NOT resumeData: /download always renders
-  // the PERSISTED resume, never the local request state, so firing this on
-  // every resumeData keystroke fetched a pre-edit snapshot 1s later (autosave
-  // takes 3s) -- the preview was permanently one edit behind, and brand-new
-  // entries (stripped from autosave payloads until they have a backend id)
-  // never appeared until an explicit Save. resumeSavedVersion only bumps
-  // once autosave/Save actually lands, so the fetch now happens exactly
-  // when there is new persisted content to show.
-  // resumeIdProp and userEmail are both read inside the effect below (the
-  // resume to fetch, and the per-user localStorage key for the selected
-  // template) but weren't part of this signature even though they're in the
-  // effect's own dependency array. Either changing while every other input
-  // stayed the same left the guard below treating it as a no-op: no fetch
-  // ran, so a new resume kept showing the previous one's preview image.
-  // Sections known to be empty render nothing, so adding/removing one in the
-  // order must not trigger a re-render. Deleting a section that had content
-  // still refreshes once: its delete bumps resumeSavedVersion after persisting.
-  // Emptiness is read from the SAVED snapshot, not live resumeData: a draft typed
-  // into an empty section would otherwise change this signature and fetch the
-  // old persisted preview -- the same keystroke fetch described above.
-  const renderedSectionOrder = (sectionOrder || []).filter((n) => !isSectionKnownEmpty(savedResumeData as never, n));
-  const previewSignature = JSON.stringify({
-    resumeSavedVersion, resumeStyle, sectionOrder: renderedSectionOrder, selectedTemplate, resumeIdProp, userEmail,
-  });
-  const lastPreviewSignatureRef = useRef<string | null>(null);
-  const [previewRetryTick, setPreviewRetryTick] = useState(0);
-  const retryPreview = () => {
-    lastPreviewSignatureRef.current = null; // force the effect below to treat this as a change
-    setPreviewLoadFailed(false);
-    setPreviewRetryTick((n) => n + 1);
-  };
-
-  useEffect(() => {
-    // Enhanced resumes use a different download pipeline (downloadEnhancedResume)
-    // not yet wired into this preview path -- keep those on the React renderer.
-    if (isEnhancedResume || !isEmailReady) return;
-    if (lastPreviewSignatureRef.current === previewSignature) return;
-    lastPreviewSignatureRef.current = previewSignature;
-
-    const resumeId = resumeIdProp ?? (typeof window !== 'undefined' ? localStorage.getItem("current_resume_id") : null);
-    if (!resumeId || resumeId === 'null' || resumeId === 'undefined') return;
-
-    let cancelled = false;
-    setIsPreviewRefreshing(true);
-
-    const timer = setTimeout(async () => {
-      try {
-        const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
-        const previewCatalogue = selectedCatalogue ? (getCataloguesMap()[selectedCatalogue] || STYLE_CATALOGUES[selectedCatalogue]) : undefined;
-        const catalogueTemplateId = previewCatalogue?.template_id;
-        const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
-        const domainTemplateId = typeof window !== 'undefined' ? localStorage.getItem(selectedTemplateKey) ?? undefined : undefined;
-        const sectionBgColor = selectedCatalogue === 'eclipse' ? resumeStyle.sectionHeaderBg : undefined;
-        const accentColor = resumeStyle.accentColor || resumeStyle.headingColor;
-        const fontFamily = resumeStyle.fontFamily || undefined;
-        const lineSpacing = resumeStyle.lineSpacing || undefined;
-        const careerLevel = getCareerLevel();
-
-        const blob = await getResumePreviewImage(
-          resumeId, catalogueTemplateId, domainTemplateId, sectionBgColor,
-          accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel,
-        );
-        if (cancelled) return;
-
-        const newUrl = window.URL.createObjectURL(blob);
-        const oldUrl = previewImageUrlRef.current;
-        previewImageUrlRef.current = newUrl;
-        setPreviewImageUrl(newUrl);
-        setPreviewLoadFailed(false);
-        // Revoke the previous blob URL only after the new one is set, so
-        // the <img> never has a moment with no valid src.
-        if (oldUrl) window.URL.revokeObjectURL(oldUrl);
-      } catch (err) {
-        logger.warn('Backend preview render failed, keeping last known preview', err);
-        if (!previewImageUrlRef.current) setPreviewLoadFailed(true);
-      } finally {
-        if (!cancelled) setIsPreviewRefreshing(false);
-      }
-    }, 1000);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      // The in-flight fetch's own `finally` skips this once `cancelled` is
-      // true (so it can't clear the flag for a fetch that's no longer the
-      // current one) -- reset it here instead, so tearing down this effect
-      // (deps changed, or unmount) never leaves "Updating preview..."
-      // spinning forever. The next effect run sets it true again if it goes
-      // on to start a new fetch.
-      setIsPreviewRefreshing(false);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewSignature, isEnhancedResume, isEmailReady, resumeIdProp, userEmail, previewRetryTick]);
-
-  // Revoke the last blob URL on unmount only (not on every dependency change --
-  // the effect above already revokes superseded URLs itself).
-  useEffect(() => {
-    return () => {
-      if (previewImageUrlRef.current) window.URL.revokeObjectURL(previewImageUrlRef.current);
-    };
-  }, []);
 
   const handleResumeScoreClick = () => {
     if (onOpenSidebar) {
@@ -765,38 +637,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           }}
         >
           {!isEmailReady ? (
-            <div className="w-full flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : !isEnhancedResume && previewLoadFailed ? (
-            <div className="w-full flex flex-col items-center justify-center py-20 gap-3">
-              <p className="text-sm text-gray-600">Couldn&apos;t load the preview.</p>
-              <button
-                onClick={retryPreview}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#2557a7] rounded-lg hover:bg-[#1f4e98] transition"
-              >
-                Retry
-              </button>
-            </div>
-          ) : !isEnhancedResume && previewImageUrl ? (
-            <div className="relative w-full flex flex-col items-center">
-              {isPreviewRefreshing && (
-                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-white/90 border border-gray-200 rounded-full px-2.5 py-1 text-[11px] text-gray-600 shadow-sm">
-                  <div className="w-3 h-3 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
-                  Updating preview…
-                </div>
-              )}
-              {/* eslint-disable-next-line @next/next/no-img-element -- a blob: object URL, not a static/remote asset next/image can optimize */}
-              <img
-                src={previewImageUrl}
-                alt="Resume preview"
-                className="w-full max-w-[794px] shadow-md"
-                onError={() => {
-                  if (!previewImageUrlRef.current) setPreviewLoadFailed(true);
-                }}
-              />
-            </div>
-          ) : !isEnhancedResume ? (
             <div className="w-full flex items-center justify-center py-20">
               <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
             </div>

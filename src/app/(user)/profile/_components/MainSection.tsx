@@ -2,6 +2,7 @@
 import { Camera, Github, Mail, MapPin, Phone, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useProfileContext } from '../context/ProfileContext';
+import { useDashboard } from '@/contexts/DashboardContext';
 import ProfileTabs from './ProfileTabs';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -87,6 +88,7 @@ function mapBackendToFrontend(backendProfile: UserProfile): ProfileData {
 
 const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const { profileData, setProfileData, setActiveTab, setProfilePicUrl } = useProfileContext();
+  const { refreshDashboard } = useDashboard();
   const personalInfoRef = useRef<PersonalInfoRef | null>(null);
   const [username, setUsername] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -109,6 +111,8 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('profilePictureUpdated', { detail: { profilePicUrl: fullUrl } }));
         }
+        toast.success("Profile picture updated successfully");
+        refreshDashboard();
       } else {
         toast.error("Upload failed. Please try again.");
       }
@@ -116,7 +120,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
       logger.error("Error uploading profile picture:", error);
       toast.error("Failed to upload image");
     }
-  }, [setProfilePicUrl]);
+  }, [setProfilePicUrl, refreshDashboard]);
 
   const handleDeleteImage = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -129,11 +133,12 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
         window.dispatchEvent(new CustomEvent('profilePictureUpdated', { detail: { profilePicUrl: null } }));
       }
       toast.success(result.message);
+      refreshDashboard();
     } catch (error) {
       logger.error("Error deleting profile picture:", error);
       toast.error("Failed to delete profile picture");
     }
-  }, [selectedImage, setProfilePicUrl]);
+  }, [selectedImage, setProfilePicUrl, refreshDashboard]);
 
   // Fetch profile data on component mount
   useEffect(() => {

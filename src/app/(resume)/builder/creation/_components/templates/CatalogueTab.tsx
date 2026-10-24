@@ -144,7 +144,6 @@ export default function CatalogueTab() {
       }
     } else {
       const accent = color ?? selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
-      styleOverride.headingColor = "#000000";
       if (accent) styleOverride.accentColor = accent;
       setResumeStyle(prev => ({ ...prev, ...styleOverride, sectionHeaderBg: undefined }));
     }

@@ -794,6 +794,8 @@ export interface ResumeData {
     languages?: string;
     titlePrefix?: string;
     qualifications?: string;
+    notice_period_days?: string;
+    work_mode?: "onsite" | "remote" | "hybrid";
     // Government Standard — India-specific
     fathersName?: string;
     maritalStatus?: string;
@@ -1215,6 +1217,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         linkedinUrl: "",
         githubUrl: "",
         portfolioUrl: "",
+        notice_period_days: undefined,
+        work_mode: undefined,
         dateOfBirth: "",
         nationality: "",
         category: "",
@@ -1855,6 +1859,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             linkedinUrl: data.personalInfo?.linkedinUrl || "",
             githubUrl: data.personalInfo?.githubUrl || "",
             portfolioUrl: (data.personalInfo as Record<string, string>)?.portfolioUrl || data.personalInfo?.portifolioUrl || "",
+            notice_period_days: data.personalInfo?.notice_period_days || null,
+            work_mode: data.personalInfo?.work_mode || null,
             dateOfBirth: data.personalInfo?.dateOfBirth || null,
             nationality: data.personalInfo?.nationality || null,
             category: data.personalInfo?.category || null,

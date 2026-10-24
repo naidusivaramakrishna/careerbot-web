@@ -27,6 +27,8 @@ export interface ResumeResponse {
     linkedinUrl?: string;
     githubUrl?: string;
     portfolioUrl?: string;
+    notice_period_days?: string;
+    work_mode?: "onsite" | "remote" | "hybrid";
   };
   professionalSummary?: {
     summary: string;
@@ -181,6 +183,10 @@ export interface TemplateResponse {
   preview_css?: string;
   category?: string;
   ats_friendly?: boolean;
+  level?: string;  // e.g., 'early_career', 'mid_level', 'senior_level'
+  experience_years?: string;  // e.g., '0-2', '1-3', '3-5'
+  domain_family?: string;  // e.g., 'software_engineering', 'core_engineering'
+  applicable_domains?: string[];
   layout?: {
     columns: number;
     page_size: string;
@@ -472,17 +478,12 @@ interface BackendCustomSection {
   // one fixed slot, so field NAMES never survive it, and a second field of
   // the same type silently overwrites the first.
   //
-  // `items` is always sent empty ([]) now, NOT populated alongside `fields`
-  // as an earlier version of this comment claimed. That is only safe
-  // because the PDF/DOCX exporters were updated to read `fields` directly
-  // -- confirmed in careerbot-api PR #184 ("fix/resume-builder-skills-
-  // export-png", commit 46f09e95, merged to develop2): both
-  // resume_export/pdf.py and resume_export/docx.py build a
+  // `items` is always sent empty ([]) now, NOT populated alongside `fields`.
+  // The PDF/DOCX exporters read `fields` directly (careerbot-api PR #184):
+  // both resume_export/pdf.py and resume_export/docx.py build a
   // `renderable_fields` list from `cs.get("fields")` and render that
-  // instead of `items`. The server-rendered PNG preview (getResumePreviewImage)
-  // rasterizes the same PDF, so it inherits the same fix. If a future
-  // export path is added that only understands `items`, populate `items`
-  // again here until it too reads `fields`.
+  // instead of `items`. If a future export path is added that only
+  // understands `items`, populate `items` again here until it too reads `fields`.
   fields?: CustomField[];
 }
 
@@ -1092,45 +1093,6 @@ export const downloadResume = async (
     logger.error('❌ Error downloading:', error);
     throw error;
   }
-};
-
-// Renders the resume via the SAME backend PDF generator used for the actual
-// download, then rasterizes it server-side to a single stacked PNG
-// (format=png) -- so the live preview panel and the downloaded file can
-// never format custom sections, dates, or section grouping differently.
-// There used to be a second, hand-written React template renderer for the
-// preview that silently drifted out of sync with the backend renderer; a
-// later attempt to embed the actual PDF client-side via react-pdf/pdfjs-dist
-// hit a persistent, environment-specific webpack bundling crash
-// ("undefined is not a non-null object") that survived several independent
-// fix attempts. Rendering to a plain image server-side sidesteps that whole
-// class of problem -- the frontend just shows a normal <img>.
-export const getResumePreviewImage = async (
-  resumeId: string,
-  catalogueTemplateId?: string,
-  domainTemplateId?: string,
-  sectionBgColor?: string,
-  accentColor?: string,
-  sectionOrder?: string[],
-  fontFamily?: string,
-  lineSpacing?: string,
-  careerLevel?: string
-): Promise<Blob> => {
-  const params = new URLSearchParams({ format: 'png' });
-  if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
-  if (domainTemplateId) params.append('template_id', domainTemplateId);
-  if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
-  if (accentColor) params.append('accent_color', accentColor);
-  if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
-  if (fontFamily) params.append('font_family', fontFamily);
-  if (lineSpacing) params.append('line_height', lineSpacing);
-  if (careerLevel) params.append('career_level', careerLevel);
-
-  const response = await httpClient.get<Blob>(
-    `/resumes/${resumeId}/download?${params.toString()}`,
-    { responseType: 'blob' }
-  );
-  return response.data;
 };
 
 // getTemplatesByCategory: every template, as an array (all callers use it
