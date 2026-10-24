@@ -1,6 +1,6 @@
 """Tests for scripts/ai_review/pr_size_gate.py -- the fail-fast PR Size gate.
 
-Limits: reviewable added lines 1,500, changed files 40, commits 20 (a value
+Limits: reviewable added lines 3,000, changed files 40, commits 20 (a value
 equal to the limit passes). Reviewable lines leave out generated files, using
 the ai-review scope guard's own code (size_stats / GENERATED_FILE_PATTERNS),
 imported rather than copied.
@@ -79,7 +79,7 @@ def test_pr_117_shape_fails_on_lines_as_xxl():
     v = gate.evaluate(stats, [])
     assert (stats["files"], stats["added"]) == (13, 9204)
     assert v["label"] == "size/XXL" and not v["passed"]
-    assert v["tripped"] == ["reviewable added lines 9,204 > 1,500"]
+    assert v["tripped"] == ["reviewable added lines 9,204 > 3,000"]
     assert v["within"] == ["changed files 13 ≤ 40", "commits 2 ≤ 20"]
 
 
@@ -89,7 +89,7 @@ def test_pr_114_shape_excludes_the_lockfile_but_counts_it_as_a_file():
     assert stats["excluded_added"] == 17393
     assert stats["added"] == 17035 and stats["files"] == 117
     v = gate.evaluate(stats, [])
-    assert v["tripped"] == ["reviewable added lines 17,035 > 1,500",
+    assert v["tripped"] == ["reviewable added lines 17,035 > 3,000",
                             "changed files 117 > 40", "commits 37 > 20"]
     summary = gate.summary_markdown(stats, v)
     assert "`cs-chatbot/package-lock.json` (+17,393)" in summary
@@ -115,12 +115,29 @@ def test_pr_99_shape_passes_as_xs():
 # Exactly at / one over each limit
 # --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("added,passed,label", [(1500, True, "size/XL"), (1501, False, "size/XXL")])
+@pytest.mark.parametrize("added,passed,label", [(3000, True, "size/XL"), (3001, False, "size/XXL")])
 def test_added_lines_limit(added, passed, label):
     v = gate.evaluate(_stats([(added, 0, "src/big.ts")]), [])
     assert v["passed"] is passed and v["label"] == label
     if not passed:
-        assert v["tripped"] == ["reviewable added lines 1,501 > 1,500"]
+        assert v["tripped"] == ["reviewable added lines 3,001 > 3,000"]
+
+
+# Owner decision 2026-10-24: the line cap was raised from 1,500 to 3,000. Of the
+# last 78 sized careerbot-web PRs, 8 went over 1,500 reviewable lines; 5 of them
+# were 1,537-2,511 (#249, #136, #138, #135, #168) and pass now. The ai-review scope
+# guard (8,000) still decides whether a review is possible at all.
+@pytest.mark.parametrize("added,passed", [(1537, True), (2511, True), (4575, False)])
+def test_the_line_cap_is_3000_for_real_pr_shapes(added, passed):
+    # 1,537 = #249, 2,511 = #135 (now pass); 4,575 = #247/#250 (still too large).
+    v = gate.evaluate(_stats([(added, 0, "src/big.ts")]), [])
+    assert v["passed"] is passed
+
+
+def test_the_summary_states_the_current_xl_xxl_boundary():
+    stats = _stats([(5, 0, "src/a.ts")])
+    s = gate.summary_markdown(stats, gate.evaluate(stats, []))
+    assert "XL ≤3,000, XXL >3,000" in s
 
 
 @pytest.mark.parametrize("files,passed", [(40, True), (41, False)])
@@ -147,7 +164,7 @@ def test_commits_limit(commits, passed):
 
 
 def test_exactly_at_every_limit_passes():
-    rows = _files(39) + [(1500 - 39, 0, "src/big.ts")]
+    rows = _files(39) + [(3000 - 39, 0, "src/big.ts")]
     v = gate.evaluate(_stats(rows, commits=20), [])
     assert v["passed"] and v["tripped"] == [] and v["label"] == "size/XL"
 
@@ -155,7 +172,7 @@ def test_exactly_at_every_limit_passes():
 @pytest.mark.parametrize("added,label", [
     (0, "size/XS"), (49, "size/XS"), (50, "size/S"), (199, "size/S"), (200, "size/M"),
     (499, "size/M"), (500, "size/L"), (999, "size/L"), (1000, "size/XL"), (1500, "size/XL"),
-    (1501, "size/XXL"), (9204, "size/XXL"),
+    (3000, "size/XL"), (3001, "size/XXL"), (9204, "size/XXL"),
 ])
 def test_size_label_buckets(added, label):
     assert gate.size_label(added) == label
@@ -192,7 +209,7 @@ def test_similar_label_names_do_not_override():
 def test_failure_summary_names_the_limit_and_gives_split_advice():
     stats = _stats(_rows_117())
     s = gate.summary_markdown(stats, gate.evaluate(stats, []))
-    assert "too large" in s and "**Limit exceeded:** reviewable added lines 9,204 > 1,500" in s
+    assert "too large" in s and "**Limit exceeded:** reviewable added lines 9,204 > 3,000" in s
     assert "Split by concern" in s and "squash" not in s
     assert "ai-review-large" in s
 
@@ -608,10 +625,10 @@ def test_pr_168_counts_only_its_script_lines(monkeypatch):
 
 
 def test_non_test_python_still_counts_toward_the_line_cap():
-    stats = _gate_stats([(1400, 0, "scripts/ai_review/pr_size_gate.py"),
+    stats = _gate_stats([(2900, 0, "scripts/ai_review/pr_size_gate.py"),
                          (200, 0, "scripts/ai_review/test_helpers.py"),
                          (900, 0, "tests/unit/test_x.py")])
-    assert stats["added"] == 1600 and stats["tests_added"] == 900
+    assert stats["added"] == 3100 and stats["tests_added"] == 900
     assert gate.evaluate(stats, [])["passed"] is False
 
 

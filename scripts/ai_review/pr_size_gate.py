@@ -64,7 +64,10 @@ from ai_pr_review import (  # noqa: E402
     size_stats,
 )
 
-MAX_ADDED_LINES, MAX_FILES, MAX_COMMITS = 1500, 40, 20
+# Line cap raised 1,500 -> 3,000 by the owner on 2026-10-24: of the last 78 sized
+# careerbot-web PRs, 8 went over 1,500 reviewable lines and 5 of those were
+# 1,537-2,511. Above 3,000, split the PR or apply SIZE_OVERRIDE_LABEL.
+MAX_ADDED_LINES, MAX_FILES, MAX_COMMITS = 3000, 40, 20
 
 # (label, reviewable added lines strictly below which it applies). Anything
 # above MAX_ADDED_LINES is size/XXL, and fails.
@@ -96,7 +99,7 @@ def size_label(added: int) -> str:
 
 
 def check_limits(stats) -> tuple[list, list]:
-    """(tripped, within): 'reviewable added lines 9,204 > 1,500' / 'commits 2 ≤ 20'."""
+    """(tripped, within): 'reviewable added lines 9,204 > 3,000' / 'commits 2 ≤ 20'."""
     tripped, within = [], []
     for key, label, cap in LIMITS:
         v = int(stats.get(key) or 0)
@@ -202,8 +205,8 @@ def summary_markdown(stats, verdict, actor=None) -> str:
                  f"{', '.join(f'`{g}`' for g in GENERATED_FILE_PATTERNS)}. "
                  f"Test patterns exempt from the LINE cap here only: "
                  f"{', '.join(f'`{t}`' for t in TEST_FILE_PATTERNS)}. Size labels by "
-                 f"reviewable added lines: XS <50, S <200, M <500, L <1000, XL ≤1500, "
-                 f"XXL >1500.</sub>")
+                 f"reviewable added lines: XS <50, S <200, M <500, L <1000, "
+                 f"XL ≤{MAX_ADDED_LINES:,}, XXL >{MAX_ADDED_LINES:,}.</sub>")
     return "\n".join(parts) + "\n"
 
 
