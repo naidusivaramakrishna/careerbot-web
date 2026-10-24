@@ -25,14 +25,37 @@
  * would put the long-lived token on every same-origin request and invalidate
  * that assumption.
  *
- * It cannot keep the backend's exact path either: refresh is proxied through
- * BOTH /api/v1/auth/refresh and /api/backend/auth/refresh, which share only
- * the '/api' prefix. '/api' covers both endpoints while still keeping the
- * token off every page route.
+ * The browser refreshes through /api/backend/auth/refresh (src/lib/http.ts),
+ * and the backend itself scopes the cookie to '/api' (careerbot-api #442).
+ * '/api' covers that route while keeping the token off every page route.
+ *
+ * A DELETION keeps the path the backend gave it. The backend expires the
+ * cookie under its old path (/api/v1/auth/refresh) right after setting the new
+ * one; rewritten to '/api', that deletion would arrive last and remove the
+ * fresh refresh_token, and the user would be signed out at the next refresh.
  */
 const REFRESH_COOKIE_PATH = '/api';
 const isRefreshCookie = (pair: string): boolean =>
   pair.split('=')[0].trim().toLowerCase().endsWith('refresh_token');
+
+const isDeletion = (attrs: string[]): boolean =>
+  attrs.some((attr) => {
+    const [rawName, ...rest] = attr.split('=');
+    const name = rawName.trim().toLowerCase();
+    const value = rest.join('=').trim();
+    if (name === 'max-age') return Number(value) <= 0;
+    if (name === 'expires') {
+      const when = Date.parse(value);
+      return !Number.isNaN(when) && when <= Date.now();
+    }
+    return false;
+  });
+
+const originalPath = (attrs: string[]): string | undefined => {
+  const path = attrs.find((attr) => attr.split('=')[0].trim().toLowerCase() === 'path');
+  const value = path?.split('=').slice(1).join('=').trim();
+  return value && value.startsWith('/') ? value : undefined;
+};
 
 /**
  * Stripping Secure is a LOCAL-DEVELOPMENT affordance only. Keying it off
@@ -73,7 +96,12 @@ export function sanitiseCookie(cookie: string, isSecureRequest: boolean, host?: 
     kept.push(attr);
   }
 
-  kept.push(isRefreshCookie(pair) ? `Path=${REFRESH_COOKIE_PATH}` : 'Path=/');
+  if (isRefreshCookie(pair)) {
+    const path = isDeletion(attrs) ? originalPath(attrs) ?? REFRESH_COOKIE_PATH : REFRESH_COOKIE_PATH;
+    kept.push(`Path=${path}`);
+  } else {
+    kept.push('Path=/');
+  }
   if (!hasSameSite) kept.push('SameSite=Lax');
 
   return [pair, ...kept].join('; ');

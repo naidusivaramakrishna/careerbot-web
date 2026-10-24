@@ -31,6 +31,43 @@ describe('sanitiseCookie — cookie path scoping', () => {
     expect(attr(out, 'Path')).toBe('Path=/api');
   });
 
+  // careerbot-api #442 sets refresh_token at Path=/api and THEN expires the
+  // old Path=/api/v1/auth/refresh cookie. If the deletion were rewritten to
+  // /api too, it would arrive last and delete the fresh cookie.
+  it('keeps the backend path on a refresh_token deletion (Max-Age=0)', () => {
+    const fresh = sanitiseCookie('refresh_token=new; Path=/api; Max-Age=604800; HttpOnly', false, 'localhost:3000');
+    const legacyDelete = sanitiseCookie(
+      'refresh_token=""; Path=/api/v1/auth/refresh; Max-Age=0; HttpOnly',
+      false,
+      'localhost:3000',
+    );
+    expect(attr(fresh, 'Path')).toBe('Path=/api');
+    expect(attr(legacyDelete, 'Path')).toBe('Path=/api/v1/auth/refresh');
+  });
+
+  it('keeps the backend path on a deletion by past Expires', () => {
+    const out = sanitiseCookie(
+      'refresh_token=; Path=/api/v1/auth/refresh; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      false,
+      'localhost:3000',
+    );
+    expect(attr(out, 'Path')).toBe('Path=/api/v1/auth/refresh');
+  });
+
+  it('scopes a deletion with no Path to /api', () => {
+    const out = sanitiseCookie('refresh_token=; Max-Age=0', false, 'localhost:3000');
+    expect(attr(out, 'Path')).toBe('Path=/api');
+  });
+
+  it('still rewrites a refresh_token with a future Expires to /api', () => {
+    const out = sanitiseCookie(
+      'refresh_token=abc; Path=/api/v1/auth/refresh; Expires=Fri, 01 Jan 2100 00:00:00 GMT',
+      false,
+      'localhost:3000',
+    );
+    expect(attr(out, 'Path')).toBe('Path=/api');
+  });
+
   it('gives access_token site-wide scope', () => {
     const out = sanitiseCookie('access_token=abc; Path=/api/v1; HttpOnly', false, 'localhost:3000');
     expect(attr(out, 'Path')).toBe('Path=/');

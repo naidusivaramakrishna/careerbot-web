@@ -11,6 +11,15 @@ export function sanitizeAuthRedirect(
 
   try {
     const parsed = new URL(value, "https://careerbot.local");
+    // Never send a signed-in user back into the sign-in flow. The 401 handler
+    // stores the current page as `next`; when that page was
+    // /auth/google/success, the success page redirected to itself forever.
+    if (parsed.pathname === "/auth" || parsed.pathname.startsWith("/auth/")) {
+      return fallback;
+    }
+    // URL normalisation can turn "/..//evil.com" into "//evil.com", which a
+    // navigation reads as another host (same class as src/lib/internalPath.ts).
+    if (parsed.pathname.startsWith("//")) return fallback;
     return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
   } catch {
     return fallback;

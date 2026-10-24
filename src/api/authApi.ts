@@ -359,10 +359,12 @@ export const confirmPasswordReset = async (
 
 // ==================== TOKEN REFRESH ====================
 
+/**
+ * Body of /api/backend/auth/refresh. The proxy removes access_token and
+ * refresh_token (they arrive only as httpOnly cookies), so they are not typed.
+ */
 export interface TokenRefreshResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
+  token_type?: string;
   expires_in?: number;
 }
 
@@ -376,8 +378,8 @@ export interface TokenRefreshResponse {
  */
 export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
-    // Use Next.js proxy route which properly forwards Set-Cookie headers
-    // This ensures the new refresh_token reaches the browser correctly
+    // Same Next proxy route as the http.ts interceptor: it strips the tokens
+    // from the body and rewrites the rotated cookies (see src/lib/http.ts).
     const response = await httpClient.post<TokenRefreshResponse>(
       "/api/backend/auth/refresh",
       {},

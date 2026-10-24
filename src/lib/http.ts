@@ -9,6 +9,7 @@ import {
   clearCorrelationId,
 } from './correlationId';
 import { getTenantId, clearTenantId } from './tenantStorage';
+import { sanitizeAuthRedirect } from './authRedirect';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
   console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to proxy. Set this in production.');
@@ -26,7 +27,13 @@ const isAdminRequest = (url?: string): boolean =>
 const getUserLoginHref = (): string => {
   if (typeof window === 'undefined') return '/?showLogin=true';
 
-  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  // sanitizeAuthRedirect drops /auth/* pages (and off-site paths): a `next`
+  // pointing back into the sign-in flow made /auth/google/success redirect to
+  // itself. Every reader sanitises too; this keeps the bad value out of the URL.
+  const currentPath = sanitizeAuthRedirect(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    ''
+  );
   const params = new URLSearchParams({ showLogin: 'true' });
   if (currentPath && currentPath !== '/') {
     params.set('next', currentPath);
@@ -399,7 +406,12 @@ client.interceptors.response.use(
     }
 
     try {
-      // Use proxy routes that properly forward Set-Cookie headers
+      // Refresh through the Next proxy routes. They strip the tokens from the
+      // response body and pass every Set-Cookie through sanitiseCookie, so the
+      // rotated refresh_token always lands on one path (/api). Calling
+      // /api/v1/auth/refresh directly would reach the backend through nginx in
+      // production and skip both. The refresh_token cookie reaches this route
+      // because the backend scopes it to /api (careerbot-api #442).
       const endpoint = isAdmin
         ? '/api/backend/admin/auth/refresh'
         : '/api/backend/auth/refresh';
