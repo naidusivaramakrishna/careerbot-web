@@ -54,6 +54,28 @@ vi.mock("@/hooks/useDefaultCoverLetterResume", () => ({
   }),
 }));
 
+// This suite tests required-field validation, not template loading.  Mock the
+// template hooks so their real API-error handling cannot leak into the test
+// as unhandled asynchronous work.
+vi.mock("@/hooks/useDefaultCoverLetterTemplate", () => ({
+  useDefaultCoverLetterTemplate: () => ({
+    defaultTemplate: null,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+    setDefault: vi.fn(),
+  }),
+}));
+
+vi.mock("@/hooks/useCoverLetterTemplates", () => ({
+  useCoverLetterTemplates: () => ({
+    templates: [],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@/hooks/useCurrentUserId", () => ({
   useCurrentUserId: () => ({
     userId: "user-1",

@@ -13,6 +13,7 @@ const {
   mockGetParsedResume,
   mockGetResumeById,
   mockGenerateMutate,
+  mockParseJDByJob,
   mockParseJDText,
 } = vi.hoisted(() => ({
   mockSearchParams: vi.fn(),
@@ -20,6 +21,7 @@ const {
   mockGetParsedResume: vi.fn(),
   mockGetResumeById: vi.fn(),
   mockGenerateMutate: vi.fn(),
+  mockParseJDByJob: vi.fn(),
   mockParseJDText: vi.fn(),
 }));
 
@@ -35,7 +37,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/api/parserApi", () => ({
   parseJDText: mockParseJDText,
   parseJDFile: vi.fn(),
-  parseJDByJob: vi.fn(),
+  parseJDByJob: mockParseJDByJob,
   getParsedJDDetails: mockGetParsedJDDetails,
   getResume: mockGetParsedResume,
 }));
@@ -137,6 +139,7 @@ describe("/cover-letter/new review regressions", { timeout: 30_000 }, () => {
     defaultResumeState = null;
     defaultResumeLoading = false;
     latestResumeState = null;
+    mockParseJDByJob.mockResolvedValue({ jd_id: "jd-1" });
     mockParseJDText.mockResolvedValue({ jd_id: "jd-1" });
     mockGetParsedJDDetails.mockResolvedValue({});
     mockGetParsedResume.mockResolvedValue({ personalInfo: { full_name: "Ananya Rao" } });
@@ -448,6 +451,47 @@ describe("/cover-letter/new agent fix round (bot F11, F12, retry, analysis, poll
 
     await waitFor(() => expect(jdField()).toHaveValue(VALID_JD));
     await waitFor(() => expect(mockParseJDText).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps restored auto-filled tracker details when analysis is cancelled", async () => {
+    const pendingParse = deferred<{ jd_id: string }>();
+    mockSearchParams.mockReturnValue(new URLSearchParams());
+    mockParseJDByJob.mockReturnValueOnce(pendingParse.promise);
+    restoreDraft({
+      jd: "",
+      source: "tracker",
+      trackerJobId: "job-42",
+      autoFilledFields: ["company", "title", "location"],
+    });
+    render(<CoverLetterNewPage />);
+
+    const trackerJobId = await screen.findByPlaceholderText("e.g. 557ac932ccd40e7a27cdd22c");
+    await waitFor(() => expect(trackerJobId).toHaveValue("job-42"));
+    fireEvent.blur(trackerJobId);
+    await waitFor(() => expect(mockParseJDByJob).toHaveBeenCalledWith("job-42"));
+    await waitFor(() => expect(screen.getByRole("dialog", { name: /analyzing job description/i })).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: /cancel and enter details manually/i }));
+
+    expect(companyField()).toHaveValue("Globex");
+    expect(roleField()).toHaveValue("Senior Backend Engineer");
+    expect(locationField()).toHaveValue("Bengaluru, India");
+    pendingParse.resolve({ jd_id: "jd-1" });
+  });
+
+  it("does not re-parse a pasted JD when it blurs during the first request", async () => {
+    const pendingParse = deferred<{ jd_id: string }>();
+    mockSearchParams.mockReturnValue(new URLSearchParams());
+    mockParseJDText.mockReturnValueOnce(pendingParse.promise);
+    render(<CoverLetterNewPage />);
+
+    fireEvent.paste(jdField());
+    fireEvent.change(jdField(), { target: { value: VALID_JD } });
+    await waitFor(() => expect(mockParseJDText).toHaveBeenCalledTimes(1));
+    fireEvent.blur(jdField());
+
+    expect(mockParseJDText).toHaveBeenCalledTimes(1);
+    pendingParse.resolve({ jd_id: "jd-1" });
+    await waitFor(() => expect(mockGetParsedJDDetails).toHaveBeenCalledWith("jd-1"));
   });
 
   it("control: a typed JD is still analyzed only on blur", async () => {

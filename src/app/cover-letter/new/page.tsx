@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   BriefcaseBusiness,
   CheckCircle2,
+  Clock3,
   Clipboard,
   FileText,
   GraduationCap,
@@ -44,6 +45,7 @@ import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import { cacheGeneratedCoverLetter } from "@/lib/coverLetterNavigationCache";
 import { getCoverLetterParsedResumeId, getCoverLetterResumeSource } from "@/lib/coverLetterResume";
 import type { CoverLetterFormSubmit, CoverLetterGenerationProgress, CoverLetterResumeOption, CoverLetterTemplate, CoverLetterTemplateId } from "@/types/coverLetter";
+import { notifyOcrOutOfTime } from "@/utils/parseWarnings";
 
 const MAX_RESUME_UPLOAD_MB = 10;
 const MIN_JD_CHARS = 50;
@@ -428,7 +430,10 @@ export default function CoverLetterNewPage() {
   const [jobAnalysisStatus, setJobAnalysisStatus] = useState<JobAnalysisStatus>("idle");
   // False while the JD came from ?jd=, the extension or a refresh draft; typing sets it.
   const jdTypedRef = useRef(false);
+  // A paste is a complete input, so it is analyzed right away instead of on blur.
+  const jdPastedRef = useRef(false);
   const jobAnalysisRequestRef = useRef(0);
+  const jobAnalysisInFlightRef = useRef<{ fingerprint: string; requestId: number } | null>(null);
   const autoFilledJobFieldsRef = useRef(new Set<AutoFilledJobField>());
   const extensionJobFieldsRef = useRef(new Set<AutoFilledJobField>());
   const [companyName, setCompanyName] = useState("");
@@ -436,6 +441,7 @@ export default function CoverLetterNewPage() {
   const [location, setLocation] = useState("");
   const clearJobAnalysis = useCallback(() => {
     jobAnalysisRequestRef.current += 1;
+    jobAnalysisInFlightRef.current = null;
     setParsedJdId(null);
     setParsedJdFingerprint(null);
     setJobAnalysisStatus("idle");
@@ -447,6 +453,13 @@ export default function CoverLetterNewPage() {
       if (!extensionJobFieldsRef.current.has(field)) setters[field]("");
     }
     autoFilledJobFieldsRef.current = new Set([...autoFilledJobFieldsRef.current].filter((field) => extensionJobFieldsRef.current.has(field)));
+  }, []);
+  // Cancelling stops waiting for the parser but keeps anything already filled in.
+  const cancelJobAnalysis = useCallback(() => {
+    jobAnalysisRequestRef.current += 1;
+    jobAnalysisInFlightRef.current = null;
+    setJobAnalysisStatus("idle");
+    toast.dismiss(JOB_ANALYSIS_TOAST_ID);
   }, []);
   const [hiringManagerName, setHiringManagerName] = useState("");
   const [candidateSignatureName, setCandidateSignatureName] = useState("");
@@ -898,11 +911,71 @@ export default function CoverLetterNewPage() {
     // Blur is an explicit request to analyze typed text, but it must not
     // repeat a successful parse when the source has not changed.
     if (parsedJdFingerprint === fingerprint && parsedJdId) return parsedJdId;
+    // A paste starts analysis before the textarea loses focus. A subsequent
+    // click, Tab, or dialog interaction can blur it, so do not replace that
+    // request with a second parse of the same source.
+    if (jobAnalysisInFlightRef.current?.fingerprint === fingerprint) return null;
 
     const requestId = ++jobAnalysisRequestRef.current;
+    jobAnalysisInFlightRef.current = { fingerprint, requestId };
     setJobAnalysisStatus("analyzing");
 
     try {
+      // Fill what can be read locally right away so the form is not empty while
+      // the slower parser runs; the parsed details refine these afterwards.
+      // Pasted text and plain-text uploads can be read here; PDF/DOCX uploads
+      // and tracker jobs rely on what the parser returned.
+      let fallbackText = "";
+      if (source === "jd") {
+        fallbackText = jd;
+      } else if (source === "upload" && jdFile && (jdFile.type === "text/plain" || /\.txt$/i.test(jdFile.name))) {
+        try {
+          fallbackText = await jdFile.text();
+        } catch {
+          fallbackText = "";
+        }
+        if (requestId !== jobAnalysisRequestRef.current || jobSourceFingerprintRef.current !== fingerprint) {
+          return null;
+        }
+      }
+      const inferredRoleTitle = fallbackText ? inferRoleTitleFromJd(fallbackText) : undefined;
+      const inferredCompanyName = fallbackText ? inferCompanyNameFromJd(fallbackText) : undefined;
+      const inferredLocation = fallbackText ? inferLocationFromJd(fallbackText) : undefined;
+      const applyAutoFilledJobField = (
+        field: AutoFilledJobField,
+        parsedValue: string | undefined,
+        setValue: (updater: (current: string) => string) => void,
+        clearAutoFilledWhenEmpty = false,
+      ) => {
+        // Parsed values get the same caps as the typed inputs (API max_length).
+        const value = parsedValue?.slice(0, field === "title" ? MAX_ROLE_TITLE_CHARS : MAX_COMPANY_LOCATION_CHARS);
+        setValue((current) => {
+          const wasAutoFilled = autoFilledJobFieldsRef.current.has(field);
+          // Data scraped by the browser extension is already tied to the job
+          // the user chose. JD analysis may fill blanks but must not clear or
+          // replace that hand-off data.
+          if (extensionJobFieldsRef.current.has(field)) return current;
+          if (!value) {
+            // Only the completed parser response can clear stale values from a
+            // previous job. The optimistic local pass must preserve restored
+            // values if it has no inference or the user cancels parsing.
+            if (!clearAutoFilledWhenEmpty || !wasAutoFilled) return current;
+            autoFilledJobFieldsRef.current.delete(field);
+            return "";
+          }
+          if (!current.trim() || wasAutoFilled) {
+            autoFilledJobFieldsRef.current.add(field);
+            return value;
+          }
+          return current;
+        });
+      };
+      // Do not invoke the clearing branch before the parser succeeds. A
+      // tracker job or a regex miss has no local fallback value to apply.
+      if (inferredCompanyName) applyAutoFilledJobField("company", inferredCompanyName, setCompanyName);
+      if (inferredRoleTitle) applyAutoFilledJobField("title", inferredRoleTitle, setRoleTitle);
+      if (inferredLocation) applyAutoFilledJobField("location", inferredLocation, setLocation);
+
       const parsedJd = await resolveParsedJdId({ source, jd, jdFile, trackerJobId });
       if (!parsedJd.jd_id) {
         throw new Error("Could not analyze this job description.");
@@ -941,9 +1014,6 @@ export default function CoverLetterNewPage() {
         return null;
       }
 
-      const inferredRoleTitle = source === "jd" ? inferRoleTitleFromJd(jd) : undefined;
-      const inferredCompanyName = source === "jd" ? inferCompanyNameFromJd(jd) : undefined;
-      const inferredLocation = source === "jd" ? inferLocationFromJd(jd) : undefined;
       const roleTitle = details.job_title ?? inferredRoleTitle;
       const companyName = details.company ?? inferredCompanyName;
       const location = isWorkArrangement(details.location) ? inferredLocation : details.location ?? inferredLocation;
@@ -952,35 +1022,9 @@ export default function CoverLetterNewPage() {
         !roleTitle && "job title",
         !location && "location",
       ].filter(Boolean) as string[];
-      const applyAutoFilledJobField = (
-        field: AutoFilledJobField,
-        parsedValue: string | undefined,
-        setValue: (updater: (current: string) => string) => void,
-      ) => {
-        // Parsed values get the same caps as the typed inputs (API max_length).
-        const value = parsedValue?.slice(0, field === "title" ? MAX_ROLE_TITLE_CHARS : MAX_COMPANY_LOCATION_CHARS);
-        setValue((current) => {
-          const wasAutoFilled = autoFilledJobFieldsRef.current.has(field);
-          // Data scraped by the browser extension is already tied to the job
-          // the user chose. JD analysis may fill blanks but must not clear or
-          // replace that hand-off data.
-          if (extensionJobFieldsRef.current.has(field)) return current;
-          if (!value) {
-            // A value auto-filled from an earlier job must not outlive it.
-            if (!wasAutoFilled) return current;
-            autoFilledJobFieldsRef.current.delete(field);
-            return "";
-          }
-          if (!current.trim() || wasAutoFilled) {
-            autoFilledJobFieldsRef.current.add(field);
-            return value;
-          }
-          return current;
-        });
-      };
-      applyAutoFilledJobField("company", companyName, setCompanyName);
-      applyAutoFilledJobField("title", roleTitle, setRoleTitle);
-      applyAutoFilledJobField("location", location, setLocation);
+      applyAutoFilledJobField("company", companyName, setCompanyName, true);
+      applyAutoFilledJobField("title", roleTitle, setRoleTitle, true);
+      applyAutoFilledJobField("location", location, setLocation, true);
       setJobAnalysisStatus(companyName || roleTitle || location ? "ready" : "incomplete");
       if (missingFields.length > 0) {
         toast.info(`Job description analyzed. Enter ${missingFields.join(" and ")}.`, { id: JOB_ANALYSIS_TOAST_ID });
@@ -1004,6 +1048,10 @@ export default function CoverLetterNewPage() {
         }
       }
       return null;
+    } finally {
+      if (jobAnalysisInFlightRef.current?.requestId === requestId) {
+        jobAnalysisInFlightRef.current = null;
+      }
     }
   }, [jd, jdFile, jobSourceReady, parsedJdFingerprint, parsedJdId, source, trackerJobId]);
 
@@ -1011,7 +1059,11 @@ export default function CoverLetterNewPage() {
   // Analyze an upload once it is valid, and a JD that arrived without typing
   // (?jd=, extension, refresh draft); typed descriptions wait for blur.
   useEffect(() => {
-    if (!jobSourceReady || !(source === "upload" || (source === "jd" && !jdTypedRef.current))) return;
+    const pasted = source === "jd" && jdPastedRef.current;
+    // A paste too short to analyze must not arm analysis for a later keystroke.
+    if (pasted && !jobSourceReady) jdPastedRef.current = false;
+    if (!jobSourceReady || !(source === "upload" || pasted || (source === "jd" && !jdTypedRef.current))) return;
+    jdPastedRef.current = false;
     void analyzeJobDetails();
   }, [analyzeJobDetails, jobSourceReady, source]);
 
@@ -1020,6 +1072,8 @@ export default function CoverLetterNewPage() {
       setApiError(null);
       cacheGeneratedCoverLetter(response);
       rememberGeneratedLetterTemplate(response.letter_id, pendingTemplateIdRef.current);
+      // Warm the letter route now so the hand-off after the popup is instant.
+      router.prefetch(`/cover-letter/${encodeURIComponent(response.letter_id)}`);
       setGeneratedLetterId(response.letter_id);
     },
     onError: (err) => {
@@ -1157,6 +1211,10 @@ export default function CoverLetterNewPage() {
     }
   }
 
+  // Clears the saved draft so a fresh visit starts empty. The visible form state
+  // is deliberately left alone: resetting it here would swap the generation
+  // popup for the empty form while the letter page is still loading. The page
+  // state is discarded anyway when the route changes.
   const resetFormAfterGeneration = useCallback(() => {
     try {
       window.sessionStorage.removeItem(COVER_LETTER_REFRESH_DRAFT_KEY);
@@ -1169,30 +1227,7 @@ export default function CoverLetterNewPage() {
     signatureResumeKeyRef.current = null;
     autoFilledJobFieldsRef.current.clear();
     jdTypedRef.current = false;
-    clearJobAnalysis();
-    setSource("jd");
-    setJd("");
-    setJdFile(null);
-    setTrackerJobId("");
-    setCompanyName("");
-    setRoleTitle("");
-    setLocation("");
-    setHiringManagerName("");
-    setCandidateSignatureName("");
-    setSignatureResumeKey(null);
-    setIncludeContactDetails(false);
-    setWordCountMode("auto");
-    setMinWords(250);
-    setMaxWords(400);
-    setUploadedResume(null);
-    setSelectedResume(null);
-    setApiError(null);
-    setActiveStep("resume");
-    setIsPreparing(false);
-    setGeneratedLetterId(null);
-    setGenerationAttemptKey(null);
-    setGenerationProgress(null);
-  }, [clearJobAnalysis]);
+  }, []);
 
   const completeGenerationNavigation = useCallback(() => {
     if (!generatedLetterId) return;
@@ -1372,11 +1407,8 @@ export default function CoverLetterNewPage() {
             {apiError}
           </div>
         )}
-        {jobAnalysisStatus === "analyzing" && (
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#526187]" role="status">
-            <Loader2 className="h-4 w-4 animate-spin text-[#2557a7]" aria-hidden="true" />
-            Analyzing job details… You can continue editing the form.
-          </div>
+        {jobAnalysisStatus === "analyzing" && activeStep === "resume" && (
+          <JobAnalysisModal source={source} onCancel={cancelJobAnalysis} />
         )}
 
         {loadingInitial ? (
@@ -1385,7 +1417,7 @@ export default function CoverLetterNewPage() {
           </div>
         ) : (
           <div className="relative">
-            {activeStep === "resume" && (
+            {activeStep === "resume" && !generatedLetterId && (
               <CoverLetterStepOneMock
                 hasResume={Boolean(resume)}
                 latestLoading={latest.isLoading || gate.isLoading || defaultResume.isLoading}
@@ -1402,6 +1434,7 @@ export default function CoverLetterNewPage() {
                 jd={jd}
                 onJdChange={(value) => { jdTypedRef.current = true; clearJobAnalysis(); setJd(value); }}
                 onJdBlur={() => void analyzeJobDetails()}
+                onJdPaste={() => { jdPastedRef.current = true; }}
                 jdFile={jdFile}
                 onJdFileChange={(file) => { clearJobAnalysis(); setJdFile(file); }}
                 trackerJobId={trackerJobId}
@@ -1457,7 +1490,7 @@ export default function CoverLetterNewPage() {
               />
             )}
 
-            {activeStep === "generate" && (
+            {(activeStep === "generate" || Boolean(generatedLetterId)) && (
               <GeneratingModal
                 isPreparing={isPreparing}
                 isGenerating={generation.isLoading}
@@ -1595,6 +1628,7 @@ function CoverLetterStepOneMock({
   jd,
   onJdChange,
   onJdBlur,
+  onJdPaste,
   jdFile,
   onJdFileChange,
   trackerJobId,
@@ -1644,6 +1678,7 @@ function CoverLetterStepOneMock({
   jd: string;
   onJdChange: (v: string) => void;
   onJdBlur: () => void;
+  onJdPaste: () => void;
   jdFile: File | null;
   onJdFileChange: (f: File | null) => void;
   trackerJobId: string;
@@ -1758,7 +1793,8 @@ function CoverLetterStepOneMock({
             <div className="relative flex h-[72px] w-[58px] items-center justify-center rounded-xl bg-[#dfe8ff] text-[#2557a7] shadow-sm 2xl:h-[92px] 2xl:w-[76px]">
               <FileText className="h-9 w-9 2xl:h-12 2xl:w-12" />
               <span className="absolute -bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-[#2557a7] text-white shadow-lg shadow-blue-200 2xl:h-10 2xl:w-10">
-                {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+                {/* No spinner here: the upload card and the parsing row below already show the progress */}
+                <Upload className="h-5 w-5" />
               </span>
             </div>
           </div>
@@ -1783,17 +1819,6 @@ function CoverLetterStepOneMock({
               <Search className="h-4 w-4" />
               {hasResume ? "Change resume" : "Choose saved resume"}
             </button>
-            {hasResume && !isUploading && !isDefaultResume && (
-              <button
-                type="button"
-                onClick={onMakeCurrentDefault}
-                disabled={isSettingDefaultResume}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-white px-4 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60 2xl:h-12 2xl:px-5 2xl:text-sm"
-              >
-                {isSettingDefaultResume ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
-                Set as default
-              </button>
-            )}
             <input
               ref={resumeInputRef}
               id={inputId}
@@ -1876,15 +1901,22 @@ function CoverLetterStepOneMock({
               </div>
               {!isUploading && (
                 <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <span
-                    className={[
-                      "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-black",
-                      isDefaultResume ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-[#2557a7]",
-                    ].join(" ")}
-                  >
-                    {isDefaultResume && <Star className="h-3.5 w-3.5 fill-current" />}
-                    {isDefaultResume ? "Default resume" : "Selected for this letter"}
-                  </span>
+                  {isDefaultResume ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
+                      <Star className="h-3.5 w-3.5 fill-current" />
+                      Default resume
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onMakeCurrentDefault}
+                      disabled={isSettingDefaultResume}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white px-3 py-1.5 text-xs font-black text-amber-700 shadow-sm transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSettingDefaultResume ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />}
+                      Set as default
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1982,6 +2014,7 @@ function CoverLetterStepOneMock({
                   value={jd}
                   onChange={(e) => onJdChange(e.target.value)}
                   onBlur={onJdBlur}
+                  onPaste={onJdPaste}
                   rows={7}
                   placeholder="Paste the full job description here..."
                   className="min-h-[190px] w-full resize-none rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-5 py-4 text-[15px] font-medium leading-7 text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_12px_30px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100"
@@ -3151,6 +3184,61 @@ function ResumePickerModal({
   );
 }
 
+function JobAnalysisModal({
+  source,
+  onCancel,
+}: {
+  source: string;
+  onCancel: () => void;
+}) {
+  const [hasWaited, setHasWaited] = useState(false);
+  const dialogRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setHasWaited(true), 8_000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  const sourceLabel = source === "upload" ? "uploaded file" : source === "tracker" ? "tracked job" : "job description";
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex min-h-[100dvh] items-start justify-center overflow-y-auto bg-[#fbfdff]/95 px-4 py-8 backdrop-blur-sm sm:items-center sm:py-10">
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Analyzing job description"
+        aria-busy="true"
+        aria-live="polite"
+        tabIndex={-1}
+        className="w-full max-w-md max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3.5 text-center shadow-[0_24px_60px_rgba(15,23,42,0.30),0_8px_20px_rgba(15,23,42,0.10)] sm:p-4"
+      >
+        <div className="relative mx-auto flex mt-1.5 h-[124px] w-[124px] items-center justify-center rounded-full bg-blue-50 shadow-[inset_0_0_28px_rgba(37,87,167,0.12)]">
+          <Loader2 className="h-9 w-9 animate-spin text-[#2557a7]" aria-hidden="true" />
+        </div>
+        <p className="mt-1.5 text-[13px] font-bold text-[#1f5eff]">Analyzing</p>
+        <h1 className="mt-1 text-[15px] font-bold tracking-tight text-[#070b33]">Reading your {sourceLabel}</h1>
+        <p className="mx-auto mt-1 max-w-sm text-[12px] leading-5 text-slate-600">
+          {hasWaited
+            ? "Detailed job descriptions can take a little longer. Still extracting the company, role and location…"
+            : "Extracting the company name, job title and location so we can fill them in for you…"}
+        </p>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-2.5 text-[12px] font-bold text-slate-600 underline decoration-slate-300 underline-offset-4 transition hover:text-[#2557a7]"
+        >
+          Cancel and enter details manually
+        </button>
+      </section>
+    </div>
+  );
+}
+
 function GeneratingModal({
   isPreparing,
   isGenerating,
@@ -3191,12 +3279,53 @@ function GeneratingModal({
     return () => window.clearTimeout(timer);
   }, [isComplete, onComplete]);
 
-  const confirmedProgress = isComplete ? 100 : progress?.progress ?? null;
+  // Real progress arrives in steps from the backend; count the ring up to each
+  // new value instead of jumping. It never shows more than the real value.
+  const realProgress = isComplete ? 100 : progress?.progress ?? null;
+  const [shownProgress, setShownProgress] = useState(0);
+  useEffect(() => {
+    if (realProgress === null) return;
+    const timer = window.setInterval(() => {
+      setShownProgress((current) => {
+        if (current >= realProgress) return current;
+        return Math.min(current + 1, realProgress);
+      });
+    }, 40);
+    return () => window.clearInterval(timer);
+  }, [realProgress]);
+  const confirmedProgress = realProgress === null ? null : Math.min(shownProgress, realProgress);
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = confirmedProgress === null
     ? circumference
     : circumference - (confirmedProgress / 100) * circumference;
+
+  // Stage checklist restored from the earlier generation popup. The active row
+  // follows the real backend stage when progress is reported; without it the
+  // popup shows validation while preparing and drafting once the request runs.
+  const processSteps = [
+    "Job Details Validated",
+    "Resume Matched",
+    "Letter Drafted",
+    "Template Applied",
+    "Export Ready",
+  ];
+  const stageToStep: Record<CoverLetterGenerationProgress["stage"], number> = {
+    queued: 0,
+    validating: 0,
+    generating: 2,
+    persisting: 3,
+    finalizing: 4,
+    completed: processSteps.length,
+    failed: 0,
+  };
+  const activeStepIndex = isComplete
+    ? processSteps.length
+    : progress
+      ? stageToStep[progress.stage]
+      : isPreparing
+        ? 0
+        : 2;
 
   const status = isComplete
     ? {
@@ -3206,7 +3335,7 @@ function GeneratingModal({
       }
     : progress
       ? {
-          label: `${progress.progress}% complete`,
+          label: `${confirmedProgress ?? progress.progress}% complete`,
           title: getGenerationStageTitle(progress.stage),
           description: hasWaited && progress.stage === "generating"
             ? "Generation is still in progress. Detailed job descriptions can take a little longer."
@@ -3229,6 +3358,14 @@ function GeneratingModal({
             title: "Creating your tailored draft",
             description: "Using your selected resume and job details to write the letter…",
           };
+  // Announce only confirmed backend state. The ring deliberately counts each
+  // percentage point for sighted users, which must not create a queue of live
+  // announcements for assistive technology.
+  const liveAnnouncement = isComplete
+    ? "Draft complete. Your cover letter is ready."
+    : progress
+      ? `${progress.progress}% complete. ${getGenerationStageTitle(progress.stage)}.`
+      : status.title;
 
   return (
     <div className="fixed inset-0 z-[10000] flex min-h-[100dvh] items-start justify-center overflow-y-auto bg-[#fbfdff]/95 px-4 py-8 backdrop-blur-sm sm:items-center sm:py-10">
@@ -3237,10 +3374,10 @@ function GeneratingModal({
         aria-modal="true"
         aria-label="Cover letter generation in progress"
         aria-busy={!isComplete}
-        aria-live="polite"
-        className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.18),0_8px_20px_rgba(15,23,42,0.08)] sm:p-8"
+        className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-300 max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3.5 text-center shadow-[0_24px_60px_rgba(15,23,42,0.30),0_8px_20px_rgba(15,23,42,0.10)] sm:p-4"
       >
-        <div className="relative mx-auto h-[132px] w-[132px]">
+        <p className="sr-only" aria-live="polite" aria-atomic="true">{liveAnnouncement}</p>
+        <div className="relative mx-auto mt-1.5 h-[124px] w-[124px]">
           <div className="absolute inset-4 rounded-full bg-blue-50 shadow-[inset_0_0_28px_rgba(37,87,167,0.12)]" />
           <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 140 140" aria-hidden="true">
             <circle cx="70" cy="70" r={radius} fill="none" stroke="#dbeafe" strokeWidth="14" />
@@ -3271,49 +3408,89 @@ function GeneratingModal({
             ) : isComplete ? (
               <CheckCircle2 className="h-10 w-10 text-emerald-500" aria-hidden="true" />
             ) : (
-              <span className="text-[30px] font-bold leading-none tracking-tight text-slate-950 tabular-nums">
+              <span aria-hidden="true" className="text-[30px] font-bold leading-none tracking-tight text-slate-950 tabular-nums">
                 {confirmedProgress}%
               </span>
             )}
           </div>
         </div>
 
-        <p className="mt-7 text-sm font-bold text-[#2557a7]">{status.label}</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#070b33]">{status.title}</h1>
-        <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-600">{status.description}</p>
+        {!isComplete && (
+          <Loader2 className="mx-auto mt-1.5 h-4 w-4 animate-spin text-[#2557a7]" aria-hidden="true" />
+        )}
+        <p aria-hidden="true" className="mt-1 text-[13px] font-bold text-[#1f5eff]">{status.label}</p>
+        <h1 className="mt-1 text-[15px] font-bold tracking-tight text-[#070b33]">{status.title}</h1>
+        <p className="mx-auto mt-1 max-w-sm text-[12px] leading-5 text-slate-600">{status.description}</p>
 
-        <div className="mt-7 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Your letter</p>
-          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+        <ul className="mt-2.5 space-y-1 text-left" aria-label="Generation steps">
+          {processSteps.map((label, index) => {
+            const done = index < activeStepIndex;
+            const active = index === activeStepIndex;
+            return (
+              <li
+                key={label}
+                className={[
+                  "flex items-center gap-2 rounded-lg px-3 py-1 transition-colors duration-200",
+                  done ? "bg-emerald-50" : active ? "bg-blue-50" : "bg-slate-50",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                    done ? "bg-emerald-500 text-white" : active ? "bg-[#2557a7] text-white" : "bg-slate-200 text-slate-400",
+                  ].join(" ")}
+                >
+                  {done ? (
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                  ) : active ? (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Clock3 className="h-2.5 w-2.5" aria-hidden="true" />
+                  )}
+                </span>
+                <span className={["min-w-0 flex-1 truncate text-[12px] font-semibold", done ? "text-emerald-700" : active ? "text-[#2557a7]" : "text-slate-400"].join(" ")}>
+                  {label}
+                </span>
+                <span className={["shrink-0 text-[11px] font-bold", done ? "text-emerald-600" : active ? "text-amber-500" : "text-slate-400"].join(" ")}>
+                  {done ? "Done" : active ? "Processing" : "Queued"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Your letter</p>
+          <dl className="mt-1 grid gap-2 text-[11px] sm:grid-cols-3">
             <div>
               <dt className="font-medium text-slate-500">Template</dt>
-              <dd className="mt-1 truncate font-bold text-slate-950">{selectedTemplate}</dd>
+              <dd className="mt-0.5 truncate font-bold text-slate-950">{selectedTemplate}</dd>
             </div>
             {roleTitle && (
               <div>
                 <dt className="font-medium text-slate-500">Role</dt>
-                <dd className="mt-1 truncate font-bold text-slate-950">{roleTitle}</dd>
+                <dd className="mt-0.5 truncate font-bold text-slate-950">{roleTitle}</dd>
               </div>
             )}
             {companyName && (
               <div>
                 <dt className="font-medium text-slate-500">Company</dt>
-                <dd className="mt-1 truncate font-bold text-slate-950">{companyName}</dd>
+                <dd className="mt-0.5 truncate font-bold text-slate-950">{companyName}</dd>
               </div>
             )}
           </dl>
         </div>
 
         {!isComplete && (
-          <div className="mt-6">
+          <div className="mt-2.5">
             <button
               type="button"
               onClick={onReturnToForm}
-              className="text-sm font-bold text-slate-600 underline decoration-slate-300 underline-offset-4 transition hover:text-[#2557a7]"
+              className="text-[12px] font-bold text-slate-600 underline decoration-slate-300 underline-offset-4 transition hover:text-[#2557a7]"
             >
               Return to form
             </button>
-            <p className="mt-2 text-xs leading-5 text-slate-500">
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">
               This stops waiting here. If the request finishes, the letter will appear in History.
             </p>
           </div>
@@ -3468,6 +3645,7 @@ function useCoverLetterResumeUpload(
     setUploadError(null);
     try {
       const parsed = await extractResume(file, { skipLoginRedirect: true });
+      notifyOcrOutOfTime(parsed.parsed_data);
       const mappedResume = {
         parsed_data: parsed.parsed_data,
         parsed_resume_id: parsed.resume_id,
