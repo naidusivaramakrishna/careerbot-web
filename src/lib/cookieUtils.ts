@@ -12,14 +12,14 @@
  *      when the inbound request isn't HTTPS.
  *
  * SameSite is normalised to Lax if absent so post-refresh same-site navs
- * still carry the cookie. Path is normalised to '/' so middleware sees
- * the cookie on every route, not just /api/*.
+ * still carry the cookie. Path is normalised to '/' for every cookie except
+ * the refresh tokens (below), so middleware sees them on every route.
  */
 /**
  * Refresh tokens are long-lived, so they are NOT given site-wide scope.
  *
- * The API deliberately scopes refresh_token to '/api/v1/auth/refresh' as
- * defense in depth (careerbot-api app/core/security.py:266-295), and
+ * The API scoped refresh_token to '/api/v1/auth/refresh' until careerbot-api
+ * #442 and scopes it to '/api' since (app/core/security.py), and
  * middleware.ts is written around that -- its own comment notes the browser
  * never sends the refresh cookie on a page navigation. Rewriting it to Path=/
  * would put the long-lived token on every same-origin request and invalidate
@@ -38,18 +38,18 @@ const REFRESH_COOKIE_PATH = '/api';
 const isRefreshCookie = (pair: string): boolean =>
   pair.split('=')[0].trim().toLowerCase().endsWith('refresh_token');
 
-const isDeletion = (attrs: string[]): boolean =>
-  attrs.some((attr) => {
-    const [rawName, ...rest] = attr.split('=');
-    const name = rawName.trim().toLowerCase();
-    const value = rest.join('=').trim();
-    if (name === 'max-age') return Number(value) <= 0;
-    if (name === 'expires') {
-      const when = Date.parse(value);
-      return !Number.isNaN(when) && when <= Date.now();
-    }
-    return false;
-  });
+/** RFC 6265 5.3: a valid Max-Age wins over Expires; an invalid one is ignored. */
+const isDeletion = (attrs: string[]): boolean => {
+  const values = (wanted: string) =>
+    attrs
+      .map((attr) => attr.split('='))
+      .filter(([rawName]) => rawName.trim().toLowerCase() === wanted)
+      .map(([, ...rest]) => rest.join('=').trim());
+  const maxAge = values('max-age').filter((v) => /^-?\d+$/.test(v)).pop();
+  if (maxAge !== undefined) return Number(maxAge) <= 0;
+  const expires = values('expires').map((v) => Date.parse(v)).filter((t) => !Number.isNaN(t)).pop();
+  return expires !== undefined && expires <= Date.now();
+};
 
 const originalPath = (attrs: string[]): string | undefined => {
   const path = attrs.find((attr) => attr.split('=')[0].trim().toLowerCase() === 'path');

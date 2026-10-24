@@ -54,6 +54,20 @@ describe('sanitiseCookie — cookie path scoping', () => {
     expect(attr(out, 'Path')).toBe('Path=/api/v1/auth/refresh');
   });
 
+  it('treats Max-Age > 0 as live even with a past Expires (Max-Age wins)', () => {
+    const out = sanitiseCookie(
+      'refresh_token=abc; Path=/api/v1/auth/refresh; Max-Age=604800; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      false,
+      'localhost:3000',
+    );
+    expect(attr(out, 'Path')).toBe('Path=/api');
+  });
+
+  it('ignores an empty Max-Age', () => {
+    const out = sanitiseCookie('refresh_token=abc; Path=/api/v1/auth/refresh; Max-Age=', false, 'localhost:3000');
+    expect(attr(out, 'Path')).toBe('Path=/api');
+  });
+
   it('scopes a deletion with no Path to /api', () => {
     const out = sanitiseCookie('refresh_token=; Max-Age=0', false, 'localhost:3000');
     expect(attr(out, 'Path')).toBe('Path=/api');

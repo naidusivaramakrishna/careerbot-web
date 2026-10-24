@@ -390,7 +390,7 @@ describe('Auth API — refreshAccessToken', () => {
 
   it('POSTs to /api/backend/auth/refresh via proxy', async () => {
     const spy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(
-      makeResponse({ access_token: 'new-at', refresh_token: 'new-rt', token_type: 'bearer' })
+      makeResponse({ token_type: 'bearer', expires_in: 1800 })
     );
 
     await refreshAccessToken();
@@ -402,14 +402,16 @@ describe('Auth API — refreshAccessToken', () => {
     );
   });
 
-  it('returns new access_token on success', async () => {
+  // The proxy strips the tokens from the body; they arrive only as httpOnly cookies.
+  it('returns the proxy body (no tokens) on success', async () => {
     vi.spyOn(httpClient, 'post').mockResolvedValueOnce(
-      makeResponse({ access_token: 'refreshed-token', refresh_token: 'new-rt', token_type: 'bearer' })
+      makeResponse({ token_type: 'bearer', expires_in: 1800 })
     );
 
     const result = await refreshAccessToken();
 
-    expect(result.access_token).toBe('refreshed-token');
+    expect(result).toEqual({ token_type: 'bearer', expires_in: 1800 });
+    expect(result).not.toHaveProperty('access_token');
   });
 
   it('rethrows as Error instance when refresh fails (401)', async () => {
