@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { logger } from '@/lib/logger';
+import { collegeFromHost, institutionBaseDomain } from '@/lib/collegeHost';
 
 // Public routes — no auth required
 const publicRoutes = [
@@ -184,6 +185,19 @@ export async function middleware(request: NextRequest) {
         if (await isMaintenanceMode(request.url)) {
             return NextResponse.redirect(new URL('/maintenance', request.url));
         }
+    }
+
+    // A college's own address (vit.<base>) opens on its sign-in page, not the
+    // consumer home page. Only the bare root, and not the sign-in link the
+    // college page itself sends people to (/?showLogin=true&next=...), which
+    // would loop. Other query strings (utm_*, from an email) still redirect.
+    if (
+        pathname === '/' &&
+        !request.nextUrl.searchParams.has('showLogin') &&
+        !request.nextUrl.searchParams.has('next') &&
+        collegeFromHost(request.headers.get('host') ?? request.nextUrl.host, institutionBaseDomain())
+    ) {
+        return NextResponse.redirect(new URL('/institution/login', request.url));
     }
 
     // Allow public routes without authentication

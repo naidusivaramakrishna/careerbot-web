@@ -29,7 +29,14 @@ export interface CollegeBranding {
 export async function getCollegeBranding(): Promise<CollegeBranding | null> {
   try {
     const { data } = await httpClient.get<{ institution: CollegeBranding | null }>(
-      '/institution/public/branding',
+      '/api/v1/institution/public/branding',
+      // Same-origin on purpose. The backend reads the college from the Host
+      // header, and NEXT_PUBLIC_BASE_URL is an absolute backend URL that never
+      // carries the college's host. On college hosts the proxy sends THIS ONE
+      // PATH straight to the backend with Host preserved; every other /api/
+      // path still goes to the web app, whose routes strip tokens from bodies
+      // and sanitise cookies (careerbot-api nginx/wildcard-subdomains.conf).
+      { baseURL: '' },
     );
     return data?.institution ?? null;
   } catch {
