@@ -2,6 +2,7 @@ import { httpClient } from "@/lib/http";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
 import { clearPendingVerification } from '@/lib/pendingVerification';
+import { clearInstitutionSession } from '@/lib/institutionSession';
 
 export interface LoginRequest {
   email: string;
@@ -110,6 +111,14 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
   // Clear user-scoped session data from previous login
   sessionStorage.removeItem('uploaded_resume_filename');
 
+  // The college token of whoever used this tab before. It belongs to THAT
+  // account, and the college API sends it in Authorization -- so a stale one
+  // makes this account act as the previous one inside the college. Dropped
+  // here and again on sign-out; InstitutionContext also checks it against
+  // the signed-in account's memberships, which covers OAuth logins that do
+  // not pass through signIn().
+  clearInstitutionSession();
+
   // A session is only issued to a verified account (signin 403s
   // EMAIL_NOT_VERIFIED otherwise), so any pending-verification banner record
   // left in this browser is stale or someone else's.
@@ -157,6 +166,12 @@ export const signOut = async () => {
   clearUnscopedJobTrackingData();
 
   ['last_resume_path', 'builder_fresh_start'].forEach((key) => sessionStorage.removeItem(key));
+
+  // The active COLLEGE session (careerbot_institution_session). It is a token
+  // for this account's membership, sent as the Authorization header on every
+  // college call. Leaving it behind lets the next account that signs in on
+  // this tab act as this one inside the college.
+  clearInstitutionSession();
 
   // Job Match session state: sweep by PREFIX, not by allow-list.
   //

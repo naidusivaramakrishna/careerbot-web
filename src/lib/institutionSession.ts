@@ -5,8 +5,13 @@
  * POST /institution/session hands the token back IN THE RESPONSE BODY, so the
  * browser has to hold it. It lives in `sessionStorage`, deliberately:
  *
- *   - `http.ts` already calls `sessionStorage.clear()` on sign-out / failed
- *     refresh, so the institution token dies with the consumer session for free.
+ *   - It is removed EXPLICITLY on sign-out and on sign-in (authApi.ts). It does
+ *     NOT die with the consumer session for free: `http.ts` only calls
+ *     `sessionStorage.clear()` when a token refresh fails, not on the normal
+ *     logout button, so an earlier version of this comment was wrong and the
+ *     previous account's college token survived into the next login.
+ *     InstitutionContext additionally refuses a stored session whose
+ *     membership is not one of the signed-in account's memberships.
  *   - sessionStorage is per-tab, so two tabs can sit in two different colleges
  *     without one silently re-tenanting the other. Cross-tab bleed is exactly
  *     the failure mode that would write a student into the wrong college.

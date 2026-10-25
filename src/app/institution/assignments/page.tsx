@@ -11,6 +11,8 @@ import {
   useMembers,
   useStudentsPaged,
 } from '@/hooks/useInstitutionResource';
+import { useStructureNames } from '@/hooks/useStructureNames';
+import { assignmentOutcomeMessage, facultyOptionLabel } from '@/lib/facultyAssignment';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import { EmptyState } from '../_components/EmptyState';
 import { ErrorNotice, FormError } from '../_components/ErrorNotice';
@@ -69,12 +71,20 @@ function FacultyAssignments() {
     return () => clearTimeout(t);
   }, [query]);
 
+  const [facultyMembershipId, setFacultyMembershipId] = useState('');
+  // A faculty member teaches in ONE department and the server refuses the whole
+  // request if any ticked student is in another. So the table is limited to the
+  // chosen faculty member's department: the mistake cannot be made, rather than
+  // reported after nothing was assigned.
+  const facultyDepartmentId =
+    (faculty.data ?? []).find((m) => m.membership_id === facultyMembershipId)?.department_id ??
+    undefined;
   const students = useStudentsPaged({
     q: search || undefined,
+    department_id: facultyDepartmentId,
     skip: page * PAGE_SIZE,
     limit: PAGE_SIZE,
   });
-  const [facultyMembershipId, setFacultyMembershipId] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<InstitutionApiError | null>(null);
@@ -88,6 +98,7 @@ function FacultyAssignments() {
   const hasNext = shownTo < total;
   const departmentName = (id: string | null) =>
     departments.data?.find((d) => d.id === id)?.name ?? id ?? '';
+  const { sectionName } = useStructureNames();
 
   // Sorted by the thing a human reads, so the list does not reorder itself
   // between visits the way an id-ordered one does.
@@ -104,18 +115,28 @@ function FacultyAssignments() {
           // their own account as "Prof Meera Iyer" and collect another
           // officer's students. The name makes the list readable; the id is
           // what actually identifies the row, so both are on screen.
-          label: [
-            m.display_name?.trim(),
+          label: facultyOptionLabel(
+            m,
             m.department_id ? departmentName(m.department_id) : null,
-            m.account_id,
-          ]
-            .filter(Boolean)
-            .join(' · '),
+          ),
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [faculty.data, departments.data],
   );
+  // Switching to a faculty member in ANOTHER department drops the ticks and goes
+  // back to page one: ticked students from the old department would make the
+  // server refuse the whole request, and the table no longer shows them.
+  const changeFaculty = (membershipId: string) => {
+    const nextDepartment = (faculty.data ?? []).find(
+      (m) => m.membership_id === membershipId,
+    )?.department_id;
+    if (nextDepartment !== facultyDepartmentId) {
+      setSelected(new Set());
+      setPage(0);
+    }
+    setFacultyMembershipId(membershipId);
+  };
   const writable = canWrite('assign_faculty');
   const fieldErrors = fieldErrorMap(error);
 
@@ -177,12 +198,16 @@ function FacultyAssignments() {
     setError(null);
     setDone(null);
     try {
-      const count = selected.size;
-      await assignStudentsToFaculty({
+      const requested = selected.size;
+      const created = await assignStudentsToFaculty({
         faculty_membership_id: facultyMembershipId,
         student_ids: Array.from(selected),
       });
-      setDone(`${count} ${count === 1 ? 'student' : 'students'} assigned.`);
+      // From the RESPONSE, not from the number of ticked rows: students already on
+      // this roster are skipped by the server and are not in the list it returns.
+      // The endpoint returns the rows it CREATED (an array); no fallback to `requested`, which
+      // would report every tick as newly assigned if the shape ever changed.
+      setDone(assignmentOutcomeMessage(requested, created.length));
       setSelected(new Set());
     } catch (err) {
       setError(
@@ -263,7 +288,7 @@ function FacultyAssignments() {
                   ? 'A head of department adds faculty before students can be assigned to them.'
                   : 'Names are entered by your college and are not verified. Check the account id.'
               }
-              onChange={(e) => setFacultyMembershipId(e.target.value)}
+              onChange={(e) => changeFaculty(e.target.value)}
             />
           </div>
 
@@ -345,7 +370,7 @@ function FacultyAssignments() {
                         {s.admission_number ?? '—'}
                       </td>
                       <td className="px-4 py-2.5 text-[13px] text-[#334155]">
-                        {s.section_id ?? '—'}
+                        {sectionName(s.section_id) ?? '—'}
                       </td>
                       <td className="px-4 py-2.5">
                         <StudentStatusPill status={s.status} />

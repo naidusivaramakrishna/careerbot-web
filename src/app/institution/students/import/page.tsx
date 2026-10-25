@@ -14,6 +14,7 @@ import {
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useDepartments } from '@/hooks/useInstitutionResource';
 import { parseCsv } from '@/lib/csv';
+import { readSectionReference } from '@/lib/sectionReference';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { BulkRowOutcome, BulkStudentRow } from '@/types/institution';
 import { DataTable } from '../../_components/DataTable';
@@ -66,9 +67,9 @@ interface RowReport {
 }
 
 const OUTCOME_STYLES: Record<BulkRowOutcome, { label: string; className: string }> = {
-  created: { label: 'Added', className: 'bg-[#dcfce7] text-[#166534]' },
+  created: { label: 'Added', className: 'bg-[#d9f8e7] text-[#085039]' },
   duplicate: { label: 'Already there', className: 'bg-[#fef3c7] text-[#92400e]' },
-  rejected: { label: 'Not added', className: 'bg-[#fee2e2] text-[#991b1b]' },
+  rejected: { label: 'Not added', className: 'bg-[#fadada] text-[#921c25]' },
 };
 
 function OutcomePill({ outcome }: { outcome: BulkRowOutcome }) {
@@ -190,7 +191,8 @@ function BulkImport() {
           full_name: fullName,
           admission_number: admissionNumber,
           college_email: (values.college_email ?? '').trim() || null,
-          section_id: (values.section_id ?? '').trim() || null,
+          // A section NAME (civil-A) or id; the bulk endpoint resolves either.
+          section_id: readSectionReference(values),
           // A year that is not a number is left OUT rather than sent as NaN,
           // which would fail the whole chunk on a body error and take the
           // other 499 rows with it.
@@ -319,6 +321,12 @@ function BulkImport() {
           )}
           . Column names are matched ignoring case and spacing.
         </p>
+        <p className="mb-3 text-[13px] leading-relaxed text-[#475569]">
+          In the section column, write the section&apos;s name as it appears on the Sections
+          page (for example <code>civil-A</code>). It is matched inside the student&apos;s
+          department. If the same name exists in two batches of one department, use the
+          section&apos;s id instead.
+        </p>
 
         <input
           ref={fileRef}
@@ -339,7 +347,7 @@ function BulkImport() {
         ) : null}
 
         {fileError ? (
-          <p className="mt-3 flex items-start gap-1.5 rounded-md bg-[#fee2e2] px-3 py-2 text-[13px] text-[#991b1b]">
+          <p className="mt-3 flex items-start gap-1.5 rounded-md bg-[#fadada] px-3 py-2 text-[13px] text-[#921c25]">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             {fileError}
           </p>
@@ -421,7 +429,7 @@ function BulkImport() {
           </SectionTitle>
 
           {summary.created > 0 && summary.rejected === 0 && summary.duplicate === 0 ? (
-            <p className="mb-3 flex items-center gap-1.5 rounded-md bg-[#dcfce7] px-3 py-2 text-[13px] text-[#166534]">
+            <p className="mb-3 flex items-center gap-1.5 rounded-md bg-[#d9f8e7] px-3 py-2 text-[13px] text-[#085039]">
               <CheckCircle2 className="h-4 w-4" aria-hidden />
               Every row imported.
             </p>

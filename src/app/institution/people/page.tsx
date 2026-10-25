@@ -11,6 +11,7 @@ import { createMember, createStudent, InstitutionApiError,
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useBatches, useDepartments, useSections } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT, ROLE_LABELS } from '@/lib/institutionMessages';
+import { batchYearHint } from '@/lib/batchYearHint';
 import { onboardableRoles } from '@/lib/institutionPermissions';
 import type { OnboardableRole } from '@/types/institution';
 import { ErrorNotice, FormError } from '../_components/ErrorNotice';
@@ -181,7 +182,7 @@ function MemberForm({
     }
   };
   const [displayName, setDisplayName] = useState('');
-  const [memberRole, setMemberRole] = useState<OnboardableRole>(allowedRoles[0] ?? 'student');
+  const [memberRole, setMemberRole] = useState<OnboardableRole>(allowedRoles[0] ?? 'faculty');
   const [departmentId, setDepartmentId] = useState(defaultDepartmentId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<InstitutionApiError | null>(null);
@@ -235,7 +236,8 @@ function MemberForm({
       </MicroLabel>
       <Body className="mb-4">
         The person needs a CareerBOT account already. This links that account to your college with a
-        role. For a student, also create their student record on the next tab.
+        role. To add a student, use the next tab: create their student record, then they join by
+        entering an invite code.
       </Body>
 
       <FormError error={error} />
@@ -448,8 +450,8 @@ function StudentForm({
         Create a student record
       </MicroLabel>
       <Body className="mb-4">
-        This is the record progress is recorded against. Give the student access on the previous tab
-        as well, so they can sign in and see it.
+        This is the record progress is recorded against. The student then signs in to CareerBOT and
+        joins the college by entering an invite code; there is nothing to grant on the other tab.
       </Body>
 
       <FormError error={error} />
@@ -517,11 +519,7 @@ function StudentForm({
           value={batchYear}
           disabled={!writable}
           error={fieldErrors.batch_year}
-          hint={
-            batchYears.length > 0
-              ? `Your batches: ${batchYears.slice(0, 3).join(', ')}`
-              : 'Optional — the intake year, e.g. 2026.'
-          }
+          hint={batchYearHint(batchYears)}
           onChange={(e) => setBatchYear(e.target.value)}
         />
       </div>

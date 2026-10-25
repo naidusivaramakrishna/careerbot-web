@@ -60,6 +60,8 @@ export default function CollegesPage() {
   const [form, setForm] = useState({
     id: '', name: '', subscription_status: 'active' as SubscriptionStatus,
     tier: 'trial' as 'trial' | 'paid',
+    // Months a PAID college has paid for. '' = no end date (the old behaviour).
+    paidMonths: '' as '' | string,
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -105,8 +107,15 @@ export default function CollegesPage() {
         name: form.name.trim(),
         subscription_status: form.subscription_status,
         tier: form.tier,
+        // Only a paid college has a paid period; a trial has its own clock.
+        ...(form.tier === 'paid' && form.paidMonths
+          ? { paid_months: Number(form.paidMonths) }
+          : {}),
       });
-      setForm({ id: '', name: '', subscription_status: 'active', tier: 'trial' });
+      setForm({
+        id: '', name: '', subscription_status: 'active', tier: 'trial',
+        paidMonths: '',
+      });
       setShowForm(false);
       await load(0);
     } catch (err) {
@@ -217,6 +226,8 @@ export default function CollegesPage() {
                 onChange={(e) => setForm({
                   ...form,
                   tier: e.target.value as 'trial' | 'paid',
+                  // A trial has no paid period; do not carry a stale choice.
+                  paidMonths: e.target.value === 'paid' ? form.paidMonths : '',
                 })}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
@@ -233,6 +244,31 @@ export default function CollegesPage() {
                 are not ready to start, create the college when they are.
               </span>
             </label>
+
+            {form.tier === 'paid' && (
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-gray-700">
+                  Paid period
+                </span>
+                <select
+                  value={form.paidMonths}
+                  onChange={(e) => setForm({ ...form, paidMonths: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">No end date</option>
+                  <option value="1">1 month</option>
+                  <option value="3">3 months</option>
+                  <option value="6">6 months</option>
+                  <option value="12">1 year</option>
+                  <option value="24">2 years</option>
+                </select>
+                <span className="mt-1 block text-xs text-gray-500">
+                  When this ends the college gets a few days of grace, then
+                  becomes read-only until it is renewed. &quot;No end date&quot; never
+                  expires.
+                </span>
+              </label>
+            )}
 
             <label className="text-sm">
               <span className="mb-1 block font-medium text-gray-700">
@@ -333,7 +369,10 @@ export default function CollegesPage() {
                     <TierBadge tier={c.tier} daysRemaining={c.trial_days_remaining} />
                   </td>
                   <td className="px-4 py-3">
-                    <StatusPill status={c.subscription_status} />
+                    {/* EFFECTIVE, so the list agrees with the detail page one
+                        click away: a paid period that ended reads grace or
+                        expired here too, not the stored "active". */}
+                    <StatusPill status={c.effective_subscription_status ?? c.subscription_status} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link

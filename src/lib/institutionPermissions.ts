@@ -46,6 +46,10 @@ export function onboardableRoles(role: InstitutionRole): OnboardableRole[] {
   const roles: OnboardableRole[] = [];
   if (can(role, 'onboard_hod')) roles.push('hod');
   if (can(role, 'onboard_faculty')) roles.push('faculty');
-  if (can(role, 'onboard_student')) roles.push('student');
+  // NOT 'student', though every role holds the onboard_student capability. That
+  // capability is for creating a student RECORD (POST /students). A student
+  // MEMBERSHIP is not something staff grant here: it exists only when the
+  // student claims an invite code, so POST /members refuses role 'student'
+  // (pattern ^(hod|faculty)$) and offering it produced a raw validation error.
   return roles;
 }

@@ -3,13 +3,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, BadgeCheck, Gauge, Loader2, PauseCircle, PlayCircle, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Gauge, Loader2, PauseCircle, Pencil, PlayCircle, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
 import {
   AdminInstitutionError,
   type CollegeDetail,
+  type SubscriptionStatus,
   appointOfficerByCode,
   getCollege,
   markCollegePaid,
+  renameCollege,
+  renewCollege,
+  setCollegePaidUntil,
+  setCollegeStatus,
   revokeOfficer,
   setCollegePaused,
 } from '@/api/adminInstitutionsApi';
@@ -64,6 +69,20 @@ export default function CollegeDetailPage() {
 
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [paidNotice, setPaidNotice] = useState<string | null>(null);
+  // Months the payment covers. '' = no end date, which is what marking paid
+  // always did before a paid period existed.
+  const [paidMonths, setPaidMonths] = useState('');
+
+  const [renewMonths, setRenewMonths] = useState('12');
+  const [isRenewing, setIsRenewing] = useState(false);
+  const [renewNotice, setRenewNotice] = useState<string | null>(null);
+  const [renewError, setRenewError] = useState<string | null>(null);
+  const [paidUntilDraft, setPaidUntilDraft] = useState('');
+  const [isSettingDate, setIsSettingDate] = useState(false);
+  const [statusDraft, setStatusDraft] = useState<SubscriptionStatus | ''>('');
+  const [isSettingStatus, setIsSettingStatus] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -81,6 +100,55 @@ export default function CollegeDetailPage() {
 
   const [pausing, setPausing] = useState(false);
   const [pauseNotice, setPauseNotice] = useState<string | null>(null);
+
+  // A TYPO IN THE NAME CAN BE CORRECTED. Only the display name: the id is the
+  // tenant key and the server refuses a body that carries it.
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [nameNotice, setNameNotice] = useState<string | null>(null);
+
+  const startEditingName = () => {
+    if (!college) return;
+    setNameDraft(college.name);
+    setNameError(null);
+    setNameNotice(null);
+    setEditingName(true);
+  };
+
+  const saveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!college || savingName) return;
+    const next = nameDraft.trim();
+    if (!next) {
+      setNameError('Enter a college name.');
+      return;
+    }
+    if (next.length > 200) {
+      setNameError('The name can be at most 200 characters.');
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      const res = await renameCollege(college.id, next);
+      // changed:false is a success: the name was already exactly this.
+      setNameNotice(res.changed ? 'College name updated.' : 'That is already the name — nothing changed.');
+      setEditingName(false);
+      await load();
+    } catch (err) {
+      setNameError(
+        err instanceof AdminInstitutionError && err.isConflict
+          ? 'Someone else changed this name. Reload and try again.'
+          : err instanceof AdminInstitutionError
+            ? err.message
+            : 'Could not update the name.',
+      );
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   // PAUSING IS NOT A BILLING ACT, and the button is here rather than beside
   // "mark paid" to say so: a platform admin may hold a college over a
@@ -120,7 +188,8 @@ export default function CollegeDetailPage() {
     setPaidNotice(null);
     setError(null);
     try {
-      const result = await markCollegePaid(collegeId);
+      const result = await markCollegePaid(
+        collegeId, paidMonths ? Number(paidMonths) : undefined);
       // changed:false IS a success. A double click, or a retry after a
       // timeout, lands here -- and calling it a failure would have the
       // operator press the button again.
@@ -134,6 +203,105 @@ export default function CollegeDetailPage() {
         : 'Could not mark this college as paid.');
     } finally {
       setIsMarkingPaid(false);
+    }
+  };
+
+  // RENEWING IS NOT IDEMPOTENT, on purpose: each press is a payment that
+  // arrived and adds a period. The button is disabled while the request is in
+  // flight so a double click cannot add two.
+  const renew = async () => {
+    if (isRenewing) return;
+    setIsRenewing(true);
+    setRenewNotice(null);
+    setRenewError(null);
+    try {
+      const res = await renewCollege(collegeId, Number(renewMonths));
+      setRenewNotice(`Renewed. Paid until ${formatDate(res.paid_until)}.`);
+      await load();
+    } catch (err) {
+      setRenewError(
+        err instanceof AdminInstitutionError && err.isConflict
+          ? 'Someone else changed this period. Reload and try again.'
+          : err instanceof AdminInstitutionError
+            ? err.message
+            : 'Could not renew this college.',
+      );
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+
+  // YYYY-MM-DD for <input type=date>, in the operator's own calendar (the
+  // server bounds the date against ITS clock; this only limits the picker).
+  const toDateInput = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const today = new Date();
+  const maxDate = new Date(today);
+  maxDate.setFullYear(maxDate.getFullYear() + 10);
+
+  // CORRECTING IS DIFFERENT FROM RENEWING: it SETS the end date instead of
+  // adding to it, so a period entered wrong (3 years for 3 months) can be
+  // fixed whatever the college had paid for before -- and it can shorten.
+  const correctPaidUntil = async () => {
+    if (isSettingDate || !paidUntilDraft) return;
+    setIsSettingDate(true);
+    setRenewNotice(null);
+    setRenewError(null);
+    try {
+      const res = await setCollegePaidUntil(collegeId, paidUntilDraft);
+      setRenewNotice(res.changed
+        ? `Paid until ${formatDate(res.paid_until)}.`
+        : 'That is already the end date — nothing changed.');
+      setPaidUntilDraft('');
+      await load();
+    } catch (err) {
+      setRenewError(
+        err instanceof AdminInstitutionError && err.isConflict
+          ? 'Someone else changed this period. Reload and try again.'
+          : err instanceof AdminInstitutionError
+            ? err.message
+            : 'Could not set the date.',
+      );
+    } finally {
+      setIsSettingDate(false);
+    }
+  };
+
+  // THE BILLING ROUTE: the pause button above only moves paused <-> active.
+  // Grace and expired -- and getting an expired college back out -- are
+  // billing outcomes, so this needs the billing permission and a 403 is
+  // reported as exactly that.
+  const applyStatus = async () => {
+    if (!college || isSettingStatus || !statusDraft) return;
+    setIsSettingStatus(true);
+    setStatusNotice(null);
+    setStatusError(null);
+    try {
+      const res = await setCollegeStatus(college.id, statusDraft);
+      const effective = res.effective_subscription_status;
+      setStatusNotice(
+        !res.changed
+          ? 'Already in that status — nothing changed.'
+          : effective && effective !== res.subscription_status
+            ? `Status set to ${res.subscription_status}, but the college is ${effective} because its paid period has ended. Renew it or set a new end date.`
+            : `Status set to ${res.subscription_status}.`,
+      );
+      setStatusDraft('');
+      await load();
+    } catch (err) {
+      setStatusError(
+        err instanceof AdminInstitutionError && err.isForbidden
+          ? 'You are not allowed to change a college\'s billing status.'
+          : err instanceof AdminInstitutionError && err.isConflict
+            ? 'Someone else changed this status. Reload and try again.'
+            : err instanceof AdminInstitutionError
+              ? err.message
+              : 'Could not change the status.',
+      );
+    } finally {
+      setIsSettingStatus(false);
     }
   };
 
@@ -209,9 +377,59 @@ export default function CollegeDetailPage() {
         <>
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">
-                {college.name}
-              </h1>
+              {editingName ? (
+                <form onSubmit={saveName} className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    maxLength={200}
+                    autoFocus
+                    aria-label="College name"
+                    className="w-72 rounded-lg border border-gray-300 px-3 py-1.5
+                               text-lg font-semibold text-gray-900"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingName}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600
+                               px-3 py-1.5 text-sm font-medium text-white
+                               hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    {savingName && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(false)}
+                    disabled={savingName}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5
+                               text-sm font-medium text-gray-700 hover:bg-gray-50
+                               disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900">
+                  {college.name}
+                  <button
+                    type="button"
+                    onClick={startEditingName}
+                    aria-label="Edit college name"
+                    title="Edit college name"
+                    className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100
+                               hover:text-gray-700"
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  </button>
+                </h1>
+              )}
+              {nameError && (
+                <p role="alert" className="mt-1 text-sm text-rose-700">{nameError}</p>
+              )}
+              {nameNotice && !editingName && (
+                <p role="status" className="mt-1 text-sm text-emerald-700">{nameNotice}</p>
+              )}
               <p className="mt-1 font-mono text-xs text-gray-500">{college.id}</p>
               <div className="mt-3">
                 <TierBadge
@@ -227,19 +445,34 @@ export default function CollegeDetailPage() {
                 hidden for a college whose tier the server did not send at
                 all, rather than guessed at. */}
             {college.tier && college.tier !== 'paid' && (
-              <button
-                type="button"
-                onClick={markPaid}
-                disabled={isMarkingPaid}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600
-                           px-4 py-2 text-sm font-medium text-white
-                           hover:bg-emerald-700 disabled:opacity-40"
-              >
-                {isMarkingPaid
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <BadgeCheck className="h-4 w-4" />}
-                Mark as paid
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  value={paidMonths}
+                  onChange={(e) => setPaidMonths(e.target.value)}
+                  aria-label="Paid period"
+                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                >
+                  <option value="">No end date</option>
+                  <option value="1">1 month</option>
+                  <option value="3">3 months</option>
+                  <option value="6">6 months</option>
+                  <option value="12">1 year</option>
+                  <option value="24">2 years</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={markPaid}
+                  disabled={isMarkingPaid}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600
+                             px-4 py-2 text-sm font-medium text-white
+                             hover:bg-emerald-700 disabled:opacity-40"
+                >
+                  {isMarkingPaid
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <BadgeCheck className="h-4 w-4" />}
+                  Mark as paid
+                </button>
+              </div>
             )}
 
             {/* WHERE THE USAGE QUESTION GETS ANSWERED. Deliberately a link out
@@ -264,14 +497,26 @@ export default function CollegeDetailPage() {
             </p>
           )}
 
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={`mb-6 grid gap-3 sm:grid-cols-2 ${college.tier === 'paid' ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500">
                 Subscription
               </p>
               <p className="mt-1 text-lg font-medium text-gray-900">
-                {college.subscription_status}
+                {college.effective_subscription_status ?? college.subscription_status}
               </p>
+              {/* The stored status is still 'active' once a paid period has
+                  passed; the effective one is what students experience. Said
+                  here so an operator is not left wondering why 'active' is
+                  read-only. */}
+              {college.effective_subscription_status &&
+                college.effective_subscription_status !== college.subscription_status && (
+                <p className="mt-1 text-xs text-amber-700">
+                  {college.effective_subscription_status === 'grace'
+                    ? 'Paid period ended. Still fully usable during grace; renew to clear it.'
+                    : 'Paid period ended. Students are read-only until it is renewed.'}
+                </p>
+              )}
               {/* PAUSE AND RESUME ONLY, never grace or expired: those are
                   what a billing process concludes, not buttons. The server
                   refuses anything else through this permission, and the UI
@@ -296,6 +541,40 @@ export default function CollegeDetailPage() {
               {pauseNotice && (
                 <p role="status" className="mt-2 text-xs text-emerald-700">{pauseNotice}</p>
               )}
+              {/* BILLING STATUS: any of the four, including grace and expired
+                  and back out of expired. Separate from pause on purpose. */}
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                <p className="mb-1.5 text-xs text-gray-500">Set billing status:</p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={statusDraft}
+                    onChange={(e) => setStatusDraft(e.target.value as SubscriptionStatus | '')}
+                    aria-label="Billing status"
+                    className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                  >
+                    <option value="">Choose…</option>
+                    <option value="active">active</option>
+                    <option value="grace">grace</option>
+                    <option value="paused">paused</option>
+                    <option value="expired">expired</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void applyStatus()}
+                    disabled={isSettingStatus || !statusDraft}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {isSettingStatus && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Apply
+                  </button>
+                </div>
+                {statusNotice && (
+                  <p role="status" className="mt-2 text-xs text-emerald-700">{statusNotice}</p>
+                )}
+                {statusError && (
+                  <p role="alert" className="mt-2 text-xs text-rose-700">{statusError}</p>
+                )}
+              </div>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500">
@@ -308,6 +587,82 @@ export default function CollegeDetailPage() {
                 {formatDate(college.trial_ends_at)}
               </p>
             </div>
+            {college.tier === 'paid' && (
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">
+                  Paid until
+                </p>
+                <p className="mt-1 text-lg font-medium tabular-nums text-gray-900">
+                  {college.paid_until ? formatDate(college.paid_until) : 'No end date'}
+                </p>
+                {college.paid_until ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <select
+                    value={renewMonths}
+                    onChange={(e) => setRenewMonths(e.target.value)}
+                    aria-label="Renew for"
+                    className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                  >
+                    <option value="1">1 month</option>
+                    <option value="3">3 months</option>
+                    <option value="6">6 months</option>
+                    <option value="12">1 year</option>
+                    <option value="24">2 years</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void renew()}
+                    disabled={isRenewing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {isRenewing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Renew
+                  </button>
+                </div>
+                ) : (
+                  /* Renew adds months to an existing end date. With none, there is nothing to add
+                     to, and the server would start a period from today, turning a college that
+                     never expires into one that does. Setting a date below is the explicit way. */
+                  <p className="mt-3 text-xs text-gray-500">
+                    No end date, so there is nothing to renew. To start a paid period, set an end date below.
+                  </p>
+                )}
+                {/* Renew ADDS; this SETS. Offered because a wrong entry could
+                    not otherwise be fixed (and "N months from today" would
+                    throw away time already paid for). */}
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="mb-1.5 text-xs text-gray-500">
+                    {college.paid_until ? 'Wrong date? Set the exact end date:' : 'Set the end date:'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={paidUntilDraft}
+                      min={toDateInput(today)}
+                      max={toDateInput(maxDate)}
+                      onChange={(e) => setPaidUntilDraft(e.target.value)}
+                      aria-label="Paid until date"
+                      className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void correctPaidUntil()}
+                      disabled={isSettingDate || !paidUntilDraft}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {isSettingDate && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Set
+                    </button>
+                  </div>
+                </div>
+                {renewNotice && (
+                  <p role="status" className="mt-2 text-xs text-emerald-700">{renewNotice}</p>
+                )}
+                {renewError && (
+                  <p role="alert" className="mt-2 text-xs text-rose-700">{renewError}</p>
+                )}
+              </div>
+            )}
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500">
                 Placement officers

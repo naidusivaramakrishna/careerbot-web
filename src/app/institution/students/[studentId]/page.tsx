@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { getStudent } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useInstitutionResource, useStudentProgress } from '@/hooks/useInstitutionResource';
+import { useStructureNames } from '@/hooks/useStructureNames';
 import { activityLabel } from '@/lib/institutionMessages';
 import type { ProgressRecord, Student } from '@/types/institution';
 import { DataTable, OptionalCell } from '../../_components/DataTable';
@@ -37,6 +38,7 @@ function StudentDetail({ studentId }: { studentId: string }) {
   const fetchStudent = useCallback(() => getStudent(studentId), [studentId]);
   const student = useInstitutionResource<Student>(fetchStudent);
   const progress = useStudentProgress(studentId);
+  const { departmentName, sectionName } = useStructureNames();
 
   const refetchProgress = useCallback(() => {
     void progress.refetch();
@@ -114,11 +116,11 @@ function StudentDetail({ studentId }: { studentId: string }) {
         </div>
         <div>
           <MicroLabel as="div">Department</MicroLabel>
-          <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{s.department_id}</p>
+          <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{departmentName(s.department_id)}</p>
         </div>
         <div>
           <MicroLabel as="div">Section</MicroLabel>
-          <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{s.section_id ?? '—'}</p>
+          <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{sectionName(s.section_id) ?? '—'}</p>
         </div>
         <div>
           <MicroLabel as="div">Batch</MicroLabel>

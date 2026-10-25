@@ -163,7 +163,23 @@ export function onInstitutionSessionStale(listener: StaleSessionListener): () =>
   };
 }
 
-function publishStaleSession(error: InstitutionApiError, status?: number): void {
+/** True when the failed request was sent with the COLLEGE token. The consumer
+ *  calls (memberships, session exchange) authenticate with the cookie and carry
+ *  no Authorization header, so a 401 on those is a different problem. */
+function carriedCollegeToken(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) return false;
+  const headers = err.config?.headers as
+    | { Authorization?: unknown; get?: (name: string) => unknown }
+    | undefined;
+  const value = headers?.Authorization ?? headers?.get?.('Authorization');
+  return typeof value === 'string' && value.length > 0;
+}
+
+function publishStaleSession(
+  error: InstitutionApiError,
+  status?: number,
+  sentCollegeToken = false,
+): void {
   // The backend answers 403 with FORBIDDEN for a membership it cannot resolve
   // -- deliberately indistinguishable from "not yours", so the response does
   // not disclose whether the membership exists. The MESSAGE is what
@@ -174,7 +190,15 @@ function publishStaleSession(error: InstitutionApiError, status?: number): void 
     /no active institution membership|membership not found|not usable|malformed/i.test(
       error.message ?? '',
     );
-  if (!looksStale) return;
+  // AN EXPIRED OR REJECTED COLLEGE TOKEN. The college token is not refreshed
+  // like the login token, so once it lapses every college call answers 401 --
+  // with a message ("Invalid authentication token" and similar) that none of the
+  // phrases above match. That left the stored session in place, every panel at
+  // zero, and nothing recovering until the tab was closed. A 401 on a request
+  // that carried the COLLEGE token is the token itself being refused, so it is
+  // stale by definition and is dropped so the user can pick the college again.
+  const tokenRefused = status === 401 && sentCollegeToken;
+  if (!looksStale && !tokenRefused) return;
   staleSessionListeners.forEach((listener) => listener());
 }
 
@@ -207,6 +231,7 @@ const KNOWN_REASONS: readonly InstitutionErrorReason[] = [
   'FEATURE_NOT_ENTITLED',
   'INVALID_REQUEST',
   'NOT_FOUND',
+  'CONFLICT',
   'INVALID_TOKEN',
 ];
 
@@ -223,6 +248,7 @@ function reasonFromStatus(status: number | undefined): InstitutionErrorReason {
   if (status === 401) return 'INVALID_TOKEN';
   if (status === 403) return 'FORBIDDEN';
   if (status === 404) return 'NOT_FOUND';
+  if (status === 409) return 'CONFLICT';
   return 'UNKNOWN';
 }
 
@@ -314,7 +340,11 @@ function mapError(err: unknown): InstitutionApiError {
 function fail(err: unknown): never {
   const mapped = mapError(err);
   publishReadOnly(mapped);
-  publishStaleSession(mapped, axios.isAxiosError(err) ? err.response?.status : undefined);
+  publishStaleSession(
+    mapped,
+    axios.isAxiosError(err) ? err.response?.status : undefined,
+    carriedCollegeToken(err),
+  );
   throw mapped;
 }
 

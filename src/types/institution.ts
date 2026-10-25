@@ -20,8 +20,10 @@
  */
 export type InstitutionRole = 'cpo' | 'hod' | 'faculty' | 'student';
 
-/** Roles that can be created through POST /members (cpo is provisioned by the platform). */
-export type OnboardableRole = Exclude<InstitutionRole, 'cpo'>;
+/** Roles that can be created through POST /members. The server accepts only hod and
+ *  faculty: cpo is provisioned by the platform, and a STUDENT membership exists only
+ *  once the student claims an invite code against a student record. */
+export type OnboardableRole = Exclude<InstitutionRole, 'cpo' | 'student'>;
 
 export const INSTITUTION_ROLES: readonly InstitutionRole[] = [
   'cpo',
@@ -404,6 +406,11 @@ export interface Student {
   college_email: string | null;
   batch_year: number | null;
   section_id: string | null;
+  /** Readable names for department_id / section_id. Sent ONLY on a student's own
+   *  profile (GET /students/me), because a student cannot list departments or
+   *  sections. Staff screens resolve the ids against those lists instead. */
+  department_name?: string | null;
+  section_name?: string | null;
   status: StudentStatus;
   photo_url?: string | null;
   created_at?: string;
@@ -477,10 +484,16 @@ export interface CreateFacultyAssignmentRequest {
   student_ids: string[];
 }
 
-export interface FacultyAssignmentResult {
+/** One row per assignment the request CREATED. Students who were already on the
+ *  faculty member's roster are skipped and are NOT in the list, so
+ *  `requested - result.length` is how many were already assigned. */
+export type FacultyAssignmentResult = Array<{
+  id: string;
+  student_id: string;
   faculty_account_id: string;
-  student_ids: string[];
-}
+  department_id: string;
+  active: boolean;
+}>;
 
 // ── progress ──────────────────────────────────────────────────
 /** Closed list — the route rejects anything else. */

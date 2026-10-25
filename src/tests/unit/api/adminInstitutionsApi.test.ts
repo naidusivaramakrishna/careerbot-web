@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/http', () => ({
-  httpClient: { get: vi.fn(), post: vi.fn() },
+  httpClient: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }));
 
 import {
@@ -18,7 +18,11 @@ import {
   getCollege,
   listColleges,
   markCollegePaid,
+  renameCollege,
+  renewCollege,
   revokeOfficer,
+  setCollegePaidUntil,
+  setCollegeStatus,
   slugProblem,
 } from '@/api/adminInstitutionsApi';
 import { httpClient as mockHttp } from '@/lib/http';
@@ -106,6 +110,125 @@ describe('appointOfficer', () => {
     expect(body).toEqual({ account_id: 'acct-1', display_name: 'P M' });
     expect(body.role).toBeUndefined();
     expect(body.institution_id).toBeUndefined();
+  });
+});
+
+describe('renameCollege', () => {
+  it('PUTs only the name to the encoded college path — never the id', async () => {
+    vi.mocked(mockHttp.put).mockResolvedValueOnce({
+      data: { id: 'srr', name: 'SRR Institute', previous_name: 'SR Institue', changed: true },
+    });
+    const res = await renameCollege('srr', 'SRR Institute');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][0]).toBe('/admin/institutions/srr');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][1]).toEqual({ name: 'SRR Institute' });
+    expect(res.changed).toBe(true);
+  });
+
+  it('encodes the college id into the path', async () => {
+    vi.mocked(mockHttp.put).mockResolvedValueOnce({ data: {} });
+    await renameCollege('vit chennai', 'VIT');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][0]).toBe('/admin/institutions/vit%20chennai');
+  });
+
+  it('reports a rename lost to someone else as a conflict', async () => {
+    vi.mocked(mockHttp.put).mockRejectedValueOnce(
+      apiError(409, 'CONFLICT', 'this college\'s name was changed by someone else'));
+    await expect(renameCollege('srr', 'SRR Institute'))
+      .rejects.toMatchObject({ status: 409, isConflict: true });
+  });
+});
+
+describe('paid period', () => {
+  it('marking paid sends no body unless a period is chosen', async () => {
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({ data: {} });
+    await markCollegePaid('vit');
+    expect(vi.mocked(mockHttp.post).mock.calls[0][0]).toBe('/admin/institutions/vit/mark-paid');
+    expect(vi.mocked(mockHttp.post).mock.calls[0][1]).toBeUndefined();
+  });
+
+  it('marking paid sends only the period when one is chosen — never a tier', async () => {
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({ data: {} });
+    await markCollegePaid('vit', 12);
+    expect(vi.mocked(mockHttp.post).mock.calls[0][1]).toEqual({ paid_months: 12 });
+  });
+
+  it('creating a paid college can carry the paid period', async () => {
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({ data: {} });
+    await createCollege({ id: 'srr', name: 'SRR', tier: 'paid', paid_months: 6 });
+    expect(vi.mocked(mockHttp.post).mock.calls[0][1]).toEqual(
+      { id: 'srr', name: 'SRR', tier: 'paid', paid_months: 6 });
+  });
+
+  it('renewing POSTs the months to the encoded renew path', async () => {
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({
+      data: { id: 'vit', paid_until: '2027-10-19T00:00:00+00:00',
+              previous_paid_until: null, months: 12, changed: true },
+    });
+    const res = await renewCollege('vit chennai', 12);
+    expect(vi.mocked(mockHttp.post).mock.calls[0][0])
+      .toBe('/admin/institutions/vit%20chennai/renew');
+    expect(vi.mocked(mockHttp.post).mock.calls[0][1]).toEqual({ months: 12 });
+    expect(res.paid_until).toBe('2027-10-19T00:00:00+00:00');
+  });
+
+  it('correcting PUTs the exact date to the paid-until path (it sets, renewing adds)', async () => {
+    vi.mocked(mockHttp.put).mockResolvedValueOnce({
+      data: { id: 'lbrce', paid_until: '2027-03-19T23:59:59+00:00',
+              previous_paid_until: '2029-12-19T23:59:59+00:00', changed: true },
+    });
+    const res = await setCollegePaidUntil('lbrce', '2027-03-19');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][0])
+      .toBe('/admin/institutions/lbrce/paid-until');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][1]).toEqual({ paid_until: '2027-03-19' });
+    expect(vi.mocked(mockHttp.post)).not.toHaveBeenCalled();
+    expect(res.changed).toBe(true);
+  });
+
+  it('a refused date (past, or too far ahead) surfaces the server message', async () => {
+    vi.mocked(mockHttp.put).mockRejectedValueOnce(
+      apiError(422, 'VALIDATION_ERROR', 'the paid-until date must be today or later'));
+    await expect(setCollegePaidUntil('lbrce', '2020-01-01'))
+      .rejects.toMatchObject({ status: 422 });
+  });
+
+  it('reports a renewal lost to someone else as a conflict', async () => {
+    vi.mocked(mockHttp.post).mockRejectedValueOnce(
+      apiError(409, 'CONFLICT', 'paid period was changed by someone else'));
+    await expect(renewCollege('vit', 1)).rejects.toMatchObject({ isConflict: true });
+  });
+});
+
+describe('setCollegeStatus', () => {
+  it('PUTs the status to the billing route — not the pause route', async () => {
+    vi.mocked(mockHttp.put).mockResolvedValueOnce({
+      data: { id: 'vit', subscription_status: 'expired', previous_status: 'active', changed: true },
+    });
+    const res = await setCollegeStatus('vit', 'expired');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][0])
+      .toBe('/admin/institutions/vit/subscription-status');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][1]).toEqual({ status: 'expired' });
+    expect(vi.mocked(mockHttp.post)).not.toHaveBeenCalled();
+    expect(res.changed).toBe(true);
+  });
+
+  it('can take an expired college back to active', async () => {
+    vi.mocked(mockHttp.put).mockResolvedValueOnce({
+      data: { id: 'vit', subscription_status: 'active', previous_status: 'expired', changed: true },
+    });
+    await setCollegeStatus('vit', 'active');
+    expect(vi.mocked(mockHttp.put).mock.calls[0][1]).toEqual({ status: 'active' });
+  });
+
+  it('a missing billing permission is reported as forbidden', async () => {
+    vi.mocked(mockHttp.put).mockRejectedValueOnce(apiError(403, 'FORBIDDEN', 'no'));
+    await expect(setCollegeStatus('vit', 'grace'))
+      .rejects.toMatchObject({ isForbidden: true });
+  });
+
+  it('a lost race is a conflict', async () => {
+    vi.mocked(mockHttp.put).mockRejectedValueOnce(apiError(409, 'CONFLICT', 'changed'));
+    await expect(setCollegeStatus('vit', 'grace'))
+      .rejects.toMatchObject({ isConflict: true });
   });
 });
 

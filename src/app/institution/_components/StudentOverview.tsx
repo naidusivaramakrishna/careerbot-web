@@ -126,7 +126,7 @@ export function StudentOverview() {
             </div>
             <div>
               <MicroLabel as="div">Department</MicroLabel>
-              <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{student.department_id}</p>
+              <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{student.department_name ?? student.department_id}</p>
             </div>
             {/* SECTION. Locked in the wireframe alongside department, batch
                 and admission number, and the only one of the four that was
@@ -140,11 +140,14 @@ export function StudentOverview() {
             <div>
               <MicroLabel as="div">Section</MicroLabel>
               <p className="mt-1 text-[13px] font-medium text-[#0f172a]">
-                {student.section_id ?? (
-                  <span className="font-normal text-[#94a3b8]">
-                    Not assigned yet
-                  </span>
-                )}
+                {student.section_name ??
+                  (student.section_id ? (
+                    'Assigned'
+                  ) : (
+                    <span className="font-normal text-[#94a3b8]">
+                      Not assigned yet
+                    </span>
+                  ))}
               </p>
             </div>
             {student.batch_year ? (

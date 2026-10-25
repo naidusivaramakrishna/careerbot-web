@@ -58,6 +58,21 @@ describe('signOut sessionStorage sweep', () => {
     expect(leaked).toEqual([]);
   });
 
+  it('removes the active college session so the next account cannot act as this one', async () => {
+    // careerbot_institution_session holds a college token for THIS account's
+    // membership; the college API sends it as Authorization. It used to survive
+    // sign-out, so the next login on the same tab inherited the previous
+    // account's college and its role.
+    sessionStorage.setItem('careerbot_institution_session', JSON.stringify({
+      access_token: 'token-of-account-A', institution_id: 'lbrce',
+      membership_id: 'm-a-lbrce', role: 'cpo', token_type: 'bearer',
+    }));
+
+    await signOut();
+
+    expect(sessionStorage.getItem('careerbot_institution_session')).toBeNull();
+  });
+
   it('leaves non-Job-Match session keys alone', async () => {
     sessionStorage.setItem('jm_matchResults', 'A');
     sessionStorage.setItem('unrelated_session_state', '123');

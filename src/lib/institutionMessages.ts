@@ -28,6 +28,7 @@ export type InstitutionErrorReason =
   | 'FEATURE_NOT_ENTITLED'
   | 'INVALID_REQUEST'
   | 'NOT_FOUND'
+  | 'CONFLICT'
   | 'INVALID_TOKEN'
   | 'NETWORK'
   | 'UNKNOWN';
@@ -46,7 +47,12 @@ export const ERROR_MESSAGES: Record<InstitutionErrorReason, string> = {
   FEATURE_NOT_ENTITLED: 'This is switched off for your college.',
   INVALID_REQUEST: 'Check the highlighted field and try again.',
   NOT_FOUND: 'That student is no longer in your college.',
-  INVALID_TOKEN: 'Your session ended. Sign in again to continue.',
+  // Shown with the server's own sentence when there is one (see ErrorNotice):
+  // the useful part is WHAT collided, e.g. that this person already holds the role.
+  CONFLICT: 'That already exists. Check what is already set up and try again.',
+  // The COLLEGE session, not the login: the user is still signed in. Saying
+  // "sign in again" sent people through logout/login that could not fix it.
+  INVALID_TOKEN: 'Your college session ended. Select your college again to continue.',
   NETWORK: 'Could not reach the server. Check your connection and try again.',
   UNKNOWN: 'Something went wrong. Try again in a moment.',
 };

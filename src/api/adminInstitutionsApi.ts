@@ -47,6 +47,14 @@ export interface CollegeSummary {
   /** What the row literally says. Debugging only -- never the badge. */
   stored_tier?: 'trial' | 'paid' | null;
   trial_ends_at?: string | null;
+  /** When a paid college's period ends. `null` / absent: no end date. */
+  paid_until?: string | null;
+  /**
+   * The payment state RIGHT NOW. Differs from `subscription_status` (the
+   * stored value) once a paid period has passed: grace for a few days, then
+   * expired. Show this one as the college's status.
+   */
+  effective_subscription_status?: SubscriptionStatus | null;
   /**
    * Whole days left, rounded up so a trial with four hours on it reads "1
    * day" rather than "0". `null` -- NOT 0 -- for anyone not on a running
@@ -93,6 +101,8 @@ export interface CreateCollegeRequest {
   subscription_status?: SubscriptionStatus;
   /** Only trial or paid: `free` is not storable. Defaults to trial server-side. */
   tier?: 'trial' | 'paid';
+  /** Months a PAID college has paid for. Omit for no end date. Paid only. */
+  paid_months?: number;
 }
 
 export interface MarkPaidResult {
@@ -102,6 +112,15 @@ export interface MarkPaidResult {
   changed: boolean;
   previous_tier?: string;
   trial_ended_at?: string | null;
+  paid_until?: string | null;
+}
+
+export interface RenewCollegeResult {
+  id: string;
+  paid_until: string;
+  previous_paid_until: string | null;
+  months: number;
+  changed: boolean;
 }
 
 /** What the API refused, in a form a screen can act on. */
@@ -230,6 +249,37 @@ export async function setCollegePaused(
   }
 }
 
+export interface SetStatusResult {
+  id: string;
+  subscription_status: SubscriptionStatus;
+  previous_status?: SubscriptionStatus;
+  /** false when it already had that status. NOT a failure. */
+  changed: boolean;
+  /** What the college is NOW. Differs from the stored status when a paid
+   *  period has passed (grace / expired follow from the date). */
+  effective_subscription_status?: SubscriptionStatus | null;
+}
+
+/**
+ * Set an existing college to ANY status: active, grace, paused or expired.
+ *
+ * THE BILLING ROUTE. setCollegePaused is limited to paused <-> active and
+ * cannot reach grace or expired, nor leave expired. This one needs the billing
+ * permission, so a 403 here means "not allowed to change billing state", not
+ * "not signed in".
+ */
+export async function setCollegeStatus(
+  collegeId: string, status: SubscriptionStatus,
+): Promise<SetStatusResult> {
+  try {
+    const { data } = await httpClient.put<SetStatusResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}/subscription-status`, { status });
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
 export async function getCollegeOverview(): Promise<CollegeOverview> {
   try {
     const { data } = await httpClient.get<CollegeOverview>(`${BASE}/overview`);
@@ -265,6 +315,26 @@ export async function createCollege(
 ): Promise<CollegeSummary> {
   try {
     const { data } = await httpClient.post<CollegeSummary>(BASE, body);
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+export interface RenameCollegeResult {
+  id: string;
+  name: string;
+  previous_name: string;
+  changed: boolean;
+}
+
+/** Correct a college's display name. The id never changes. */
+export async function renameCollege(
+  collegeId: string, name: string,
+): Promise<RenameCollegeResult> {
+  try {
+    const { data } = await httpClient.put<RenameCollegeResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}`, { name });
     return data;
   } catch (err) {
     throw toError(err);
@@ -319,19 +389,69 @@ export async function appointOfficerByCode(
  * without this every college created reaches the free tier after fourteen days
  * and stays there.
  *
- * NO BODY, because the route accepts none -- which is what stops it being
- * asked for "trial" and minting a second fourteen-day trial for a college that
- * has already had one.
+ * THE ONLY THING IT CAN BE TOLD IS A PERIOD (`paidMonths`), never a tier -- which
+ * is what stops it being asked for "trial" and minting a second fourteen-day
+ * trial for a college that has already had one. Omitted: paid with no end date.
+ * To ADD time to a college that is already paid, use renewCollege.
  *
  * SAFE TO CALL TWICE. The second call returns 200 with changed:false rather
  * than a conflict, so a double click or a retry after a timeout is not an
  * error a screen has to explain. Treating it as one would have the operator
  * press the button again.
  */
-export async function markCollegePaid(collegeId: string): Promise<MarkPaidResult> {
+export async function markCollegePaid(
+  collegeId: string, paidMonths?: number,
+): Promise<MarkPaidResult> {
   try {
     const { data } = await httpClient.post<MarkPaidResult>(
-      `${BASE}/${encodeURIComponent(collegeId)}/mark-paid`);
+      `${BASE}/${encodeURIComponent(collegeId)}/mark-paid`,
+      paidMonths ? { paid_months: paidMonths } : undefined);
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+export interface SetPaidUntilResult {
+  id: string;
+  paid_until: string;
+  previous_paid_until: string | null;
+  /** false when that was already the end date. NOT a failure. */
+  changed: boolean;
+}
+
+/**
+ * CORRECT a paid college's period by setting the END DATE outright
+ * (`paidUntil` is a plain YYYY-MM-DD: the last day covered).
+ *
+ * renewCollege ADDS time, so it cannot fix a mistake (3 years entered for 3
+ * months). This SETS the date, so it can shorten a period as well as extend
+ * it. The server refuses a date in the past and one more than ten years ahead.
+ */
+export async function setCollegePaidUntil(
+  collegeId: string, paidUntil: string,
+): Promise<SetPaidUntilResult> {
+  try {
+    const { data } = await httpClient.put<SetPaidUntilResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}/paid-until`,
+      { paid_until: paidUntil });
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+/**
+ * Add `months` to a PAID college's period. NOT idempotent, on purpose: each
+ * call is a payment that arrived. A college that lapsed (grace or expired) is
+ * back to normal the moment this succeeds.
+ */
+export async function renewCollege(
+  collegeId: string, months: number,
+): Promise<RenewCollegeResult> {
+  try {
+    const { data } = await httpClient.post<RenewCollegeResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}/renew`, { months });
     return data;
   } catch (err) {
     throw toError(err);

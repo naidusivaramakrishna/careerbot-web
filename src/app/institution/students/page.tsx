@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useStudentsPaged } from '@/hooks/useInstitutionResource';
+import { useStructureNames } from '@/hooks/useStructureNames';
 import { READ_ONLY_CONTROL_HINT, studentStatusLabel } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from '../_components/DataTable';
@@ -36,6 +37,7 @@ const STATUS_FILTERS = ['all', 'enrolled', 'graduated', 'withdrawn', 'suspended'
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 function StudentsRoster() {
+  const { departmentName, sectionName } = useStructureNames();
   const { readOnlyReason, allows } = useInstitution();
   const params = useSearchParams();
   const [query, setQuery] = useState('');
@@ -252,13 +254,13 @@ function StudentsRoster() {
               key: 'department',
               header: 'Department',
               secondary: true,
-              render: (s) => <OptionalCell value={s.department_id} />,
+              render: (s) => <OptionalCell value={departmentName(s.department_id)} />,
             },
             {
               key: 'section',
               header: 'Section',
               secondary: true,
-              render: (s) => <OptionalCell value={s.section_id} />,
+              render: (s) => <OptionalCell value={sectionName(s.section_id)} />,
             },
             {
               key: 'batch',

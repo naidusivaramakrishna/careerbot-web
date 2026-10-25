@@ -37,7 +37,9 @@ import {
 import { can, type InstitutionCapability } from '@/lib/institutionPermissions';
 import type { InstitutionMembership, InstitutionRole } from '@/types/institution';
 
-export type ReadOnlyReason = 'COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED';
+const STALE_RECOVERY_WINDOW_MS = 30_000;
+
+export type ReadOnlyReason ='COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED';
 
 interface InstitutionContextValue {
   /** All memberships for the signed-in account. `[]` means "not a college user". */
@@ -85,6 +87,7 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
   // One stale-session recovery per mount. Without this the clear/re-select
   // cycle repeats indefinitely and the page appears to refresh forever.
   const staleRecoveryAttempted = useRef(false);
+  const lastStaleRecoveryAt = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -92,10 +95,10 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
     };
   }, []);
 
-  // Rehydrate the session this tab already had (survives a page reload).
-  useEffect(() => {
-    setSession(getInstitutionSession());
-  }, []);
+  // The session this tab already had (it survives a page reload) is restored by
+  // refreshMemberships, and only AFTER it has been checked against the
+  // signed-in account's memberships. It is deliberately not read into state
+  // here: an unchecked stored session could belong to the previous account.
 
   const refreshMemberships = useCallback(async () => {
     setIsLoadingMemberships(true);
@@ -104,9 +107,27 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
       const rows = await listMemberships();
       if (!mountedRef.current) return;
       setMemberships(rows);
+      // THE STORED COLLEGE SESSION MUST BELONG TO THIS ACCOUNT. sessionStorage
+      // survives logout -> login in the same tab, and the college token in it is
+      // sent as Authorization on every college call, so a session left by a
+      // previous account would have this one acting as that account. It is only
+      // trusted once the signed-in account's own memberships contain the
+      // membership it was minted from; otherwise it is dropped, not used.
+      const stored = getInstitutionSession();
+      if (stored && rows.some((m) => m.membership_id === stored.membership_id)) {
+        setSession(stored);
+      } else if (stored) {
+        clearInstitutionSession();
+        setSession(null);
+      }
     } catch (err) {
       if (!mountedRef.current) return;
       setMemberships([]);
+      // Memberships could not be read, so the stored session cannot be
+      // checked against this account. Fail closed: an unverifiable college
+      // token is not kept (the worst case is picking the college again).
+      clearInstitutionSession();
+      setSession(null);
       setMembershipsError(
         err instanceof InstitutionApiError
           ? err
@@ -180,6 +201,14 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
     () =>
       onInstitutionSessionStale(() => {
         if (staleRecoveryAttempted.current) return;
+        // AT MOST ONE RECOVERY PER WINDOW, whatever the flag says. A successful
+        // re-selection resets the flag (it is a "fresh start"), so if the server
+        // mints a token and then refuses it, flag-only guarding would mint,
+        // refuse, clear and re-select forever. An expired token hours later is
+        // outside the window and recovers normally.
+        const now = Date.now();
+        if (now - lastStaleRecoveryAt.current < STALE_RECOVERY_WINDOW_MS) return;
+        lastStaleRecoveryAt.current = now;
         staleRecoveryAttempted.current = true;
         clearInstitutionSession();
         if (!mountedRef.current) return;

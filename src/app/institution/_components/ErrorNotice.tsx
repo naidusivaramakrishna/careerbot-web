@@ -33,6 +33,9 @@ import type { InstitutionErrorReason } from '@/lib/institutionMessages';
 const SERVER_MESSAGE_IS_USEFUL = new Set<InstitutionErrorReason>([
   'INVALID_REQUEST',
   'NOT_FOUND',
+  // A 409 names what collided ("this person already has an active hod role"),
+  // which is the whole message; the generic copy would throw it away.
+  'CONFLICT',
 ]);
 
 function displayMessage(error: InstitutionApiError): string {

@@ -6,6 +6,7 @@ import { ClipboardPen, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useStudentsPaged } from '@/hooks/useInstitutionResource';
+import { useStructureNames } from '@/hooks/useStructureNames';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from './DataTable';
@@ -32,6 +33,7 @@ import { WriteGuard } from './WriteGuard';
 const ROSTER_LIMIT = 200;
 
 export function FacultyOverview() {
+  const { sectionName } = useStructureNames();
   const { readOnlyReason } = useInstitution();
   // 200 is the route's maximum page. A faculty roster is tens of students, so
   // one page is the whole thing -- but `total` is read rather than assumed, so
@@ -108,7 +110,7 @@ export function FacultyOverview() {
               key: 'section',
               header: 'Section',
               secondary: true,
-              render: (s) => <OptionalCell value={s.section_id} />,
+              render: (s) => <OptionalCell value={sectionName(s.section_id)} />,
             },
             {
               key: 'batch',
