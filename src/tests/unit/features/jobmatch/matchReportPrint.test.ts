@@ -40,3 +40,19 @@ describe("print report preview", () => {
     expect(() => openMatchReportPreview({}, "Resume", "Role")).toThrow("Preview blocked");
   });
 });
+
+describe("the score gauge", () => {
+  it("draws a track that contrasts with the summary box, so the full circle is visible", () => {
+    const html = matchReportHtml({ data: { ats_score: 21.8 } }, "Resume.pdf", "Role.txt");
+    const track = /<circle cx="60" cy="60" r="49" fill="white" stroke="(#[0-9A-Fa-f]{6})"/.exec(html);
+    expect(track).not.toBeNull();
+    // .summary is #F2F4F7; a track in that colour is invisible against it.
+    expect(track![1].toUpperCase()).not.toBe("#F2F4F7");
+    expect(html).toContain("background:#F2F4F7;border:1px solid #B2CCFF");
+  });
+
+  it("the coloured arc covers exactly the score", () => {
+    const html = matchReportHtml({ data: { ats_score: 21.8 } }, "Resume.pdf", "Role.txt");
+    expect(html).toContain('pathLength="100" stroke-dasharray="21.8 100"');
+  });
+});

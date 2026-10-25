@@ -191,6 +191,9 @@ function parseAnalyzeMatchError(err: any): {
   return { errorMessage, details };
 }
 
+// `?view=` values for wizard steps 1-3 (see the URL sync in Overview).
+const WIZARD_VIEWS = ["upload-resume", "job-description", "confirm"];
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 const Overview = ({ sessionId }: { sessionId?: string }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -262,7 +265,12 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     try { return sessionStorage.getItem("jm_jdText") || ""; } catch { return ""; }
   });
 
-  const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
+  // A refresh on ?view=details reopens the detailed analysis (results come from sessionStorage).
+  const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(() => {
+    try {
+      return !sessionId && !!matchResults && new URL(window.location.href).searchParams.get("view") === "details";
+    } catch { return false; }
+  });
   const [detailedPreviewTab, setDetailedPreviewTab] = useState<"resume" | "jd">("resume");
   const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
     // Restore an existing analysis for the lifetime of this browser tab. The
@@ -294,6 +302,50 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   const [sessionJdId, setSessionJdId] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // ── URL <-> screen sync ────────────────────────────────────────────────────
+  // The whole flow lives on one route, so each screen is mirrored into `?view=`.
+  // That gives the browser Back/Forward buttons something to step through and
+  // keeps a refresh on the same screen. Wizard steps need uploaded File objects,
+  // which a refresh loses, so only results/details are restored from the URL.
+  const currentView: string | null = (() => {
+    if (isProcessing) return null;
+    if (activeTab === "analysis" && matchResults) return showDetailedAnalysis ? "details" : "results";
+    if (wizardStep >= 1 && wizardStep <= 3) return WIZARD_VIEWS[wizardStep - 1];
+    return "";
+  })();
+  const urlSyncedRef = useRef(false);
+  // popstate handler below is registered once; it must read the latest results, not the first render's.
+  const matchResultsRef = useRef(matchResults);
+  matchResultsRef.current = matchResults;
+  useEffect(() => {
+    if (currentView === null) return;
+    const url = new URL(window.location.href);
+    if ((url.searchParams.get("view") ?? "") === currentView) { urlSyncedRef.current = true; return; }
+    if (currentView) url.searchParams.set("view", currentView); else url.searchParams.delete("view");
+    const method = urlSyncedRef.current ? "pushState" : "replaceState";
+    urlSyncedRef.current = true;
+    window.history[method](window.history.state, "", url);
+  }, [currentView]);
+  useEffect(() => {
+    const apply = () => {
+      const view = new URL(window.location.href).searchParams.get("view") ?? "";
+      if ((view === "results" || view === "details") && matchResultsRef.current) {
+        setActiveTab("analysis");
+        // Keep a refresh on this screen: "Back to Job Match" had stored "upload".
+        try { sessionStorage.setItem("jm_activeTab", "analysis"); } catch {}
+        setShowDetailedAnalysis(view === "details");
+        return;
+      }
+      const step = WIZARD_VIEWS.indexOf(view) + 1;
+      setActiveTab("upload");
+      setShowDetailedAnalysis(false);
+      setWizardStep(step as 0 | 1 | 2 | 3);
+    };
+    const onPop = () => apply();
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -523,11 +575,10 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           resumeSizeMB={(uploadedFile ? uploadedFile.size / (1024 * 1024) : resumeSizeMB) ?? undefined}
           jdSizeMB={(jdFile ? jdFile.size / (1024 * 1024) : jdSizeMB) ?? undefined}
           analyzedAt={analyzedAt ?? undefined}
-          jdText={jdText}
           onBack={() => { setActiveTab("upload"); try { sessionStorage.setItem("jm_activeTab", "upload"); } catch {} setWizardStep(0); setShowDetailedAnalysis(false); }}
-          // MatchResultsOverview passes onDetails straight to onClick, so the first argument can be a
-          // click event; only an explicit "jd" selects the JD tab.
-          onDetails={(previewTab?: unknown) => { setDetailedPreviewTab(previewTab === "jd" ? "jd" : "resume"); setShowDetailedAnalysis(true); }}
+          // Only an explicit "jd" selects the JD tab. Anything else (including a click event that
+          // reached here by mistake) opens the resume, never an unknown tab with an empty panel.
+          onDetails={(previewTab) => { setDetailedPreviewTab(previewTab === "jd" ? "jd" : "resume"); setShowDetailedAnalysis(true); }}
         />}
         <ErrorPopupModal
           error={error}

@@ -2,6 +2,11 @@
 .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .header h2 { margin: 0 0 5px; color: #101828; letter-spacing: -.3px; font-size: var(--text-h2); line-height: var(--text-h2--line-height); font-weight: var(--text-h2--font-weight); }
 .header p { margin: 0; color: #2557A7; font-size: var(--text-body-lg); line-height: var(--text-body-lg--line-height); font-weight: var(--text-body-lg--font-weight); }
+.headerActions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.applyAll { min-height: 36px; padding: 8px 14px; border: 1px solid #2557A7; border-radius: 8px; background: #2557A7; color: #FFFFFF; cursor: pointer; white-space: nowrap; font: inherit; font-size: var(--text-body-sm); line-height: var(--text-body-sm--line-height); font-weight: 600; }
+.applyAll:hover:not(:disabled) { background: #1F4E98; border-color: #1F4E98; }
+.applyAll:focus-visible { outline: 2px solid #2557A7; outline-offset: 2px; }
+.applyAll:disabled { opacity: .65; cursor: progress; }
 .filter { position: relative; flex: 0 0 180px; }
 .filter select { appearance: none; width: 100%; min-height: 36px; padding: 8px 30px 8px 12px; border: 1px solid #D0D5DD; border-radius: 8px; background: #F8FAFC; color: #2557A7; font: inherit; cursor: pointer; font-size: var(--text-body-sm); line-height: var(--text-body-sm--line-height); font-weight: var(--text-body-sm--font-weight); }
 .filter select:focus-visible { outline: 2px solid #2557A7; outline-offset: 2px; }
@@ -52,6 +57,8 @@
 .panel button:focus-visible { outline: 2px solid #2557A7; outline-offset: 2px; }
 @media (max-width: 480px) {
   .header { flex-direction: column; align-items: stretch; }
+  .headerActions { flex-direction: column; align-items: stretch; }
+  .applyAll { width: 100%; }
   .filter { flex-basis: auto; width: 100%; }
   .filter select { min-height: 40px; }
 }

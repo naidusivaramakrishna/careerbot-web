@@ -135,14 +135,28 @@ describe("report actions", () => {
     expect(chip.style.backgroundColor).toBe("rgb(236, 253, 243)"); // #ECFDF3
   });
 
-  it("View Detailed Analysis and the file cards call onDetails without a preview-tab argument (the caller takes none)", () => {
+  it("View Detailed Analysis passes no tab; each file card opens its own tab of the detailed analysis", () => {
     const onDetails = vi.fn();
     render(<MatchResultsOverview matchResults={{ data: { ats_score: 67 } }} resumeName="Resume.pdf" jobDescriptionName="Role.txt" onDetails={onDetails} onBack={vi.fn()} />);
     screen.getByRole("button", { name: "View Detailed Analysis" }).click();
     screen.getByRole("button", { name: /view your resume in detailed analysis/i }).click();
-    expect(onDetails).toHaveBeenCalledTimes(2);
-    // No preview-tab argument: Overview's handler takes none, so one would be dropped.
-    expect(onDetails.mock.calls.map((call) => typeof call[0])).not.toContain("string");
+    screen.getByRole("button", { name: /view job description in detailed analysis/i }).click();
+    expect(onDetails.mock.calls).toEqual([[], ["resume"], ["jd"]]);
+  });
+});
+
+describe("the job description lands on the report page", () => {
+  it("the detailed analysis opened on the jd tab shows the job description text", () => {
+    const { container } = render(
+      <AnalysisContent
+        jdText="A role requiring React."
+        initialPreviewTab="jd"
+        onBackToUpload={vi.fn()}
+        parsedResumeData={{ id: "resume-test", filename: "Resume.pdf", parsed_data: { contact: { name: "Test Candidate" }, skills: ["React"] } }}
+        matchResults={{ data: { id: "match-test", ats_score: 70, resume_id: "resume-test", match_result: {} } }}
+      />
+    );
+    expect(container.textContent).toContain("A role requiring");
   });
 });
 

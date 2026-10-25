@@ -1,9 +1,10 @@
 import React from "react";
 import { act, render, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import MatchPenalties, { getFixImpactCounts, hasAutomaticFixes, type ApplyAllHandle } from "@/app/(jobs)/jobmatch/_components/analysis/MatchPenalties";
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 afterEach(cleanup);
 
 const penalty = (id: string, category = "technical_skills", fixType = "auto") => ({
@@ -89,5 +90,143 @@ describe("Recommendations table", () => {
     expect(onOpenSection).toHaveBeenCalledWith("education");
     rerender(<MatchPenalties recommendations onAddSkill={vi.fn()} matchResult={{}}/>);
     expect(screen.getByText("No recommendations were returned for this analysis.")).toBeTruthy();
+  });
+});
+
+describe("Apply all fixes button", () => {
+  const props = (over: Record<string, unknown> = {}) => ({
+    recommendations: true,
+    onAddSkill: vi.fn().mockResolvedValue(true),
+    onApplyFix: vi.fn().mockResolvedValue(true),
+    onOpenSection: vi.fn(),
+    matchResult: { Match_Penalties: { penalties: [
+      penalty("React"), penalty("Docker"), penalty("summary", "summary"),
+      penalty("manual", "education", "manual"),
+      { ...penalty("all"), suggestion_id: "apply_all_fixes", is_bulk_parent: true, is_master: true },
+    ] } },
+    ...over,
+  });
+
+  it("counts only the automatic fixes: not the manual one, not the apply-all rows", () => {
+    render(<MatchPenalties {...props()} />);
+    expect(screen.getByRole("button", { name: "Apply all fixes (3)" })).toBeTruthy();
+  });
+
+  it("applies every automatic fix with the existing handlers and leaves the manual one", async () => {
+    const p = props();
+    render(<MatchPenalties {...p} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Apply all fixes (3)" })); });
+    expect(p.onAddSkill).toHaveBeenCalledTimes(2);
+    expect(p.onAddSkill).toHaveBeenCalledWith("React", "React");
+    expect(p.onAddSkill).toHaveBeenCalledWith("Docker", "Docker");
+    expect(p.onApplyFix).toHaveBeenCalledTimes(1);
+    expect(p.onApplyFix).toHaveBeenCalledWith("summary", "summary", { deferBlank: true });
+  });
+
+  it("is not offered when nothing automatic is left", () => {
+    render(<MatchPenalties {...props({ appliedSuggestionIds: ["React", "Docker", "summary"] })} />);
+    expect(screen.queryByRole("button", { name: /Apply all fixes/ })).toBeNull();
+  });
+
+  it("is not offered in a read-only view", () => {
+    render(<MatchPenalties {...props({ readOnly: true })} />);
+    expect(screen.queryByRole("button", { name: /Apply all fixes/ })).toBeNull();
+  });
+
+  it("keeps the filter where it was", () => {
+    render(<MatchPenalties {...props()} />);
+    expect(screen.getByRole("combobox", { name: "Filter recommendations" })).toBeTruthy();
+  });
+});
+
+describe("Apply all fixes: the ones that ask for a number come last", () => {
+  const text = (id: string, after: string) => ({
+    ...penalty(id, "experience"), before_example: `before ${id}`, after_example: after,
+  });
+  const rows = () => [
+    text("blank_a", "Raised data quality by n%."),
+    text("plain_b", "Built reusable components."),
+    text("plain_c", "Documented sample-data limitations."),
+    text("blank_d", "Handled n+ concurrent users."),
+  ];
+  const run = async (onApplyFix: (id: string) => Promise<unknown>) => {
+    vi.mocked(toast.warning).mockClear();
+    vi.mocked(toast.success).mockClear();
+    render(<MatchPenalties recommendations onAddSkill={vi.fn()} onApplyFix={onApplyFix as never} onOpenSection={vi.fn()}
+      matchResult={{ Match_Penalties: { penalties: rows() } }} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Apply all fixes (4)" })); });
+  };
+
+  it("applies the fixes with no blank first, then the blank ones", async () => {
+    const order: string[] = [];
+    await run(async (id) => { order.push(id); return true; });
+    expect(order).toEqual(["plain_b", "plain_c", "blank_a", "blank_d"]);
+    expect(toast.success).toHaveBeenCalledWith("All fixes applied.");
+  });
+
+  it("a cancelled number prompt skips only that fix; the rest still go through", async () => {
+    const order: string[] = [];
+    await run(async (id) => { order.push(id); return id !== "blank_a"; });
+    expect(order).toEqual(["plain_b", "plain_c", "blank_a", "blank_d"]);   // blank_d still tried after blank_a was cancelled
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(toast.warning).mock.calls[0][0])).toContain("1 fix needs a number");
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("two cancelled prompts are reported together", async () => {
+    await run(async (id) => !id.startsWith("blank"));
+    expect(String(vi.mocked(toast.warning).mock.calls[0][0])).toContain("2 fixes need a number");
+  });
+
+  it("a real failure among the plain fixes stops the run before any question is asked", async () => {
+    const order: string[] = [];
+    await run(async (id) => { order.push(id); return id !== "plain_b"; });
+    expect(order).toEqual(["plain_b"]);
+    expect(String(vi.mocked(toast.warning).mock.calls[0][0])).toContain("Some fixes were not applied");
+  });
+});
+
+describe("Apply all fixes: a blank the text check misses (server says needs_number)", () => {
+  // after_example carries no n% marker, so only the server's answer tells these need a number.
+  const text = (id: string) => ({ ...penalty(id, "experience"), before_example: `before ${id}`, after_example: `Improved ${id} handling.` });
+  const rows = () => [text("hidden_a"), text("plain_b"), text("hidden_c")];
+  const run = async (onApplyFix: (id: string, category: string, opts?: { deferBlank?: boolean }) => Promise<unknown>) => {
+    vi.mocked(toast.warning).mockClear();
+    vi.mocked(toast.success).mockClear();
+    render(<MatchPenalties recommendations onAddSkill={vi.fn()} onApplyFix={onApplyFix as never} onOpenSection={vi.fn()}
+      matchResult={{ Match_Penalties: { penalties: rows() } }} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Apply all fixes (3)" })); });
+  };
+  const after = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  it("defers them without a prompt in pass one and asks for them in pass two", async () => {
+    const calls: string[] = [];
+    await run(async (id, _category, opts) => {
+      calls.push(`${id}${opts?.deferBlank ? ":defer" : ""}`);
+      return id.startsWith("hidden") && opts?.deferBlank ? "needs_number" : true;
+    });
+    expect(calls).toEqual(["hidden_a:defer", "plain_b:defer", "hidden_c:defer", "hidden_a", "hidden_c"]);
+    expect(toast.success).toHaveBeenCalledWith("All fixes applied.");
+  });
+
+  it("does not say 'All fixes applied' when the number prompt is cancelled in pass two", async () => {
+    await run(async (id, _category, opts) => {
+      if (!id.startsWith("hidden")) return true;
+      return opts?.deferBlank ? "needs_number" : false;
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(String(vi.mocked(toast.warning).mock.calls[0][0])).toContain("2 fixes need a number");
+  });
+
+  it("still asks for the last row's number when the requests take real time", async () => {
+    const calls: string[] = [];
+    await run(async (id, _category, opts) => {
+      calls.push(`${id}${opts?.deferBlank ? ":defer" : ""}`);
+      await after(15);
+      return id === "hidden_c" && opts?.deferBlank ? "needs_number" : true;
+    });
+    await act(async () => { await after(120); });
+    expect(calls).toEqual(["hidden_a:defer", "plain_b:defer", "hidden_c:defer", "hidden_c"]);
+    expect(toast.success).toHaveBeenCalledWith("All fixes applied.");
   });
 });

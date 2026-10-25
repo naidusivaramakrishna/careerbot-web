@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import { resultScore, resultColor } from "./resultsSummary";
 import recommendationStyles from "./Recommendations.module.css";
+import { hasMetricBlank } from "@/lib/job-match/metricBlank";
 
 interface Penalty {
   suggestion_id: string;
@@ -42,7 +43,7 @@ function isRealSuggestion(p: Penalty): boolean {
 // fix (the score moved) but wrote nothing the preview can show
 // (`resume_updated: false`). The API keeps no undo bookkeeping for such a fix,
 // so the row shows "Applied" without Undo, like a bulk-applied child.
-export type ApplyFixResult = boolean | "applied_not_in_preview";
+export type ApplyFixResult = boolean | "applied_not_in_preview" | "needs_number";
 
 interface MatchPenaltiesProps {
   readonly recommendations?: boolean;
@@ -55,7 +56,7 @@ interface MatchPenaltiesProps {
   readonly onAddSkill: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   readonly onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   /** Apply a non-skill fix (job title / summary / bullet rewrite). Returns whether it actually changed anything (see ApplyFixResult). */
-  readonly onApplyFix?: (suggestion_id: string, category: string) => Promise<ApplyFixResult>;
+  readonly onApplyFix?: (suggestion_id: string, category: string, opts?: { deferBlank?: boolean }) => Promise<ApplyFixResult>;
   /** Undo a previously-applied non-skill fix. Returns whether it actually succeeded. */
   readonly onRemoveFix?: (suggestion_id: string, category: string) => Promise<boolean>;
   /** Open the resume section editor (manual-fix suggestions with no auto-resolver route here). */
@@ -74,8 +75,12 @@ interface MatchPenaltiesProps {
   readonly impactFilter?: "all" | "high" | "medium" | "low";
 }
 
+/** "plain" = only fixes that need no number from the user; "blanks" = only the ones with an
+ *  n% / n+ / $n blank to fill. Omitted = every fix, in list order. */
+export type ApplyPhase = "plain" | "blanks";
+
 export interface ApplyAllHandle {
-  applyAll: () => Promise<boolean>;
+  applyAll: (phase?: ApplyPhase) => Promise<boolean>;
 }
 
 // Resume section ids the manual-editor popup understands — mirrors ALL_SECTIONS
@@ -379,7 +384,7 @@ function CategoryGroup({
   readonly items: Penalty[];
   readonly onAddSkill: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   readonly onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
-  readonly onApplyFix?: (suggestion_id: string, category: string) => Promise<ApplyFixResult>;
+  readonly onApplyFix?: (suggestion_id: string, category: string, opts?: { deferBlank?: boolean }) => Promise<ApplyFixResult>;
   readonly onRemoveFix?: (suggestion_id: string, category: string) => Promise<boolean>;
   readonly onOpenSection?: (sectionKey: string) => void;
   readonly readOnly?: boolean;
@@ -430,6 +435,12 @@ function CategoryGroup({
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [bulkLoadingKey, setBulkLoadingKey] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+  // Fixes the server said need a number, left for the second pass of "Apply all fixes".
+  const deferredIds = React.useRef<Set<string>>(new Set());
+  // Live copy of loadingIds. The imperative handle (and handleAdd) close over the state from their
+  // last render, which is stale when "Apply all fixes" moves to its second pass before React has
+  // re-rendered the row the first pass just finished.
+  const loadingRef = React.useRef<Set<string>>(new Set());
 
   const meta = CATEGORY_META[category] ?? { label: prettifyCategory(category), color: "#475467", lightBg: "#F8FAFC", border: "#EAECF0", icon: CircleAlert };
   // A category can carry MORE THAN ONE bulk parent — e.g. technical_skills
@@ -469,22 +480,29 @@ function CategoryGroup({
   // `silent` skips the per-item error toast — used during "Fix All" so a run
   // of rate-limited calls doesn't spam one toast per skill; the bulk loop
   // shows a single summary toast instead.
-  const handleAdd = async (p: Penalty, opts?: { silent?: boolean }): Promise<boolean> => {
+  const handleAdd = async (p: Penalty, opts?: { silent?: boolean; deferBlank?: boolean }): Promise<boolean> => {
     // Already applied — genuinely a success, nothing left to do.
     if (addedIds.has(p.suggestion_id)) return true;
     // Already in flight from another click: the outcome is unknown, so don't
     // report success. The bulk loop counts a true return toward its "Added N
     // of M" toast, and this item's own request may still fail.
-    if (loadingIds.has(p.suggestion_id)) return false;
+    if (loadingRef.current.has(p.suggestion_id)) return false;
     if (isSkillActionable && !p.target) return false;
     if (!isSkillActionable && !(onApplyFix && isPenaltyApplyable(p))) return false;
+    loadingRef.current.add(p.suggestion_id);
     setLoadingIds(prev => new Set(prev).add(p.suggestion_id));
     let applied = true;
     try {
       if (isSkillActionable) {
         applied = await onAddSkill(p.target!, p.suggestion_id);
       } else {
-        const result = await onApplyFix!(p.suggestion_id, p.category);
+        const result = opts?.deferBlank
+          ? await onApplyFix!(p.suggestion_id, p.category, { deferBlank: true })
+          : await onApplyFix!(p.suggestion_id, p.category);
+        if (result === "needs_number") {
+          deferredIds.current.add(p.suggestion_id);
+          return false;
+        }
         applied = result !== false;
         if (result === "applied_not_in_preview") {
           setBulkAppliedIds(prev => new Set(prev).add(p.suggestion_id));
@@ -498,6 +516,7 @@ function CategoryGroup({
         toast.error("Couldn't add this skill. Please try again.");
       }
     } finally {
+      loadingRef.current.delete(p.suggestion_id);
       setLoadingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
     }
     return applied;
@@ -610,13 +629,23 @@ function CategoryGroup({
   };
 
   React.useImperativeHandle(applyAllRef, () => ({
-    async applyAll() {
-      if (readOnly || bulkLoadingKey || loadingIds.size > 0) return false;
+    async applyAll(phase?: ApplyPhase) {
+      if (readOnly || bulkLoadingKey || loadingRef.current.size > 0) return false;
       // Reuse individual apply handlers, including persistence and manual-input checks.
       for (const item of individuals) {
         if (addedIds.has(item.suggestion_id) || item.fix_type === "manual") continue;
+        const needsNumber = hasMetricBlank(item.after_example);
+        if (phase === "plain" && needsNumber) continue;
+        if (phase === "blanks" && !needsNumber && !deferredIds.current.has(item.suggestion_id)) continue;
         if (!isSkillActionable && !isPenaltyApplyable(item)) continue;
-        if (!(await handleAdd(item, { silent: true }))) return false;
+        if (!(await handleAdd(item, { silent: true, deferBlank: phase === "plain" }))) {
+          // Needs a number: not a failure, the second pass asks for it.
+          // Only the first pass defers; a refusal in the second pass (cancelled prompt) is a real "no".
+          if (phase === "plain" && deferredIds.current.has(item.suggestion_id)) continue;
+          deferredIds.current.delete(item.suggestion_id);
+          return false;
+        }
+        deferredIds.current.delete(item.suggestion_id);
       }
       return true;
     },
@@ -762,14 +791,46 @@ function CategoryGroup({
 export default function MatchPenalties({ recommendations, compact, expandAll, matchResult, impactFilter, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied, bulkAppliedSuggestionIds, onBulkApplied, applyAllRef }: MatchPenaltiesProps) {
   const groups = React.useRef(new Map<string, ApplyAllHandle>());
   const [recommendationFilter, setRecommendationFilter] = useState<"all" | "high" | "medium" | "low">("all");
-  React.useImperativeHandle(applyAllRef, () => ({
-    async applyAll() {
+  const [applyingAll, setApplyingAll] = useState(false);
+  // Every row's own apply handler, one after another: the same code path as clicking each
+  // Apply button, so persistence, the metric-blank prompt and rate-limit handling are shared.
+  const applyEverything = async (): Promise<boolean> => {
+    for (const group of Array.from(groups.current.values())) {
+      if (!(await group.applyAll())) return false;
+    }
+    return true;
+  };
+  React.useImperativeHandle(applyAllRef, () => ({ applyAll: applyEverything }));
+  // The button's run, in two passes. First every fix that needs no number from the user, so a
+  // question can never stop the run with most of it undone. Then the fixes with an n% / n+ blank,
+  // one at a time through the same prompt as a single Apply. A prompt that is cancelled skips only
+  // that fix; a real failure (rate limit, save error) in the first pass still stops the run.
+  const applyAllFixes = async () => {
+    if (applyingAll) return;
+    setApplyingAll(true);
+    try {
       for (const group of Array.from(groups.current.values())) {
-        if (!(await group.applyAll())) return false;
+        if (!(await group.applyAll("plain"))) {
+          toast.warning("Some fixes were not applied. Check the list and try again.");
+          return;
+        }
       }
-      return true;
-    },
-  }));
+      let leftForUser = 0;
+      for (const group of Array.from(groups.current.values())) {
+        if (!(await group.applyAll("blanks"))) leftForUser += 1;
+      }
+      if (leftForUser > 0) {
+        toast.warning(
+          `${leftForUser} ${leftForUser === 1 ? "fix needs" : "fixes need"} a number from you. ` +
+          "Click Apply on " + (leftForUser === 1 ? "that row" : "those rows") + " to add it.",
+        );
+      } else {
+        toast.success("All fixes applied.");
+      }
+    } finally {
+      setApplyingAll(false);
+    }
+  };
   const backendPenalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
 
   // The backend flags a missing "technical_skills" field in Formatting_Check but,
@@ -832,6 +893,11 @@ export default function MatchPenalties({ recommendations, compact, expandAll, ma
       p.category === "technical_skills" || p.category === "soft_skills" ||
       (!!onApplyFix && isPenaltyApplyable(p));
     const orderedRows = [...individualRows].sort((a, b) => Number(isAutomatic(b)) - Number(isAutomatic(a)));
+    // Fixes the button would apply: automatic ones not applied yet. Manual rows (a phone number,
+    // a degree) need the person's own input, so they are never counted or applied here.
+    const pendingAutomatic = individualRows.filter(
+      p => p.fix_type !== "manual" && isAutomatic(p) && !(appliedSuggestionIds ?? []).includes(p.suggestion_id),
+    ).length;
     const filteredRows = orderedRows.filter(p => recommendationFilter === "all" || tier(p) === recommendationFilter);
     const indexes = new Map(filteredRows.map((p, index) => [p.suggestion_id, index + 1]));
     const cards = [
@@ -840,7 +906,7 @@ export default function MatchPenalties({ recommendations, compact, expandAll, ma
       { level: "low", label: "Additional Suggestions", description: "To make your resume stronger", Icon: Circle },
     ];
     return <section className={recommendationStyles.panel} aria-labelledby="recommendations-title">
-      <header className={recommendationStyles.header}><div><h2 id="recommendations-title">Recommendations</h2><p>Actionable suggestions to improve your resume and increase your match score.</p></div><div className={recommendationStyles.filter}><select aria-label="Filter recommendations" value={recommendationFilter} onChange={event => setRecommendationFilter(event.target.value as typeof recommendationFilter)}><option value="all">All Recommendations</option><option value="high">High Impact Fixes</option><option value="medium">Medium Impact Fixes</option><option value="low">Additional Suggestions</option></select><ChevronDown size={16} aria-hidden="true"/></div></header>
+      <header className={recommendationStyles.header}><div><h2 id="recommendations-title">Recommendations</h2><p>Actionable suggestions to improve your resume and increase your match score.</p></div><div className={recommendationStyles.headerActions}>{!readOnly && pendingAutomatic > 0 && <button type="button" className={recommendationStyles.applyAll} onClick={() => void applyAllFixes()} disabled={applyingAll} aria-busy={applyingAll}>{applyingAll ? "Applying fixes…" : `Apply all fixes (${pendingAutomatic})`}</button>}<div className={recommendationStyles.filter}><select aria-label="Filter recommendations" value={recommendationFilter} onChange={event => setRecommendationFilter(event.target.value as typeof recommendationFilter)}><option value="all">All Recommendations</option><option value="high">High Impact Fixes</option><option value="medium">Medium Impact Fixes</option><option value="low">Additional Suggestions</option></select><ChevronDown size={16} aria-hidden="true"/></div></div></header>
       <div className={recommendationStyles.cards}>{cards.map(({level, label, description, Icon}) => <article key={level} data-level={level}><Icon aria-hidden="true"/><div><strong>{individualRows.filter(p => tier(p) === level).length}</strong><h3>{label}</h3><p>{description}</p></div></article>)}</div>
       <div className={recommendationStyles.tableScroll}><table className={recommendationStyles.table}><thead><tr><th scope="col">#</th><th scope="col">Recommendation</th><th scope="col">Priority</th><th scope="col" title="Estimated score points returned by the analysis">Est. Impact</th><th scope="col">Action</th></tr></thead><tbody>
         {orderedRows.map(p => <CategoryGroup key={p.suggestion_id} category={p.category} items={[p]} recommendationIndexes={indexes} applyAllRef={handle => { if (handle) groups.current.set(p.suggestion_id, handle); else groups.current.delete(p.suggestion_id); }} onAddSkill={onAddSkill} onRemoveSkill={onRemoveSkill} onApplyFix={onApplyFix} onRemoveFix={onRemoveFix} onOpenSection={onOpenSection} readOnly={readOnly} appliedSuggestionIds={appliedSuggestionIds} bulkAppliedSuggestionIds={bulkAppliedSuggestionIds} onBulkApplied={onBulkApplied} onSuggestionApplied={onSuggestionApplied}/>)}

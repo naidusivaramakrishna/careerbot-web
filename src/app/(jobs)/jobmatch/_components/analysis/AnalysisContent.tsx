@@ -346,7 +346,7 @@ function applyClampedScore(newScore: unknown, setLiveScore: (score: number) => v
 type ApplyFixAttempt =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | { ok: true; res: any; manualValue?: string; blankText?: string }
-  | { ok: false };
+  | { ok: false; deferred?: boolean };
 
 // Extracted from applyTextFix: runs matcherEnhanceApply and, if the backend
 // refuses with "needs_value" (an unfilled metric blank, e.g. "...deployment
@@ -358,7 +358,8 @@ async function attemptEnhanceApply(
   matchId: string,
   suggestion_id: string,
   runSerially: <T,>(fn: () => Promise<T>) => Promise<T>,
-  askForNumber: (blankText?: string) => Promise<string | null>
+  askForNumber: (blankText?: string) => Promise<string | null>,
+  deferBlank?: boolean
 ): Promise<ApplyFixAttempt> {
   try {
     const res = await runSerially(() => matcherEnhanceApply(matchId, suggestion_id));
@@ -384,6 +385,8 @@ async function attemptEnhanceApply(
       );
       return { ok: false };
     }
+    // "Apply all fixes" asks for the number later, after every fix that needs none.
+    if (deferBlank) return { ok: false, deferred: true };
     const rawBlank = errPayload?.error?.details?.text ?? errPayload?.text;
     const blankText = normalizeBlankText(rawBlank);
     const answer = await askForNumber(blankText);
@@ -766,13 +769,13 @@ export default function AnalysisContent({
   // resolved entirely server-side from suggestion_id, so unlike skills there's
   // no separate "target" to persist; we just mirror the resulting text change
   // locally so the live preview matches what the backend wrote to the resume.
-  const applyTextFix = React.useCallback(async (suggestion_id: string, category: string): Promise<ApplyFixResult> => {
+  const applyTextFix = React.useCallback(async (suggestion_id: string, category: string, opts?: { deferBlank?: boolean }): Promise<ApplyFixResult> => {
     if (!matchId || !suggestion_id) return false;
     // Set below when the needs_value flow prompted the user for a number —
     // used to patch the cached suggestion text before mirroring it into the
     // preview (see the comment near its use further down).
-    const attempt = await attemptEnhanceApply(matchId, suggestion_id, runSerially, askForNumber);
-    if (!attempt.ok) return false;
+    const attempt = await attemptEnhanceApply(matchId, suggestion_id, runSerially, askForNumber, opts?.deferBlank);
+    if (!attempt.ok) return attempt.deferred ? "needs_number" : false;
     const { res, manualValue, blankText } = attempt;
 
     const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;

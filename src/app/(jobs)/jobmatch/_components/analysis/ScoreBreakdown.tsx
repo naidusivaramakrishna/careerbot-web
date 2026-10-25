@@ -33,6 +33,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { resultColor } from "./resultsSummary";
+import { impactFromPenalties } from "@/lib/job-match/sectionImpact";
 
 function parseScore(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
@@ -366,6 +367,12 @@ export default function ScoreBreakdown({
   const levelAlignment = careerProg.level_alignment ?? {};
   const leadership    = matchResult.Leadership_Check ?? {};
 
+  // Impact follows the severity of the section's outstanding fixes, the same source the
+  // Recommendations tab labels by, so one item cannot read Low here and High there. The
+  // fixed value is only the fallback for a section that has no fix rows.
+  const sectionImpact = (categories: string[], fallback: "high" | "medium" | "low") =>
+    impactFromPenalties(matchResult.Match_Penalties?.penalties, categories, fallback);
+
   const techScore = parseScore(tech.execution_failed ? null : tech.match_score);
   const softScore = parseScore(soft.execution_failed ? null : soft.match_score);
   const capScore  = parseScore(cap.execution_failed ? null : cap.match_score);
@@ -456,7 +463,7 @@ export default function ScoreBreakdown({
           subtitle="Skills & technical abilities"
           icon={Code2}
           priorityLabel="High priority"
-          priorityLevel="high"
+          priorityLevel={sectionImpact(["technical_skills"], "high")}
           score={techScore}
           passText="Your resume includes all of the Hard skills."
           missingCount={missingTech.length}
@@ -496,7 +503,7 @@ export default function ScoreBreakdown({
           subtitle="Behavioral & interpersonal skills"
           icon={UsersRound}
           priorityLabel="Medium priority"
-          priorityLevel="medium"
+          priorityLevel={sectionImpact(["soft_skills"], "medium")}
           score={softScore}
           passText="Your resume includes all of the Soft skills."
           missingCount={softError ? undefined : missingSoft.length}
@@ -521,7 +528,7 @@ export default function ScoreBreakdown({
           subtitle="Skills you can apply in the role"
           icon={Target}
           priorityLabel="Medium priority"
-          priorityLevel="medium"
+          priorityLevel={sectionImpact(["capabilities"], "medium")}
           score={capScore}
           passText="Your resume demonstrates all required capabilities."
           missingCount={missingCap.length}
@@ -536,7 +543,7 @@ export default function ScoreBreakdown({
           subtitle="Structured, results-driven bullet points"
           icon={ListChecks}
           priorityLabel="Medium priority"
-          priorityLevel="medium"
+          priorityLevel={sectionImpact(["star_pattern"], "medium")}
           score={starScore}
           passText="Your bullets follow the STAR format with measurable results."
         >
@@ -581,7 +588,7 @@ export default function ScoreBreakdown({
           subtitle="JD action verbs reflected in your bullet points"
           icon={Zap}
           priorityLabel="Medium priority"
-          priorityLevel="medium"
+          priorityLevel={sectionImpact(["requirements"], "medium")}
           score={reqScore}
           passText="Your bullets use all the action verbs the JD calls for."
           missingCount={missingVerbs.length}
@@ -596,7 +603,7 @@ export default function ScoreBreakdown({
           subtitle="Professional summary alignment with the role"
           icon={FileText}
           priorityLabel="Medium priority"
-          priorityLevel="medium"
+          priorityLevel={sectionImpact(["summary"], "medium")}
           score={summaryScore}
           passText="Your professional summary aligns well with the role."
         >
@@ -634,7 +641,7 @@ export default function ScoreBreakdown({
           subtitle="Alignment with the target role's title"
           icon={Tag}
           priorityLabel="Low priority"
-          priorityLevel="low"
+          priorityLevel={sectionImpact(["job_title"], "low")}
           score={jobScore}
           passText="Your job title aligns well with the role."
         >
@@ -662,7 +669,7 @@ export default function ScoreBreakdown({
           subtitle="Years and depth of relevant experience"
           icon={Briefcase}
           priorityLabel="Low priority"
-          priorityLevel="low"
+          priorityLevel={sectionImpact(["experience"], "low")}
           score={expScore}
           passText="Your experience level matches the role requirements."
         >
@@ -674,7 +681,7 @@ export default function ScoreBreakdown({
           subtitle="Degree and academic requirements"
           icon={GraduationCap}
           priorityLabel="Low priority"
-          priorityLevel="low"
+          priorityLevel={sectionImpact(["education"], "low")}
           score={eduScore}
           passText="Your education meets the role requirements."
         >
@@ -686,7 +693,7 @@ export default function ScoreBreakdown({
           subtitle="Relevant professional certifications"
           icon={Award}
           priorityLabel="Low priority"
-          priorityLevel="low"
+          priorityLevel={sectionImpact(["certifications"], "low")}
           score={certScore}
           passText="Your certifications meet the role requirements."
         >
@@ -698,7 +705,7 @@ export default function ScoreBreakdown({
           subtitle="Resume structure & parseability"
           icon={FileCheck2}
           priorityLabel="Low priority"
-          priorityLevel="low"
+          priorityLevel={sectionImpact(["formatting"], "low")}
           score={fmtScore}
           passText="Your resume formatting is ATS-friendly."
         >
@@ -759,7 +766,7 @@ export default function ScoreBreakdown({
             subtitle="Ownership, initiative & team leadership signals"
             icon={Crown}
             priorityLabel="Low priority"
-            priorityLevel="low"
+            priorityLevel={sectionImpact(["leadership"], "low")}
             score={leadershipScore}
             passText="Your resume shows leadership and ownership where it's needed."
           >

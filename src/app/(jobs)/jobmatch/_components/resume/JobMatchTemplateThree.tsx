@@ -3,7 +3,7 @@
 import React from "react";
 import { Edit3, Trash2 } from "lucide-react";
 import SafeHTML from "@/components/common/SafeHTML";
-import { highlightResumeKeywords, ResumeKeywordHtml, missingKeywordStyle, missingKeywordBorderColor } from "./resumeKeywordHighlights";
+import { highlightResumeKeywords, ResumeKeywordHtml, matchedKeywordStyle, missingKeywordStyle, missingKeywordBorderColor } from "./resumeKeywordHighlights";
 import AutoPaginator from "@/components/common/AutoPaginator";
 import { getSafeExternalUrl } from "@/utils/validators";
 import { getEducationScore } from "@/utils/resumeMappers";
@@ -179,6 +179,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const keywordMode = matchedKeywords !== undefined;
   const matchedTerms = [...(matchedKeywords ?? []), ...(af.skills ?? []), ...(af.softSkills ?? [])];
   const missingTerms = [...(pendingSkills ?? []), ...(pendingSoftSkills ?? [])];
+  const matchedTermSet = new Set(matchedTerms.map((t) => String(t).trim().toLowerCase()));
   const highlightText = (value: string) => keywordMode ? highlightResumeKeywords(value, matchedTerms, missingTerms) : value;
 
   const hlStyle: React.CSSProperties = {
@@ -793,7 +794,10 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                 <SectionActions onEditSection={onEditSection} onDeleteSection={onDeleteSection} sectionKey="summary" />
                 <SectionDivider baseFont={baseFont} label="Summary" />
                 <p style={{ fontSize: "13.5px", color: "#101828", lineHeight: 1.65, textAlign: "justify", margin: 0 }}>
-                  {hl("summary", "text", professionalSummary)}
+                  {(pf.summary ?? []).includes("text") && !(af.summary ?? []).includes("text")
+                    // Not applied yet: the whole summary reads as missing, then turns green once applied.
+                    ? <span data-resume-edit="pending" style={{ ...missingStyle, WebkitBoxDecorationBreak: "clone", boxDecorationBreak: "clone" }}>{professionalSummary}</span>
+                    : hl("summary", "text", professionalSummary)}
                 </p>
               </div>
             )}
@@ -995,7 +999,13 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     );
                     const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.skills || []).map((s: string) => s.toLowerCase()));
-                    if (keywordMode) return <p style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.6 }}>{[...new Map([...realSkills, ...pendingList].map(skill => [skill.toLowerCase(), skill])).values()].join(" | ")}</p>;
+                    if (keywordMode) {
+                      // Missing skills stay red here too, so they cannot pass for skills already on the resume.
+                      const unique = [...new Map([...realSkills, ...pendingList].map(skill => [skill.toLowerCase(), skill])).values()];
+                      return <p style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.6 }}>{unique.map((skill, idx) => (
+                        <React.Fragment key={`${skill}-${idx}`}>{renderSkillNode(skill, pendingSet.has(skill.toLowerCase()), matchedTermSet.has(skill.toLowerCase()), missingStyle, matchedKeywordStyle)}{idx < unique.length - 1 ? " | " : ""}</React.Fragment>
+                      ))}</p>;
+                    }
                     return categorizeTechnicalSkills([...realSkills, ...pendingList]).map(({ label, skills: groupSkills }) => (
                       <p key={label} style={{ fontSize: "13.5px", color: "#101828", margin: 0, lineHeight: 1.6 }}>
                         <strong>{label}:</strong>{" "}
@@ -1033,7 +1043,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const pendingSet = new Set(pendingList.map((s) => s.toLowerCase()));
                     const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
                     const combined = [...realSoft, ...pendingList];
-                    if (keywordMode) return combined.join(" | ");
+                    if (keywordMode) {
+                      return combined.map((skill: string, idx: number) => (
+                        <React.Fragment key={`${skill}-${idx}`}>{renderSkillNode(skill, pendingSet.has(skill.toLowerCase()), matchedTermSet.has(skill.toLowerCase()), missingStyle, matchedKeywordStyle)}{idx < combined.length - 1 ? " | " : ""}</React.Fragment>
+                      ));
+                    }
                     return combined.map((skill: string, idx: number) => {
                       const lower = skill.toLowerCase();
                       const isPending = pendingSet.has(lower);

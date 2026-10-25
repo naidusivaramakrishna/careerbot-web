@@ -42,50 +42,51 @@ describe("results overview navigation", () => {
   });
 });
 
-describe("job description preview dialog", () => {
-  const renderWithJd = () => render(
-    <MatchResultsOverview
-      matchResults={{data: {ats_score: 67}}}
-      resumeName="Resume.pdf"
-      jobDescriptionName="Role.txt"
-      jdText="We are hiring a backend engineer."
-      onDetails={vi.fn()}
-      onBack={vi.fn()}
-    />
-  );
+describe("the View buttons open the report page, not a popup", () => {
+  const renderOverview = (onDetails = vi.fn()) => {
+    render(
+      <MatchResultsOverview
+        matchResults={{data: {ats_score: 67}}}
+        resumeName="Resume.pdf"
+        jobDescriptionName="Role.txt"
+        onDetails={onDetails}
+        onBack={vi.fn()}
+      />
+    );
+    return onDetails;
+  };
 
-  it("opens as an accessible, labelled dialog showing the job description, and closes on the close button", () => {
-    renderWithJd();
-    fireEvent.click(screen.getByRole("button", {name: "View Job Description"}));
-
-    const dialog = screen.getByRole("dialog");
-    expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(dialog.getAttribute("aria-labelledby")).toBe("jd-preview-title");
-    expect(screen.getByText("We are hiring a backend engineer.")).toBeTruthy();
-    // Focus moves into the dialog on open instead of staying behind the overlay.
-    expect(document.activeElement).toBe(screen.getByRole("button", {name: "Close job description preview"}));
-
-    fireEvent.click(screen.getByRole("button", {name: "Close job description preview"}));
-    expect(screen.queryByRole("dialog")).toBeNull();
+  it("View Job Description opens the detailed analysis on the job description tab", () => {
+    const onDetails = renderOverview();
+    fireEvent.click(screen.getByRole("button", {name: "View Job Description in detailed analysis"}));
+    expect(onDetails).toHaveBeenCalledOnce();
+    expect(onDetails).toHaveBeenCalledWith("jd");
   });
 
-  it("closes on Escape", () => {
-    renderWithJd();
-    fireEvent.click(screen.getByRole("button", {name: "View Job Description"}));
-    expect(screen.getByRole("dialog")).toBeTruthy();
-
-    fireEvent.keyDown(screen.getByRole("dialog"), {key: "Escape"});
-    expect(screen.queryByRole("dialog")).toBeNull();
+  it("View Resume opens the detailed analysis on the resume tab", () => {
+    const onDetails = renderOverview();
+    fireEvent.click(screen.getByRole("button", {name: "View Your Resume in detailed analysis"}));
+    expect(onDetails).toHaveBeenCalledWith("resume");
   });
 
-  it("returns focus to the trigger button on close", () => {
-    renderWithJd();
-    const trigger = screen.getByRole("button", {name: "View Job Description"});
-    trigger.focus();
-    fireEvent.click(trigger);
+  it("View Detailed Analysis passes no tab, so the caller's default (resume) applies", () => {
+    const onDetails = renderOverview();
+    fireEvent.click(screen.getByRole("button", {name: "View Detailed Analysis"}));
+    expect(onDetails).toHaveBeenCalledOnce();
+    expect(onDetails.mock.calls[0]).toEqual([]);
+  });
 
-    fireEvent.keyDown(screen.getByRole("dialog"), {key: "Escape"});
-    expect(document.activeElement).toBe(trigger);
+  it("the keyword stat cards also pass no tab (never a click event)", () => {
+    const onDetails = renderOverview();
+    fireEvent.click(screen.getByText("Matched Keywords").closest("button") as HTMLElement);
+    expect(onDetails).toHaveBeenCalledOnce();
+    expect(onDetails.mock.calls[0]).toEqual([]);
+  });
+
+  it("never opens a dialog", () => {
+    renderOverview();
+    fireEvent.click(screen.getByRole("button", {name: "View Job Description in detailed analysis"}));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 

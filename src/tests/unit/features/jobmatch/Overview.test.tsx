@@ -1,10 +1,13 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Overview from "@/app/(jobs)/jobmatch/_components/Overview";
 import { getMatchAnalytics, getResume, matchResumeAndJD, parseJDFile, parseJDText, parseResume } from "@/api/parserApi";
 import { getExtensionSession } from "@/api/extensionApi";
 import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
+
+// Each test renders the whole wizard and waits on a 1.5s results delay; on a loaded CI runner the default 5s is too tight.
+vi.setConfig({ testTimeout: 20000 });
 
 vi.mock("@/api/parserApi", () => ({
   parseResume: vi.fn(), parseJDFile: vi.fn(), parseJDText: vi.fn(), parseJDUrl: vi.fn(),
@@ -244,4 +247,86 @@ describe("Overview: the wizard during analysis", () => {
     expect(screen.getByText("Step 4 of 4")).toBeTruthy();
     expect(screen.getByText("Analyzing")).toBeTruthy();
   }, TEST_TIMEOUT);
+});
+
+describe("Overview: URL follows the screen", () => {
+  const view = () => new URL(window.location.href).searchParams.get("view");
+  const goTo = (search: string) => {
+    window.history.pushState(null, "", `/jobmatch/app${search}`);
+    act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
+  };
+
+  beforeEach(() => { window.history.replaceState(null, "", "/jobmatch/app"); });
+  afterEach(() => { window.history.replaceState(null, "", "/"); });
+
+  const analyze = async () => {
+    vi.mocked(matchResumeAndJD).mockResolvedValue(eligible as never);
+    render(<Overview sessionId="s1" />);
+    await screen.findByTestId("results-overview", undefined, { timeout: 4000 });
+  };
+
+  it("adds a history entry for each screen after the landing page", async () => {
+    const push = vi.spyOn(window.history, "pushState");
+    await analyze();
+    expect(view()).toBe("results");
+    expect(push).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open details" }));
+    expect(view()).toBe("details");
+    expect(push).toHaveBeenCalledTimes(2);
+    push.mockRestore();
+  });
+
+  it("the first write replaces the entry when the page opens on a screen with no ?view=", () => {
+    sessionStorage.setItem("jm_matchResults", JSON.stringify({ data: { match_id: "m2", ats_score: 80, match_result: { eligible: true } } }));
+    sessionStorage.setItem("jm_activeTab", "analysis");
+    const push = vi.spyOn(window.history, "pushState");
+    const replace = vi.spyOn(window.history, "replaceState");
+    render(<Overview />);
+    expect(view()).toBe("results");
+    expect(replace).toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
+    replace.mockRestore();
+  });
+
+  it("Back from details shows results again after a fresh analysis (nothing was in storage at mount)", async () => {
+    await analyze();
+    fireEvent.click(screen.getByRole("button", { name: "Open details" }));
+    expect(screen.getByTestId("detailed-analysis")).toBeTruthy();
+
+    goTo("?view=results");
+    expect(screen.getByTestId("results-overview")).toBeTruthy();
+    expect(screen.queryByTestId("detailed-analysis")).toBeNull();
+    expect(view()).toBe("results");
+  });
+
+  it("Forward to details works too", async () => {
+    await analyze();
+    goTo("?view=details");
+    expect(screen.getByTestId("detailed-analysis")).toBeTruthy();
+  });
+
+  it("a restored results screen survives a refresh after 'Back to Job Match'", async () => {
+    await analyze();
+    sessionStorage.setItem("jm_activeTab", "upload");
+    goTo("?view=results");
+    expect(sessionStorage.getItem("jm_activeTab")).toBe("analysis");
+  });
+
+  it("Back to a wizard view leaves the results screen", async () => {
+    await analyze();
+    goTo("?view=confirm");
+    expect(screen.queryByTestId("results-overview")).toBeNull();
+    expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+  });
+
+  it("a refresh on ?view=details reopens the detailed analysis from the stored results", () => {
+    sessionStorage.setItem("jm_matchResults", JSON.stringify({ data: { match_id: "m2", ats_score: 80, match_result: { eligible: true } } }));
+    sessionStorage.setItem("jm_activeTab", "analysis");
+    window.history.replaceState(null, "", "/jobmatch/app?view=details");
+    render(<Overview />);
+    expect(screen.getByTestId("detailed-analysis")).toBeTruthy();
+    expect(view()).toBe("details");
+  });
 });
