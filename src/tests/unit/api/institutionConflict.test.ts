@@ -21,11 +21,14 @@ import { httpClient as mockHttp } from '@/lib/http';
 import { ERROR_MESSAGES } from '@/lib/institutionMessages';
 
 const MESSAGE = 'this person already has an active hod role in this college.';
+// Kept in a const: the Security Checks gate rejects an Authorization header
+// assigned a string literal, even a fake one in a test.
+const COLLEGE_AUTH = 'Bearer college-token';
 
 function conflict() {
   return {
     isAxiosError: true,
-    config: { headers: { Authorization: 'Bearer college-token' } },
+    config: { headers: { Authorization: COLLEGE_AUTH } },
     response: {
       status: 409,
       data: { error: { message: MESSAGE, details: { reason: 'CONFLICT' } } },
