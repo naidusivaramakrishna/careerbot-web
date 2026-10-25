@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Check, ArrowRight, Clock, X, UploadCloud, UserRound, Briefcase, GraduationCap, BadgeCheck, Tags, FileCheck2, BookOpenCheck, ShieldCheck, BarChart3, Target, FileWarning, Scissors, TrendingUp, Users, Star } from "lucide-react";
+import { Sparkles, Check, ArrowRight, Clock, X, UploadCloud, FileCheck2, BookOpenCheck, ShieldCheck, BarChart3, Target, FileWarning, Scissors, TrendingUp, Users, Star } from "lucide-react";
 import { FaFilePdf, FaFileWord } from "react-icons/fa";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { processResumeComplete } from "@/api/resumeatsapi";
+import { processResumeComplete, type ScanStage } from "@/api/resumeatsapi";
 import ErrorModal from "./ErrorModal";
+import TargetRolePrompt from "@/components/common/TargetRolePrompt";
+import { useElapsedSeconds } from "@/hooks/useElapsedSeconds";
+import { TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
 import { validateResumeFile, formatFileSize } from "@/app/(resume)/ats/utils/helpers";
 import { buildAtsReportRoute, normalizeResumeScanError } from "@/app/(resume)/ats/utils/scanFlow";
 
@@ -67,18 +70,6 @@ const LIVE_MESSAGES = [
   "Calculating recruiter readability...",
 ] as const;
 
-const ANALYSIS_CHECKLIST = [
-  { label: "Resume Uploaded", start: 0, Icon: UploadCloud },
-  { label: "Contact Information", start: 15, Icon: UserRound },
-  { label: "Experience Analysis", start: 35, Icon: Briefcase },
-  { label: "Education Review", start: 45, Icon: GraduationCap },
-  { label: "Skills Validation", start: 55, Icon: BadgeCheck },
-  { label: "Keyword Optimization", start: 70, Icon: Tags },
-  { label: "ATS Formatting Check", start: 82, Icon: FileCheck2 },
-  { label: "Readability Analysis", start: 92, Icon: BookOpenCheck },
-] as const;
-
-
 const WORKFLOW = [
   { id: "upload",  label: "Upload",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg> },
   { id: "analyze", label: "Analyze", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> },
@@ -106,8 +97,9 @@ interface UploadZoneProps {
 }
 
 interface LoadingOverlayProps {
-  displayProgress: number;
-  loadingPhase: AnalysisPhase | "";
+  /** The stage the scan is really in, or "done" once the report is ready. */
+  stage: ScanStage | "done";
+  elapsedSeconds: number;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -305,24 +297,23 @@ function FilePreview({ file, onRemove, agreed, onAgree }: FilePreviewProps) {
   );
 }
 
-function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) {
-  const isComplete = loadingPhase === AnalysisPhase.Complete;
-  const reduceMotion = useReducedMotion();
-  const [liveMsg, setLiveMsg] = useState(0);
+/** The scan's real stages: each flips when its API call starts or finishes. Nothing here is estimated. */
+const SCAN_STAGES: ReadonlyArray<{ id: ScanStage; label: string; Icon: typeof UploadCloud }> = [
+  { id: "parsing",   label: "Uploading and reading your resume", Icon: UploadCloud },
+  { id: "scoring",   label: "Scoring your resume",               Icon: BarChart3 },
+  { id: "finishing", label: "Preparing your report",             Icon: FileCheck2 },
+];
 
-  useEffect(() => {
-    if (isComplete || reduceMotion) return;
-    const id = setInterval(() => setLiveMsg((m) => (m + 1) % LIVE_MESSAGES.length), 3000);
-    return () => clearInterval(id);
-  }, [isComplete, reduceMotion]);
+function LoadingOverlay({ stage, elapsedSeconds }: LoadingOverlayProps) {
+  const isComplete = stage === "done";
+  const reduceMotion = useReducedMotion();
+  const activeIndex = isComplete ? SCAN_STAGES.length : SCAN_STAGES.findIndex((item) => item.id === stage);
 
   const ringSize = 155;
   const center = ringSize / 2;
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
-  const clampedProgress = Math.max(0, Math.min(100, displayProgress));
-  const progressLabel = Math.round(clampedProgress);
-  const remainingSeconds = Math.max(0, Math.ceil((100 - clampedProgress) * 18 / 28));
+  const completedFraction = Math.max(0, Math.min(1, activeIndex / SCAN_STAGES.length));
 
   return (
     <motion.div
@@ -333,6 +324,9 @@ function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) 
       transition={{ duration: 0.25 }}
       className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4"
       style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Scanning your resume"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.93, y: 18 }}
@@ -348,87 +342,95 @@ function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) 
         <div className="relative z-10 px-4 py-3 flex flex-col items-center gap-2">
           {!isComplete ? (
             <>
-              {/* Ring card */}
               <div className="w-full rounded-2xl border border-[#E8EEF7] bg-linear-to-b from-white to-[#F0F6FF] px-4 py-3 flex flex-col items-center gap-2"
                 style={{ boxShadow: "0 4px 24px rgba(37,99,235,0.08)" }}>
+                <p className="text-[15px] font-bold text-[#2563EB]">ATS Scan</p>
 
-                <p className="text-[15px] font-bold text-[#2563EB]">Premium ATS Scan</p>
-
-                {/* Ring */}
+                {/* Ring: the arc is the share of stages already finished; the turning arc shows work in progress. */}
                 <div className="relative grid place-items-center" style={{ width: ringSize, height: ringSize }}>
-                  {/* Glow */}
                   <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%)", filter: "blur(8px)" }} />
-
-                  <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} overflow="visible">
+                  <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} overflow="visible" aria-hidden="true">
                     <defs>
                       <linearGradient id="atsRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#1D4ED8" />
                         <stop offset="100%" stopColor="#60A5FA" />
                       </linearGradient>
                     </defs>
-                    {/* Track */}
                     <circle cx={center} cy={center} r={radius} fill="white" stroke="#DBEAFE" strokeWidth="16" />
-                    {/* Progress arc */}
                     <motion.circle
                       cx={center} cy={center} r={radius}
                       fill="none" stroke="url(#atsRingGrad)" strokeWidth="16" strokeLinecap="round"
                       strokeDasharray={circumference}
                       initial={{ strokeDashoffset: circumference }}
-                      animate={{ strokeDashoffset: circumference * (1 - clampedProgress / 100) }}
+                      animate={{ strokeDashoffset: circumference * (1 - completedFraction) }}
                       transition={{ duration: reduceMotion ? 0 : 0.6, ease: "easeOut" }}
                       style={{ transform: "rotate(-90deg)", transformOrigin: `${center}px ${center}px`, filter: "drop-shadow(0 0 6px rgba(37,99,235,0.5))" }}
                     />
+                    {!reduceMotion && (
+                      <motion.circle
+                        cx={center} cy={center} r={radius - 14}
+                        fill="none" stroke="#93C5FD" strokeWidth="3" strokeLinecap="round"
+                        strokeDasharray={`${circumference * 0.18} ${circumference}`}
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
+                        style={{ transformOrigin: `${center}px ${center}px` }}
+                      />
+                    )}
                   </svg>
-
-                  {/* Center content */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-                    <span className="text-[34px] font-black text-[#101828] leading-none tabular-nums">{progressLabel}%</span>
-                    <span className="text-[12px] font-medium text-[#6B7280]">{remainingSeconds} sec left</span>
+                    <span data-testid="scan-step" className="whitespace-nowrap text-[15px] font-extrabold text-[#101828] leading-none tabular-nums">
+                      Step {Math.min(activeIndex + 1, SCAN_STAGES.length)} of {SCAN_STAGES.length}
+                    </span>
                   </div>
                 </div>
 
-                {/* Live message */}
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={liveMsg}
-                    initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.2 }}
-                    className="text-[14px] font-bold text-[#2563EB] text-center"
-                  >
-                    {LIVE_MESSAGES[liveMsg]}
-                  </motion.p>
-                </AnimatePresence>
+                <p className="text-[14px] font-bold text-[#2563EB] text-center" aria-live="polite">
+                  {SCAN_STAGES[Math.max(0, activeIndex)].label}…
+                </p>
+                {elapsedSeconds >= 45 && (
+                  <p className="text-[11.5px] text-[#6B7280] text-center">
+                    Long or scanned resumes can take a little longer. Please keep this page open.
+                  </p>
+                )}
               </div>
 
-              {/* Checklist */}
-              <div className="w-full rounded-[8px] border border-[#E6EAF0] overflow-hidden bg-white">
-                {ANALYSIS_CHECKLIST.map((item, index) => {
-                  const next = ANALYSIS_CHECKLIST[index + 1]?.start ?? 101;
-                  const done = clampedProgress >= next;
-                  const scanning = !done && clampedProgress >= item.start;
+              <ul className="w-full rounded-[8px] border border-[#E6EAF0] overflow-hidden bg-white">
+                {SCAN_STAGES.map((item, index) => {
+                  const done = index < activeIndex;
+                  const active = index === activeIndex;
                   return (
-                    <div key={item.label} className="flex h-8 items-center gap-3 border-b border-[#F1F5F9] px-4 last:border-b-0">
-                      <span className="grid h-3 w-3 shrink-0 place-items-center rounded-full" style={{ background: done ? "#ECFDF3" : scanning ? "#FFFBEB" : "#F1F5F9", color: done ? "#22C55E" : scanning ? "#F59E0B" : "#94A3B8" }}>
-                        {done ? <Check className="h-2 w-2" strokeWidth={3} /> : scanning ? (
-                          <motion.span animate={reduceMotion ? undefined : { rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} className="block h-2.5 w-2.5 rounded-full border border-current border-t-transparent" />
+                    <li key={item.id} data-testid={`scan-stage-${item.id}`} data-state={done ? "done" : active ? "active" : "queued"}
+                      className="flex h-9 items-center gap-3 border-b border-[#F1F5F9] px-4 last:border-b-0">
+                      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full" style={{ background: done ? "#ECFDF3" : active ? "#FFFBEB" : "#F1F5F9", color: done ? "#22C55E" : active ? "#F59E0B" : "#94A3B8" }}>
+                        {done ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : active ? (
+                          <motion.span animate={reduceMotion ? undefined : { rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} className="block h-3 w-3 rounded-full border border-current border-t-transparent" />
                         ) : <span className="h-1 w-1 rounded-full bg-current" />}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#101828]">{item.label}</span>
-                      <span className="text-[12px] font-bold" style={{ color: done ? "#16A34A" : scanning ? "#F59E0B" : "#94A3B8" }}>
-                        {done ? "Done" : scanning ? "Scanning" : "Queued"}
+                      <span className="text-[12px] font-bold" style={{ color: done ? "#16A34A" : active ? "#F59E0B" : "#94A3B8" }}>
+                        {done ? "Done" : active ? "In progress" : "Waiting"}
                       </span>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </>
           ) : (
-            <div className="flex flex-col items-center py-4 text-center">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
-                <Check className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
+            <div className="flex flex-col items-center py-4 text-center" role="status">
+              <div className="relative mb-3 grid h-12 w-12 place-items-center">
+                {/* The report can take a moment to open: a turning ring says the page is still working. */}
+                <span aria-hidden="true" className="absolute inset-0 rounded-full border-2 border-emerald-200 border-t-emerald-500 motion-safe:animate-spin" />
+                <Check className="h-5 w-5 text-emerald-600" strokeWidth={2.5} aria-hidden="true" />
               </div>
               <p className="text-[13px] font-bold text-slate-900">Analysis Complete</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Redirecting...</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
+                Opening your report
+                <span aria-hidden="true" className="inline-flex gap-0.5">
+                  {[0, 150, 300].map((delay) => (
+                    <span key={delay} className="h-1 w-1 rounded-full bg-slate-400 motion-safe:animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                  ))}
+                </span>
+              </p>
             </div>
           )}
         </div>
@@ -746,11 +748,15 @@ export default function ATSLoginPage() {
   // "scan" = the upload/analysis itself failed and can be retried with the same file.
   const [errorSource,     setErrorSource]     = useState<"file" | "scan">("scan");
   const [isLoading,       setIsLoading]       = useState(false);
-  const [loadingPhase,    setLoadingPhase]    = useState<AnalysisPhase | "">("");
-  const [progress,        setProgress]        = useState(0);
-  const [displayProgress, setDisplayProgress] = useState(0);
+  // The stage the scan is REALLY in (set from processResumeComplete's callbacks) and the real elapsed time.
+  const [scanStage,       setScanStage]       = useState<ScanStage | "done">("parsing");
+  // Asked for when the resume names no role (a fresher with no headline).
+  const [askRole,         setAskRole]         = useState(false);
+  const [roleInput,       setRoleInput]       = useState("");
 
-  const canScan = Boolean(file && agreed);
+  // Set the moment a scan starts: a held-down Enter or a double click must not send a second parse + enhance.
+  const scanInFlight = useRef(false);
+  const canScan = Boolean(file && agreed) && !isLoading;
 
   const handleDragOver  = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
@@ -772,44 +778,41 @@ export default function ATSLoginPage() {
     setFile(f);
   };
 
-  const handleScanResume = async () => {
-    if (!file) return;
+  const runScan = async (targetRole?: string) => {
+    if (!file || scanInFlight.current) return;
+    scanInFlight.current = true;
     setError("");
+    setAskRole(false);
+    setScanStage("parsing");
     setIsLoading(true);
-    setProgress(0);
     try {
-      setLoadingPhase(AnalysisPhase.Uploading);
-      setProgress(30);
-      const result = await processResumeComplete(file);
-      setProgress(70);
-      setLoadingPhase(AnalysisPhase.Analyzing);
+      const result = await processResumeComplete(file, { targetRole, onStage: setScanStage });
       if (!result.success) {
+        // A resume with no role anywhere cannot be scored: ask for one instead of failing.
+        if (result.code === TARGET_ROLE_REQUIRED) {
+          scanInFlight.current = false;
+          setIsLoading(false);
+          setAskRole(true);
+          return;
+        }
         throw new Error(normalizeResumeScanError(result, "Upload failed"));
       }
-      setProgress(100);
-      setLoadingPhase(AnalysisPhase.Complete);
+      setScanStage("done");
       const resumeId = typeof result.resume_id === "string" ? result.resume_id : "";
       setTimeout(() => router.push(buildAtsReportRoute(resumeId)), 600);
     } catch (err: unknown) {
       setErrorSource("scan");
       setError(normalizeResumeScanError(err, "Unable to process your resume. Please try again."));
+      scanInFlight.current = false;
       setIsLoading(false);
-      setProgress(0);
-      setLoadingPhase("");
     }
   };
 
-  useEffect(() => {
-    if (!isLoading) { setDisplayProgress(0); return; }
-    const ceiling = progress >= 100 ? 100 : progress >= 70 ? 95 : 68;
-    const id = setInterval(() => {
-      setDisplayProgress((prev) => {
-        if (prev >= ceiling) return prev;
-        return Math.min(prev + (prev < progress ? 2 : 0.4), ceiling);
-      });
-    }, 120);
-    return () => clearInterval(id);
-  }, [isLoading, progress]);
+  // Not (e: MouseEvent) => runScan(e): the click event must never be taken for a role.
+  const handleScanResume = () => { void runScan(); };
+
+  // Real elapsed time while a scan is running; it is not an estimate of how long is left.
+  const elapsedSeconds = useElapsedSeconds(isLoading);
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -852,12 +855,18 @@ export default function ATSLoginPage() {
 
       <AnimatePresence>
         {isLoading && (
-          <LoadingOverlay
-            displayProgress={displayProgress}
-            loadingPhase={loadingPhase}
-          />
+          <LoadingOverlay stage={scanStage} elapsedSeconds={elapsedSeconds} />
         )}
       </AnimatePresence>
+
+      {askRole && !isLoading && (
+        <TargetRolePrompt
+          value={roleInput}
+          onChange={setRoleInput}
+          onSubmit={() => { void runScan(roleInput.trim()); }}
+          onCancel={() => setAskRole(false)}
+        />
+      )}
 
       {/* ── Main workspace ── */}
       <div className="relative mx-auto w-full max-w-[1380px] px-5 sm:px-8 lg:px-12">

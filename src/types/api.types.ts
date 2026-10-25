@@ -313,6 +313,8 @@ export interface ATSScore {
   final_score?: number;
   max_score?: number;
   Percentage?: number;
+  /** Alias of the display score, written by the enhancer after apply/delete-fix. */
+  current_score?: number | null;
   score_calculation?: { final_score: number; formula: string };
   profile?: string;
   years_of_experience?: number;
@@ -491,6 +493,24 @@ export interface EnhanceResumeResponse {
   deleted_suggestion_id?: string;
   was_applied?: boolean;
   already_applied?: boolean;
+  /** What the apply did, or why nothing was changed (check `was_applied`, not the HTTP status). */
+  correction_applied?: string;
+  /** Floats rounded to 2 decimals (careerbot-ai /enhance/apply). */
+  score_diff?: { before: number; after: number; delta: number };
+  /** Only when a section's points moved; `section` is the scorer key (e.g. ATSCompatibility). */
+  section_changes?: Array<{ section: string; pts_recovered: number }>;
+  /** Only when other fixes folded into the same sentence rewrite were applied with it. */
+  also_applied?: string[];
+  /** Only for `apply_all_fixes` / `<section>_apply_all`. */
+  apply_all?: {
+    section: string;
+    outcome: "applied" | "partial" | "failed" | "nothing_to_apply" | string;
+    applied_ids: string[];
+    failed: Array<{ id: string; section?: string; reason?: string }>;
+    remaining_ids: string[];
+  };
+  /** The role the scan was scored for (the resume headline). */
+  target_role?: string | null;
   enhanced_data?: ResumeData;
   /** Version of the one persisted resume/score/suggestion snapshot. */
   revision?: number;
@@ -501,7 +521,17 @@ export interface EnhanceResumeResponse {
     undo_available: boolean;
     applied_at?: string;
     fix_type?: "manual" | "auto" | string;
+    /** True for a fix the scan applied for the user (mode "auto"); the editor offers Undo on it. */
+    auto?: boolean;
+    /** The suggestion an automatic fix came from: what it changed (before / after). */
+    suggestion?: Partial<EnhancedSuggestion>;
   }>;
+  /** mode "auto" only: what the scan applied for the user and what it could not. */
+  auto_applied?: {
+    outcome: "applied" | "partial" | "nothing_to_apply" | "failed" | string;
+    applied_ids: string[];
+    failed: Array<{ id: string; reason?: string }>;
+  };
   operation?: {
     type: "apply_fix" | "delete_fix" | "autosave" | "bulk_update" | string;
     suggestion_id?: string | null;
@@ -510,8 +540,32 @@ export interface EnhanceResumeResponse {
 
 // New-format ATS display block returned alongside the enhance result.
 // `score` is the headline 0-100 figure; other presentation fields vary.
+export interface AtsDisplaySection {
+  name: string;
+  score_pct: number;
+  weighted_pts: number;
+  max_pts: number;
+  /** True when the section does not apply to this candidate (e.g. Experience for a fresher): grey it out. */
+  is_not_applicable: boolean;
+  /**
+   * Reason rows (only `penalty_pts` + `reason`, NO `id`) come first, then fixes. A row without an
+   * `id` explains the score and is not clickable: never key a UI on `id` without handling it.
+   */
+  fixes?: Array<Partial<EnhancedSuggestion> & { reason?: string | null; penalty_pts?: number | null }>;
+}
+
 export interface AtsDisplay {
   score?: number;
+  sections?: AtsDisplaySection[];
+  completeness?: {
+    name?: string;
+    score_pct?: number;
+    missing_fields?: string[];
+    experience_band?: "fresher" | "entry" | "mid" | "senior" | "expert" | string;
+  } | null;
+  recommended_section_order?: string[];
+  /** "Apply all" offers (`apply_all_fixes`, `<section>_apply_all`); not individual suggestions. */
+  bulk_suggestions?: Array<{ id: string; section: string; fix_ids: string[]; penalty_pts?: number | null; reason?: string | null }>;
   [key: string]: unknown;
 }
 
@@ -530,6 +584,15 @@ export interface EnhancedSuggestion {
   fix_type: "manual" | "auto" | "info";
   /** Backend-owned capability for a non-editable suggestion. */
   ui_action?: "template_applied" | "review_content" | "review_formatting" | string;
+  /** Overall-score points recovered by this fix (careerbot-ai). */
+  penalty_pts?: number | null;
+  impact?: "high" | "medium" | "low" | null;
+  /** Global priority across all sections, 1 = most urgent. */
+  rank?: number | null;
+  /** Current resume text and the suggested replacement; or `reason` when nothing is replaced. */
+  before_example?: string | null;
+  after_example?: string | null;
+  reason?: string | null;
   /** UI-only state set only after the backend confirms the apply request. */
   status?: "pending" | "fixed";
   /**

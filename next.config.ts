@@ -21,9 +21,9 @@ const nextConfig: NextConfig = {
 
   // Dev-server rewrites proxy default is 30s; mock-test/generate routinely
   // takes 30-60s (Azure OpenAI generation + verify chain) so requests get
-  // killed mid-flight with ECONNRESET. Raise to 4 minutes.
+  // killed mid-flight with ECONNRESET. Raise to 5.5 minutes (an ATS scan can take that long).
   experimental: {
-    proxyTimeout: 240000,
+    proxyTimeout: 330000,
   },
 
   eslint: {

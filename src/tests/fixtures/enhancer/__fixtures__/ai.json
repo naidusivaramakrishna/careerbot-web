@@ -1,0 +1,2619 @@
+{
+  "post_enhance": {
+    "success": true,
+    "resume_json": {
+      "name": "Sample Person",
+      "contact": {
+        "name": "Sample Person",
+        "email": "sample@example.com"
+      },
+      "summary": "Sample summary text.",
+      "experience": [
+        {
+          "company": "Sample Co",
+          "role": "Developer"
+        }
+      ],
+      "technical_skills": [
+        {
+          "skill": "Python"
+        }
+      ]
+    },
+    "target_role": "Intern",
+    "score": 88.2,
+    "sections": [
+      {
+        "name": "Contact",
+        "score_pct": 100.0,
+        "weighted_pts": 7.0,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Headline",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Summary",
+        "score_pct": 60.0,
+        "weighted_pts": 4.2,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "penalty_pts": 2.8,
+            "reason": "Sample text 27"
+          },
+          {
+            "id": "suggested_summary_0",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 2,
+            "penalty_pts": null,
+            "before_example": "Sample text 1",
+            "after_example": "Sample text 2",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Experience",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Internships",
+        "score_pct": 96.2,
+        "weighted_pts": 15.4,
+        "max_pts": 16,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "internship_1_sentence_weak_1",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 20,
+            "penalty_pts": 0.6,
+            "before_example": "Sample text 4",
+            "after_example": "Sample text 5",
+            "reason": "Sample text 6"
+          }
+        ]
+      },
+      {
+        "name": "Projects",
+        "score_pct": 65.0,
+        "weighted_pts": 9.75,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "project_1_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 3,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 7"
+          },
+          {
+            "id": "project_1_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 4,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 8"
+          },
+          {
+            "id": "project_1_tech_stack_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 5,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 9"
+          },
+          {
+            "id": "project_2_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 6,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 10"
+          },
+          {
+            "id": "project_2_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 7,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 11"
+          },
+          {
+            "id": "project_2_sentence_weak_2",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 8,
+            "penalty_pts": 0.15,
+            "before_example": "Sample text 12",
+            "after_example": "Sample text 13",
+            "reason": "Sample text 14"
+          },
+          {
+            "id": "project_3_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 9,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 15"
+          },
+          {
+            "id": "project_3_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 10,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 16"
+          },
+          {
+            "id": "project_4_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 11,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 17"
+          },
+          {
+            "id": "project_4_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 12,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 18"
+          },
+          {
+            "id": "project_5_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 13,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 19"
+          },
+          {
+            "id": "project_5_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 14,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 20"
+          }
+        ]
+      },
+      {
+        "name": "Education",
+        "score_pct": 95.6,
+        "weighted_pts": 14.34,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "education_issue_3_grade",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 19,
+            "penalty_pts": 0.66,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 21"
+          }
+        ]
+      },
+      {
+        "name": "Skills",
+        "score_pct": 93.0,
+        "weighted_pts": 17.67,
+        "max_pts": 19,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "skills_evidence_gap",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 18,
+            "penalty_pts": 1.33,
+            "before_example": null,
+            "after_example": "Sample text 22",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Certifications",
+        "score_pct": 88.0,
+        "weighted_pts": 8.8,
+        "max_pts": 10,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "certifications_apply_all",
+            "fix_type": "auto",
+            "penalty_pts": 1.2,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 29"
+          },
+          {
+            "id": "cert_3_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 16,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 23",
+            "reason": "Sample text 24"
+          },
+          {
+            "id": "cert_4_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 17,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 25",
+            "reason": "Sample text 26"
+          }
+        ]
+      },
+      {
+        "name": "ATS Compatibility",
+        "score_pct": 100.0,
+        "weighted_pts": 9.0,
+        "max_pts": 9,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Career Progression",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      }
+    ],
+    "completeness": {
+      "name": "Completeness",
+      "score_pct": 100.0,
+      "weighted_pts": 2.0,
+      "max_pts": 2,
+      "is_not_applicable": false,
+      "missing_fields": [],
+      "experience_band": "fresher"
+    },
+    "suggestions": [
+      {
+        "id": "apply_all_fixes",
+        "section": "All",
+        "fix_type": "auto",
+        "fix_ids": [
+          "project_2_sentence_weak_2",
+          "internship_1_sentence_weak_1",
+          "cert_3_unbacked",
+          "cert_4_unbacked",
+          "skills_evidence_gap",
+          "suggested_summary_0"
+        ],
+        "penalty_pts": 6.08,
+        "reason": "Sample text 28"
+      },
+      {
+        "id": "certifications_apply_all",
+        "section": "Certifications",
+        "fix_type": "auto",
+        "fix_ids": [
+          "cert_3_unbacked",
+          "cert_4_unbacked"
+        ],
+        "penalty_pts": 1.2,
+        "reason": "Sample text 29"
+      }
+    ],
+    "recommended_section_order": [
+      "Contact",
+      "Career Objective",
+      "Education",
+      "Skills",
+      "Projects",
+      "Internships",
+      "Certifications",
+      "Achievements"
+    ],
+    "time_stamp": "2026-10-22T18:32:24.677290+05:30",
+    "enhanced_resume_id": "enh-1",
+    "resume_id": "res-1",
+    "user_id": "user-1",
+    "correlation_id": "corr-1",
+    "trace_id": "trace-1",
+    "from_cache": true,
+    "mode": "auto",
+    "current_score": 88.2,
+    "estimated_score_after_fixes": 100.0,
+    "points_possible": 11.84,
+    "issues_count": 18,
+    "sections_with_issues": 6,
+    "score_status": "complete",
+    "score_source": null,
+    "backend_cache_hit": true,
+    "backend_cache_source": "mongodb"
+  },
+  "get": {
+    "success": true,
+    "resume_json": {
+      "name": "Sample Person",
+      "contact": {
+        "name": "Sample Person",
+        "email": "sample@example.com"
+      },
+      "summary": "Sample summary text.",
+      "experience": [
+        {
+          "company": "Sample Co",
+          "role": "Developer"
+        }
+      ],
+      "technical_skills": [
+        {
+          "skill": "Python"
+        }
+      ]
+    },
+    "target_role": "Intern",
+    "score": 88.2,
+    "sections": [
+      {
+        "name": "Contact",
+        "score_pct": 100.0,
+        "weighted_pts": 7.0,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Headline",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Summary",
+        "score_pct": 60.0,
+        "weighted_pts": 4.2,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "penalty_pts": 2.8,
+            "reason": "Sample text 27"
+          },
+          {
+            "id": "suggested_summary_0",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 2,
+            "penalty_pts": null,
+            "before_example": "Sample text 1",
+            "after_example": "Sample text 2",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Experience",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Internships",
+        "score_pct": 96.2,
+        "weighted_pts": 15.4,
+        "max_pts": 16,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "internship_1_sentence_weak_1",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 20,
+            "penalty_pts": 0.6,
+            "before_example": "Sample text 4",
+            "after_example": "Sample text 5",
+            "reason": "Sample text 6"
+          }
+        ]
+      },
+      {
+        "name": "Projects",
+        "score_pct": 65.0,
+        "weighted_pts": 9.75,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "project_1_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 3,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 7"
+          },
+          {
+            "id": "project_1_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 4,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 8"
+          },
+          {
+            "id": "project_1_tech_stack_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 5,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 9"
+          },
+          {
+            "id": "project_2_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 6,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 10"
+          },
+          {
+            "id": "project_2_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 7,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 11"
+          },
+          {
+            "id": "project_2_sentence_weak_2",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 8,
+            "penalty_pts": 0.15,
+            "before_example": "Sample text 12",
+            "after_example": "Sample text 13",
+            "reason": "Sample text 14"
+          },
+          {
+            "id": "project_3_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 9,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 15"
+          },
+          {
+            "id": "project_3_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 10,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 16"
+          },
+          {
+            "id": "project_4_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 11,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 17"
+          },
+          {
+            "id": "project_4_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 12,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 18"
+          },
+          {
+            "id": "project_5_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 13,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 19"
+          },
+          {
+            "id": "project_5_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 14,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 20"
+          }
+        ]
+      },
+      {
+        "name": "Education",
+        "score_pct": 95.6,
+        "weighted_pts": 14.34,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "education_issue_3_grade",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 19,
+            "penalty_pts": 0.66,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 21"
+          }
+        ]
+      },
+      {
+        "name": "Skills",
+        "score_pct": 93.0,
+        "weighted_pts": 17.67,
+        "max_pts": 19,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "skills_evidence_gap",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 18,
+            "penalty_pts": 1.33,
+            "before_example": null,
+            "after_example": "Sample text 22",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Certifications",
+        "score_pct": 88.0,
+        "weighted_pts": 8.8,
+        "max_pts": 10,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "certifications_apply_all",
+            "fix_type": "auto",
+            "penalty_pts": 1.2,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 29"
+          },
+          {
+            "id": "cert_3_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 16,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 23",
+            "reason": "Sample text 24"
+          },
+          {
+            "id": "cert_4_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 17,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 25",
+            "reason": "Sample text 26"
+          }
+        ]
+      },
+      {
+        "name": "ATS Compatibility",
+        "score_pct": 100.0,
+        "weighted_pts": 9.0,
+        "max_pts": 9,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Career Progression",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      }
+    ],
+    "completeness": {
+      "name": "Completeness",
+      "score_pct": 100.0,
+      "weighted_pts": 2.0,
+      "max_pts": 2,
+      "is_not_applicable": false,
+      "missing_fields": [],
+      "experience_band": "fresher"
+    },
+    "suggestions": [
+      {
+        "id": "apply_all_fixes",
+        "section": "All",
+        "fix_type": "auto",
+        "fix_ids": [
+          "project_2_sentence_weak_2",
+          "internship_1_sentence_weak_1",
+          "cert_3_unbacked",
+          "cert_4_unbacked",
+          "skills_evidence_gap",
+          "suggested_summary_0"
+        ],
+        "penalty_pts": 6.08,
+        "reason": "Sample text 28"
+      },
+      {
+        "id": "certifications_apply_all",
+        "section": "Certifications",
+        "fix_type": "auto",
+        "fix_ids": [
+          "cert_3_unbacked",
+          "cert_4_unbacked"
+        ],
+        "penalty_pts": 1.2,
+        "reason": "Sample text 29"
+      }
+    ],
+    "recommended_section_order": [
+      "Contact",
+      "Career Objective",
+      "Education",
+      "Skills",
+      "Projects",
+      "Internships",
+      "Certifications",
+      "Achievements"
+    ],
+    "id": "enh-1",
+    "user_id": "user-1",
+    "tenant_id": "public",
+    "original_resume_id": "res-1",
+    "enhancement_type": "general",
+    "improvements": [],
+    "enhancement_report": {
+      "ats_corrections_applied": []
+    },
+    "revision": 161,
+    "last_deleted_suggestion_id": null,
+    "display_name": "Sample Person",
+    "source": "enhanced",
+    "job_description_id": null,
+    "region": "india",
+    "template_id": null,
+    "applied_catalogue": null,
+    "section_bg_color": null,
+    "accent_color": null,
+    "font_family": null,
+    "line_height": null,
+    "created_at": "2026-10-22T11:15:23.241000",
+    "updated_at": "2026-10-22T15:18:15.267000",
+    "applied_fixes": [
+      {
+        "suggestion_id": "internship_2_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:52:09.277514+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_0",
+          "section": "Internships",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 38",
+          "after_example": "Sample text 39",
+          "reason": "Sample text 40"
+        }
+      },
+      {
+        "suggestion_id": "internship_2_sentence_weak_1",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.081015+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_1",
+          "section": "Internships",
+          "message": "Sample text 43",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 41",
+          "after_example": "Sample text 42",
+          "reason": "Sample text 43"
+        }
+      },
+      {
+        "suggestion_id": "project_1_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.289446+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "project_1_sentence_weak_0",
+          "section": "Projects",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.23,
+          "impact": "low",
+          "rank": 7,
+          "before_example": "Sample text 45",
+          "after_example": "Sample text 75",
+          "reason": "Sample text 40"
+        }
+      }
+    ],
+    "ats_corrections_applied": {
+      "ats_corrections_applied": []
+    },
+    "current_score": 88.2,
+    "estimated_score_after_fixes": 100.0,
+    "points_possible": 11.84,
+    "issues_count": 18,
+    "sections_with_issues": 6,
+    "score_status": "complete",
+    "score_source": "",
+    "enhanced_resume_id": "enh-1"
+  },
+  "apply": {
+    "success": true,
+    "resume_json": {
+      "name": "Sample Person",
+      "contact": {
+        "name": "Sample Person",
+        "email": "sample@example.com"
+      },
+      "summary": "Sample summary text.",
+      "experience": [
+        {
+          "company": "Sample Co",
+          "role": "Developer"
+        }
+      ],
+      "technical_skills": [
+        {
+          "skill": "Python"
+        }
+      ]
+    },
+    "target_role": "Intern",
+    "score": 88.6,
+    "sections": [
+      {
+        "name": "Contact",
+        "score_pct": 100.0,
+        "weighted_pts": 7.0,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Headline",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Summary",
+        "score_pct": 60.0,
+        "weighted_pts": 4.2,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "penalty_pts": 2.8,
+            "reason": "Sample text 27"
+          },
+          {
+            "id": "suggested_summary_0",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 2,
+            "penalty_pts": null,
+            "before_example": "Sample text 1",
+            "after_example": "Sample text 2",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Experience",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Internships",
+        "score_pct": 96.2,
+        "weighted_pts": 15.4,
+        "max_pts": 16,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "internship_1_sentence_weak_1",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 19,
+            "penalty_pts": 0.6,
+            "before_example": "Sample text 4",
+            "after_example": "Sample text 5",
+            "reason": "Sample text 6"
+          }
+        ]
+      },
+      {
+        "name": "Projects",
+        "score_pct": 68.0,
+        "weighted_pts": 10.2,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "project_1_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 3,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 8"
+          },
+          {
+            "id": "project_1_tech_stack_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 4,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 9"
+          },
+          {
+            "id": "project_2_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 5,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 10"
+          },
+          {
+            "id": "project_2_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 6,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 11"
+          },
+          {
+            "id": "project_2_sentence_weak_2",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 7,
+            "penalty_pts": 0.15,
+            "before_example": "Sample text 12",
+            "after_example": "Sample text 13",
+            "reason": "Sample text 14"
+          },
+          {
+            "id": "project_3_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 8,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 15"
+          },
+          {
+            "id": "project_3_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 9,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 16"
+          },
+          {
+            "id": "project_4_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 10,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 17"
+          },
+          {
+            "id": "project_4_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 11,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 18"
+          },
+          {
+            "id": "project_5_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 12,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 19"
+          },
+          {
+            "id": "project_5_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 13,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 20"
+          }
+        ]
+      },
+      {
+        "name": "Education",
+        "score_pct": 95.6,
+        "weighted_pts": 14.34,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "education_issue_3_grade",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 18,
+            "penalty_pts": 0.66,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 21"
+          }
+        ]
+      },
+      {
+        "name": "Skills",
+        "score_pct": 93.0,
+        "weighted_pts": 17.67,
+        "max_pts": 19,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "skills_evidence_gap",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 17,
+            "penalty_pts": 1.33,
+            "before_example": null,
+            "after_example": "Sample text 22",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Certifications",
+        "score_pct": 88.0,
+        "weighted_pts": 8.8,
+        "max_pts": 10,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "certifications_apply_all",
+            "fix_type": "auto",
+            "penalty_pts": 1.2,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 29"
+          },
+          {
+            "id": "cert_3_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 15,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 23",
+            "reason": "Sample text 24"
+          },
+          {
+            "id": "cert_4_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 16,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 25",
+            "reason": "Sample text 26"
+          }
+        ]
+      },
+      {
+        "name": "ATS Compatibility",
+        "score_pct": 100.0,
+        "weighted_pts": 9.0,
+        "max_pts": 9,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Career Progression",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      }
+    ],
+    "completeness": {
+      "name": "Completeness",
+      "score_pct": 100.0,
+      "weighted_pts": 2.0,
+      "max_pts": 2,
+      "is_not_applicable": false,
+      "missing_fields": [],
+      "experience_band": "fresher"
+    },
+    "suggestions": [
+      {
+        "id": "apply_all_fixes",
+        "section": "All",
+        "fix_type": "auto",
+        "fix_ids": [
+          "project_2_sentence_weak_2",
+          "internship_1_sentence_weak_1",
+          "cert_3_unbacked",
+          "cert_4_unbacked",
+          "skills_evidence_gap",
+          "suggested_summary_0"
+        ],
+        "penalty_pts": 6.08,
+        "reason": "Sample text 28"
+      },
+      {
+        "id": "certifications_apply_all",
+        "section": "Certifications",
+        "fix_type": "auto",
+        "fix_ids": [
+          "cert_3_unbacked",
+          "cert_4_unbacked"
+        ],
+        "penalty_pts": 1.2,
+        "reason": "Sample text 29"
+      }
+    ],
+    "recommended_section_order": [
+      "Contact",
+      "Career Objective",
+      "Education",
+      "Skills",
+      "Projects",
+      "Internships",
+      "Certifications",
+      "Achievements"
+    ],
+    "time_stamp": "2026-10-22T22:25:11.291574+05:30",
+    "score_diff": {
+      "before": 88.2,
+      "after": 88.6,
+      "delta": 0.4
+    },
+    "fixed_suggestion": "project_1_company_missing",
+    "correction_applied": "Sample text 88",
+    "was_applied": true,
+    "section_changes": [
+      {
+        "section": "Projects",
+        "pts_recovered": 0.0
+      }
+    ],
+    "user_id": "user-1",
+    "correlation_id": "corr-1",
+    "trace_id": "trace-1",
+    "current_score": 88.6,
+    "estimated_score_after_fixes": 99.99,
+    "points_possible": 11.39,
+    "issues_count": 17,
+    "sections_with_issues": 6,
+    "score_status": "complete",
+    "score_source": "",
+    "mode": "apply_fix",
+    "enhanced_resume_id": "enh-1",
+    "revision": 162,
+    "applied_fixes": [
+      {
+        "suggestion_id": "internship_2_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:52:09.277514+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_0",
+          "section": "Internships",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 38",
+          "after_example": "Sample text 39",
+          "reason": "Sample text 40"
+        }
+      },
+      {
+        "suggestion_id": "internship_2_sentence_weak_1",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.081015+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_1",
+          "section": "Internships",
+          "message": "Sample text 43",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 41",
+          "after_example": "Sample text 42",
+          "reason": "Sample text 43"
+        }
+      },
+      {
+        "suggestion_id": "project_1_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.289446+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "project_1_sentence_weak_0",
+          "section": "Projects",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.23,
+          "impact": "low",
+          "rank": 7,
+          "before_example": "Sample text 45",
+          "after_example": "Sample text 75",
+          "reason": "Sample text 40"
+        }
+      }
+    ],
+    "operation": {
+      "type": "apply_fix",
+      "suggestion_id": "project_1_company_missing"
+    }
+  },
+  "delete_fix": {
+    "success": true,
+    "resume_json": {
+      "name": "Sample Person",
+      "contact": {
+        "name": "Sample Person",
+        "email": "sample@example.com"
+      },
+      "summary": "Sample summary text.",
+      "experience": [
+        {
+          "company": "Sample Co",
+          "role": "Developer"
+        }
+      ],
+      "technical_skills": [
+        {
+          "skill": "Python"
+        }
+      ]
+    },
+    "target_role": "Intern",
+    "score": 88.2,
+    "sections": [
+      {
+        "name": "Contact",
+        "score_pct": 100.0,
+        "weighted_pts": 7.0,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Headline",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Summary",
+        "score_pct": 60.0,
+        "weighted_pts": 4.2,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "penalty_pts": 2.8,
+            "reason": "Sample text 27"
+          },
+          {
+            "id": "suggested_summary_0",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 2,
+            "penalty_pts": null,
+            "before_example": "Sample text 1",
+            "after_example": "Sample text 2",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Experience",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Internships",
+        "score_pct": 96.2,
+        "weighted_pts": 15.4,
+        "max_pts": 16,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "internship_1_sentence_weak_1",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 20,
+            "penalty_pts": 0.6,
+            "before_example": "Sample text 4",
+            "after_example": "Sample text 5",
+            "reason": "Sample text 6"
+          }
+        ]
+      },
+      {
+        "name": "Projects",
+        "score_pct": 65.0,
+        "weighted_pts": 9.75,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "project_1_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 3,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 7"
+          },
+          {
+            "id": "project_1_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 4,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 8"
+          },
+          {
+            "id": "project_1_tech_stack_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 5,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 9"
+          },
+          {
+            "id": "project_2_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 6,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 10"
+          },
+          {
+            "id": "project_2_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 7,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 11"
+          },
+          {
+            "id": "project_2_sentence_weak_2",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 8,
+            "penalty_pts": 0.15,
+            "before_example": "Sample text 12",
+            "after_example": "Sample text 13",
+            "reason": "Sample text 14"
+          },
+          {
+            "id": "project_3_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 9,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 15"
+          },
+          {
+            "id": "project_3_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 10,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 16"
+          },
+          {
+            "id": "project_4_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 11,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 17"
+          },
+          {
+            "id": "project_4_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 12,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 18"
+          },
+          {
+            "id": "project_5_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 13,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 19"
+          },
+          {
+            "id": "project_5_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 14,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 20"
+          }
+        ]
+      },
+      {
+        "name": "Education",
+        "score_pct": 95.6,
+        "weighted_pts": 14.34,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "education_issue_3_grade",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 19,
+            "penalty_pts": 0.66,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 21"
+          }
+        ]
+      },
+      {
+        "name": "Skills",
+        "score_pct": 93.0,
+        "weighted_pts": 17.67,
+        "max_pts": 19,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "skills_evidence_gap",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 18,
+            "penalty_pts": 1.33,
+            "before_example": null,
+            "after_example": "Sample text 22",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Certifications",
+        "score_pct": 88.0,
+        "weighted_pts": 8.8,
+        "max_pts": 10,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "certifications_apply_all",
+            "fix_type": "auto",
+            "penalty_pts": 1.2,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 29"
+          },
+          {
+            "id": "cert_3_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 16,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 23",
+            "reason": "Sample text 24"
+          },
+          {
+            "id": "cert_4_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 17,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 25",
+            "reason": "Sample text 26"
+          }
+        ]
+      },
+      {
+        "name": "ATS Compatibility",
+        "score_pct": 100.0,
+        "weighted_pts": 9.0,
+        "max_pts": 9,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Career Progression",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      }
+    ],
+    "completeness": {
+      "name": "Completeness",
+      "score_pct": 100.0,
+      "weighted_pts": 2.0,
+      "max_pts": 2,
+      "is_not_applicable": false,
+      "missing_fields": [],
+      "experience_band": "fresher"
+    },
+    "suggestions": [
+      {
+        "id": "apply_all_fixes",
+        "section": "All",
+        "fix_type": "auto",
+        "fix_ids": [
+          "project_2_sentence_weak_2",
+          "internship_1_sentence_weak_1",
+          "cert_3_unbacked",
+          "cert_4_unbacked",
+          "skills_evidence_gap",
+          "suggested_summary_0"
+        ],
+        "penalty_pts": 6.08,
+        "reason": "Sample text 28"
+      },
+      {
+        "id": "certifications_apply_all",
+        "section": "Certifications",
+        "fix_type": "auto",
+        "fix_ids": [
+          "cert_3_unbacked",
+          "cert_4_unbacked"
+        ],
+        "penalty_pts": 1.2,
+        "reason": "Sample text 29"
+      }
+    ],
+    "recommended_section_order": [
+      "Contact",
+      "Career Objective",
+      "Education",
+      "Skills",
+      "Projects",
+      "Internships",
+      "Certifications",
+      "Achievements"
+    ],
+    "time_stamp": "2026-10-22T22:25:14.642753+05:30",
+    "enhanced_resume_id": "enh-1",
+    "deleted_suggestion_id": "project_1_company_missing",
+    "re_applied_count": 0,
+    "score_before_deletion": 88.6,
+    "score_after_deletion": 88.2,
+    "score_diff": {
+      "before": 88.6,
+      "after": 88.2,
+      "delta": -0.4
+    },
+    "message": "Sample text 89",
+    "current_score": 88.2,
+    "estimated_score_after_fixes": 100.0,
+    "points_possible": 11.84,
+    "issues_count": 18,
+    "sections_with_issues": 6,
+    "score_status": "complete",
+    "score_source": "",
+    "revision": 163,
+    "applied_fixes": [
+      {
+        "suggestion_id": "internship_2_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:52:09.277514+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_0",
+          "section": "Internships",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 38",
+          "after_example": "Sample text 39",
+          "reason": "Sample text 40"
+        }
+      },
+      {
+        "suggestion_id": "internship_2_sentence_weak_1",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.081015+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_1",
+          "section": "Internships",
+          "message": "Sample text 43",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 41",
+          "after_example": "Sample text 42",
+          "reason": "Sample text 43"
+        }
+      },
+      {
+        "suggestion_id": "project_1_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.289446+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "project_1_sentence_weak_0",
+          "section": "Projects",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.23,
+          "impact": "low",
+          "rank": 7,
+          "before_example": "Sample text 45",
+          "after_example": "Sample text 75",
+          "reason": "Sample text 40"
+        }
+      }
+    ],
+    "operation": {
+      "type": "delete_fix",
+      "suggestion_id": "project_1_company_missing"
+    }
+  },
+  "autosave": {
+    "success": true,
+    "resume_json": {
+      "name": "Sample Person",
+      "contact": {
+        "name": "Sample Person",
+        "email": "sample@example.com"
+      },
+      "summary": "Sample summary text.",
+      "experience": [
+        {
+          "company": "Sample Co",
+          "role": "Developer"
+        }
+      ],
+      "technical_skills": [
+        {
+          "skill": "Python"
+        }
+      ]
+    },
+    "target_role": null,
+    "score": 88.2,
+    "sections": [
+      {
+        "name": "Contact",
+        "score_pct": 100.0,
+        "weighted_pts": 7.0,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Headline",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Summary",
+        "score_pct": 60.0,
+        "weighted_pts": 4.2,
+        "max_pts": 7,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "penalty_pts": 2.8,
+            "reason": "Sample text 27"
+          },
+          {
+            "id": "suggested_summary_0",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 2,
+            "penalty_pts": null,
+            "before_example": "Sample text 1",
+            "after_example": "Sample text 2",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Experience",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      },
+      {
+        "name": "Internships",
+        "score_pct": 96.2,
+        "weighted_pts": 15.4,
+        "max_pts": 16,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "internship_1_sentence_weak_1",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 20,
+            "penalty_pts": 0.6,
+            "before_example": "Sample text 4",
+            "after_example": "Sample text 5",
+            "reason": "Sample text 6"
+          }
+        ]
+      },
+      {
+        "name": "Projects",
+        "score_pct": 65.0,
+        "weighted_pts": 9.75,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "project_1_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 3,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 7"
+          },
+          {
+            "id": "project_1_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 4,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 8"
+          },
+          {
+            "id": "project_1_tech_stack_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 5,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 9"
+          },
+          {
+            "id": "project_2_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 6,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 10"
+          },
+          {
+            "id": "project_2_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 7,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 11"
+          },
+          {
+            "id": "project_2_sentence_weak_2",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 8,
+            "penalty_pts": 0.15,
+            "before_example": "Sample text 12",
+            "after_example": "Sample text 13",
+            "reason": "Sample text 14"
+          },
+          {
+            "id": "project_3_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 9,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 15"
+          },
+          {
+            "id": "project_3_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 10,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 16"
+          },
+          {
+            "id": "project_4_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 11,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 17"
+          },
+          {
+            "id": "project_4_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 12,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 18"
+          },
+          {
+            "id": "project_5_company_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 13,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 19"
+          },
+          {
+            "id": "project_5_duration_missing",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 14,
+            "penalty_pts": 0.45,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 20"
+          }
+        ]
+      },
+      {
+        "name": "Education",
+        "score_pct": 95.6,
+        "weighted_pts": 14.34,
+        "max_pts": 15,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "education_issue_3_grade",
+            "fix_type": "manual",
+            "impact": "low",
+            "rank": 19,
+            "penalty_pts": 0.66,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 21"
+          }
+        ]
+      },
+      {
+        "name": "Skills",
+        "score_pct": 93.0,
+        "weighted_pts": 17.67,
+        "max_pts": 19,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "skills_evidence_gap",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 18,
+            "penalty_pts": 1.33,
+            "before_example": null,
+            "after_example": "Sample text 22",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "name": "Certifications",
+        "score_pct": 88.0,
+        "weighted_pts": 8.8,
+        "max_pts": 10,
+        "is_not_applicable": false,
+        "fixes": [
+          {
+            "id": "certifications_apply_all",
+            "fix_type": "auto",
+            "penalty_pts": 1.2,
+            "before_example": null,
+            "after_example": null,
+            "reason": "Sample text 29"
+          },
+          {
+            "id": "cert_3_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 16,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 23",
+            "reason": "Sample text 24"
+          },
+          {
+            "id": "cert_4_unbacked",
+            "fix_type": "auto",
+            "impact": "low",
+            "rank": 17,
+            "penalty_pts": 0.6,
+            "before_example": null,
+            "after_example": "Sample text 25",
+            "reason": "Sample text 26"
+          }
+        ]
+      },
+      {
+        "name": "ATS Compatibility",
+        "score_pct": 100.0,
+        "weighted_pts": 9.0,
+        "max_pts": 9,
+        "is_not_applicable": false,
+        "fixes": []
+      },
+      {
+        "name": "Career Progression",
+        "score_pct": 0.0,
+        "weighted_pts": 0.0,
+        "max_pts": 0,
+        "is_not_applicable": true,
+        "fixes": []
+      }
+    ],
+    "completeness": {
+      "name": "Completeness",
+      "score_pct": 100.0,
+      "weighted_pts": 2.0,
+      "max_pts": 2,
+      "is_not_applicable": false,
+      "missing_fields": [],
+      "experience_band": "fresher"
+    },
+    "suggestions": [
+      {
+        "id": "apply_all_fixes",
+        "section": "All",
+        "fix_type": "auto",
+        "fix_ids": [
+          "project_2_sentence_weak_2",
+          "internship_1_sentence_weak_1",
+          "cert_3_unbacked",
+          "cert_4_unbacked",
+          "skills_evidence_gap",
+          "suggested_summary_0"
+        ],
+        "penalty_pts": 6.08,
+        "reason": "Sample text 28"
+      },
+      {
+        "id": "certifications_apply_all",
+        "section": "Certifications",
+        "fix_type": "auto",
+        "fix_ids": [
+          "cert_3_unbacked",
+          "cert_4_unbacked"
+        ],
+        "penalty_pts": 1.2,
+        "reason": "Sample text 29"
+      }
+    ],
+    "recommended_section_order": [
+      "Contact",
+      "Career Objective",
+      "Education",
+      "Skills",
+      "Projects",
+      "Internships",
+      "Certifications",
+      "Achievements"
+    ],
+    "updated_at": "2026-10-22T16:55:16.326000",
+    "enhanced_resume_id": "enh-1",
+    "revision": 165,
+    "applied_fixes": [
+      {
+        "suggestion_id": "internship_2_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:52:09.277514+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_0",
+          "section": "Internships",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 38",
+          "after_example": "Sample text 39",
+          "reason": "Sample text 40"
+        }
+      },
+      {
+        "suggestion_id": "internship_2_sentence_weak_1",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.081015+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "internship_2_sentence_weak_1",
+          "section": "Internships",
+          "message": "Sample text 43",
+          "fix_type": "auto",
+          "penalty_pts": 0.6,
+          "impact": "low",
+          "rank": 32,
+          "before_example": "Sample text 41",
+          "after_example": "Sample text 42",
+          "reason": "Sample text 43"
+        }
+      },
+      {
+        "suggestion_id": "project_1_sentence_weak_0",
+        "status": "applied",
+        "undo_available": true,
+        "applied_at": "2026-10-22T18:53:16.289446+05:30",
+        "fix_type": "auto",
+        "auto": true,
+        "suggestion": {
+          "id": "project_1_sentence_weak_0",
+          "section": "Projects",
+          "message": "Sample text 40",
+          "fix_type": "auto",
+          "penalty_pts": 0.23,
+          "impact": "low",
+          "rank": 7,
+          "before_example": "Sample text 45",
+          "after_example": "Sample text 75",
+          "reason": "Sample text 40"
+        }
+      }
+    ],
+    "operation": {
+      "type": "autosave",
+      "suggestion_id": null
+    },
+    "current_score": 88.2,
+    "estimated_score_after_fixes": 100.0,
+    "points_possible": 11.84,
+    "issues_count": 18,
+    "sections_with_issues": 6,
+    "score_status": "complete",
+    "score_source": ""
+  },
+  "bulk": {
+    "message": "Enhanced resume updated successfully",
+    "enhanced_id": "enh-1",
+    "enhanced_resume": {
+      "success": true,
+      "resume_json": {
+        "name": "Sample Person",
+        "contact": {
+          "name": "Sample Person",
+          "email": "sample@example.com"
+        },
+        "summary": "Sample summary text.",
+        "experience": [
+          {
+            "company": "Sample Co",
+            "role": "Developer"
+          }
+        ],
+        "technical_skills": [
+          {
+            "skill": "Python"
+          }
+        ]
+      },
+      "target_role": "Intern",
+      "score": 88.2,
+      "sections": [
+        {
+          "name": "Contact",
+          "score_pct": 100.0,
+          "weighted_pts": 7.0,
+          "max_pts": 7,
+          "is_not_applicable": false,
+          "fixes": []
+        },
+        {
+          "name": "Headline",
+          "score_pct": 0.0,
+          "weighted_pts": 0.0,
+          "max_pts": 0,
+          "is_not_applicable": true,
+          "fixes": []
+        },
+        {
+          "name": "Summary",
+          "score_pct": 60.0,
+          "weighted_pts": 4.2,
+          "max_pts": 7,
+          "is_not_applicable": false,
+          "fixes": [
+            {
+              "penalty_pts": 2.8,
+              "reason": "Sample text 27"
+            },
+            {
+              "id": "suggested_summary_0",
+              "fix_type": "auto",
+              "impact": "low",
+              "rank": 2,
+              "penalty_pts": null,
+              "before_example": "Sample text 1",
+              "after_example": "Sample text 2",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "name": "Experience",
+          "score_pct": 0.0,
+          "weighted_pts": 0.0,
+          "max_pts": 0,
+          "is_not_applicable": true,
+          "fixes": []
+        },
+        {
+          "name": "Internships",
+          "score_pct": 96.2,
+          "weighted_pts": 15.4,
+          "max_pts": 16,
+          "is_not_applicable": false,
+          "fixes": [
+            {
+              "id": "internship_1_sentence_weak_1",
+              "fix_type": "auto",
+              "impact": "low",
+              "rank": 20,
+              "penalty_pts": 0.6,
+              "before_example": "Sample text 4",
+              "after_example": "Sample text 5",
+              "reason": "Sample text 6"
+            }
+          ]
+        },
+        {
+          "name": "Projects",
+          "score_pct": 65.0,
+          "weighted_pts": 9.75,
+          "max_pts": 15,
+          "is_not_applicable": false,
+          "fixes": [
+            {
+              "id": "project_1_company_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 3,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 7"
+            },
+            {
+              "id": "project_1_duration_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 4,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 8"
+            },
+            {
+              "id": "project_1_tech_stack_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 5,
+              "penalty_pts": 0.6,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 9"
+            },
+            {
+              "id": "project_2_company_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 6,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 10"
+            },
+            {
+              "id": "project_2_duration_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 7,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 11"
+            },
+            {
+              "id": "project_2_sentence_weak_2",
+              "fix_type": "auto",
+              "impact": "low",
+              "rank": 8,
+              "penalty_pts": 0.15,
+              "before_example": "Sample text 12",
+              "after_example": "Sample text 13",
+              "reason": "Sample text 14"
+            },
+            {
+              "id": "project_3_company_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 9,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 15"
+            },
+            {
+              "id": "project_3_duration_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 10,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 16"
+            },
+            {
+              "id": "project_4_company_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 11,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 17"
+            },
+            {
+              "id": "project_4_duration_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 12,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 18"
+            },
+            {
+              "id": "project_5_company_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 13,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 19"
+            },
+            {
+              "id": "project_5_duration_missing",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 14,
+              "penalty_pts": 0.45,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 20"
+            }
+          ]
+        },
+        {
+          "name": "Education",
+          "score_pct": 95.6,
+          "weighted_pts": 14.34,
+          "max_pts": 15,
+          "is_not_applicable": false,
+          "fixes": [
+            {
+              "id": "education_issue_3_grade",
+              "fix_type": "manual",
+              "impact": "low",
+              "rank": 19,
+              "penalty_pts": 0.66,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 21"
+            }
+          ]
+        },
+        {
+          "name": "Skills",
+          "score_pct": 93.0,
+          "weighted_pts": 17.67,
+          "max_pts": 19,
+          "is_not_applicable": false,
+          "fixes": [
+            {
+              "id": "skills_evidence_gap",
+              "fix_type": "auto",
+              "impact": "low",
+              "rank": 18,
+              "penalty_pts": 1.33,
+              "before_example": null,
+              "after_example": "Sample text 22",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "name": "Certifications",
+          "score_pct": 88.0,
+          "weighted_pts": 8.8,
+          "max_pts": 10,
+          "is_not_applicable": false,
+          "fixes": [
+            {
+              "id": "certifications_apply_all",
+              "fix_type": "auto",
+              "penalty_pts": 1.2,
+              "before_example": null,
+              "after_example": null,
+              "reason": "Sample text 29"
+            },
+            {
+              "id": "cert_3_unbacked",
+              "fix_type": "auto",
+              "impact": "low",
+              "rank": 16,
+              "penalty_pts": 0.6,
+              "before_example": null,
+              "after_example": "Sample text 23",
+              "reason": "Sample text 24"
+            },
+            {
+              "id": "cert_4_unbacked",
+              "fix_type": "auto",
+              "impact": "low",
+              "rank": 17,
+              "penalty_pts": 0.6,
+              "before_example": null,
+              "after_example": "Sample text 25",
+              "reason": "Sample text 26"
+            }
+          ]
+        },
+        {
+          "name": "ATS Compatibility",
+          "score_pct": 100.0,
+          "weighted_pts": 9.0,
+          "max_pts": 9,
+          "is_not_applicable": false,
+          "fixes": []
+        },
+        {
+          "name": "Career Progression",
+          "score_pct": 0.0,
+          "weighted_pts": 0.0,
+          "max_pts": 0,
+          "is_not_applicable": true,
+          "fixes": []
+        }
+      ],
+      "completeness": {
+        "name": "Completeness",
+        "score_pct": 100.0,
+        "weighted_pts": 2.0,
+        "max_pts": 2,
+        "is_not_applicable": false,
+        "missing_fields": [],
+        "experience_band": "fresher"
+      },
+      "suggestions": [
+        {
+          "id": "apply_all_fixes",
+          "section": "All",
+          "fix_type": "auto",
+          "fix_ids": [
+            "project_2_sentence_weak_2",
+            "internship_1_sentence_weak_1",
+            "cert_3_unbacked",
+            "cert_4_unbacked",
+            "skills_evidence_gap",
+            "suggested_summary_0"
+          ],
+          "penalty_pts": 6.08,
+          "reason": "Sample text 28"
+        },
+        {
+          "id": "certifications_apply_all",
+          "section": "Certifications",
+          "fix_type": "auto",
+          "fix_ids": [
+            "cert_3_unbacked",
+            "cert_4_unbacked"
+          ],
+          "penalty_pts": 1.2,
+          "reason": "Sample text 29"
+        }
+      ],
+      "recommended_section_order": [
+        "Contact",
+        "Career Objective",
+        "Education",
+        "Skills",
+        "Projects",
+        "Internships",
+        "Certifications",
+        "Achievements"
+      ],
+      "id": "enh-1",
+      "user_id": "user-1",
+      "tenant_id": "public",
+      "original_resume_id": "res-1",
+      "enhancement_type": "general",
+      "improvements": [],
+      "enhancement_report": {
+        "ats_corrections_applied": []
+      },
+      "revision": 164,
+      "last_deleted_suggestion_id": null,
+      "display_name": "Sample Person",
+      "source": "enhanced",
+      "job_description_id": null,
+      "region": "india",
+      "template_id": null,
+      "applied_catalogue": null,
+      "section_bg_color": null,
+      "accent_color": null,
+      "font_family": null,
+      "line_height": null,
+      "created_at": "2026-10-22T11:15:23.241000",
+      "updated_at": "2026-10-22T16:55:15.405000",
+      "applied_fixes": [
+        {
+          "suggestion_id": "internship_2_sentence_weak_0",
+          "status": "applied",
+          "undo_available": true,
+          "applied_at": "2026-10-22T18:52:09.277514+05:30",
+          "fix_type": "auto",
+          "auto": true,
+          "suggestion": {
+            "id": "internship_2_sentence_weak_0",
+            "section": "Internships",
+            "message": "Sample text 40",
+            "fix_type": "auto",
+            "penalty_pts": 0.6,
+            "impact": "low",
+            "rank": 32,
+            "before_example": "Sample text 38",
+            "after_example": "Sample text 39",
+            "reason": "Sample text 40"
+          }
+        },
+        {
+          "suggestion_id": "internship_2_sentence_weak_1",
+          "status": "applied",
+          "undo_available": true,
+          "applied_at": "2026-10-22T18:53:16.081015+05:30",
+          "fix_type": "auto",
+          "auto": true,
+          "suggestion": {
+            "id": "internship_2_sentence_weak_1",
+            "section": "Internships",
+            "message": "Sample text 43",
+            "fix_type": "auto",
+            "penalty_pts": 0.6,
+            "impact": "low",
+            "rank": 32,
+            "before_example": "Sample text 41",
+            "after_example": "Sample text 42",
+            "reason": "Sample text 43"
+          }
+        },
+        {
+          "suggestion_id": "project_1_sentence_weak_0",
+          "status": "applied",
+          "undo_available": true,
+          "applied_at": "2026-10-22T18:53:16.289446+05:30",
+          "fix_type": "auto",
+          "auto": true,
+          "suggestion": {
+            "id": "project_1_sentence_weak_0",
+            "section": "Projects",
+            "message": "Sample text 40",
+            "fix_type": "auto",
+            "penalty_pts": 0.23,
+            "impact": "low",
+            "rank": 7,
+            "before_example": "Sample text 45",
+            "after_example": "Sample text 75",
+            "reason": "Sample text 40"
+          }
+        }
+      ],
+      "ats_corrections_applied": {
+        "ats_corrections_applied": []
+      },
+      "current_score": 88.2,
+      "estimated_score_after_fixes": 100.0,
+      "points_possible": 11.84,
+      "issues_count": 18,
+      "sections_with_issues": 6,
+      "score_status": "complete",
+      "score_source": "",
+      "enhanced_resume_id": "enh-1",
+      "operation": {
+        "type": "bulk_update",
+        "suggestion_id": null
+      }
+    }
+  }
+}
