@@ -33,16 +33,21 @@ ARG ALLOW_LOCALHOST=0
 # An omitted --build-arg is an EMPTY STRING, and the build still succeeds: every
 # consumer then falls back to its own `|| 'http://localhost:8000'`. Forgetting
 # one arg out of five silently reproduces v13/v14, so fail loudly instead.
-# NEXT_PUBLIC_BASE_URL must be ABSOLUTE or buildWsUrl() drops to the
-# NEXT_PUBLIC_WS_HOST fallback and live interviews break while login still works.
+# NEXT_PUBLIC_BASE_URL is either exactly /api/v1 or absolute:
+#   /api/v1    - same-origin: API calls and the live-interview socket go to the
+#                address the page is on. Required for college addresses
+#                (vit.<domain>), whose sign-in cookies are sent only to that address.
+#   http(s):// - fixed backend address (single-host deployments).
+# Anything else is refused: buildWsUrl() would drop to the NEXT_PUBLIC_WS_HOST
+# fallback and live interviews would break while login still works.
 RUN if [ "$ALLOW_LOCALHOST" != "1" ]; then \
       for v in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_SERVER_URL NEXT_PUBLIC_FRONTEND_URL NEXT_PUBLIC_WS_HOST BACKEND_URL; do \
         eval "val=\$$v"; \
         [ -n "$val" ] || { echo "BUILD ARG MISSING: $v (pass --build-arg $v=...)"; exit 1; }; \
       done; \
       case "$NEXT_PUBLIC_BASE_URL" in \
-        http://*|https://*) ;; \
-        *) echo "NEXT_PUBLIC_BASE_URL must be absolute (http:// or https://), got: $NEXT_PUBLIC_BASE_URL"; exit 1;; \
+        /api/v1|http://*|https://*) ;; \
+        *) echo "NEXT_PUBLIC_BASE_URL must be /api/v1 or absolute (http:// or https://), got: $NEXT_PUBLIC_BASE_URL"; exit 1;; \
       esac; \
     fi
 

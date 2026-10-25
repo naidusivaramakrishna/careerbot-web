@@ -4,7 +4,14 @@ import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import { enhanceResume } from "./enhancerApi";
 import { getResume } from "./parserApi";
 
-const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
+// Same-origin build (NEXT_PUBLIC_BASE_URL=/api/v1): '' so requests go to the
+// page's own address -- the only host a college address's sign-in cookies are
+// sent to. Otherwise the fixed backend address, as before.
+function apiBase(): string {
+  return process.env.NEXT_PUBLIC_BASE_URL === '/api/v1'
+    ? ''
+    : process.env.NEXT_PUBLIC_SERVER_URL || '';
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -144,7 +151,7 @@ export const parseResume = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);
 
-  const url = `${API_BASE}/api/v1/parser/parse_resume/`;
+  const url = `${apiBase()}/api/v1/parser/parse_resume/`;
   logApiRequest('POST', url, { fileName: file.name, fileSize: file.size });
 
   try {
@@ -203,7 +210,7 @@ export const parseResume = async (file: File) => {
 ------------------------------------------------------ */
 export const clearCacheForResume = async (resumeId: string) => {
   const response = await fetch(
-    `${API_BASE}/api/v1/parser/clear-cache/${resumeId}`,
+    `${apiBase()}/api/v1/parser/clear-cache/${resumeId}`,
     {
       method: "DELETE",
       credentials: "include",
@@ -434,7 +441,7 @@ export interface ResumeResponse {
 }
 
 export const getAllResumes = async (): Promise<ResumeResponse[]> => {
-  const response = await fetch(`${API_BASE}/api/v1/resumes/`, {
+  const response = await fetch(`${apiBase()}/api/v1/resumes/`, {
     method: "GET",
     credentials: "include",
   });
@@ -452,7 +459,7 @@ export const downloadResume = async (
 
   // Use parser download endpoint (backend route): /api/v1/parser/download/{resume_id}?format={pdf|docx}
   const response = await fetch(
-    `${API_BASE}/api/v1/parser/download/${resumeId}?format=${requestedFormat}`,
+    `${apiBase()}/api/v1/parser/download/${resumeId}?format=${requestedFormat}`,
     {
       method: "GET",
       credentials: "include",

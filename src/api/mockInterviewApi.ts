@@ -442,8 +442,10 @@ export const getLiveHistory = async (limit = 20): Promise<{ sessions: LiveSessio
 
 /**
  * Build the full WebSocket URL for a live session.
- * Next.js HTTP rewrites do NOT proxy WebSocket upgrades, so we connect
- * directly to the backend host, not through window.location.host.
+ * Next.js HTTP rewrites do NOT proxy WebSocket upgrades, so the socket never
+ * goes through the Next server. With a same-origin build (/api/v1) it goes to
+ * the page's own address and nginx sends the socket path straight to the
+ * backend; with an absolute build it goes to that backend address.
  */
 export function buildWsUrl(wsPath: string): string {
   // Already a full WS URL — use as-is
@@ -451,8 +453,16 @@ export function buildWsUrl(wsPath: string): string {
     return wsPath;
   }
 
-  // Production: derive backend WS origin from NEXT_PUBLIC_BASE_URL
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+
+  // Same-origin build: the page's address. On a college address this is the
+  // only host its sign-in cookies and ticket flow belong to.
+  if (baseUrl === '/api/v1') {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${window.location.host}${wsPath}`;
+  }
+
+  // Absolute build: derive backend WS origin from NEXT_PUBLIC_BASE_URL
   if (baseUrl && (baseUrl.startsWith('http://') || baseUrl.startsWith('https://'))) {
     const wsBase = baseUrl
       .replace(/^https:\/\//, 'wss://')
