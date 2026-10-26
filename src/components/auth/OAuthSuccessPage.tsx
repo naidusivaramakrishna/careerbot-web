@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { isAuthenticated } from "@/api/authApi"
 import { getStoredAuthRedirect } from "@/lib/authRedirect"
 import { clearPendingVerification } from "@/lib/pendingVerification"
+import { clearInstitutionSession } from "@/lib/institutionSession"
 
 interface Props {
     provider: string
@@ -70,6 +71,9 @@ export function OAuthSuccessPage({ provider }: Props) {
                     sessionStorage.removeItem('__signing_out')
                     // Session handed over, as in authApi.signIn: drop any unverified-signup record.
                     clearPendingVerification()
+                    // The previous account's college token: sessionStorage survives the hard
+                    // navigation below, and signIn() (which drops it) is not on this path.
+                    clearInstitutionSession()
                     toast.success(`Successfully signed in with ${provider}!`)
 
                     const redirectTo = getStoredAuthRedirect()

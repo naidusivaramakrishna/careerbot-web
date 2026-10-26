@@ -36,9 +36,11 @@ import { Crown, MessageSquare, Upload, User, CheckCircle } from "lucide-react";
 interface RightSectionProps {
     completeness: number;
     missingFields: string[];
+    /** The backend used the student formula (every membership a student one). */
+    weightedForStudent?: boolean;
 }
 
-const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
+const RightSection = ({ completeness, missingFields, weightedForStudent = false }: RightSectionProps) => {
     const router = useRouter();
     const { setProfileData } = useProfileContext();
     const { refreshDashboard } = useDashboard();
@@ -550,7 +552,14 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             {/* ── Profile Completeness ── */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm font-semibold text-gray-800">Profile Completeness</p>
+                    <div>
+                        <p className="text-sm font-semibold text-gray-800">Profile Completeness</p>
+                        {weightedForStudent && (
+                            <p className="text-xs text-gray-600 mt-0.5" data-testid="weighted-for-student">
+                                Weighted for a student, not a job hunter
+                            </p>
+                        )}
+                    </div>
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${status.color} ${status.bgColor}`}>
                         {status.label}
                     </span>

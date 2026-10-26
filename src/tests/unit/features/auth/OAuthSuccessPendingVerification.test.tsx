@@ -43,6 +43,7 @@ import GoogleOAuthSuccess from '@/app/auth/google/success/page';
 import LinkedInOAuthSuccess from '@/app/auth/linkedin/success/page';
 import { OAuthSuccessPage } from '@/components/auth/OAuthSuccessPage';
 import { VerificationRecovery } from '@/components/VerificationRecovery';
+import { getInstitutionSession, setInstitutionSession } from '@/lib/institutionSession';
 
 const PENDING_KEY = 'pendingEmailVerification';
 
@@ -95,5 +96,36 @@ describe.each(providers)('%s: pending email verification record', (_name, render
     // Let the rejected-session branch run.
     await new Promise((r) => setTimeout(r, 0));
     expect(localStorage.getItem(PENDING_KEY)).not.toBeNull();
+  });
+});
+
+// The college session lives in sessionStorage, which a hard navigation does
+// not clear. Account B signing in with OAuth in A's tab must not inherit A's
+// college token (it would hide B's own college UI outside /institution).
+describe.each(providers)("%s: previous account's college session", (_name, renderPage) => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it('is cleared once the OAuth session is verified', async () => {
+    setInstitutionSession({
+      access_token: 'A-token', token_type: 'bearer', institution_id: 'vit', role: 'student', membership_id: 'mA',
+    });
+    mockIsAuthenticated.mockResolvedValue(true);
+    render(renderPage());
+    await waitFor(() => expect(getInstitutionSession()).toBeNull());
+  });
+
+  it('is kept when the OAuth session could not be verified', async () => {
+    setInstitutionSession({
+      access_token: 'A-token', token_type: 'bearer', institution_id: 'vit', role: 'student', membership_id: 'mA',
+    });
+    mockIsAuthenticated.mockResolvedValue(false);
+    render(renderPage());
+    await waitFor(() => expect(mockIsAuthenticated).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getInstitutionSession()?.access_token).toBe('A-token');
   });
 });

@@ -362,3 +362,15 @@ describe('RightSection — resume import replaces only the sections the resume h
     expect(deleteProject).toHaveBeenCalledWith('proj-1');
   });
 });
+
+describe('RightSection — "weighted for a student" label', () => {
+  it('shown when the backend used the student formula', () => {
+    render(<RightSection completeness={15} missingFields={['Resume']} weightedForStudent />);
+    expect(screen.getByTestId('weighted-for-student')).toHaveTextContent('Weighted for a student');
+  });
+
+  it('not shown for a jobseeker or staff (default)', () => {
+    render(<RightSection completeness={15} missingFields={['Resume']} />);
+    expect(screen.queryByTestId('weighted-for-student')).not.toBeInTheDocument();
+  });
+});

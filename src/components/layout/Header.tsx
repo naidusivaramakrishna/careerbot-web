@@ -16,6 +16,8 @@ import {
 } from '@/components/icons/EnterpriseNavIcons';
 import { useCreditsBalance } from '@/hooks/useCreditsBalance';
 import { useCollegeMembershipResolved, useStudentCollege } from '@/hooks/useCollegeMembership';
+import { useStudentRecord } from '@/hooks/useStudentRecord';
+import { CollegeIdentityBar } from '@/components/layout/CollegeIdentityBar';
 import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
@@ -164,6 +166,8 @@ export default function Header() {
   // Until the membership answer is in, show the skeleton: a student must not
   // be shown the upgrade panel for the instant before "Provided by" arrives.
   const membershipResolved = useCollegeMembershipResolved();
+  // The identity bar (centre slot) -- students only, once their record loads.
+  const studentRecord = useStudentRecord();
   const { unreadCount: apiUnreadCount, refetch: refetchUnreadCount } = useUnreadNotificationsCount({
     autoRefresh: true,
     refreshInterval: 30000, // Refresh every 30 seconds
@@ -354,6 +358,13 @@ export default function Header() {
           />
           <span className="text-2xl font-bold tracking-tight" style={{ color: "#2557a7" }}>CareerBOT</span>
         </button>
+
+        {/* Centre: the college identity bar, students only */}
+        {studentRecord.status === 'ready' ? (
+          <div className="flex min-w-0 flex-1 justify-center">
+            <CollegeIdentityBar record={studentRecord.record} />
+          </div>
+        ) : null}
 
         {/* Right actions */}
         <div className="flex items-center gap-3">

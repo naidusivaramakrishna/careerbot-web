@@ -172,6 +172,10 @@ export type Standing =
       /** How many share this exact place, so a screen can say "joint 3rd"
        *  rather than implying a clean placing. */
       tied_with: number;
+      /** Rank in the same batch year across every department of the college
+       *  ("#12 in college"). Only present when the department rank above is;
+       *  the same privacy floor applies, so it can be unavailable on its own. */
+      college?: Standing;
     }
   | {
       available: false;

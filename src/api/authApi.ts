@@ -3,6 +3,7 @@ import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantSt
 import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
 import { clearPendingVerification } from '@/lib/pendingVerification';
 import { clearInstitutionSession } from '@/lib/institutionSession';
+import { announceAccountChanged } from '@/lib/accountChange';
 
 export interface LoginRequest {
   email: string;
@@ -118,6 +119,9 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
   // the signed-in account's memberships, which covers OAuth logins that do
   // not pass through signIn().
   clearInstitutionSession();
+  // ...and every cache built for that account (college memberships, the
+  // student record): this sign-in may not reload the page.
+  announceAccountChanged();
 
   // A session is only issued to a verified account (signin 403s
   // EMAIL_NOT_VERIFIED otherwise), so any pending-verification banner record
@@ -172,6 +176,7 @@ export const signOut = async () => {
   // college call. Leaving it behind lets the next account that signs in on
   // this tab act as this one inside the college.
   clearInstitutionSession();
+  announceAccountChanged();
 
   // Job Match session state: sweep by PREFIX, not by allow-list.
   //

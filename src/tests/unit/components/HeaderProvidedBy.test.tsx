@@ -36,6 +36,8 @@ vi.mock('@/lib/logger', () => {
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 let studentCollege: { id: string; name: string } | null = null;
+let studentRecordState: { status: string; record?: unknown } = { status: 'none' };
+vi.mock('@/hooks/useStudentRecord', () => ({ useStudentRecord: () => studentRecordState }));
 vi.mock('@/hooks/useCollegeMembership', () => ({
   useStudentCollege: () => studentCollege,
   useHasCollegeMembership: () => studentCollege !== null,
@@ -45,7 +47,7 @@ let membershipResolved = true;
 
 import Header from '@/components/layout/Header';
 
-beforeEach(() => { studentCollege = null; membershipResolved = true; });
+beforeEach(() => { studentCollege = null; membershipResolved = true; studentRecordState = { status: 'none' }; });
 
 describe('Header plan panel', () => {
   it('a student sees "Provided by <college>" and no plan/credits link', () => {
@@ -70,5 +72,37 @@ describe('Header plan panel', () => {
     const { container } = render(<Header />);
     expect(screen.queryByTestId('provided-by-college')).not.toBeInTheDocument();
     expect(container.querySelector('a[href="/payments"]')).toBeNull();
+  });
+});
+
+describe('Header identity bar', () => {
+  const record = {
+    college: { id: 'vit', name: 'VIT Chennai', membershipId: 'm1' },
+    student: { department_name: 'CSE', section_name: 'B', batch_year: 2027, admission_number: '22CSE118' },
+    readiness: { readiness: 81, max: 100 },
+    standing: { available: true, rank: 4, cohort_size: 40, percentile: 90, readiness: 81, tied_with: 0,
+      college: { available: true, rank: 12, cohort_size: 300, percentile: 96, readiness: 81, tied_with: 0 } },
+    people: null,
+  };
+
+  it('a student whose record loaded sees the bar', () => {
+    studentCollege = { id: 'vit', name: 'VIT Chennai' };
+    studentRecordState = { status: 'ready', record };
+    render(<Header />);
+    const bar = screen.getByTestId('college-identity-bar');
+    expect(bar).toHaveTextContent('VIT Chennai · CSE · Section B · Batch 2027 · 22CSE118');
+    expect(bar).toHaveTextContent('#12 in college');
+    expect(bar).toHaveTextContent('#4 in CSE');
+    expect(bar).toHaveAttribute('href', '/institution');
+  });
+
+  it('no bar while loading, or for anyone who is not a student', () => {
+    studentRecordState = { status: 'loading' };
+    const { unmount } = render(<Header />);
+    expect(screen.queryByTestId('college-identity-bar')).not.toBeInTheDocument();
+    unmount();
+    studentRecordState = { status: 'none' };
+    render(<Header />);
+    expect(screen.queryByTestId('college-identity-bar')).not.toBeInTheDocument();
   });
 });

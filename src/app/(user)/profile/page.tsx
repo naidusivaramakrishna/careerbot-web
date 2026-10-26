@@ -6,9 +6,12 @@ import { ProfileContextProvider } from "./context/ProfileContext";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { getProfile } from "@/api/userApi";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { useIsStudentOnly } from "@/hooks/useCollegeMembership";
 
 const ProfileContent = () => {
     const { data: dashboardData } = useDashboard();
+    // Same rule the backend uses to pick the student formula.
+    const weightedForStudent = useIsStudentOnly();
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
 
@@ -45,6 +48,7 @@ const ProfileContent = () => {
                     <RightSection
                         completeness={dashboardData?.profile?.completeness ?? 0}
                         missingFields={dashboardData?.profile?.missing_fields ?? []}
+                        weightedForStudent={weightedForStudent}
                     />
                 </div>
             </div>

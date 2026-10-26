@@ -16,6 +16,7 @@ import {
   useCollegeMembershipResolved,
   pickStudentCollege,
   useHasCollegeMembership,
+  useIsStudentOnly,
   useStudentCollege,
 } from '@/hooks/useCollegeMembership';
 import { clearInstitutionSession, setInstitutionSession } from '@/lib/institutionSession';
@@ -38,7 +39,7 @@ describe('pickStudentCollege', () => {
 
   it('no session + exactly one student membership -> that college', () => {
     expect(pickStudentCollege([m('m1', 'vit', 'student')], null))
-      .toEqual({ id: 'vit', name: 'VIT University' });
+      .toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' });
   });
 
   it('no session + one STAFF membership -> null (staff keep today\'s UI)', () => {
@@ -60,7 +61,7 @@ describe('pickStudentCollege', () => {
 
   it('student session matching a membership -> that college', () => {
     const rows = [m('m1', 'a', 'student'), m('m2', 'b', 'faculty')];
-    expect(pickStudentCollege(rows, session('m1', 'a', 'student'))).toEqual({ id: 'a', name: 'A University' });
+    expect(pickStudentCollege(rows, session('m1', 'a', 'student'))).toEqual({ id: 'a', name: 'A University', membershipId: 'm1' });
   });
 
   it('student session the account does not own (another account\'s token) -> null', () => {
@@ -94,6 +95,25 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
     expect(student.result.current).toBeNull();
   });
 
+  it('a failed call is NOT cached: the next mount asks again', async () => {
+    listMemberships.mockRejectedValueOnce(new Error('401')).mockResolvedValue([m('m1', 'vit', 'student')]);
+    const first = renderHook(() => useHasCollegeMembership());
+    await waitFor(() => expect(listMemberships).toHaveBeenCalledTimes(1));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(first.result.current).toBe(false);
+    const second = renderHook(() => useStudentCollege());
+    await waitFor(() => expect(second.result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' }));
+    expect(listMemberships).toHaveBeenCalledTimes(2);
+  });
+
+  it('useIsStudentOnly mirrors the backend rule', async () => {
+    listMemberships.mockResolvedValue([m('m1', 'a', 'student'), m('m2', 'b', 'faculty')]);
+    const mixed = renderHook(() => useIsStudentOnly());
+    const has = renderHook(() => useHasCollegeMembership());
+    await waitFor(() => expect(has.result.current).toBe(true));
+    expect(mixed.result.current).toBe(false);
+  });
+
   it('a failed membership call is treated as "no college", as before', async () => {
     listMemberships.mockRejectedValue(new Error('down'));
     const has = renderHook(() => useHasCollegeMembership());
@@ -111,7 +131,7 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
   it('one student membership, no session yet -> the college', async () => {
     listMemberships.mockResolvedValue([m('m1', 'vit', 'student')]);
     const { result } = renderHook(() => useStudentCollege());
-    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University' }));
+    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' }));
   });
 
   it('follows a college switch in this tab', async () => {
@@ -124,7 +144,7 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
     act(() => setInstitutionSession({
       access_token: 't1', token_type: 'bearer', institution_id: 'a', role: 'student', membership_id: 'm1',
     }));
-    await waitFor(() => expect(result.current).toEqual({ id: 'a', name: 'A University' }));
+    await waitFor(() => expect(result.current).toEqual({ id: 'a', name: 'A University', membershipId: 'm1' }));
 
     act(() => setInstitutionSession({
       access_token: 't2', token_type: 'bearer', institution_id: 'b', role: 'faculty', membership_id: 'm2',
@@ -140,16 +160,6 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
     await waitFor(() => expect(listMemberships).toHaveBeenCalledTimes(1));
   });
 
-  it('a failed call is NOT cached: the next mount asks again', async () => {
-    listMemberships.mockRejectedValueOnce(new Error('401')).mockResolvedValue([m('m1', 'vit', 'student')]);
-    const first = renderHook(() => useHasCollegeMembership());
-    await waitFor(() => expect(listMemberships).toHaveBeenCalledTimes(1));
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(first.result.current).toBe(false);
-    const second = renderHook(() => useStudentCollege());
-    await waitFor(() => expect(second.result.current).toEqual({ id: 'vit', name: 'VIT University' }));
-    expect(listMemberships).toHaveBeenCalledTimes(2);
-  });
 
   it('THE JOIN FLOW: rows primed by the college context reach hooks that cached []', async () => {
     listMemberships.mockResolvedValue([]); // before the invite is claimed
@@ -158,7 +168,7 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
     await waitFor(() => expect(listMemberships).toHaveBeenCalledTimes(1));
     expect(result.current).toBeNull();
     act(() => primeCollegeMemberships([m('m1', 'vit', 'student')])); // InstitutionContext after the claim
-    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University' }));
+    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' }));
     expect(has.result.current).toBe(true);
     expect(listMemberships).toHaveBeenCalledTimes(1); // no extra request
   });
@@ -171,11 +181,11 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
     const { result } = renderHook(() => useStudentCollege());
     await waitFor(() => expect(listMemberships).toHaveBeenCalledTimes(1));
     act(() => primeCollegeMemberships([m('m1', 'vit', 'student')]));
-    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University' }));
+    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' }));
     await act(async () => { release([]); await Promise.resolve(); await Promise.resolve(); });
-    expect(result.current).toEqual({ id: 'vit', name: 'VIT University' });
+    expect(result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' });
     const later = renderHook(() => useStudentCollege()); // a fresh mount reads the primed rows
-    expect(later.result.current).toEqual({ id: 'vit', name: 'VIT University' });
+    expect(later.result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' });
   });
 
   it('a late FAILURE from before the prime neither wipes the rows nor forces a new request', async () => {
@@ -184,9 +194,9 @@ describe('useStudentCollege / useHasCollegeMembership', () => {
     const { result } = renderHook(() => useStudentCollege());
     await waitFor(() => expect(listMemberships).toHaveBeenCalledTimes(1));
     act(() => primeCollegeMemberships([m('m1', 'vit', 'student')]));
-    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University' }));
+    await waitFor(() => expect(result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' }));
     await act(async () => { fail(new Error('down')); await Promise.resolve(); await Promise.resolve(); });
-    expect(result.current).toEqual({ id: 'vit', name: 'VIT University' });
+    expect(result.current).toEqual({ id: 'vit', name: 'VIT University', membershipId: 'm1' });
     renderHook(() => useHasCollegeMembership());
     await act(async () => { await Promise.resolve(); });
     expect(listMemberships).toHaveBeenCalledTimes(1);

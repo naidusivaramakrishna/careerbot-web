@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getStoredAuthRedirect } from "@/lib/authRedirect";
 import { isAuthenticated } from "@/api/authApi";
 import { clearPendingVerification } from "@/lib/pendingVerification";
+import { clearInstitutionSession } from "@/lib/institutionSession";
 
 function LinkedInOAuthContent() {
   const router = useRouter();
@@ -67,6 +68,9 @@ function LinkedInOAuthContent() {
         // unverified-signup record so the "Resume Email Verification" banner
         // does not follow the signed-in user around.
         clearPendingVerification();
+        // The previous account's college token: sessionStorage survives the hard
+        // navigation below, and signIn() (which drops it) is not on this path.
+        clearInstitutionSession();
         await new Promise((resolve) => setTimeout(resolve, 400));
         if (cancelled) return;
         // Hard navigation — not router.push — so that:

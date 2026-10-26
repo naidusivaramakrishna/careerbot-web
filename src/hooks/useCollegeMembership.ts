@@ -6,6 +6,7 @@ import {
   getInstitutionSession,
   subscribeToInstitutionSession,
 } from '@/lib/institutionSession';
+import { onAccountChanged } from '@/lib/accountChange';
 import type { InstitutionMembership } from '@/types/institution';
 
 /**
@@ -32,6 +33,9 @@ import type { InstitutionMembership } from '@/types/institution';
 let inflight: Promise<InstitutionMembership[]> | null = null;
 let latest: InstitutionMembership[] | null = null;
 const listeners = new Set<(rows: InstitutionMembership[]) => void>();
+const resets = new Set<() => void>();
+// Bumped on every account change: an answer requested for the previous
+// account must never be published to (or cached for) the next one.
 // Bumped by every prime: a request that started before the prime is older
 // than the rows it handed in, so its answer (or its failure) must neither be
 // published nor clear the cache.
@@ -61,6 +65,15 @@ function resolveOnce(): Promise<InstitutionMembership[]> {
   }
   return inflight;
 }
+
+// Sign-in or sign-out without a reload: forget the previous account's
+// memberships and have every mounted hook ask again.
+onAccountChanged(() => {
+  generation += 1;
+  inflight = null;
+  latest = null;
+  resets.forEach((reset) => reset());
+});
 
 /**
  * Hand fresh membership rows to every mounted hook.
@@ -94,14 +107,24 @@ function useMembershipState(): { rows: InstitutionMembership[]; resolved: boolea
     const onRows = (rows: InstitutionMembership[]) => {
       if (alive) setState({ rows, resolved: true });
     };
+    const ask = () => {
+      const gen = generation;
+      resolveOnce().then((rows) => {
+        if (alive && gen === generation) setState({ rows, resolved: true });
+      });
+    };
+    const onReset = () => {
+      if (!alive) return;
+      setState({ rows: [], resolved: false });
+      ask();
+    };
     listeners.add(onRows);
-    const gen = generation;
-    resolveOnce().then((rows) => {
-      if (alive && gen === generation) setState({ rows, resolved: true });
-    });
+    resets.add(onReset);
+    ask();
     return () => {
       alive = false;
       listeners.delete(onRows);
+      resets.delete(onReset);
     };
   }, []);
 
@@ -125,6 +148,8 @@ export function useHasCollegeMembership(): boolean {
 export interface StudentCollege {
   id: string;
   name: string;
+  /** The membership this college comes from -- what a college session is minted for. */
+  membershipId: string;
 }
 
 /**
@@ -165,12 +190,28 @@ export function pickStudentCollege(
         r.institution_id === session.institution_id &&
         r.role === 'student',
     );
-    return row ? { id: row.institution_id, name: row.institution_name } : null;
+    return row
+      ? { id: row.institution_id, name: row.institution_name, membershipId: row.membership_id }
+      : null;
   }
   if (rows.length === 1 && rows[0].role === 'student') {
-    return { id: rows[0].institution_id, name: rows[0].institution_name };
+    return {
+      id: rows[0].institution_id,
+      name: rows[0].institution_name,
+      membershipId: rows[0].membership_id,
+    };
   }
   return null;
+}
+
+/**
+ * Every active membership is a student one -- the SAME rule the backend uses
+ * to pick student-weighted completeness (dashboard_service/completeness.py), so
+ * the "weighted for a student" label never appears next to a jobseeker number.
+ */
+export function useIsStudentOnly(): boolean {
+  const rows = useMembershipRows();
+  return rows.length > 0 && rows.every((r) => r.role === 'student');
 }
 
 export function useStudentCollege(): StudentCollege | null {
