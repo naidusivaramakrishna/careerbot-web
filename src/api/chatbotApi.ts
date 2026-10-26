@@ -84,7 +84,6 @@ export interface ChatMessageRequest {
  * Response from sending a chat message
  */
 export interface ChatMessageResponse {
-  session_id: string;
   message: string;
   answer: string;
   category: string;
@@ -108,6 +107,18 @@ export interface EscalationRequest {
   contact_email?: string;
   contact_phone?: string;
   issue_details?: EscalationIssueDetails;
+  /** Optional: ids returned by uploadTicketAttachment. A screenshot is
+   * never required to raise a ticket -- omit or send an empty array. */
+  attachment_ids?: string[];
+}
+
+/** Response from POST /tickets/attachments/upload */
+export interface TicketAttachmentUploadResponse {
+  success: boolean;
+  attachment_id: string;
+  filename: string;
+  content_type: string;
+  size: number;
 }
 
 /**
@@ -126,6 +137,13 @@ export interface EscalationIssueDetails {
   transaction_id?: string;
   invoice_number?: string;
   payment_date?: string;
+  /** The exact question the user asked the chatbot, when this ticket was
+   * raised from a specific answer (e.g. "Raise a support ticket" after
+   * marking a reply unhelpful). Undefined when raised with no prior Q&A. */
+  original_question?: string;
+  /** The chatbot's exact answer to original_question -- kept separate so
+   * it's never mistaken for (or substituted as) the customer's question. */
+  chatbot_answer?: string;
 }
 
 /**
@@ -139,11 +157,28 @@ export interface EscalationResponse {
   message: string;
   reference_number?: string;
   expected_response_time?: string;
+  /**
+   * Only populated for guest tickets with a linked attachment -- each entry
+   * is a single-use, time-limited link that works without logging in (see
+   * GET /tickets/attachments/guest/{token}). Authenticated tickets get an
+   * empty array here; they already have a working, owner-authorized URL
+   * via getTicketAttachmentUrl.
+   */
+  attachments?: Array<{ attachment_id: string; filename: string; view_url: string }>;
 }
 
 /**
  * Support ticket item in list (careerbot-api TicketResponse)
  */
+/** Display-only metadata for a ticket attachment -- NOT the file itself.
+ * Pair with getTicketAttachmentUrl() to build the actual download link. */
+export interface TicketAttachmentSummary {
+  attachment_id: string;
+  filename: string;
+  /** Guest-only: a single-use, login-free link (see EscalationResponse.attachments). */
+  view_url?: string;
+}
+
 export interface SupportTicket {
   ticket_id: string;
   subject: string;
@@ -156,6 +191,7 @@ export interface SupportTicket {
   user_name?: string | null;
   created_at: string;
   updated_at: string;
+  attachments?: TicketAttachmentSummary[];
 }
 
 /**
@@ -221,6 +257,140 @@ export const sendChatMessage = async (
 };
 
 /**
+ * Persisted chat session summary -- one row in the History tab.
+ * Backend: app/api/v1/endpoints/chat_sessions.py SessionResponse.
+ */
+export interface ChatSessionSummary {
+  session_id: string;
+  user_id: string;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+  title: string;
+  preview: string;
+  message_count: number;
+}
+
+export interface ChatSessionHistoryResponse {
+  total: number;
+  skip: number;
+  limit: number;
+  sessions: ChatSessionSummary[];
+}
+
+export interface ChatSessionMessage {
+  message_id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
+export interface ChatSessionDetail extends ChatSessionSummary {
+  messages: ChatSessionMessage[];
+}
+
+/**
+ * Reply to one message sent into a persisted session. Carries the same
+ * category/confidence/escalation fields ChatMessageResponse does, computed
+ * the same way server-side, so callers can reuse the exact same
+ * confidence-gated display logic regardless of which endpoint answered.
+ */
+export interface SessionMessageResponse {
+  message_id: string;
+  session_id: string;
+  content: string;
+  timestamp: string;
+  role: string;
+  category: string;
+  confidence: number;
+  requires_escalation: boolean;
+  escalation_reason?: string | null;
+}
+
+/**
+ * Create a new persisted chat session for the authenticated user.
+ * Requires authentication -- guests keep using sendChatMessage() above,
+ * which has no persisted session.
+ *
+ * Backend endpoint: POST /api/v1/chat/sessions
+ */
+export const createChatSession = async (): Promise<ChatSessionSummary> => {
+  const response = await httpClient.post<ChatSessionSummary>("/chat/sessions", {});
+  return response.data;
+};
+
+/**
+ * One URL path segment from a session/ticket/attachment id: percent-encoded,
+ * and never empty, '.' or '..' (encodeURIComponent leaves dots alone, and a
+ * URL resolver would treat them as "this/parent directory").
+ */
+const pathSegment = (id: string): string => {
+  if (!id || id === "." || id === "..") {
+    throw new Error("Invalid id in request path");
+  }
+  return encodeURIComponent(id);
+};
+
+/**
+ * Send a message into an existing persisted session and get the
+ * chatbot's reply. The backend loads prior messages as context, calls the
+ * same chatbot/KB service sendChatMessage does, and persists both sides of
+ * the exchange before responding.
+ *
+ * Backend endpoint: POST /api/v1/chat/sessions/{session_id}/messages
+ */
+export const sendSessionMessage = async (
+  sessionId: string,
+  content: string
+): Promise<SessionMessageResponse> => {
+  const response = await httpClient.post<SessionMessageResponse>(
+    `/chat/sessions/${pathSegment(sessionId)}/messages`,
+    { content }
+  );
+  return response.data;
+};
+
+/**
+ * The authenticated user's own chat session history, most recently active
+ * first. Backs the History tab.
+ *
+ * Backend endpoint: GET /api/v1/chat/sessions/history
+ */
+export const getChatSessionHistory = async (
+  skip: number = 0,
+  limit: number = 20
+): Promise<ChatSessionHistoryResponse> => {
+  const response = await httpClient.get<ChatSessionHistoryResponse>(
+    "/chat/sessions/history",
+    { params: { skip, limit } }
+  );
+  return response.data;
+};
+
+/**
+ * One session's full message history, for restoring a previous
+ * conversation into the chat UI.
+ *
+ * Backend endpoint: GET /api/v1/chat/sessions/{session_id}
+ */
+export const getChatSession = async (sessionId: string): Promise<ChatSessionDetail> => {
+  const response = await httpClient.get<ChatSessionDetail>(`/chat/sessions/${pathSegment(sessionId)}`);
+  return response.data;
+};
+
+/**
+ * Remove one of the authenticated caller's own persisted chat sessions from
+ * their History. The backend only CLOSES the session (status "closed"; the
+ * session and its messages are kept, and history still returns it), so the
+ * UI hides closed sessions and a message into one gets 409.
+ *
+ * Backend endpoint: DELETE /api/v1/chat/sessions/{session_id}
+ */
+export const deleteChatSession = async (sessionId: string): Promise<void> => {
+  await httpClient.delete(`/chat/sessions/${pathSegment(sessionId)}`);
+};
+
+/**
  * Get user's support tickets
  *
  * @param statusFilter - Optional status filter (open, in_progress, resolved, closed)
@@ -270,6 +440,20 @@ export const getSupportTickets = async (
 };
 
 /**
+ * Get a single ticket by ID -- used for the ?ticket= deep link from the
+ * support-team notification email's "View Tickets" button. The backend
+ * allows the ticket's owner OR support staff (moderator/admin/superadmin)
+ * to view it; a plain 403 means the caller is neither (most likely: not
+ * logged in as staff yet).
+ *
+ * Backend endpoint: GET /api/v1/tickets/{ticket_id}
+ */
+export const getTicketDetails = async (ticketId: string): Promise<SupportTicket> => {
+  const response = await httpClient.get<SupportTicket>(`/tickets/${pathSegment(ticketId)}`);
+  return response.data;
+};
+
+/**
  * Escalate a chat issue to a support ticket
  *
  * Backend endpoint: POST /api/v1/tickets/create
@@ -292,6 +476,13 @@ const buildTicketBody = (request: EscalationRequest, forAuthenticated: boolean) 
         ...(request.issue_details?.steps_to_reproduce && {
           steps_to_reproduce: request.issue_details.steps_to_reproduce
         }),
+        ...(request.attachment_ids?.length && { attachment_ids: request.attachment_ids }),
+        ...(request.issue_details?.original_question && {
+          original_question: request.issue_details.original_question
+        }),
+        ...(request.issue_details?.chatbot_answer && {
+          chatbot_answer: request.issue_details.chatbot_answer
+        }),
       }
     : {
         subject: request.issue_title,
@@ -303,6 +494,13 @@ const buildTicketBody = (request: EscalationRequest, forAuthenticated: boolean) 
         priority: mapPriorityToBackend(request.issue_details?.priority),
         ...(request.issue_details?.steps_to_reproduce && {
           steps_to_reproduce: request.issue_details.steps_to_reproduce
+        }),
+        ...(request.attachment_ids?.length && { attachment_ids: request.attachment_ids }),
+        ...(request.issue_details?.original_question && {
+          original_question: request.issue_details.original_question
+        }),
+        ...(request.issue_details?.chatbot_answer && {
+          chatbot_answer: request.issue_details.chatbot_answer
         }),
       };
 
@@ -316,6 +514,52 @@ function extractBackendMessage(data: unknown): string | undefined {
   }
   return undefined;
 }
+
+/**
+ * Upload a single screenshot/file to attach to a support ticket.
+ *
+ * Deliberately separate from escalateToSupport: works for guests and
+ * authenticated users alike (no auth required), and succeeds or fails
+ * independently of ticket creation -- a failed upload simply means that
+ * one file isn't attached; the ticket can still be raised without it.
+ *
+ * Backend endpoint: POST /api/v1/tickets/attachments/upload (multipart/form-data)
+ */
+export const uploadTicketAttachment = async (
+  file: File
+): Promise<TicketAttachmentUploadResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  // httpClient's underlying axios instance sets a default
+  // 'Content-Type: application/json' header on every request (see
+  // src/lib/http.ts) -- that default wins over axios's automatic
+  // multipart-boundary detection unless explicitly overridden per-request,
+  // so a FormData body sent without this override goes out mislabeled as
+  // JSON. The backend then fails to parse `file` out of the body, the
+  // upload throws, and (by design, see ChatApp.tsx's Promise.allSettled)
+  // the ticket is still created -- just silently without the attachment.
+  // Setting Content-Type to undefined here removes the inherited header so
+  // the browser/axios can generate the correct multipart boundary itself.
+  const response = await httpClient.post<TicketAttachmentUploadResponse>(
+    '/tickets/attachments/upload',
+    formData,
+    { headers: { 'X-Skip-Auth-Redirect': 'true', 'Content-Type': undefined } }
+  );
+  return response.data;
+};
+
+/**
+ * Build the download/view URL for a ticket attachment. Reuses the exact
+ * same backend base URL every other ticket call already uses (not a new
+ * env var/config) -- a direct <a href>, same as the "View Attachment" link
+ * in the confirmation emails. The URL is not a secret: the real
+ * authorization check (ticket owner or support staff) is enforced
+ * server-side on GET /tickets/{ticket_id}/attachments/{attachment_id}
+ * regardless of who navigates to it.
+ */
+export const getTicketAttachmentUrl = (ticketId: string, attachmentId: string): string =>
+  `${httpClient.defaults.baseURL}/tickets/${pathSegment(ticketId)}/attachments/${pathSegment(attachmentId)}`;
 
 export const escalateToSupport = async (
   request: EscalationRequest
@@ -412,6 +656,47 @@ export const escalateToSupport = async (
     throw new Error(
       `Failed to create ticket: ${backendMessage}`
     );
+  }
+};
+
+/**
+ * Cancel a support ticket the authenticated caller owns.
+ *
+ * Backend endpoint: PATCH /api/v1/tickets/{ticket_id}/status
+ * The only transition this supports is open/in_progress/waiting_user ->
+ * cancelled; the backend rejects anything else with 409 (already
+ * resolved/closed/cancelled) or 400 (any target status other than
+ * 'cancelled' -- this isn't a general status editor).
+ *
+ * @param ticketId - The ticket_id (e.g. "CB-00001") to cancel
+ * @returns The updated ticket document, with status now 'cancelled'
+ */
+export const cancelTicket = async (ticketId: string): Promise<SupportTicket> => {
+  try {
+    const response = await httpClient.patch<SupportTicket>(
+      `/tickets/${pathSegment(ticketId)}/status`,
+      { status: "cancelled" }
+    );
+    return response.data;
+  } catch (error: unknown) {
+    console.error("Failed to cancel ticket:", error);
+
+    const httpStatus = errorStatus(error);
+    const backendMessage = extractBackendMessage(errorData(error));
+
+    if (httpStatus === 401 || httpStatus === 403) {
+      throw new Error(backendMessage || "You don't have permission to cancel this ticket.");
+    }
+
+    if (httpStatus === 404) {
+      throw new Error(backendMessage || "Ticket not found.");
+    }
+
+    if (httpStatus === 409) {
+      throw new Error(backendMessage || "This ticket can no longer be cancelled.");
+    }
+
+    throw new Error(backendMessage || errorMessage(error) || "Failed to cancel ticket. Please try again.");
   }
 };
 
@@ -626,6 +911,9 @@ export const verifyTicketOtp = async (
 const chatbotApi = {
   sendChatMessage,
   getSupportTickets,
+  getTicketDetails,
+  uploadTicketAttachment,
+  getTicketAttachmentUrl,
   escalateToSupport,
   getFeatureCosts,
   getBillingSummary,

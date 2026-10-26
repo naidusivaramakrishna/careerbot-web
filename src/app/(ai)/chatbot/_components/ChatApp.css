@@ -277,12 +277,17 @@
 
 .widget-panel {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 300px;
-  height: 480px;
-  max-height: calc(100vh - 120px);
-  max-width: calc(100vw - 32px);
+  /* Matches Nancy's floating chat panel exactly -- position and size both
+     (NancyChat's wrapper in JobsContents.tsx: bottom-5 right-5 i.e. 20px/20px,
+     width: min(420px, calc(100vw - 24px)), height: min(640px, calc(100vh - 92px))) --
+     so the two assistants sit and size themselves identically rather than
+     CareerBot visibly differing from Nancy. The per-breakpoint overrides
+     below repeat these same values rather than fixed pixel sizes, for the
+     same reason. */
+  bottom: 20px;
+  right: 20px;
+  width: min(420px, calc(100vw - 24px));
+  height: min(640px, calc(100vh - 92px));
   display: flex;
   border-radius: 20px;
   background: linear-gradient(160deg, #f4f8fd 0%, #e9f0fa 55%, #eef3fa 100%);
@@ -465,6 +470,41 @@
   background: #eef4fc;
   border-color: #1f5fb7;
   transform: translateX(4px);
+}
+
+.session-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-item-header .session-title {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.session-delete-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.session-delete-btn:hover {
+  opacity: 1;
+  background: #fee2e2;
+}
+
+.session-delete-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .session-title {
@@ -902,6 +942,20 @@
   border-radius: 4px 14px 14px 14px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   border: 1px solid #eef2f7;
+}
+
+/* Inline "click here" link appended to a KB answer (see getActionLink) --
+   plain color + underline, deliberately not styled as a button, since it
+   sits inline within the answer's own sentence rather than as a separate
+   call-to-action block. */
+.inline-action-link {
+  color: #1f5fb7;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.inline-action-link:hover {
+  color: #14407f;
 }
 
 .message-expand-toggle {
@@ -2431,12 +2485,16 @@
 /* LARGE DESKTOP (1920px and above) */
 @media (min-width: 1920px) {
   .widget-panel {
-    width: 520px;
-    height: 780px;
+    /* Same position/size as the base rule -- matches Nancy at every
+       desktop breakpoint instead of just this one. */
+    bottom: 20px;
+    right: 20px;
+    width: min(420px, calc(100vw - 24px));
+    height: min(640px, calc(100vh - 92px));
   }
 
   .chat-sidebar {
-    max-width: 380px;
+    max-width: 300px;
   }
 
   .message-text {
@@ -2458,24 +2516,26 @@
 /* STANDARD DESKTOP (1200px - 1920px) */
 @media (min-width: 1200px) and (max-width: 1919px) {
   .widget-panel {
-    width: 480px;
-    height: 750px;
+    /* Matches Nancy -- see the base rule's comment above. */
+    bottom: 20px;
+    right: 20px;
+    width: min(420px, calc(100vw - 24px));
+    height: min(640px, calc(100vh - 92px));
   }
 
   .chat-sidebar {
-    max-width: 350px;
+    max-width: 300px;
   }
 }
 
 /* LAPTOP/TABLET (768px - 1200px) */
 @media (min-width: 768px) and (max-width: 1199px) {
   .widget-panel {
-    width: calc(100vw - 60px);
-    max-width: 420px;
-    height: calc(100vh - 80px);
-    max-height: 700px;
-    bottom: 30px;
-    right: 30px;
+    /* Matches Nancy -- see the base rule's comment above. */
+    bottom: 20px;
+    right: 20px;
+    width: min(420px, calc(100vw - 24px));
+    height: min(640px, calc(100vh - 92px));
   }
 
   .chat-sidebar {
@@ -2599,10 +2659,9 @@
 /* TABLET (600px - 768px) */
 @media (min-width: 600px) and (max-width: 767px) {
   .widget-panel {
-    width: calc(100vw - 40px);
-    max-width: 400px;
-    height: calc(100vh - 80px);
-    max-height: 650px;
+    /* Matches Nancy -- see the base rule's comment above. */
+    width: min(420px, calc(100vw - 24px));
+    height: min(640px, calc(100vh - 92px));
     bottom: 20px;
     right: 20px;
     border-radius: 16px;
@@ -2861,8 +2920,12 @@
   }
 
   .widget-panel {
+    /* Matches Nancy's own small-screen behavior (NancyChat's wrapper
+       switches to inset-x-3 bottom-3 i.e. 12px margins below Tailwind's sm
+       breakpoint) -- width/bottom/right already lined up; height now uses
+       the same 92px vertical offset too. */
     width: calc(100vw - 24px);
-    height: calc(100vh - 60px);
+    height: calc(100vh - 92px);
     bottom: 12px;
     right: 12px;
     left: auto;

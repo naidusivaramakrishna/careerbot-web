@@ -117,13 +117,13 @@ export const canGuestAnswer = (queryType: QueryType): boolean => {
 export const getAuthRequiredMessage = (queryType: QueryType): string => {
   switch (queryType) {
     case 'BILLING':
-      return '💳 To access your billing and subscription information, please log in to your CareerBot account.';
+      return '💳 To access your billing and subscription information, please sign in to your CareerBot account. [click here](action:login)';
     case 'ACCOUNT':
-      return '👤 To access your account information and settings, please log in to your CareerBot account.';
+      return '👤 To access your account information and settings, please sign in to your CareerBot account. [click here](action:login)';
     case 'SUPPORT_TICKET':
-      return '🎫 To raise a support ticket and get help with your account-specific issues, please log in to your CareerBot account.';
+      return '🎫 To raise a support ticket and get help with your account-specific issues, please sign in to your CareerBot account. [click here](action:login)';
     default:
-      return '🔐 This feature requires you to be logged in. Please log in to your CareerBot account to continue.';
+      return '🔐 This feature requires you to be logged in to continue. [click here](action:login)';
   }
 };
 

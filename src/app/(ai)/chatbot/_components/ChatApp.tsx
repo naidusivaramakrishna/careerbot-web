@@ -2,8 +2,23 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import './ChatApp.css';
-import { sendChatMessage, escalateToSupport, getSupportTickets, sendTicketOtp, verifyTicketOtp } from '@/api/chatbotApi';
-import type { SupportTicket } from '@/api/chatbotApi';
+import {
+  sendChatMessage,
+  escalateToSupport,
+  uploadTicketAttachment,
+  getTicketAttachmentUrl,
+  getSupportTickets,
+  getTicketDetails,
+  cancelTicket,
+  sendTicketOtp,
+  verifyTicketOtp,
+  createChatSession,
+  sendSessionMessage,
+  getChatSessionHistory,
+  getChatSession,
+  deleteChatSession,
+} from '@/api/chatbotApi';
+import type { SupportTicket, ChatSessionSummary, TicketAttachmentSummary } from '@/api/chatbotApi';
 import { isUserAuthenticated, classifyQuery, canGuestAnswer, getAuthRequiredMessage } from '@/api/chatbotAuth';
 import { getProfile } from '@/api/userApi';
 import {
@@ -30,6 +45,7 @@ interface Message {
   sources?: string[];
   relatedQuestions?: string[];
   ticket?: TicketInfo;
+  actionLink?: ActionLink;
 }
 
 interface ChatSession {
@@ -43,6 +59,15 @@ interface ChatSession {
   messages?: Message[];
   // Owner's email for per-user isolation
   userEmail?: string;
+  // Which store this row came from. 'backend' rows are MongoDB-persisted
+  // (the source of truth going forward) and never carry `messages` inline
+  // -- loadSessionMessages fetches the full transcript on demand. 'local'
+  // rows are legacy localStorage entries saved before backend persistence
+  // existed; they already carry their full transcript (or a preview
+  // fallback) and are never written to again. Undefined for sessions
+  // created before this field existed -- treated as 'local' for restore
+  // purposes, same as today.
+  source?: 'backend' | 'local';
 }
 
 interface TicketInfo {
@@ -59,6 +84,7 @@ interface TicketInfo {
   affected_feature?: string;
   updated_at?: string;
   user_name?: string | null;
+  attachments?: TicketAttachmentSummary[];
 }
 
 type SidebarTab = 'history' | 'tickets';
@@ -77,9 +103,241 @@ const getHttpStatus = (error: unknown): number | undefined =>
     ? (error as { response?: { status?: number } }).response?.status
     : undefined;
 
-// KB answers arrive as **bold**-style markdown; the chat bubble renders
-// plain text, so strip the markers instead of showing literal asterisks.
-const stripMarkdown = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').trim();
+// Only this small, explicit allowlist of href schemes may become a live,
+// clickable link -- everything else (most notably javascript:, data:,
+// vbscript:, etc.) renders as plain text instead. renderMarkdownText runs
+// on backend-sourced text with no further sanitization -- the KB answer
+// itself (data.answer), restored session messages, and raw error.message --
+// so a malicious or merely compromised value here must never become a
+// script-executing href. React does not block javascript: URLs; it only
+// logs a console warning and still renders the link.
+// A same-site path starts with exactly one '/': '//host' and '/\host' are
+// protocol-relative URLs that browsers resolve to another site, and the URL
+// parser drops tabs/newlines first ('/\t/host' -> '//host'), so a path may
+// not contain whitespace or control characters either.
+const isSafeLinkHref = (href: string): boolean =>
+  /^\/(?![\/\\])[^\s\x00-\x1f\x7f]*$/.test(href) || /^https:\/\//i.test(href) || /^mailto:/i.test(href);
+
+// KB answers may contain **bold** and [link](action:login) markdown.
+// Parse and render these as JSX elements for proper interaction.
+const renderMarkdownText = (text: string): React.ReactNode => {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  // Pattern: [text](action:login) or [text](url)
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const boldRegex = /\*\*([^*]+)\*\*/g;
+
+  // First, find all links and bold sections with their positions
+  const links: Array<{ start: number; end: number; text: string; href: string }> = [];
+  const bolds: Array<{ start: number; end: number; text: string }> = [];
+
+  let match;
+  while ((match = linkRegex.exec(text)) !== null) {
+    links.push({ start: match.index, end: match.index + match[0].length, text: match[1], href: match[2] });
+  }
+
+  boldRegex.lastIndex = 0;
+  while ((match = boldRegex.exec(text)) !== null) {
+    bolds.push({ start: match.index, end: match.index + match[0].length, text: match[1] });
+  }
+
+  // Sort all by position. Explicit union type so the `'href' in item` check
+  // below actually narrows -- inferred from the spread alone, TS widens
+  // `href` to `unknown` instead of discriminating on it.
+  type TextPart =
+    | { start: number; end: number; text: string; href: string }
+    | { start: number; end: number; text: string };
+  const all: TextPart[] = [...links, ...bolds].sort((a, b) => a.start - b.start);
+
+  // Build JSX nodes
+  for (const item of all) {
+    if (item.start > lastIndex) {
+      parts.push(text.substring(lastIndex, item.start));
+    }
+
+    if ('href' in item) {
+      // Link
+      if (item.href === 'action:login') {
+        parts.push(
+          <button
+            key={`link-${item.start}`}
+            className="link-btn"
+            onClick={() => {
+              // Trigger login action (requires handler in parent component)
+              const event = new CustomEvent('chatbot:action', { detail: { action: 'login' } });
+              window.dispatchEvent(event);
+            }}
+            style={{ cursor: 'pointer', textDecoration: 'underline', color: '#0066cc', background: 'none', border: 'none', padding: 0 }}
+          >
+            {item.text}
+          </button>,
+        );
+      } else if (isSafeLinkHref(item.href)) {
+        parts.push(
+          <a
+            key={`link-${item.start}`}
+            href={item.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: 'underline', color: '#0066cc' }}
+          >
+            {item.text}
+          </a>,
+        );
+      } else {
+        // Unsafe scheme -- never render as a live link, just the label text.
+        parts.push(item.text);
+      }
+    } else {
+      // Bold
+      parts.push(<strong key={`bold-${item.start}`}>{item.text}</strong>);
+    }
+
+    lastIndex = item.end;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+};
+
+// A navigation affordance appended inline inside a KB answer's own text,
+// when (and only when) a real page exists for it -- see getActionLink.
+// Rendered as "{sentence}{linkText}." inline within the same paragraph as
+// the answer, not as a separate button/block -- `sentence` is the lead-in
+// clause, `linkText` is the anchor text ("click here"), `href` is the
+// destination. `requiresLogin` marks a guest-only login-trigger link so
+// the backend category reported is not what decides the link type twice.
+interface ActionLink {
+  sentence: string;
+  linkText: string;
+  href: string;
+  requiresLogin?: boolean;
+}
+
+// Both spellings are listed because the backend's category field is either
+// the hardcoded LoginIntent enum's .value (the fast-path keyword cascade)
+// or a JSON knowledge-base topic's own `intent` slug (the KB_TOPIC_MATCH
+// similarity-search path) -- the two were verified independently against
+// app/services/support_escalation/login_chatbot_service.py's LoginIntent
+// enum and the login_support_kb.json topic list, since the same real-world
+// topic (e.g. "forgot password") carries a different spelling on each path.
+// Excluded even though a real reset page exists: password_new_rejected /
+// new_password_rejected (its answer is about password REQUIREMENTS, never
+// recommends resetting) and login_invalid_credentials / invalid_credentials
+// (its answer mentions 'Forgot Password?' in passing, but the likely cause
+// is often a typo'd email or Caps Lock, not a password that needs
+// resetting -- a prominent reset link would overstate the fix).
+const PASSWORD_RESET_CATEGORIES = new Set([
+  'forgot_password', 'password_forgot_or_change',
+  'reset_email_not_received', 'password_reset_email_not_received',
+  'reset_link_not_working', 'password_reset_link_not_working',
+  'reset_link_expired', 'password_reset_link_expired',
+  'password_change_not_working', 'password_changed_still_cant_login',
+  'account_locked', 'account_locked_or_blocked', 'account_temporarily_blocked',
+]);
+
+// signup_update_registered_email's own KB answer explicitly says "Update
+// your registered email from account/profile settings once signed in" --
+// /profile is the real destination for that too, not a separate page.
+const PROFILE_CATEGORIES = new Set(['profile_building', 'signup_update_registered_email']);
+
+// Real routes confirmed against src/middleware.ts's publicRoutes /
+// publicLandingPages arrays and the actual page tree under src/app/ (each
+// bare landing path, e.g. /jobmatch or /mock-interview, is public -- only
+// its feature sub-path, e.g. /jobmatch/app, is protected). coding_test is
+// additionally forced through the login-trigger for guests as a deliberate
+// CHATBOT-ONLY policy -- see the comment at its usage site.
+//
+// Two real features were deliberately left OUT of this map, not forgotten:
+// smart_match and resume_enhancer have no dedicated page of their own --
+// Smart Match is ranking logic embedded directly in the /jobslogin feed,
+// and Resume Enhancer's AI-suggestion capability lives inline on the
+// /atslogin/report page rather than its own route (resume_enhancer below
+// links there since that genuinely is where the capability lives, but
+// smart_match has nowhere accurate to send anyone, so it gets no link).
+const PROTECTED_FEATURE_LINKS: Record<string, { route: string; sentence: string }> = {
+  resume_builder: { route: '/builder/start', sentence: 'To get started, ' },
+  // resume_optimization is the hardcoded composite topic the GUEST
+  // Products & Features main question resolves to (distinct from
+  // resume_builder, which the authenticated one resolves to) -- same
+  // real destination either way.
+  resume_optimization: { route: '/builder/start', sentence: 'To get started, ' },
+  coding_test: { route: '/coding-test', sentence: 'To start practicing, ' },
+  job_match: { route: '/jobmatch/app', sentence: 'To run it on your resume, ' },
+  mock_interview_live: { route: '/mock-interview/live', sentence: 'To start a session, ' },
+  mock_test: { route: '/mock-test', sentence: 'To take one, ' },
+  english_assessment: { route: '/communication/start', sentence: 'To take the assessment, ' },
+  job_search: { route: '/jobslogin', sentence: 'To browse and apply, ' },
+  resume_parser: { route: '/atslogin', sentence: 'To upload your resume, ' },
+  resume_enhancer: { route: '/atslogin/report', sentence: 'To see AI suggestions, ' },
+};
+
+// cover_letter's /cover-letter route is fully public end-to-end (verified
+// in publicRoutes) -- unlike the protected features above, guests go
+// straight there too, no login-trigger needed.
+const PUBLIC_FEATURE_LINKS: Record<string, { route: string; sentence: string }> = {
+  cover_letter: { route: '/cover-letter', sentence: 'To get started, ' },
+};
+
+const buildLoginTriggerHref = (destination: string): string =>
+  `/?showLogin=true&next=${encodeURIComponent(destination)}`;
+
+// Ticket ids look like CB-00001. A ?ticket= value with anything else in it
+// ('/', '.', '%', ...; e.g. '../admin') is rejected before any request.
+const isValidTicketId = (id: string): boolean => /^[A-Za-z0-9_-]{1,64}$/.test(id);
+
+// careerbot-api ticket limits (ticket_models.py, support_tickets_public.py).
+// Over them the whole ticket create fails with 422, so enforce them here.
+const MAX_TICKET_ATTACHMENTS = 5;
+const MAX_TICKET_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_TICKET_SUBJECT_CHARS = 200;
+const MAX_TICKET_QA_CHARS = 5000;
+
+/**
+ * Pure function, no rendering -- derives the inline action link (if any)
+ * for a KB-answered category, given the current auth state. Returns null
+ * when no real destination page exists for the topic, so no link should
+ * be shown at all.
+ */
+export const getActionLink = (category: string, isAuthenticated: boolean): ActionLink | null => {
+  const publicFeature = PUBLIC_FEATURE_LINKS[category];
+  if (publicFeature) {
+    return { sentence: publicFeature.sentence, linkText: 'click here', href: publicFeature.route };
+  }
+
+  if (PASSWORD_RESET_CATEGORIES.has(category)) {
+    return { sentence: 'To reset your password, ', linkText: 'click here', href: '/forgot-password' };
+  }
+
+  if (PROFILE_CATEGORIES.has(category)) {
+    return isAuthenticated
+      ? { sentence: 'To view or edit your profile, ', linkText: 'click here', href: '/profile' }
+      : {
+          sentence: 'To view or edit your profile, please log in -- ',
+          linkText: 'click here',
+          href: buildLoginTriggerHref('/profile'),
+          requiresLogin: true,
+        };
+  }
+
+  const protectedFeature = PROTECTED_FEATURE_LINKS[category];
+  if (protectedFeature) {
+    return isAuthenticated
+      ? { sentence: protectedFeature.sentence, linkText: 'click here', href: protectedFeature.route }
+      : {
+          sentence: `${protectedFeature.sentence}please log in -- `,
+          linkText: 'click here',
+          href: buildLoginTriggerHref(protectedFeature.route),
+          requiresLogin: true,
+        };
+  }
+
+  return null;
+};
 
 // Collapsed preview: the first sentence, not an arbitrary character cut —
 // so it reads as a clean summary instead of trailing off mid-word.
@@ -284,9 +542,16 @@ const FEATURE_ISSUE_TYPES: Record<string, { value: string; label: string }[]> = 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   open: { label: 'Open', color: 'status-open' },
   in_progress: { label: 'In Progress', color: 'status-progress' },
+  waiting_user: { label: 'Waiting on You', color: 'status-progress' },
   resolved: { label: 'Resolved', color: 'status-resolved' },
   closed: { label: 'Closed', color: 'status-closed' },
+  cancelled: { label: 'Cancelled', color: 'status-closed' },
 };
+
+// Mirrors the backend's CANCELLABLE_STATUSES (support_tickets_public.py) --
+// only shows the Cancel action for tickets that endpoint will actually
+// accept. Resolved/closed/cancelled are terminal.
+const CANCELLABLE_TICKET_STATUSES = new Set(['open', 'in_progress', 'waiting_user']);
 
 interface UserSettings {
   // Chat Preferences
@@ -359,27 +624,71 @@ const ChatApp: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // True once `sessionId` is a real MongoDB-backed session (created via
+  // createChatSession, or opened from a backend history row). Guests, and
+  // authenticated users for whom session creation failed, keep this false
+  // and fall through to the original stateless sendChatMessage() path --
+  // this is a fallback, never a hard dependency.
+  const [isBackendSession, setIsBackendSession] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [tickets, setTickets] = useState<TicketInfo[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<TicketInfo | null>(null);
-  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
+  // Populated once, from ?ticket= in the URL -- the deep link the
+  // support-team notification email's "View Tickets" button now points at
+  // (see getTicketDetails / the effect below). Not re-read on navigation
+  // within the widget; it only ever drives the one auto-open on load.
+  const [deepLinkTicketId] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('ticket')
+  );
+  // Set once initializeApp (below) finishes its own setMessages([welcomeMessage])
+  // reset -- the deep-link effect must not race that reset with its own
+  // setMessages call, or whichever one lands second wins and silently
+  // drops the other's message.
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [isCancellingTicket, setIsCancellingTicket] = useState(false);
   const [messageFeedback, setMessageFeedback] = useState<Map<string, 'yes' | 'no'>>(new Map());
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const isProcessingRef = useRef(false);  // Prevent concurrent requests
   const cachedEmailRef = useRef<string | null>(null);  // Cache email to avoid silent loss on getProfile() failure
+  // Bumped on every sign-out / account switch: a request started for the
+  // previous account must not apply its result after that (sending,
+  // History, tickets, ticket submit), and the ?ticket= deep link re-runs
+  // for the new one.
+  const accountGenerationRef = useRef(0);
+  const [accountGeneration, setAccountGeneration] = useState(0);
+  const startNewAccountGeneration = () => {
+    accountGenerationRef.current += 1;
+    setAccountGeneration(accountGenerationRef.current);
+  };
   const selectedApp = 'CareerBot';
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [showTicketSuccess, setShowTicketSuccess] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketDescription, setTicketDescription] = useState('');
+  // The exact question/answer pair this ticket was raised from (e.g. via
+  // "Raise a support ticket" under an unhelpful reply) -- kept separate
+  // from ticketSubject/ticketDescription (see openTicketModal) so the
+  // chatbot's answer never overwrites or gets mistaken for the customer's
+  // own question. Empty when a ticket is raised with no prior Q&A.
+  const [ticketOriginalQuestion, setTicketOriginalQuestion] = useState('');
+  const [ticketChatbotAnswer, setTicketChatbotAnswer] = useState('');
   const [ticketFeature, setTicketFeature] = useState<string | null>(null);
   const [ticketIssueType, setTicketIssueType] = useState<string>('');
   const [ticketStepsToReproduce, setTicketStepsToReproduce] = useState('');
   const [ticketAttachments, setTicketAttachments] = useState<File[]>([]);
+  // Picker message (files over the count/size limit) and, after submit, the
+  // names of files whose upload failed (shown in the success modal).
+  const [attachmentNotice, setAttachmentNotice] = useState('');
+  const [failedAttachmentNames, setFailedAttachmentNames] = useState<string[]>([]);
   const [ticketId, setTicketId] = useState('');
+  // Drives the "View Attachment" link(s) in the just-submitted success
+  // modal only -- populated with guest view_urls when present (see
+  // submitTicket), separate from `tickets`/`selectedTicket` state.
+  const [successTicketAttachments, setSuccessTicketAttachments] = useState<TicketAttachmentSummary[]>([]);
   const [ticketPriority, setTicketPriority] = useState<1 | 2>(1);
   const [ticketTransactionId, setTicketTransactionId] = useState('');
   const [ticketInvoiceNumber, setTicketInvoiceNumber] = useState('');
@@ -389,8 +698,15 @@ const ChatApp: React.FC = () => {
   const [ticketUserType, setTicketUserType] = useState('');
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
   const [userName, setUserName] = useState('');
-  const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
-  const [isLocallyAuthenticated, setIsLocallyAuthenticated] = useState(isUserAuthenticated());
+  // Must start false, matching what isUserAuthenticated() always returns
+  // during SSR (it short-circuits on `typeof window === 'undefined'') --
+  // initializing from the real client-side value here caused a hydration
+  // mismatch (server renders the guest bubble, client immediately wants
+  // the bare authenticated launcher) on any fresh top-level page load by
+  // an already-authenticated visitor, e.g. clicking the ?ticket= email
+  // link straight into /chatbot. Corrected to the real value in the
+  // mount-only effect below, immediately after hydration.
+  const [isLocallyAuthenticated, setIsLocallyAuthenticated] = useState(false);
 
   // OTP Verification for unauthenticated users
   const [showOtpVerification, setShowOtpVerification] = useState(false);
@@ -669,6 +985,15 @@ const ChatApp: React.FC = () => {
     loadSettings();
   }, []);
 
+  // Runs once, immediately after hydration, to correct isLocallyAuthenticated
+  // from its forced SSR-safe `false` to the real client-side value -- see
+  // the comment on that state. Deliberately NOT gated on hasOpenedRef (unlike
+  // checkAuthStatus below): an authenticated visitor's minimized launcher
+  // must show the right bubble even if they never open the widget.
+  useEffect(() => {
+    setIsLocallyAuthenticated(isUserAuthenticated());
+  }, []);
+
   useEffect(() => {
     // Only initialize chat when it's first opened
     if (isMinimized || hasOpenedRef.current) return;
@@ -703,6 +1028,8 @@ const ChatApp: React.FC = () => {
       } else {
         console.log('User not authenticated, skipping profile load');
       }
+
+      setHasInitialized(true);
     };
 
     initializeApp();
@@ -711,6 +1038,11 @@ const ChatApp: React.FC = () => {
   // Track current user email to detect account switches
   // IMPORTANT: This MUST use getProfile().email (real email), NOT localStorage.user_email (fake guest email)
   const userEmailRef = useRef<string | null>(null);
+  // Numbers each auth check. A check may act only if no newer check has
+  // already acted on a definite answer (signed out, or a profile): an older,
+  // slower one would "switch back" to the account its request saw.
+  const authCheckSeqRef = useRef(0);
+  const answeredAuthCheckRef = useRef(0);
 
   // Detect logout, login, or account switch
   useEffect(() => {
@@ -721,6 +1053,7 @@ const ChatApp: React.FC = () => {
       if (!hasOpenedRef.current) return;
 
       const currentAuth = isUserAuthenticated();
+      const checkSeq = ++authCheckSeqRef.current;
 
       // Get REAL user email from profile for authenticated users
       // NEVER use localStorage.user_email which is a fake guest email
@@ -733,6 +1066,8 @@ const ChatApp: React.FC = () => {
           console.error('Failed to get current user profile:', error);
         }
       }
+      if (checkSeq < answeredAuthCheckRef.current) return;
+      if (!currentAuth || currentUserEmail) answeredAuthCheckRef.current = checkSeq;
 
       // Initialize ref on first check
       if (!userEmailRef.current && currentUserEmail) {
@@ -750,18 +1085,30 @@ const ChatApp: React.FC = () => {
         setUserName('');
         setTickets([]);
         setChatSessions([]);
+        setSelectedTicket(null);
         setIsLocallyAuthenticated(true);
+        // The open conversation (and its backend session) belongs to the
+        // previous account: start a fresh one for this account.
+        startNewAccountGeneration();
+        const generation = accountGenerationRef.current;
+        initializeChat();
 
         // Reload user profile and history for new account
         try {
           const userProfile = await getProfile();
+          // Switched again (or signed out) while this loaded: that change owns the screen now.
+          if (generation !== accountGenerationRef.current) return;
+          // Yet another account signed in while this loaded (its own check may
+          // have failed, so nothing bumped the generation): load nothing for
+          // the email this check saw; the next check switches to the new one.
+          if (userProfile?.email !== currentUserEmail) return;
           console.log('Loaded new account profile:', userProfile?.full_name);
           if (userProfile?.full_name) {
             setUserName(userProfile.full_name);
           }
           // Reload history and tickets for the new user (using real profile email)
-          await loadChatHistory(currentUserEmail);
-          await loadTickets(currentUserEmail);
+          await loadChatHistory(currentUserEmail, generation);
+          await loadTickets(currentUserEmail, generation);
         } catch (error) {
           console.error('Failed to load new account profile:', error);
         }
@@ -780,23 +1127,36 @@ const ChatApp: React.FC = () => {
         setUserName('');
         setTickets([]);
         setChatSessions([]);
+        // Never let a guest keep writing into the signed-out user's backend
+        // session, or see their conversation.
+        startNewAccountGeneration();
+        initializeChat();
       } else if (!isLocallyAuthenticated && currentAuth) {
         // Login detected
         console.log('Login detected');
         userEmailRef.current = currentUserEmail;
         setIsLocallyAuthenticated(true);
+        const generation = accountGenerationRef.current;
 
         // Load user profile and history
         try {
           const userProfile = await getProfile();
+          if (generation !== accountGenerationRef.current) return;
+          // As in the switch branch above, and drop the guest's ticket list.
+          // (No email from this check's first request: nothing is loaded
+          // below, only the name is shown.)
+          if (currentUserEmail && userProfile?.email !== currentUserEmail) {
+            setTickets([]);
+            return;
+          }
           console.log('Loaded user profile:', userProfile?.full_name);
           if (userProfile?.full_name) {
             setUserName(userProfile.full_name);
           }
           // Reload history and tickets for the logged-in user (using real profile email)
           if (currentUserEmail) {
-            await loadChatHistory(currentUserEmail);
-            await loadTickets(currentUserEmail);
+            await loadChatHistory(currentUserEmail, generation);
+            await loadTickets(currentUserEmail, generation);
           }
         } catch (error) {
           console.error('Failed to load user profile:', error);
@@ -836,6 +1196,99 @@ const ChatApp: React.FC = () => {
     };
   }, [isLocallyAuthenticated]);
 
+  useEffect(() => {
+    const handleChatbotAction = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.action === 'login') {
+        // Redirect to home page with login modal, then back to this page.
+        window.location.href = buildLoginTriggerHref(window.location.pathname + window.location.search);
+      }
+    };
+
+    window.addEventListener('chatbot:action', handleChatbotAction);
+    return () => window.removeEventListener('chatbot:action', handleChatbotAction);
+  }, []);
+
+  // ?ticket= deep link from the support-team email's "View Tickets" button.
+  // Reuses the existing /chatbot page and ticket-detail modal -- no new
+  // frontend page. Opening the widget is split into its own effect, separate
+  // from the fetch-or-prompt logic below, because that logic must not run
+  // until AFTER initializeApp's own setMessages([welcomeMessage]) reset.
+  useEffect(() => {
+    if (!deepLinkTicketId) return;
+    setIsMinimized(false);
+  }, [deepLinkTicketId]);
+
+  // Re-runs when auth state changes so a staff member who follows the link
+  // while logged out gets prompted to log in, then lands on the same ticket
+  // once they're back (buildLoginTriggerHref's `next` round-trips this exact
+  // URL). Gated on hasInitialized -- see the comment on that state.
+  useEffect(() => {
+    if (!deepLinkTicketId || !hasInitialized) return;
+
+    if (!isValidTicketId(deepLinkTicketId)) {
+      setMessages((prev) => prev.some((m) => m.id === 'deep-link-invalid') ? prev : [
+        ...prev,
+        { id: 'deep-link-invalid', type: 'assistant', text: 'That link is not a valid ticket link.', timestamp: new Date() },
+      ]);
+      return;
+    }
+
+    if (!isLocallyAuthenticated) {
+      const loginHref = buildLoginTriggerHref(`/chatbot?ticket=${deepLinkTicketId}`);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `deep-link-login-${deepLinkTicketId}`,
+          type: 'assistant',
+          text: `Please log in to view ticket ${deepLinkTicketId}.`,
+          timestamp: new Date(),
+          actionLink: { sentence: '', linkText: 'Log in to continue', href: loginHref, requiresLogin: true },
+        },
+      ]);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const ticket = await getTicketDetails(deepLinkTicketId);
+        if (cancelled) return;
+        setSelectedTicket({
+          id: ticket.ticket_id,
+          subject: ticket.subject,
+          status: ticket.status,
+          priority: ticket.priority === 'urgent' ? 2 : 1,
+          created_at: ticket.created_at,
+          contact_email: ticket.user_email,
+          description: ticket.description,
+          affected_feature: ticket.affected_feature,
+          updated_at: ticket.updated_at,
+          user_name: ticket.user_name,
+          attachments: ticket.attachments,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error(`Failed to load deep-linked ticket ${deepLinkTicketId}:`, error);
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        const text =
+          status === 404
+            ? `Ticket ${deepLinkTicketId} was not found.`
+            : status === 403
+              ? `You don't have permission to view ticket ${deepLinkTicketId}.`
+              : `Couldn't load ticket ${deepLinkTicketId}. Please try again.`;
+        setMessages((prev) => [
+          ...prev,
+          { id: `deep-link-error-${deepLinkTicketId}`, type: 'assistant', text, timestamp: new Date() },
+        ]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkTicketId, isLocallyAuthenticated, hasInitialized, accountGeneration]);
+
   const loadSettings = () => {
     try {
       const stored = localStorage.getItem('careerbot-settings');
@@ -864,200 +1317,314 @@ const ChatApp: React.FC = () => {
     }
   };
 
-  /**
-   * KB Mapping: Maps natural-language questions to answers
-   * Used as fallback when backend doesn't recognize the question
-   */
-  const getAnswerForQuestion = (question: string): string | null => {
-    const q = question.toLowerCase().trim();
+  // Keyed off the backend's own topic classification (`category`), not the
+  // user's raw question text. Matching against free-text was both
+  // inconsistent (most phrasings hit no keyword at all, so no suggestions
+  // showed) and wrong (a keyword could appear in an unrelated question and
+  // pull in an unrelated topic's suggestions). The backend's classification
+  // is already authoritative for what this answer is about -- piggyback on
+  // it instead of re-guessing.
+  //
+  // Every key below is a REAL category this backend returns -- discovered
+  // by probing /api/v1/chat/message with representative questions per
+  // domain and reading back the `category` field it actually classified
+  // them as (not guessed/invented). `unknown_login_issue` is deliberately
+  // excluded: it's the backend's generic "can you describe what's
+  // happening" clarifying fallback, always below the 0.7 confidence gate
+  // this function is only called behind -- it isn't a real topic, so there
+  // is nothing relevant to suggest for it. Each entry's questions are
+  // phrased to land back on one of this same set of categories, so a click
+  // leads to another real, confidently-answered topic rather than a
+  // dead end.
+  const getRelatedQuestions = (category: string, currentQuestion: string, previousQuestions: string[] = [], isAuthenticated: boolean = false): string[] => {
+    const normalizedCurrent = currentQuestion.toLowerCase().replace(/[^\w\s]/g, '').trim();
 
-    // Question-to-answer mapping for all supported natural-language questions
-    const questionAnswerMap: Record<string, string> = {
-      // Products & Features
-      'how can i create a resume?': '✨ Create ATS-friendly resumes in minutes with smart templates, AI content suggestions, and instant preview. Download as PDF, Word, or Text.',
-      'how can i improve my resume?': '💡 Get AI suggestions to improve bullet points, add keywords, and increase your resume strength score instantly.',
-      'what does resume parser do?': '📋 Upload your resume and we extract your experience, skills, and education automatically. Works with PDF, Word, and Text files.',
-      'how can i create a cover letter?': '📝 Create personalized cover letters in 2 minutes tailored to each job description with multiple templates.',
-      'how can i search for jobs?': '🔍 Access thousands of job listings filtered by role, location, and experience level with company ratings and trends.',
-      'how does job match work?': '🎯 Get AI-powered job recommendations with match scores (0-100%) and skill gap analysis for each role.',
-      'how does mock interview work?': '🎤 Practice interviews with AI feedback, real-time suggestions, and performance tracking to build confidence.',
-      'what is mock test?': '📊 Take role-specific skill assessments with detailed results, benchmarking, and learning resources.',
-      'how can careerbot help me with my resume?': '✨ CareerBot provides AI-powered tools to create, parse, and optimize your resume. Use our Resume Builder, Parser, and Enhancer for professional results.',
-      'what features are available in careerbot?': '🚀 CareerBot offers Resume Builder, Resume Parser, Resume Enhancer, Cover Letter Generator, Job Search, Job Match, Mock Interview, and Skill Assessments.',
+    // Pre-login cross-links ("why can't I log in" / "reset my password")
+    // make no sense to suggest to someone already signed in -- verified live
+    // that each of these routes to a distinct topic, none circular back to
+    // profile_building/signup_update_registered_email themselves.
+    const profileBuildingRelated = isAuthenticated
+      ? [
+          '📧 How can I update my name or email address?',
+          '🚪 How do I sign out of my account?',
+          '🔄 Why do I keep getting signed out unexpectedly?',
+        ]
+      : [
+          '📧 How do I update my email address?',
+          '✅ What is included in the free plan?',
+          '🔑 How can I reset my password?',
+        ];
+    const signupUpdateEmailRelated = isAuthenticated
+      ? [
+          '👤 Where can I edit my profile details?',
+          '🚪 How do I sign out of my account?',
+          '🔄 Why do I keep getting signed out unexpectedly?',
+        ]
+      : [
+          '🔑 How can I reset my password?',
+          '👤 How can I edit my profile?',
+          '📧 How can I get help with OTP verification?',
+        ];
+    const signoutNotWorkingRelated = [
+      '🔄 Why do I keep getting signed out unexpectedly?',
+      '👤 How can I update my profile information?',
+      '📧 How can I update my registered email address?',
+    ];
+    const sessionUnexpectedSignoutRelated = [
+      '🚪 How do I sign out of my account?',
+      '👤 How can I update my profile information?',
+      '📧 How can I update my registered email address?',
+    ];
 
-      // Subscription & Pricing
-      'what is included in the free plan?': '✅ Resume Parser (2/month), Basic Job Search, Chatbot (limited), Job Match (Top 5), 1 Mock Test. Perfect to explore CareerBot!',
-      'what features are available in the premium plan?': '💎 ₹299/month or ₹2,990/year (Save 17%). Unlimited access to all tools: Resume, Job Search, Mock Interviews, Alerts, and Priority Support. Free 7-day trial!',
-      'what does the enterprise plan include?': '🏢 Custom pricing for teams & organizations. Includes everything in Premium + Team Dashboard, Bulk Licenses, Dedicated Manager, API Access, and 24/7 Support.',
-      'what are the differences between the plans?': 'Free: Limited features | Premium (₹299/mo): Unlimited tools + Priority Support | Enterprise: Custom + Dedicated Manager. Choose what fits your needs!',
-      'how can i upgrade my plan?': '1️⃣ Click "Upgrade" in settings | 2️⃣ Select plan & payment method | 3️⃣ Instant activation! Use code "START50" for 50% off first month.',
-      'what is the refund policy?': '💯 7-day free trial, 30-day money-back guarantee with no questions asked. Cancel anytime. Refunds processed in 5-7 business days.',
-      'how much does the premium plan cost?': '💰 Premium Plan: ₹299/month or ₹2,990/year (saves 17%). Includes unlimited access to all features and priority support.',
-      'can i cancel my subscription?': '❌ Yes, you can cancel anytime with no penalties. Your access continues until the end of your billing period.',
-      'can i change my subscription plan?': '🔄 Yes, you can upgrade or downgrade your plan anytime from your account settings. Changes take effect at your next billing cycle.',
+    // Products & Features -- auth-aware sub-questions for the 6 main
+    // topics (Resume Building, Job Match, Mock Interview, Mock Test,
+    // Coding Assessment, English Assessment). Every phrase below was
+    // verified live against the backend to resolve to its intended,
+    // non-self-referencing, non-duplicate topic before being added.
+    //
+    // The guest main question for Resume Building resolves to
+    // resume_optimization (a hardcoded composite overview), while the
+    // authenticated one resolves to resume_builder (the specific KB
+    // topic) -- both are made auth-aware below, since either topic can
+    // also be reached directly via typed text regardless of auth state.
+    //
+    // Mock Interview, Mock Test, Coding Assessment, and English Assessment
+    // have NO sibling KB topics of their own (verified: every candidate
+    // "what topics are covered" / "how do I view my results" style
+    // sub-question either fails to route at all, or resolves back to the
+    // same topic as its own main question). Their sub-questions instead
+    // cross-link to each other -- a real, verified, non-duplicate
+    // "assessment cluster" -- rather than inventing granular sub-topics
+    // the KB does not have.
+    const resumeOptimizationRelated = isAuthenticated
+      ? [
+          '💡 How can I improve my existing resume?',
+          '📝 How can I create a cover letter?',
+          '📋 How can I upload my resume to get an ATS score?',
+        ]
+      : [
+          '✨ How can I create a resume?',
+          '💡 How can I improve my resume?',
+          '📝 Can CareerBot help me create a cover letter?',
+        ];
+    const resumeBuilderRelated = isAuthenticated
+      ? [
+          '💡 How can I improve my existing resume?',
+          '📝 How can I create a cover letter?',
+          '📋 How can I upload my resume to get an ATS score?',
+        ]
+      : [
+          '💡 How can I improve my resume?',
+          '📝 Can CareerBot help me create a cover letter?',
+          '📋 How can I upload my resume to get an ATS score?',
+        ];
+    const jobMatchRelated = isAuthenticated
+      ? [
+          '💼 How can I improve my match for a job?',
+          '🔍 How can I search for jobs that match my skills?',
+          '✨ How can I get AI suggestions to improve my resume?',
+        ]
+      : [
+          '💼 What does my job match score mean?',
+          '🔍 How can I search for jobs that match my skills?',
+          '✨ How can I get AI suggestions to improve my resume?',
+        ];
+    const mockInterviewLiveRelated = isAuthenticated
+      ? [
+          '🎭 How can I practice for another interview?',
+          '📊 Where can I take a Mock Test and see my results?',
+          '💻 Where can I practice coding problems and review my performance?',
+        ]
+      : [
+          '🎭 What types of interview questions can I practice?',
+          '📊 How do I take a mock test and check my results?',
+          '💻 How can I practice coding problems to assess my skills?',
+        ];
+    const mockTestRelated = isAuthenticated
+      ? [
+          '🎤 How can I start a Mock Interview and review my feedback?',
+          '💻 Where can I practice coding problems and review my performance?',
+          '🗣️ How can I take an English Assessment and review my performance?',
+        ]
+      : [
+          '🎤 How do I start a mock interview?',
+          '💻 How can I practice coding problems to assess my skills?',
+          '🗣️ Can I take an English assessment to check my speaking and writing skills?',
+        ];
+    const codingTestRelated = isAuthenticated
+      ? [
+          '📊 Where can I take a Mock Test and see my results?',
+          '🎤 How can I start a Mock Interview and review my feedback?',
+          '🗣️ How can I take an English Assessment and review my performance?',
+        ]
+      : [
+          '📊 How do I take a mock test and check my results?',
+          '🎤 How do I start a mock interview?',
+          '🗣️ Can I take an English assessment to check my speaking and writing skills?',
+        ];
+    const englishAssessmentRelated = isAuthenticated
+      ? [
+          '💻 Where can I practice coding problems and review my performance?',
+          '📊 Where can I take a Mock Test and see my results?',
+          '🎤 How can I start a Mock Interview and review my feedback?',
+        ]
+      : [
+          '💻 How can I practice coding problems to assess my skills?',
+          '📊 How do I take a mock test and check my results?',
+          '🎤 How do I start a mock interview?',
+        ];
 
-      // Career Improvement
-      'how can i optimize my resume?': '✨ Use our Builder, Parser & Enhancer to create ATS-friendly resumes with keywords, achievements, and professional formatting. Stand out to recruiters!',
-      'how can i prepare for an interview?': '🎤 Practice with AI mock interviews, get real-time feedback, review recordings, and learn from 500+ Q&A. Build confidence before your real interview!',
-      'how can i improve my job search strategy?': '🔍 Get AI-powered Job Match recommendations, smart alerts, and application tracking. Focus on 80%+ match roles, not just apply everywhere.',
-      'how can i improve my skills?': '🧠 Assess skill gaps, get curated learning paths, find top courses for your target roles, and track progress with certifications.',
-      'how can careerbot help me plan my career?': '🗺️ Map your career path with clear goals, identify skills to develop, discover adjacent roles, and plan your next move strategically.',
-      'how can i improve my professional networking?': '🤝 Build professional connections with LinkedIn optimization, informational interview templates, and networking strategies to find hidden job opportunities.',
-      'how can i prepare for my next job?': '🚀 Use Mock Interview practice, resume optimization, and skill assessments to prepare comprehensively for your next opportunity.',
-      'how can i improve my chances of getting a job?': '⭐ Combine a strong resume, tailored applications, mock interview practice, and targeted job search. Focus on quality over quantity.',
-
-      // Login & Account
-      'how can i reset my password?': '🔑 Go to login page and click "Forgot Password?". Enter your email, check for the reset link (wait 2-3 minutes), click it, and create a new password.',
-      'why can\'t i log in to my account?': '⚠️ Check your email/password spelling, verify Caps Lock is OFF, clear browser cache, try a different browser, or reset your password if forgotten.',
-      'how can i get help with otp verification?': '📧 Check your spam folder, wait 2-3 minutes for the code, or request a new OTP. Codes expire after 10 minutes.',
-      'what should i do if my account is locked?': '🔒 Account locked after multiple failed login attempts for security. Wait 15 minutes or reset your password to unlock immediately.',
-      'how can i edit my profile?': '👤 Click Profile Icon → Settings → Edit your name, photo, bio, and contact info → Save Changes. Updates reflect instantly!',
-      'how can i change my password?': '🔐 Settings → Security → Enter current password → Create new password (min 8 chars) → Confirm. Use strong, unique passwords!',
-      'why am i not receiving the otp?': '❌ Check spam/junk folder, wait 2-3 minutes, verify correct email, or request a new OTP. Contact support if still having issues.',
-      'how can i access my account?': '🔓 Visit the login page, enter your registered email and password. If you forgot your password, click "Forgot Password?" for reset instructions.',
-
-      // Career Advice & Resume Enhancement
-      'how do i make my resume stand out to recruiters?': '✨ Use strong action verbs, quantify achievements with numbers, tailor content to job descriptions, and ensure ATS compatibility. Focus on impact and results, not just responsibilities.',
-      'what are the best resume templates and formats?': '📄 Use clean, modern formats with clear sections. Stick to 1-2 pages maximum. Popular options: chronological (most common), functional (emphasize skills), or hybrid. Avoid graphics that ATS readers can\'t parse.',
-      'how do i highlight achievements with numbers and impact?': '🎯 Use metrics and results: "Increased sales by 25%", "Reduced costs by $50K", "Led team of 8 people". Replace vague descriptions with concrete numbers, percentages, and measurable outcomes.',
-      'how does ats screening work with my resume?': '🤖 ATS (Applicant Tracking Systems) scans resumes for keywords matching job descriptions. To optimize: use standard formatting, include relevant keywords from the job posting, use standard section headers, and avoid graphics or tables.',
-      'what skills are most in-demand in my field?': '⭐ This varies by industry. Focus on: technical skills specific to your field, soft skills (communication, leadership), and emerging technologies. Use job postings and industry reports to identify trending skills.',
-      'how do i assess my skill gaps accurately?': '📊 Compare your current skills to job requirements in your target roles. Use self-assessment, get feedback from colleagues, take skill assessments, or use tools like CareerBot\'s skill analyzer.',
-      'what courses should i take to improve skills?': '📈 Identify which skills are most needed for your target role, then look for courses on platforms like Coursera, Udemy, LinkedIn Learning, or industry-specific certifications. Prioritize high-demand skills.',
-      'how do i prioritize which skills to learn?': '🧠 Focus on skills that: (1) are in high demand in your target roles, (2) align with your career goals, (3) have high ROI for your time investment, and (4) complement your existing expertise.',
-      'what jobs match my skills and experience?': '💼 Use job search platforms and CareerBot\'s Job Match feature to find roles that align with your background. Look for positions requiring 70-100% of your current skills.',
-      'how do i find entry-level or internship positions?': '🔍 Check job boards (LinkedIn, Indeed, Glassdoor), company career pages, university career centers, and networking events. Filter by experience level and apply directly to companies you admire.',
-      'how do i customize my application for each job?': '📋 Tailor your resume and cover letter to each position by: using keywords from the job description, highlighting relevant experience, addressing specific requirements, and showing knowledge of the company.',
-      'what is my skill match score for this role?': '🎯 Skill match scores compare your background to job requirements. A score of 70%+ generally indicates you\'re well-qualified. Use CareerBot\'s Job Match to see your score and skill gaps.',
-      'what careers align with my background?': '💼 Analyze your skills, experience, and interests, then research similar roles. Use career assessment tools and informational interviews to explore adjacent opportunities.',
-      'how accurate is job matching?': '📊 Job matching uses keyword and skill matching to identify roles. Accuracy improves when job descriptions are detailed and your profile is complete. Use it as a guide, not the only factor.',
-      'what factors affect my job match score?': '🎯 Factors include: degree/education, years of experience, technical skills, soft skills, industry experience, certifications, and keyword matches with the job description.',
-      'what roles should i target next?': '🎯 Analyze your skills, experience, and interests to identify adjacent roles. Look for positions that: (1) build on your current expertise, (2) have high market demand, (3) align with your career goals, and (4) offer growth potential. Use CareerBot\'s Job Match to discover suitable opportunities.',
-      'what is a realistic career progression path for me?': '🚀 Map progression by analyzing: current role requirements, skills needed for next level, typical tenure in current role, and growth opportunities. Talk to people in target roles for realistic timelines.',
-      'how do i plan my 5-year career strategy?': '📊 Set clear goals for skills, seniority, and industry. Create milestones: Year 1 (skills), Year 2-3 (increased responsibility), Year 4-5 (leadership/specialization). Review and adjust annually.',
-      'should i transition to a different industry?': '🎯 Evaluate: transferable skills, market demand, salary expectations, required retraining, and your motivation. Consider lateral moves or bridge roles that leverage your current expertise.',
-      'what are emerging roles in my field?': '💡 Research industry trends through LinkedIn, job boards, industry reports, and professional communities. Look for roles combining traditional skills with new technologies.',
-      'where can i find internships in my field?': '🔍 Check LinkedIn, Indeed, company career pages, university career centers, professional associations, and networking events. Apply early and highlight relevant coursework.',
-      'how do i write a strong internship application?': '📋 Highlight relevant coursework, projects, and skills. Write a compelling cover letter showing enthusiasm for the role and company. Customize each application.',
-      'how do i network for internship opportunities?': '🤝 Attend industry events, connect on LinkedIn, reach out to alumni, informational interviews, and ask professors for referrals. Personal connections often lead to opportunities.',
-      'what internships lead to full-time offers?': '📚 Internships in high-growth companies, strategic roles, and competitive industries often convert to offers. Perform well, show initiative, and express interest in full-time opportunities.',
-      'how do i build a professional network?': '🤝 Attend industry events, connect on LinkedIn, reach out to colleagues, join professional groups, and offer value to others. Networking is mutual relationship-building.',
-      'how do i reach out to professionals in my field?': '💼 Use LinkedIn, professional associations, alumni networks, or mutual connections. Personalize outreach, be specific about why you\'re reaching out, and offer value.',
-      'what is appropriate networking etiquette?': '📧 Be professional and genuine. Research before reaching out, be respectful of people\'s time, follow up appropriately, and always thank people for their help.',
-      'how do i leverage linkedin for job search?': '🔗 Optimize profile with keywords, connect strategically, engage with industry content, use LinkedIn\'s job search feature, and reach out to recruiters. Stay active and visible.',
-      'what certifications are valuable in my field?': '📚 Research industry-standard certifications relevant to your target role. Focus on those recognized by employers and industry leaders in your field.',
-      'where can i find quality online courses?': '🧠 Platforms like Coursera, Udemy, LinkedIn Learning, edX, and industry-specific sites offer quality courses. Read reviews and check instructor credentials.',
-      'how do i balance education with job searching?': '🎓 Prioritize: allocate specific hours for learning, job search, and interviews. Focus on high-impact activities and keep both running concurrently to maximize your time.',
-      'how long do popular certifications take?': '⏱️ Varies widely: some are 4-6 weeks, others take months or years. Factor in study time (10-20 hours/week), exam prep, and hands-on projects. Dedicate consistent time for best results.',
-
-      // Interview & Mock Interview Questions
-      'what are common behavioral interview questions?': '🎤 Common ones include: "Tell me about a challenge you overcame", "Describe a time you failed", "How do you handle conflict?", "Give an example of teamwork", "Describe your leadership style". Use STAR format (Situation, Task, Action, Result) for answers.',
-      'how do i prepare for technical/coding interviews?': '💼 Practice data structures and algorithms, solve coding problems on LeetCode or HackerRank, review system design concepts, mock interview with peers, and practice explaining your thought process while coding.',
-      'can i practice mock interviews with you?': '🎭 Yes! CareerBot offers Mock Interview feature where you can practice with AI feedback. Practice common behavioral questions, technical questions, and get real-time suggestions. Review recordings to improve.',
-      'how do i answer difficult questions confidently?': '💬 Pause and think before answering, use STAR method for behavioral questions, be honest about limitations, stay calm, and practice extensively. Confidence comes from preparation and practice.',
-      'what interview questions should i practice?': '🎤 Practice: behavioral (STAR format), technical (relevant to role), situational (how you handle scenarios), and cultural fit questions. Use CareerBot\'s mock interview to practice real scenarios.',
-      'how do i improve my interview performance?': '💼 Record yourself answering questions, practice with mock interviews, get feedback from peers, research the company thoroughly, prepare thoughtful questions, and review your performance after each interview.',
-      'how long is a typical mock interview session?': '⏱️ Most mock interviews last 30-60 minutes, similar to real interviews. This includes introduction, 4-6 questions, and closing. Practice sessions can be shorter (15-30 min) for focused skill building.',
-      'how is my interview performance scored?': '📊 CareerBot scores based on: answer quality, structure (STAR format), confidence, clarity, relevance, and engagement. Get detailed feedback on each question and overall performance areas to improve.',
-    };
-
-    // Try exact match first
-    if (questionAnswerMap[q]) {
-      return questionAnswerMap[q];
-    }
-
-    // Try normalized match (remove punctuation, emoji, and special chars - match relatedMap normalization)
-    const normalizedQ = q.toLowerCase().replace(/[^\w\s]/g, '').trim();
-    for (const [mappedQ, answer] of Object.entries(questionAnswerMap)) {
-      const normalizedMapped = mappedQ.toLowerCase().replace(/[^\w\s]/g, '').trim();
-      if (normalizedQ === normalizedMapped) {
-        return answer;
-      }
-    }
-
-    return null;
-  };
-
-  const getRelatedQuestions = (userQuery: string, previousQuestions: string[] = []): string[] => {
-    const query = userQuery.toLowerCase();
-    const normalizedCurrent = userQuery.toLowerCase().replace(/[^\w\s]/g, '').trim();
-
-    // Generate related questions based on user query keywords
     const relatedMap: Record<string, string[]> = {
-      resume: [
-        '✨ How do I make my resume stand out to recruiters?',
-        '📄 What are the best resume templates and formats?',
-        '🎯 How do I highlight achievements with numbers and impact?',
-        '🤖 How does ATS screening work with my resume?',
+      // Login & Account
+      forgot_password: [
+        "⚠️ Why can't I log in to my account?",
+        '🔒 What should I do if my account is locked?',
+        '📧 How can I get help with OTP verification?',
       ],
-      interview: [
-        '🎤 What are common behavioral interview questions?',
-        '💼 How do I prepare for technical/coding interviews?',
-        '🎭 Can I practice mock interviews with you?',
-        '💬 How do I answer difficult questions confidently?',
+      social_signin_not_linking: [
+        '🔑 How can I reset my password?',
+        '🔒 What should I do if my account is locked?',
+        '👤 How do I update my email address?',
       ],
-      mock: [
-        '🎤 What interview questions should I practice?',
-        '💼 How do I improve my interview performance?',
-        '⏱️ How long is a typical mock interview session?',
-        '📊 How is my interview performance scored?',
+      otp_not_received: [
+        '🔑 How can I reset my password?',
+        '📧 How do I verify my email address?',
+        "⚠️ Why can't I log in to my account?",
       ],
-      skills: [
-        '⭐ What skills are most in-demand in my field?',
-        '📊 How do I assess my skill gaps accurately?',
-        '📈 What courses should I take to improve skills?',
-        '🧠 How do I prioritize which skills to learn?',
+      account_locked: [
+        '🔑 How can I reset my password?',
+        "⚠️ Why can't I log in to my account?",
+        '👤 How can I edit my profile?',
       ],
-      job: [
+      otp_verification_not_completing: [
+        '📧 How can I get help with OTP verification?',
+        '🔑 How can I reset my password?',
+        '👤 How do I update my email address?',
+      ],
+      account_access_general_issue: [
+        '📧 Why am I not receiving the OTP?',
+        '🔑 How can I reset my password?',
+        '👤 How can I edit my profile?',
+      ],
+      signup_update_registered_email: signupUpdateEmailRelated,
+      profile_building: profileBuildingRelated,
+      signout_not_working: signoutNotWorkingRelated,
+      session_unexpected_signout: sessionUnexpectedSignoutRelated,
+
+      // Subscription & Billing
+      subscription_plans: [
+        '1️⃣ How can I upgrade my plan?',
+        '❌ Can I cancel my subscription?',
+        '💯 What is the refund policy?',
+      ],
+      refund_request: [
+        '💳 What payment methods do you accept?',
+        '❌ Can I cancel my subscription?',
+        '✅ What is included in the free plan?',
+      ],
+      upgrade_downgrade_plan: [
+        '✅ What is included in the free plan?',
+        '💳 What payment methods do you accept?',
+        '❌ Can I cancel my subscription?',
+      ],
+      cancel_subscription: [
+        '💯 What is the refund policy?',
+        '1️⃣ How can I upgrade my plan?',
+        '✅ What is included in the free plan?',
+      ],
+      payment_methods: [
+        '💰 I was charged twice, what do I do?',
+        '💯 What is the refund policy?',
+        '1️⃣ How can I upgrade my plan?',
+      ],
+      billing_dispute: [
+        '💳 What payment methods do you accept?',
+        '💯 What is the refund policy?',
+        '👤 What is my subscription plan?',
+      ],
+      account_subscription: [
+        '✅ What is included in the free plan?',
+        '❌ Can I cancel my subscription?',
+        '1️⃣ How can I upgrade my plan?',
+      ],
+
+      // Product Features
+      //
+      // '🎯 How does job match work?' used to appear as a cross-link in
+      // several buckets below -- it actually resolves to the smart_match
+      // topic (a different, free feature), not job_match, verified live.
+      // A later attempted fix ('✨ What is Smart Match and how is it
+      // different?') was never itself verified and turned out to resolve
+      // to unknown_login_issue -- a complete miss. The replacement below
+      // ('✨ What is Smart Match and how does it rank jobs for me?') is the
+      // one phrase that was actually confirmed live to resolve to
+      // smart_match at HIGH confidence; it now replaces every mislabeled
+      // occurrence consistently (products_features, job_search, job_match).
+      products_features: [
+        '✨ How can I create a resume?',
+        '✨ What is Smart Match and how does it rank jobs for me?',
+        '🎤 What is mock interview?',
+      ],
+      // resume_optimization is the hardcoded composite topic the guest
+      // main question ("What can CareerBot help me do with my resume?")
+      // resolves to; resume_builder is the specific KB topic the
+      // authenticated main question resolves to. Both made auth-aware
+      // above (resumeOptimizationRelated / resumeBuilderRelated) since
+      // either can also be reached directly via typed text.
+      resume_optimization: resumeOptimizationRelated,
+      resume_builder: resumeBuilderRelated,
+      resume_enhancer: [
+        '✨ How can I create a resume?',
+        '📋 What does resume parser do?',
+        '📝 How can I create a cover letter?',
+      ],
+      resume_parser: [
+        '✨ How can I create a resume?',
+        '💡 How can I improve my resume?',
+        '📝 How can I create a cover letter?',
+      ],
+      // Both spellings -- "cover_letter" is the JSON KB topic intent,
+      // "cover_letter_help" is the hardcoded LoginIntent spelling hit by
+      // the guest sub-question "Can CareerBot help me create a cover
+      // letter?" -- verified live, same duality pattern as elsewhere.
+      cover_letter: [
+        '✨ How can I create a resume?',
+        '💡 How can I improve my resume?',
+        '🔍 How can I search for jobs?',
+      ],
+      cover_letter_help: [
+        '✨ How can I create a resume?',
+        '💡 How can I improve my resume?',
+        '🔍 How can I search for jobs?',
+      ],
+      job_search: [
+        '✨ What is Smart Match and how does it rank jobs for me?',
         '💼 What jobs match my skills and experience?',
-        '🔍 How do I find entry-level or internship positions?',
-        '📋 How do I customize my application for each job?',
-        '🎯 What is my skill match score for this role?',
+        '✨ How can I create a resume?',
       ],
-      match: [
-        '💼 What careers align with my background?',
-        '📊 How accurate is job matching?',
-        '🎯 What factors affect my job match score?',
-        '🚀 What roles should I target next?',
+      smart_match: [
+        '💼 What jobs match my skills and experience?',
+        '🔍 How can I search for jobs?',
+        '💡 How can I improve my resume?',
       ],
-      career: [
-        '🚀 What is a realistic career progression path for me?',
-        '📊 How do I plan my 5-year career strategy?',
-        '🎯 Should I transition to a different industry?',
-        '💡 What are emerging roles in my field?',
+      job_match: jobMatchRelated,
+      mock_interview_live: mockInterviewLiveRelated,
+      mock_test: mockTestRelated,
+      interview_prep: [
+        '🎤 What is mock interview?',
+        '📊 What is mock test?',
+        '💡 How can I improve my resume?',
       ],
-      internship: [
-        '🔍 Where can I find internships in my field?',
-        '📋 How do I write a strong internship application?',
-        '🤝 How do I network for internship opportunities?',
-        '📚 What internships lead to full-time offers?',
-      ],
-      network: [
-        '🤝 How do I build a professional network?',
-        '💼 How do I reach out to professionals in my field?',
-        '📧 What is appropriate networking etiquette?',
-        '🔗 How do I leverage LinkedIn for job search?',
-      ],
-      education: [
-        '📚 What certifications are valuable in my field?',
-        '🧠 Where can I find quality online courses?',
-        '🎓 How do I balance education with job searching?',
-        '⏱️ How long do popular certifications take?',
-      ],
+      coding_test: codingTestRelated,
+      english_assessment: englishAssessmentRelated,
     };
 
-    // Find matching related questions
-    let candidateQuestions: string[] = [];
-    for (const [keyword, questions] of Object.entries(relatedMap)) {
-      if (query.includes(keyword)) {
-        candidateQuestions = questions;
-        break;
-      }
-    }
+    const candidateQuestions = relatedMap[(category || '').toLowerCase()] || [];
 
     if (candidateQuestions.length === 0) {
       return [];
     }
+
 
     // Filter out: current question, previously asked questions, and duplicates
     const filtered = candidateQuestions.filter((q) => {
@@ -1081,7 +1648,9 @@ const ChatApp: React.FC = () => {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    return shuffled.slice(0, 4);
+    // Every bucket above has exactly 3 entries by design -- this just
+    // guards that invariant rather than relying on it silently.
+    return shuffled.slice(0, 3);
   };
 
   const ensureToken = () => {
@@ -1102,9 +1671,15 @@ const ChatApp: React.FC = () => {
   // No need for manual authHeaders
 
   const initializeChat = async () => {
-    // Create a new session ID - backend will accept it on first message
+    // Client-generated placeholder id -- what every conversation starts
+    // with, guest or authenticated. The backend MongoDB session is created
+    // lazily, on the first real message (see handleSendMessage), not here --
+    // creating it on widget-open (or on "New Conversation") produced an
+    // empty "New Chat" row in History for every user who opened the widget
+    // and sent nothing.
     const newSessionId = `chat-session-${Date.now()}`;
     setSessionId(newSessionId);
+    setIsBackendSession(false);
 
     const welcomeMessage: Message = {
       id: 'welcome',
@@ -1115,74 +1690,179 @@ const ChatApp: React.FC = () => {
     setMessages([welcomeMessage]);
   };
 
-  const loadChatHistory = async (authedEmail?: string) => {
+  // Legacy localStorage reader. MongoDB is the source of truth for history
+  // going forward (loadChatHistory below reads the backend first), but
+  // conversations archived here before that existed are never migrated or
+  // deleted automatically -- see CHAT_SESSIONS_STORAGE_KEY's comment. This
+  // keeps them visible, tagged `source: 'local'`, instead of silently
+  // disappearing from the History tab.
+  const loadLocalLegacyHistory = (userEmail: string): ChatSession[] => {
+    try {
+      const savedSessions = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
+      if (!savedSessions) return [];
+
+      const allSessions: StoredChatSession[] = JSON.parse(savedSessions);
+      const userSessions = allSessions.filter((s) => s.userEmail === userEmail || !s.userEmail);
+
+      return userSessions.map((s) => ({
+        ...s,
+        userEmail,
+        date: new Date(s.date),
+        messages: s.messages?.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
+        source: 'local' as const,
+      }));
+    } catch (error) {
+      console.error('Failed to load legacy local chat sessions:', error);
+      return [];
+    }
+  };
+
+  // Read AFTER a History/ticket load's last request, before anything is
+  // shown or saved for `expected` (the account the load is for). null: the
+  // account changed meanwhile -- signed out / switched (new generation), or
+  // the profile names another account (it signed in and no auth check has
+  // acted on that yet, e.g. its check's request failed). The load then shows
+  // and saves nothing; the next auth check switches and loads again.
+  // Otherwise the profile's email (undefined if that request failed).
+  const confirmedOwnerEmail = async (expected: string | null, generation: number) => {
+    if (generation !== accountGenerationRef.current) return null;
+    let email: string | undefined;
+    try {
+      email = (await getProfile())?.email || undefined;
+    } catch (error) {
+      console.error('Failed to get profile to confirm the account:', error);
+    }
+    if (generation !== accountGenerationRef.current) return null;
+    if (expected && email && email !== expected) return null;
+    return email;
+  };
+
+  // `generation`: the account this load is for (default: the current one).
+  // A load whose account is no longer signed in writes nothing.
+  const loadChatHistory = async (authedEmail?: string, generation = accountGenerationRef.current) => {
     // Only load chat history for authenticated users
     if (!isUserAuthenticated()) {
       setChatSessions([]);
       return;
     }
 
+    // The account this load is for: the given email, else the one the auth
+    // check last confirmed, else (before the first check) the profile's.
     // Get user email from profile for security - prevent one user from accessing another's history
     // ALWAYS use getProfile().email, NEVER use localStorage.user_email (which is a fake guest email)
-    let userEmail = authedEmail;
-    if (!userEmail) {
+    let expectedEmail = authedEmail ?? userEmailRef.current;
+    if (!expectedEmail) {
       try {
         const profile = await getProfile();
-        userEmail = profile?.email;
+        expectedEmail = profile?.email || null;
       } catch {
         console.error('Failed to get profile for history loading');
-        setChatSessions([]);
+        if (generation === accountGenerationRef.current) setChatSessions([]);
         return;
       }
+      if (generation !== accountGenerationRef.current) return;
     }
 
-    if (!userEmail) {
+    if (!expectedEmail) {
       setChatSessions([]);
       return;
     }
 
-    // Load from global storage key and filter by current user
+    // Backend (MongoDB) is the source of truth going forward. Legacy local
+    // sessions are appended after it so nothing already in a user's History
+    // tab disappears -- see loadLocalLegacyHistory's comment. A failure to
+    // reach the backend falls back to local-only rather than showing
+    // nothing.
+    let backendSessions: ChatSession[] = [];
     try {
-      const savedSessions = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
-      if (savedSessions) {
-        const allSessions: StoredChatSession[] = JSON.parse(savedSessions);
-
-        // Filter to only this user's sessions. Include sessions without userEmail (backward compat for older entries)
-        const userSessions = allSessions.filter((s) => s.userEmail === userEmail || !s.userEmail);
-
-        if (userSessions.length === 0) {
-          // No sessions for this user
-          setChatSessions([]);
-          return;
-        }
-
-        // Unowned sessions stay visible to every account (backward compat
-        // for entries saved before userEmail existed) but are never stamped
-        // with whoever happens to load history first — that would silently
-        // and permanently hand one account's legacy chats to a different
-        // account on a shared device, with no way back. `userEmail` below
-        // is set only on the in-memory copy used to render this screen.
-
-        // Load user's sessions
-        const loadedSessions: ChatSession[] = userSessions.map((s) => ({
-          ...s,
-          userEmail,
-          date: new Date(s.date),
-          messages: s.messages?.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
-        }));
-        setChatSessions(loadedSessions);
-        return;
-      }
+      // The backend's maximum page (100): closed rows are filtered out
+      // below, so the default 20 would shrink with every removal.
+      const { sessions } = await getChatSessionHistory(0, 100);
+      // DELETE only closes a session on the backend (it is not erased), and
+      // history still returns closed ones: hide them, so "Remove from
+      // history" sticks.
+      backendSessions = sessions.filter((s) => s.status !== 'closed').map((s: ChatSessionSummary) => ({
+        id: s.session_id,
+        title: s.title,
+        preview: s.preview,
+        date: new Date(s.updated_at || s.created_at),
+        source: 'backend' as const,
+      }));
     } catch (error) {
-      console.error('Failed to load saved chat sessions:', error);
+      console.error('Failed to load backend chat history, showing local history only:', error);
     }
 
-    // No saved sessions - show empty history
-    setChatSessions([]);
+    // Signed out / switched account while this loaded: not theirs.
+    // Not confirmed, or another account: show none (unless a sign-out /
+    // switch now owns the screen).
+    const userEmail = await confirmedOwnerEmail(expectedEmail, generation);
+    if (!userEmail) {
+      if (generation === accountGenerationRef.current) setChatSessions([]);
+      return;
+    }
+    const localSessions = loadLocalLegacyHistory(userEmail);
+    setChatSessions([...backendSessions, ...localSessions]);
+  };
+
+  // loadChatHistory only runs once per widget-open (gated by hasOpenedRef in
+  // the mount effect), so without this, a backend session created by the
+  // first message sent after opening would never appear here -- the History
+  // tab would keep showing whatever was loaded before that conversation
+  // started. Re-fetch on every open instead of trusting the stale snapshot.
+  const openHistory = () => {
+    setIsHistoryOpen(true);
+    loadChatHistory();
+  };
+
+  // Remove a session from History. Backend-sourced rows call DELETE, which
+  // closes the session (the backend keeps it; loadChatHistory hides closed
+  // ones, see deleteChatSession's comment); legacy local rows have no
+  // backend counterpart, so they're removed from the localStorage blob
+  // directly instead. If the removed session is the one currently open,
+  // reset to a fresh chat rather than leaving the UI pointing at it.
+  const handleDeleteSession = async (session: ChatSession, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Remove this conversation from your history?')) {
+      return;
+    }
+
+    setDeletingSessionId(session.id);
+    const generation = accountGenerationRef.current;
+    try {
+      if (session.source === 'backend') {
+        await deleteChatSession(session.id);
+        // Signed out / switched account meanwhile: the conversation on
+        // screen is the next account's now; leave it alone.
+        if (generation !== accountGenerationRef.current) return;
+      } else {
+        try {
+          const raw = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
+          if (raw) {
+            const allSessions: StoredChatSession[] = JSON.parse(raw);
+            localStorage.setItem(
+              CHAT_SESSIONS_STORAGE_KEY,
+              JSON.stringify(allSessions.filter((s) => s.id !== session.id))
+            );
+          }
+        } catch (error) {
+          console.error('Failed to delete local chat session:', error);
+        }
+      }
+
+      setChatSessions((prev) => prev.filter((s) => s.id !== session.id));
+
+      if (sessionId === session.id) {
+        initializeChat();
+      }
+    } catch (error: unknown) {
+      alert(describeError(error, 'Failed to remove conversation. Please try again.'));
+    } finally {
+      setDeletingSessionId(null);
+    }
   };
 
   // Load messages for a specific session
-  const loadSessionMessages = (sessionId: string) => {
+  const loadSessionMessages = async (sessionId: string) => {
     const session = chatSessions.find(s => s.id === sessionId);
     if (!session) return;
 
@@ -1192,6 +1872,44 @@ const ChatApp: React.FC = () => {
       text: RESTORED_NOTICE_TEXT,
       timestamp: new Date(),
     };
+
+    if (session.source === 'backend') {
+      // Backend rows only carry title/preview in the History list -- fetch
+      // the full transcript now that the user wants to open it. Sending a
+      // follow-up message into this session must keep using the backend
+      // (this id is a real MongoDB session id, not a client-generated one).
+      const generation = accountGenerationRef.current;
+      try {
+        const detail = await getChatSession(sessionId);
+        // Signed out / switched account while this loaded: not theirs.
+        if (generation !== accountGenerationRef.current) return;
+        const restoredMessages: Message[] = detail.messages.map((m) => ({
+          id: m.message_id,
+          type: m.role,
+          text: m.content,
+          timestamp: new Date(m.timestamp),
+        }));
+        setMessages([...restoredMessages, restoredNotice]);
+      } catch (error) {
+        if (generation !== accountGenerationRef.current) return;
+        console.error('Failed to load conversation from backend:', error);
+        setMessages([{
+          id: 'error',
+          type: 'assistant',
+          text: "Sorry, I couldn't load that conversation. Please try again.",
+          timestamp: new Date(),
+        }]);
+      }
+      setIsHistoryOpen(false);
+      setSessionId(sessionId);
+      setIsBackendSession(true);
+      return;
+    }
+
+    // Legacy local session -- its id is client-generated, not a backend
+    // session id, so a follow-up message must NOT be routed to the
+    // session-message endpoint (there is nothing in MongoDB to find it).
+    setIsBackendSession(false);
 
     if (session.messages && session.messages.length > 0) {
       // Full transcript was saved — restore the actual conversation as-is.
@@ -1218,14 +1936,29 @@ const ChatApp: React.FC = () => {
     setSessionId(sessionId);
   };
 
-  const loadTickets = async (authedEmail?: string) => {
+  // `generation`: as in loadChatHistory.
+  const loadTickets = async (authedEmail?: string, generation = accountGenerationRef.current) => {
     const isAuth = isUserAuthenticated();
     console.log('[loadTickets] Starting - is authenticated:', isAuth);
+    // The account this load is for (as in loadChatHistory).
+    let expectedEmail = authedEmail ?? userEmailRef.current;
+    if (isAuth && !expectedEmail) {
+      try {
+        expectedEmail = (await getProfile())?.email || null;
+      } catch (error) {
+        // Whose tickets these would be is unknown: show none (as History).
+        console.error('[loadTickets] Failed to get profile email:', error);
+        if (generation === accountGenerationRef.current) setTickets([]);
+        return;
+      }
+      if (generation !== accountGenerationRef.current) return;
+    }
 
     // Try to load from backend for authenticated users
     if (isAuth) {
       try {
         const data = await getSupportTickets();
+        if (generation !== accountGenerationRef.current) return;
         const backendTickets: TicketInfo[] = (data.data || []).map((ticket: SupportTicket) => ({
           id: ticket.ticket_id || `ticket-${Date.now()}-${Math.random()}`,
           subject: ticket.subject,
@@ -1238,10 +1971,18 @@ const ChatApp: React.FC = () => {
           affected_feature: ticket.affected_feature,
           updated_at: ticket.updated_at,
           user_name: ticket.user_name,
+          attachments: ticket.attachments,
         }));
 
         // If backend returns tickets, use them and save to localStorage
         if (backendTickets.length > 0) {
+          // Shown only for a confirmed account: otherwise show none (as
+          // History and the fallback below).
+          const owner = await confirmedOwnerEmail(expectedEmail, generation);
+          if (!owner) {
+            if (generation === accountGenerationRef.current) setTickets([]);
+            return;
+          }
           setTickets(backendTickets);
           localStorage.setItem('saved_tickets', JSON.stringify(backendTickets));
           return;
@@ -1254,21 +1995,26 @@ const ChatApp: React.FC = () => {
       }
     }
 
+    // Signed out / switched account while the backend call failed: the
+    // fallback below would show this (previous) account's saved tickets.
+    if (generation !== accountGenerationRef.current) return;
+
     // Try to load saved tickets from localStorage (for both auth and guest users)
     try {
+      // IMPORTANT: For authenticated users, get real email from profile, NOT fake localStorage email
+      // Read the profile even when the caller passed the email: the ticket
+      // request above may have run after another account signed in.
+      let ownerEmail: string | undefined;
+      if (isAuth) {
+        const confirmed = await confirmedOwnerEmail(expectedEmail, generation);
+        if (confirmed === null) {
+          if (generation === accountGenerationRef.current) setTickets([]);
+          return;
+        }
+        ownerEmail = confirmed;
+      }
       const savedTickets = localStorage.getItem('saved_tickets');
       const guestEmail = localStorage.getItem('guest_ticket_email');
-
-      // IMPORTANT: For authenticated users, get real email from profile, NOT fake localStorage email
-      let ownerEmail = authedEmail;
-      if (!ownerEmail && isAuth) {
-        try {
-          const profile = await getProfile();
-          ownerEmail = profile?.email || undefined;
-        } catch (error) {
-          console.error('[loadTickets] Failed to get profile email:', error);
-        }
-      }
 
       if (savedTickets) {
         const tickets: TicketInfo[] = JSON.parse(savedTickets);
@@ -1313,6 +2059,10 @@ const ChatApp: React.FC = () => {
 
     // Mark that we're processing a request
     isProcessingRef.current = true;
+    // A sign-out / account switch while this is in flight: drop the result
+    // instead of showing it (or installing its session) for the next user.
+    const generation = accountGenerationRef.current;
+    const accountChanged = () => generation !== accountGenerationRef.current;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -1339,7 +2089,7 @@ const ChatApp: React.FC = () => {
         const loginPromptMessage: Message = {
           id: (Date.now() + 1).toString(),
           type: 'assistant',
-          text: `${authMessage}\n\n[Please log in to continue]`,
+          text: authMessage,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, loginPromptMessage]);
@@ -1348,57 +2098,122 @@ const ChatApp: React.FC = () => {
           playVoiceResponse(authMessage);
         }
       } else {
-        // PHASE 1: Check if we have a frontend KB answer (skip API call if we do)
-        const frontendAnswer = getAnswerForQuestion(messageText);
+        // Lazily create the backend session on the first real message of an
+        // authenticated conversation -- not on widget-open (see
+        // initializeChat). Local variables, not the isBackendSession/
+        // sessionId state, so this call uses the freshly-created id
+        // immediately regardless of React's state-flush timing; the
+        // isProcessingRef guard at the top of this function already
+        // prevents a second call from racing this one and double-creating.
+        let activeSessionId = sessionId;
+        // A backend session belongs to the account that created it: a
+        // sign-out the 30 s auth check hasn't noticed yet must not send this
+        // guest message into it.
+        let activeIsBackendSession = isBackendSession && isAuthenticated;
+        if (isBackendSession && !isAuthenticated) {
+          activeSessionId = `chat-session-${Date.now()}`;
+          setSessionId(activeSessionId);
+          setIsBackendSession(false);
+        }
+        const startBackendSession = async () => {
+          const created = await createChatSession();
+          if (accountChanged()) return;
+          activeSessionId = created.session_id;
+          activeIsBackendSession = true;
+          setSessionId(activeSessionId);
+          setIsBackendSession(true);
+        };
+        if (isAuthenticated && !activeIsBackendSession) {
+          try {
+            await startBackendSession();
+          } catch (error) {
+            console.error('Failed to create backend chat session, falling back to stateless chat:', error);
+          }
+        }
+        if (accountChanged()) return;
+        const askSession = (id: string) =>
+          sendSessionMessage(id, messageText).then((r) => ({
+            answer: r.content,
+            confidence: r.confidence,
+            category: r.category,
+            sources: [] as string[],
+          }));
 
-        if (frontendAnswer) {
-          // Use frontend KB answer directly - no API call needed
-          // Get previous user questions to avoid duplication
-          const previousQuestions = messages
-            .filter(m => m.type === 'user')
-            .map(m => m.text);
-
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            type: 'assistant',
-            text: frontendAnswer,
-            timestamp: new Date(),
-            sources: [],
-            relatedQuestions: getRelatedQuestions(messageText, previousQuestions),
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-
-          if (settings.enableVoiceOutput) {
-            playVoiceResponse(frontendAnswer);
+        // Always answer from the backend's real knowledge base -- never the
+        // hardcoded frontend question/answer map, which duplicates backend
+        // content and silently drifts out of sync with it (e.g. help text
+        // changing on the backend without this file being updated to match).
+        // Persisted sessions go through the new session-message endpoint
+        // (loads context, calls the same chatbot/KB service, saves both
+        // sides); everything else (guests, or a failed session create)
+        // keeps using the original stateless endpoint unchanged. Both
+        // responses are normalized to the same {answer, confidence,
+        // sources} shape so the rest of this branch doesn't need to know
+        // which one answered.
+        let data;
+        if (activeIsBackendSession && activeSessionId) {
+          try {
+            data = await askSession(activeSessionId);
+          } catch (error) {
+            // 409: the session was closed ("Remove from history");
+            // 403/404: it belongs to another account (a switch not yet
+            // noticed) or is gone. Continue in a new session of this account.
+            const status = getHttpStatus(error);
+            if (status !== 409 && status !== 403 && status !== 404) throw error;
+            let replaced = false;
+            try {
+              await startBackendSession();
+              replaced = true;
+            } catch (createError) {
+              if (accountChanged()) return;
+              // Same fallback as the first create: stateless chat, and drop
+              // the dead session so the next message doesn't hit it again.
+              console.error('Failed to create a new backend session, falling back to stateless chat:', createError);
+              activeSessionId = `chat-session-${Date.now()}`;
+              setSessionId(activeSessionId);
+              setIsBackendSession(false);
+            }
+            if (accountChanged()) return;
+            data = replaced
+              ? await askSession(activeSessionId)
+              : await sendChatMessage(messageText, activeSessionId);
+            if (accountChanged()) return;
+            setMessages((prev) => [...prev, {
+              id: `${activeSessionId}-continued`,
+              type: 'system',
+              text: 'That conversation is no longer available, so your message continued in a new conversation.',
+              timestamp: new Date(),
+            }]);
           }
         } else {
-          // PHASE 2: No frontend KB answer - try backend API
-          const data = await sendChatMessage(messageText, sessionId);
+          data = await sendChatMessage(messageText, activeSessionId ?? undefined);
+        }
+        if (accountChanged()) return;
+        // Check if we got a confident answer from the backend KB
+        const hasConfidentAnswer = data.answer && data.confidence >= 0.7;
 
-          // Check if we got a confident answer from the backend KB
-          const hasConfidentAnswer = data.answer && data.confidence >= 0.7;
+        // Get previous user questions to avoid duplication
+        const previousQuestions = messages
+          .filter(m => m.type === 'user')
+          .map(m => m.text);
 
-          // Get previous user questions to avoid duplication
-          const previousQuestions = messages
-            .filter(m => m.type === 'user')
-            .map(m => m.text);
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'assistant',
+          text: hasConfidentAnswer ? data.answer : "❌ I couldn't find an answer to that question in our knowledge base. Please raise a support ticket and our team will help you!",
+          timestamp: new Date(),
+          sources: data.sources || [],
+          relatedQuestions: hasConfidentAnswer ? getRelatedQuestions(data.category, messageText, previousQuestions, isLocallyAuthenticated) : [],
+          actionLink: hasConfidentAnswer ? getActionLink(data.category, isLocallyAuthenticated) ?? undefined : undefined,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
 
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            type: 'assistant',
-            text: hasConfidentAnswer ? data.answer : "❌ I couldn't find an answer to that question in our knowledge base. Please raise a support ticket and our team will help you!",
-            timestamp: new Date(),
-            sources: data.sources || [],
-            relatedQuestions: hasConfidentAnswer ? getRelatedQuestions(messageText, previousQuestions) : [],
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-
-          if (settings.enableVoiceOutput) {
-            playVoiceResponse(assistantMessage.text);
-          }
+        if (settings.enableVoiceOutput) {
+          playVoiceResponse(assistantMessage.text);
         }
       }
     } catch (error) {
+      if (accountChanged()) return;
       console.error('Failed to send message:', error);
 
       const responseText = error instanceof Error ? error.message : 'Failed to get response from chatbot';
@@ -1459,8 +2274,15 @@ const ChatApp: React.FC = () => {
 
 
   const startNewChat = () => {
-    // Save current chat to history only for authenticated users
-    if (messages.length > 1 && isUserAuthenticated()) {
+    // Archive to localStorage only as a fallback: when isBackendSession is
+    // true, every message in this conversation was already persisted to
+    // MongoDB in real time (see handleSendMessage), so saving it again here
+    // would just create a second, stale copy -- exactly the "two competing
+    // sources of truth" this migration is meant to avoid. This path only
+    // runs for authenticated users whose backend session creation failed
+    // (or who are continuing a legacy local session), so a backend hiccup
+    // still doesn't lose the conversation.
+    if (messages.length > 1 && isUserAuthenticated() && !isBackendSession) {
       // Filter out the restored-session notice (UI-only marker)
       const filteredMessages = messages.filter((m) => m.text !== RESTORED_NOTICE_TEXT);
 
@@ -1491,17 +2313,27 @@ const ChatApp: React.FC = () => {
 
       // Get real user email from profile (NOT fake localStorage email) and save
       // IMPORTANT: Use getProfile().email, NEVER localStorage.user_email which is a fake guest email
+      // This conversation belongs to the account the auth check last
+      // confirmed (`owner`; none yet: not saved): save it only under that
+      // account, and show the saved History only while it is still on screen.
+      const owner = userEmailRef.current;
+      const generation = accountGenerationRef.current;
       getProfile()
         .then((profile) => {
+          const sameAccount = generation === accountGenerationRef.current;
+          if (!owner || profile?.email !== owner) return;
           if (profile?.email) {
-            cachedEmailRef.current = profile.email;
             // saveSessionToStorage returns the user's visible sessions after save
             const visibleSessions = saveSessionToStorage(newSession, profile.email);
+            if (!sameAccount) return;
+            cachedEmailRef.current = profile.email;
             setChatSessions(visibleSessions);
           }
         })
         .catch((error) => {
           console.error('Failed to save chat session:', error);
+          if (generation !== accountGenerationRef.current) return;
+          if (!owner || cachedEmailRef.current !== owner) return;
           // Use cached email if getProfile fails (prevents silent loss)
           if (cachedEmailRef.current) {
             const visibleSessions = saveSessionToStorage(newSession, cachedEmailRef.current);
@@ -1516,13 +2348,22 @@ const ChatApp: React.FC = () => {
     initializeChat();
   };
 
-  const openTicketModal = async (prefillSubject?: string) => {
-    setTicketSubject(prefillSubject || '');
+  const openTicketModal = async (context?: { originalQuestion?: string; chatbotAnswer?: string }) => {
+    const { originalQuestion, chatbotAnswer } = context || {};
+    // Subject is a concise issue title describing what the customer asked
+    // about, never the chatbot's (potentially long) solution text -- so it
+    // comes from originalQuestion, not chatbotAnswer. With no prior
+    // question (e.g. the generic "Raise a support ticket" link), the user
+    // types their own subject; the field just starts blank.
+    setTicketSubject(originalQuestion ? firstSentence(originalQuestion).slice(0, MAX_TICKET_SUBJECT_CHARS) : '');
     setTicketDescription('');
+    setTicketOriginalQuestion(originalQuestion || '');
+    setTicketChatbotAnswer(chatbotAnswer || '');
     setTicketFeature(null);
     setTicketIssueType('');
     setTicketStepsToReproduce('');
     setTicketAttachments([]);
+    setAttachmentNotice('');
     setTicketTransactionId('');
     setTicketInvoiceNumber('');
     setTicketPaymentDate('');
@@ -1539,29 +2380,64 @@ const ChatApp: React.FC = () => {
 
     // Auto-populate Name and Email for authenticated users
     if (isUserAuthenticated()) {
+      const generation = accountGenerationRef.current;
+      let userProfile: Awaited<ReturnType<typeof getProfile>> | null = null;
       try {
-        const userProfile = await getProfile();
-        setTicketName(userProfile.full_name || '');
-        setTicketEmail(userProfile.email || '');
+        userProfile = await getProfile();
       } catch (error) {
         console.error('Failed to fetch user profile:', error);
         // Continue anyway, fields will be empty
+      }
+      // Signed out / switched account meanwhile: never open the form with
+      // the previous account's details (or the question it was raised from).
+      if (generation !== accountGenerationRef.current) return;
+      if (userProfile) {
+        setTicketName(userProfile.full_name || '');
+        setTicketEmail(userProfile.email || '');
       }
     }
 
     setShowTicketModal(true);
   };
 
+  // The nearest prior user message before an assistant reply at `index` --
+  // i.e. the exact question that reply answered. Used so "Raise a support
+  // ticket" under an unhelpful reply can send the customer's real question,
+  // not the chatbot's answer, as the ticket's original_question.
+  const findPrecedingUserQuestion = (index: number): string | undefined => {
+    for (let i = index - 1; i >= 0; i--) {
+      if (messages[i].type === 'user') {
+        return messages[i].text;
+      }
+    }
+    return undefined;
+  };
+
   const handleAttachmentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      const newFiles = Array.from(files);
-      setTicketAttachments((prev) => [...prev, ...newFiles]);
+      const picked = Array.from(files);
+      const tooLarge = picked.filter((f) => f.size > MAX_TICKET_ATTACHMENT_BYTES);
+      const fitting = picked.filter((f) => f.size <= MAX_TICKET_ATTACHMENT_BYTES);
+      const room = Math.max(0, MAX_TICKET_ATTACHMENTS - ticketAttachments.length);
+      const overCount = fitting.slice(room);
+      const notes: string[] = [];
+      if (tooLarge.length > 0) {
+        notes.push(`Not attached (larger than 5 MB): ${tooLarge.map((f) => f.name).join(', ')}.`);
+      }
+      if (overCount.length > 0) {
+        notes.push(`You can attach up to ${MAX_TICKET_ATTACHMENTS} files. Not attached: ${overCount.map((f) => f.name).join(', ')}.`);
+      }
+      setAttachmentNotice(notes.join(' '));
+      setTicketAttachments((prev) => [...prev, ...fitting.slice(0, room)]);
+      // Lets the user pick the same file again after removing it.
+      event.target.value = '';
     }
   };
 
   const removeAttachment = (index: number) => {
     setTicketAttachments((prev) => prev.filter((_, i) => i !== index));
+    setAttachmentNotice('');
   };
 
   const handleSendOtp = async () => {
@@ -1729,6 +2605,36 @@ const ChatApp: React.FC = () => {
     setIsSubmittingTicket(true);
 
     try {
+      // Upload attachments BEFORE creating the ticket, but never let an
+      // upload failure block the ticket itself -- a screenshot is always
+      // optional (Promise.allSettled, not Promise.all). Each successful
+      // upload is a standalone record on the backend (not yet linked to
+      // any ticket), so it's immediately included in the ticket-create
+      // call below rather than needing a second round-trip to attach it.
+      const generation = accountGenerationRef.current;
+      let uploadedAttachments: TicketAttachmentSummary[] = [];
+      let failedNames: string[] = [];
+      if (ticketAttachments.length > 0) {
+        const results = await Promise.allSettled(
+          ticketAttachments.map((file) => uploadTicketAttachment(file))
+        );
+        uploadedAttachments = results
+          .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof uploadTicketAttachment>>> => r.status === 'fulfilled')
+          .map((r) => ({ attachment_id: r.value.attachment_id, filename: r.value.filename }));
+
+        failedNames = ticketAttachments.filter((_, i) => results[i].status === 'rejected').map((f) => f.name);
+        if (failedNames.length > 0) {
+          console.error(`${failedNames.length} of ${ticketAttachments.length} attachment(s) failed to upload; continuing without them`);
+        }
+      }
+      // Signed out / switched account during the uploads: never create the
+      // ticket under the new account with the previous one's details.
+      if (generation !== accountGenerationRef.current) {
+        alert('Your account changed while this ticket was being sent, so it was not created. Please check the form and submit again.');
+        return;
+      }
+      const attachmentIds = uploadedAttachments.map((a) => a.attachment_id);
+
       const escalationData = await escalateToSupport({
         // featureToSubmit is only null when unauthenticated (where it's
         // hardcoded to 'login-issues' above) or when the guard above this
@@ -1738,6 +2644,7 @@ const ChatApp: React.FC = () => {
         issue_description: ticketDescription,
         session_id: sessionId,
         contact_email: ticketEmail || undefined,
+        attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
         issue_details: {
           feature: featureToSubmit,
           issue_type: ticketIssueType,
@@ -1747,6 +2654,8 @@ const ChatApp: React.FC = () => {
           requester_email: ticketEmail || undefined,
           user_type: ticketUserType || undefined,
           verification_token: verificationToken || undefined,
+          original_question: ticketOriginalQuestion.slice(0, MAX_TICKET_QA_CHARS) || undefined,
+          chatbot_answer: ticketChatbotAnswer.slice(0, MAX_TICKET_QA_CHARS) || undefined,
           ...(featureToSubmit === 'payment-billing' && {
             transaction_id: ticketTransactionId,
             invoice_number: ticketInvoiceNumber,
@@ -1755,16 +2664,54 @@ const ChatApp: React.FC = () => {
         },
       });
 
+      // Guest tickets get a view_url back per attachment (a single-use,
+      // login-free link -- see EscalationResponse.attachments);
+      // authenticated tickets get an empty array since they already have a
+      // working owner-authorized URL via getTicketAttachmentUrl. Merge by
+      // attachment_id rather than replacing the list outright, so a
+      // response with no attachments (e.g. an older backend) still shows
+      // whatever this client just uploaded.
+      // The ticket was created for the previous account; don't show it (or
+      // add it to the list) under the account that is signed in now. It
+      // does exist, though: say so and close the form, so it isn't sent twice.
+      if (generation !== accountGenerationRef.current) {
+        setShowTicketModal(false);
+        alert(`Ticket ${escalationData.ticket_id} was created for the account that was signed in before.`);
+        return;
+      }
+
+      const viewUrlByAttachmentId = new Map(
+        (escalationData.attachments || []).map((a) => [a.attachment_id, a.view_url])
+      );
+      const attachmentsWithViewUrls = uploadedAttachments.map((a) => ({
+        ...a,
+        view_url: viewUrlByAttachmentId.get(a.attachment_id),
+      }));
+
+      // description/affected_feature/updated_at are already available right
+      // here in local state/response -- the create endpoint itself only
+      // returns {ticket_id, status, created_at} (see EscalationResponse),
+      // so without this the ticket details modal would silently render
+      // this ticket as missing Description/Category/Last Updated the
+      // moment it's created, only "fixing itself" once the user later
+      // reloads the ticket list from the backend.
+      const createdAt = new Date().toISOString();
       const ticket: TicketInfo = {
         id: escalationData.ticket_id,
         subject: ticketSubject,
         status: escalationData.status,
         priority: ticketPriority,
-        created_at: new Date().toISOString(),
+        created_at: createdAt,
+        updated_at: createdAt,
         contact_email: ticketEmail, // Include email for guest ticket filtering
+        description: ticketDescription,
+        affected_feature: featureToSubmit || 'login-issues',
+        attachments: attachmentsWithViewUrls.length > 0 ? attachmentsWithViewUrls : undefined,
       };
 
       setTicketId(escalationData.ticket_id);
+      setSuccessTicketAttachments(attachmentsWithViewUrls);
+      setFailedAttachmentNames(failedNames);
       setTickets((prev) => {
         const updated = [ticket, ...prev];
         // Save to localStorage for persistence
@@ -1805,6 +2752,39 @@ const ChatApp: React.FC = () => {
       alert(describeError(error, 'Failed to create ticket. Please try again.'));
     } finally {
       setIsSubmittingTicket(false);
+    }
+  };
+
+  // Only the owner may cancel (the backend checks user_id): a ticket in this
+  // account's own list, or one whose email is this account's. Staff opening
+  // a customer's ticket from the ?ticket= link, and guests, get no button.
+  const isOwnTicket = (ticket: TicketInfo): boolean =>
+    isLocallyAuthenticated &&
+    (tickets.some((t) => t.id === ticket.id) ||
+      (!!userEmailRef.current && ticket.contact_email?.toLowerCase() === userEmailRef.current.toLowerCase()));
+
+  const handleCancelTicket = async (ticketId: string) => {
+    if (!window.confirm('Cancel this ticket? This cannot be undone.')) {
+      return;
+    }
+
+    setIsCancellingTicket(true);
+    try {
+      const updated = await cancelTicket(ticketId);
+
+      // Reflect the new status everywhere this ticket is shown: the open
+      // detail modal, the list/card view, and the localStorage cache
+      // submitTicket() and loadTickets() both read/write.
+      setSelectedTicket((prev) => (prev && prev.id === ticketId ? { ...prev, status: updated.status } : prev));
+      setTickets((prev) => {
+        const next = prev.map((t) => (t.id === ticketId ? { ...t, status: updated.status } : t));
+        localStorage.setItem('saved_tickets', JSON.stringify(next));
+        return next;
+      });
+    } catch (error: unknown) {
+      alert(describeError(error, 'Failed to cancel ticket. Please try again.'));
+    } finally {
+      setIsCancellingTicket(false);
     }
   };
 
@@ -1919,7 +2899,17 @@ const ChatApp: React.FC = () => {
                       onClick={() => loadSessionMessages(session.id)}
                       style={{ cursor: 'pointer' }}
                     >
-                      <div className="session-title">{session.title}</div>
+                      <div className="session-item-header">
+                        <div className="session-title">{session.title}</div>
+                        <button
+                          className="session-delete-btn"
+                          title="Remove from history"
+                          disabled={deletingSessionId === session.id}
+                          onClick={(e) => handleDeleteSession(session, e)}
+                        >
+                          {deletingSessionId === session.id ? '…' : '🗑️'}
+                        </button>
+                      </div>
                       <div className="session-preview">{session.preview}</div>
                       <div className="session-date">
                         {session.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1984,7 +2974,7 @@ const ChatApp: React.FC = () => {
             {isLocallyAuthenticated && (
               <button
                 className="sidebar-toggle"
-                onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                onClick={() => (isHistoryOpen ? setIsHistoryOpen(false) : openHistory())}
                 title="Toggle History"
               >
                 ☰
@@ -2005,7 +2995,7 @@ const ChatApp: React.FC = () => {
               ↙↗
             </button>
 
-            <button className="close-btn-header" onClick={() => { setMessages([]); setInputValue(''); setIsMinimized(true); }} title="Close (exit to launcher and clear conversation)">
+            <button className="close-btn-header" onClick={() => { startNewChat(); setIsMinimized(true); }} title="Close (saves conversation and returns to launcher)">
               ×
             </button>
           </div>
@@ -2013,7 +3003,7 @@ const ChatApp: React.FC = () => {
 
         {/* Messages Area */}
         <div className="messages-container" ref={messagesContainerRef}>
-          {(messages.length <= 5 || showSuggestionsPanel) && settings.showSuggestedQuestions && (
+          {settings.showSuggestedQuestions && (
             <div className="top-suggestions">
               <div className="top-suggestions-title">How can we help?</div>
               <div className="top-suggestions-questions help-questions">
@@ -2025,17 +3015,37 @@ const ChatApp: React.FC = () => {
                   {expandedMenu === 'features' ? '▼' : '▶'} I want to know more about the products and features
                 </button>
                 {expandedMenu === 'features' && (
+                  // 6 buttons, one per topic (Resume Building, Job Match,
+                  // Mock Interview, Mock Test, Coding Assessment, English
+                  // Assessment) -- auth-aware, same pattern as Login &
+                  // Account. Guests get introductory "what is this"
+                  // questions; authenticated users get practical
+                  // "how do I use this" questions. Every phrase verified
+                  // live against the backend to resolve to its intended
+                  // topic before being added; the two English Assessment
+                  // and two Coding/Mock Test proposals that failed to
+                  // route at all were replaced (see ChatApp test file /
+                  // session notes for the rejected originals).
                   <div className="features-grid">
-                    <button onClick={() => handleSendMessage('How can I create a resume?')} className="feature-card">📄 How can I create a resume?</button>
-                    <button onClick={() => handleSendMessage('How can I improve my resume?')} className="feature-card">💡 How can I improve my resume?</button>
-                    <button onClick={() => handleSendMessage('What does Resume Parser do?')} className="feature-card">📋 What does Resume Parser do?</button>
-                    <button onClick={() => handleSendMessage('How can I create a cover letter?')} className="feature-card">📝 How can I create a cover letter?</button>
-                    <button onClick={() => handleSendMessage('How can I search for jobs?')} className="feature-card">🔍 How can I search for jobs?</button>
-                    <button onClick={() => handleSendMessage('How does Job Match work?')} className="feature-card">🎯 How does Job Match work?</button>
-                    <button onClick={() => handleSendMessage('How does Mock Interview work?')} className="feature-card">🎤 How does Mock Interview work?</button>
-                    <button onClick={() => handleSendMessage('What is Mock Test?')} className="feature-card">📊 What is Mock Test?</button>
-                    <button onClick={() => handleSendMessage('How can CareerBot help me with my resume?')} className="feature-card">✨ How can CareerBot help with my resume?</button>
-                    <button onClick={() => handleSendMessage('What features are available in CareerBot?')} className="feature-card">💬 What features are available?</button>
+                    {isLocallyAuthenticated ? (
+                      <>
+                        <button onClick={() => handleSendMessage('How can I create or update my resume?')} className="feature-card">📄 How can I create or update my resume?</button>
+                        <button onClick={() => handleSendMessage('How can I check my resume match for a specific job?')} className="feature-card">🎯 How can I check my resume match for a specific job?</button>
+                        <button onClick={() => handleSendMessage('How can I start a Mock Interview and review my feedback?')} className="feature-card">🎤 How can I start a Mock Interview and review my feedback?</button>
+                        <button onClick={() => handleSendMessage('Where can I take a Mock Test and see my results?')} className="feature-card">📊 Where can I take a Mock Test and see my results?</button>
+                        <button onClick={() => handleSendMessage('Where can I practice coding problems and review my performance?')} className="feature-card">💻 Where can I practice coding problems and review my performance?</button>
+                        <button onClick={() => handleSendMessage('How can I take an English Assessment and review my performance?')} className="feature-card">🗣️ How can I take an English Assessment and review my performance?</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => handleSendMessage('What can CareerBot help me do with my resume?')} className="feature-card">📄 What can CareerBot help me do with my resume?</button>
+                        <button onClick={() => handleSendMessage('How does Job Match help me find suitable jobs?')} className="feature-card">🎯 How does Job Match help me find suitable jobs?</button>
+                        <button onClick={() => handleSendMessage('What is a Mock Interview, and how does it work?')} className="feature-card">🎤 What is a Mock Interview, and how does it work?</button>
+                        <button onClick={() => handleSendMessage('What is a Mock Test, and what can I practice?')} className="feature-card">📊 What is a Mock Test, and what can I practice?</button>
+                        <button onClick={() => handleSendMessage('How can CareerBot help me assess my coding skills?')} className="feature-card">💻 How can CareerBot help me assess my coding skills?</button>
+                        <button onClick={() => handleSendMessage('What is the English Assessment and how does it work?')} className="feature-card">🗣️ What is the English Assessment and how does it work?</button>
+                      </>
+                    )}
                   </div>
                 )}
                 <button
@@ -2086,20 +3096,60 @@ const ChatApp: React.FC = () => {
                 </button>
                 {expandedMenu === 'help-login-account' && (
                   <div className="features-grid">
-                    <button onClick={() => handleSendMessage('How can I reset my password?')} className="feature-card">🔑 How can I reset my password?</button>
-                    <button onClick={() => handleSendMessage('Why can\'t I log in to my account?')} className="feature-card">⚠️ Why can&apos;t I log in?</button>
-                    <button onClick={() => handleSendMessage('How can I get help with OTP verification?')} className="feature-card">📧 How can I get help with OTP?</button>
-                    <button onClick={() => handleSendMessage('What should I do if my account is locked?')} className="feature-card">🔒 What if my account is locked?</button>
-                    <button onClick={() => handleSendMessage('How can I edit my profile?')} className="feature-card">👤 How can I edit my profile?</button>
-                    <button onClick={() => handleSendMessage('How can I change my password?')} className="feature-card">🔐 How can I change my password?</button>
-                    <button onClick={() => handleSendMessage('Why am I not receiving the OTP?')} className="feature-card">❌ Why am I not receiving OTP?</button>
-                    <button onClick={() => handleSendMessage('How can I access my account?')} className="feature-card">🔓 How can I access my account?</button>
+                    {isLocallyAuthenticated ? (
+                      // Authenticated: account-management first -- none of
+                      // these are "how do I get into my account" questions,
+                      // since the user is already in. "Why can't I save my
+                      // profile changes?" was deliberately left out: it has
+                      // no distinct KB answer (falls back to the same
+                      // generic profile_building blurb, which doesn't
+                      // actually address a save failure) -- an unsupported
+                      // question, not a real topic.
+                      <>
+                        <button onClick={() => handleSendMessage('How can I update my profile information?')} className="feature-card">👤 How can I update my profile information?</button>
+                        {/* No dedicated "change password while logged in" page
+                            exists in this app -- verified against the real
+                            router. This still routes to the one real reset
+                            flow (same KB topic as "I forgot my password"),
+                            which is the only supported mechanism. */}
+                        <button onClick={() => handleSendMessage('How can I change my password?')} className="feature-card">🔐 How can I change my password?</button>
+                        <button onClick={() => handleSendMessage('How can I update my registered email address?')} className="feature-card">📧 How can I update my registered email address?</button>
+                        <button onClick={() => handleSendMessage('How do I sign out of my account?')} className="feature-card">🚪 How do I sign out of my account?</button>
+                        <button onClick={() => handleSendMessage('Why do I keep getting signed out unexpectedly?')} className="feature-card">🔄 Why do I keep getting signed out unexpectedly?</button>
+                      </>
+                    ) : (
+                      // Guest: access/troubleshooting -- getting INTO the
+                      // account, not managing it once inside.
+                      <>
+                        <button onClick={() => handleSendMessage("Why can't I log in to my account?")} className="feature-card">⚠️ Why can&apos;t I log in to my account?</button>
+                        <button onClick={() => handleSendMessage('I forgot my password. How can I reset it?')} className="feature-card">🔑 I forgot my password. How can I reset it?</button>
+                        <button onClick={() => handleSendMessage('Why am I not receiving the OTP?')} className="feature-card">📧 Why am I not receiving the OTP?</button>
+                        <button onClick={() => handleSendMessage('My account is locked. How can I unlock it?')} className="feature-card">🔒 My account is locked. How can I unlock it?</button>
+                        <button onClick={() => handleSendMessage('Why are my login credentials not being accepted?')} className="feature-card">🆔 Why are my login credentials not being accepted?</button>
+                      </>
+                    )}
+                  </div>
+                )}
+                <button
+                  className="feature-question-btn help-question"
+                  onClick={() => setExpandedMenu(expandedMenu === 'help-payment' ? null : 'help-payment')}
+                  style={{position: 'relative'}}
+                >
+                  {expandedMenu === 'help-payment' ? '▼' : '▶'} Do you need help with a payment?
+                </button>
+                {expandedMenu === 'help-payment' && (
+                  <div className="features-grid">
+                    <button onClick={() => handleSendMessage('How can I check my payment status?')} className="feature-card">📊 How can I check my payment status?</button>
+                    <button onClick={() => handleSendMessage('Why was money deducted but my payment is not confirmed?')} className="feature-card">⚠️ Why was money deducted but payment not confirmed?</button>
+                    <button onClick={() => handleSendMessage('Why were my credits not added after payment?')} className="feature-card">💰 Why were my credits not added after payment?</button>
+                    <button onClick={() => handleSendMessage('How can I report an unauthorized payment?')} className="feature-card">🚨 How can I report an unauthorized payment?</button>
+                    <button onClick={() => handleSendMessage('How can I get help with a payment issue?')} className="feature-card">🆘 How can I get help with a payment issue?</button>
                   </div>
                 )}
               </div>
             </div>
           )}
-          {messages.map((message) => {
+          {messages.map((message, messageIndex) => {
             if (message.type === 'system' && message.ticket) {
               const meta = STATUS_META[message.ticket.status] || STATUS_META.open;
               return (
@@ -2141,37 +3191,40 @@ const ChatApp: React.FC = () => {
                 </div>
                 <div className="message-content">
                   {(() => {
-                    // User messages are displayed in full, never shortened
+                    // Always show the complete message -- both user and
+                    // assistant. Chatbot answers (KB-sourced or account data)
+                    // are already concise by design; collapsing them to just
+                    // their first sentence hid real content (e.g. the actual
+                    // steps in a "how do I cancel my subscription" answer)
+                    // behind a button most users never clicked.
                     if (message.type !== 'assistant') {
                       return <div className="message-text">{message.text}</div>;
                     }
 
-                    // Assistant messages can be summarized
-                    const cleanText = stripMarkdown(message.text);
-                    const summary = firstSentence(cleanText);
-                    const isLong = cleanText.length > 180 && summary.length < cleanText.length;
-                    const isExpanded = expandedMessageIds.has(message.id);
                     return (
-                      <>
-                        <div className="message-text">
-                          {isLong && !isExpanded ? summary : cleanText}
-                        </div>
-                        {isLong && (
-                          <button
-                            className="message-expand-toggle"
-                            onClick={() =>
-                              setExpandedMessageIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(message.id)) next.delete(message.id);
-                                else next.add(message.id);
-                                return next;
-                              })
-                            }
-                          >
-                            {isExpanded ? 'Show less' : 'Show more'}
-                          </button>
+                      <div className="message-text">
+                        {renderMarkdownText(message.text)}
+                        {message.actionLink && (
+                          <>
+                            {' '}
+                            {message.actionLink.sentence}
+                            {/* Plain <a>, not next/link's <Link> -- Link does
+                                client-side "soft" navigation, which silently
+                                fails to open the sign-in modal for
+                                requiresLogin links when the widget is already
+                                open on "/" itself (page.tsx's modal-opening
+                                effect is mount-only, it doesn't re-run on a
+                                query-string-only soft navigation). A plain
+                                <a> forces a full navigation every time, so
+                                the modal reliably opens regardless of which
+                                page the widget was open on. */}
+                            <a href={message.actionLink.href} className="inline-action-link">
+                              {message.actionLink.linkText}
+                            </a>
+                            .
+                          </>
                         )}
-                      </>
+                      </div>
                     );
                   })()}
                   {message.sources && message.sources.length > 0 && (
@@ -2223,7 +3276,13 @@ const ChatApp: React.FC = () => {
                         <div className="feedback-not-helpful">
                           <p>Sorry, I couldn&apos;t help with that.</p>
                           <p>
-                            <button className="link-btn" onClick={() => openTicketModal(firstSentence(message.text))}>
+                            <button
+                              className="link-btn"
+                              onClick={() => openTicketModal({
+                                originalQuestion: findPrecedingUserQuestion(messageIndex),
+                                chatbotAnswer: message.text,
+                              })}
+                            >
                               Raise a support ticket →
                             </button>
                           </p>
@@ -2253,39 +3312,6 @@ const ChatApp: React.FC = () => {
                   <span></span>
                 </div>
               </div>
-            </div>
-          )}
-
-          {messages.length > 5 && !showSuggestionsPanel && (
-            <div
-              style={{
-                position: 'sticky',
-                bottom: '16px',
-                display: 'flex',
-                justifyContent: 'center',
-                zIndex: 10,
-                marginTop: '16px',
-                pointerEvents: 'none',
-              }}
-            >
-              <button
-                onClick={() => setShowSuggestionsPanel(true)}
-                style={{
-                  pointerEvents: 'auto',
-                  padding: '10px 20px',
-                  backgroundColor: '#0066cc',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  boxShadow: '0 2px 8px rgba(0, 102, 204, 0.3)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                ✨ Show Suggestions
-              </button>
             </div>
           )}
         </div>
@@ -2334,7 +3360,7 @@ const ChatApp: React.FC = () => {
             {isLocallyAuthenticated && isUserAuthenticated() && (
               <button
                 className={`nav-tab ${activeNavTab === 'history' ? 'active' : ''}`}
-                onClick={() => { setActiveNavTab('history'); setIsHistoryOpen(true); }}
+                onClick={() => { setActiveNavTab('history'); openHistory(); }}
                 title="History"
               >
                 <svg className="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2373,6 +3399,7 @@ const ChatApp: React.FC = () => {
                     className="field-input"
                     placeholder="Enter your issue"
                     value={ticketSubject}
+                    maxLength={MAX_TICKET_SUBJECT_CHARS}
                     onChange={(e) => setTicketSubject(e.target.value)}
                   />
                   <p style={{ fontSize: '12px', color: ticketSubject.length >= 5 ? '#10b981' : '#ef4444', marginTop: '4px', marginBottom: '16px' }}>
@@ -2470,6 +3497,7 @@ const ChatApp: React.FC = () => {
                     className="field-input"
                     placeholder="Brief summary of your issue"
                     value={ticketSubject}
+                    maxLength={MAX_TICKET_SUBJECT_CHARS}
                     onChange={(e) => setTicketSubject(e.target.value)}
                   />
                   <p style={{ fontSize: '12px', color: ticketSubject.length >= 5 ? '#10b981' : '#ef4444', marginTop: '4px', marginBottom: '16px' }}>
@@ -2613,6 +3641,9 @@ const ChatApp: React.FC = () => {
               >
                 📎 Upload Screenshot/File
               </button>
+              {attachmentNotice && (
+                <p role="alert" style={{ fontSize: '12px', color: '#b45309', marginTop: '6px' }}>{attachmentNotice}</p>
+              )}
               {ticketAttachments.length > 0 && (
                 <div className="attachment-list">
                   {ticketAttachments.map((file, index) => (
@@ -2751,6 +3782,27 @@ const ChatApp: React.FC = () => {
 
             <p className="success-message">Our support team will review your request and contact you at <strong>{ticketEmail || 'your registered email address'}</strong>.</p>
 
+            {successTicketAttachments.length > 0 && (
+              <div className="ticket-attachments-box">
+                <label>Attachment{successTicketAttachments.length > 1 ? 's' : ''}:</label>
+                {successTicketAttachments.map((att) =>
+                  att.view_url ? (
+                    <p key={att.attachment_id}>
+                      📎 <a href={att.view_url} target="_blank" rel="noopener noreferrer">{att.filename}</a>
+                    </p>
+                  ) : (
+                    <p key={att.attachment_id}>📎 {att.filename}</p>
+                  )
+                )}
+              </div>
+            )}
+
+            {failedAttachmentNames.length > 0 && (
+              <p role="alert" style={{ fontSize: '12px', color: '#b45309', marginTop: '6px' }}>
+                These files could not be attached, so the ticket was created without them: {failedAttachmentNames.join(', ')}
+              </p>
+            )}
+
             <div className="success-modal-footer">
               <button
                 className="modal-submit-btn"
@@ -2783,6 +3835,9 @@ const ChatApp: React.FC = () => {
                   {selectedTicket.priority === 2 && <span className="priority-flag">🔥 Urgent</span>}
                 </div>
 
+                <label className="field-label">Ticket ID</label>
+                <p style={{ marginBottom: '16px' }}>{selectedTicket.id || 'N/A'}</p>
+
                 <label className="field-label">Subject</label>
                 <p style={{ marginBottom: '16px' }}>{selectedTicket.subject}</p>
 
@@ -2799,6 +3854,9 @@ const ChatApp: React.FC = () => {
                     <p style={{ marginBottom: '16px' }}>{selectedTicket.affected_feature}</p>
                   </>
                 )}
+
+                <label className="field-label">Priority</label>
+                <p style={{ marginBottom: '16px' }}>{selectedTicket.priority === 2 ? '🔥 Urgent' : 'Normal'}</p>
 
                 <label className="field-label">Created</label>
                 <p style={{ marginBottom: '16px' }}>
@@ -2817,6 +3875,47 @@ const ChatApp: React.FC = () => {
                     <label className="field-label">Contact Email</label>
                     <p style={{ marginBottom: '16px' }}>{selectedTicket.contact_email} <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: 600 }}>· Notified</span></p>
                   </>
+                )}
+
+                {selectedTicket.attachments && selectedTicket.attachments.length > 0 && (
+                  <>
+                    <label className="field-label">Attachments</label>
+                    <div style={{ marginBottom: '16px' }}>
+                      {selectedTicket.attachments.map((att) => (
+                        <div key={att.attachment_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                          <span>📎 {att.filename}</span>
+                          {isLocallyAuthenticated ? (
+                            <a
+                              href={getTicketAttachmentUrl(selectedTicket.id, att.attachment_id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="link-btn"
+                            >
+                              View Attachment
+                            </a>
+                          ) : (
+                            // Guests can never view ticket content by ID at all
+                            // (same policy as get_ticket_details and the
+                            // confirmation-email link) -- a link here would
+                            // just 403, so show the filename without one
+                            // rather than an attachment that looks clickable
+                            // but isn't.
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Sign in to view</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {CANCELLABLE_TICKET_STATUSES.has(selectedTicket.status) && isOwnTicket(selectedTicket) && (
+                  <button
+                    className="link-btn"
+                    disabled={isCancellingTicket}
+                    onClick={() => handleCancelTicket(selectedTicket.id)}
+                  >
+                    {isCancellingTicket ? 'Cancelling…' : 'Cancel Ticket'}
+                  </button>
                 )}
               </div>
             </div>
