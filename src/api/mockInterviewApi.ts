@@ -265,10 +265,7 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 // ==================== PHASE 3 — LIVE INTERVIEW INTERFACES ====================
 
 export interface LiveCreateRequest {
-  // Only these three are accepted — "mixed" (and the old "technical_coding")
-  // are rejected (422). There is no separate coding-round flag: this backend
-  // release has no live-interview coding round at all.
-  session_type: 'hr' | 'technical' | 'managerial';
+  session_type: 'hr' | 'technical' | 'managerial' | 'technical+coding';
   target_role?: string;
   experience_level?: string;
   focus_areas?: string[];
@@ -326,10 +323,23 @@ export interface LiveSession {
 // site) and sometimes timestamp_ms/version — omitted here since nothing reads
 // them per-variant.
 //
-// coding_answer / coding_round_start are NOT part of this backend release's
-// documented protocol (live-interview.txt has no coding-round section at
-// all) — kept here only so the existing coding-round UI keeps compiling
-// as inert, unused code until that feature ships server-side again.
+// Coding round ("technical+coding" sessions): mirrors careerbot-api develop2
+// app/api/v1/endpoints/mock_interview_live.py — the server sends
+// coding_round_start {problem, instructions} (no time limit), the browser
+// answers with submit_code / followup_answer, and the server replies with
+// code_graded / followup_graded (or an `error` frame such as
+// CODE_GRADING_FAILED). code_graded carries only a follow-up COUNT, never
+// the follow-up question text.
+
+export interface LiveCodingProblem {
+  slug: string;
+  title: string;
+  difficulty: string;
+  statement: string;
+  examples: { input: string; output: string; explanation?: string | null }[];
+  constraints: string[];
+  starter_code: Partial<Record<'python' | 'java' | 'cpp' | 'c', string>>;
+}
 
 export interface AnswerEvaluation {
   weighted_score: number;
@@ -345,7 +355,8 @@ export type WsClientMessage =
   | { type: 'end_interview' }
   | { type: 'skip_question' }
   | { type: 'ping' }
-  | { type: 'coding_answer'; submission_id: string | null; score: number | null; problem_slug: string };
+  | { type: 'submit_code'; code: string; language: string }
+  | { type: 'followup_answer'; code: string; attempt_number: number };
 
 export type WsServerMessage =
   | { type: 'session_ready' }
@@ -385,7 +396,10 @@ export type WsServerMessage =
   | { type: 'heartbeat'; ts_ms?: number }
   | { type: 'error'; code: string; message: string; recoverable?: boolean }
   | { type: 'pong' }
-  | { type: 'coding_round_start'; problem_slug: string; problem_title: string; time_limit_s: number };
+  // time_limit_s is not sent today; read it if a later backend adds it.
+  | { type: 'coding_round_start'; problem: LiveCodingProblem; instructions?: string; time_limit_s?: number }
+  | { type: 'code_graded'; score: number; criteria?: Record<string, unknown>; summary?: string; follow_up_count: number }
+  | { type: 'followup_graded'; attempt_number: number; score: number; summary?: string; next_followup_available: boolean };
 
 // ==================== PHASE 3 — LIVE INTERVIEW FUNCTIONS ====================
 

@@ -8,6 +8,7 @@ import {
   evaluateLiveSessionVideo,
   WsServerMessage,
   WsClientMessage,
+  LiveCodingProblem,
   LiveCreateResponse,
   SimliAvatarSession,
 } from "@/api/mockInterviewApi";
@@ -20,8 +21,7 @@ import { MOCK_INTERVIEWERS, isValidInterviewerIndex, pickInterviewerIndex } from
 import type { MockInterviewer } from "../../_lib/interviewers";
 import { useMockInterview } from "../../_context/MockInterviewContext";
 import { CodingTransition } from "@/components/interview/CodingTransition";
-import { CodingStep } from "@/components/interview/CodingStep";
-import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
+import { CodingStep, type CodeGraded, type FollowupGraded } from "@/components/interview/CodingStep";
 import {
   Mic,
   Video,
@@ -47,14 +47,24 @@ type InterviewPhase =
   | "ai-talking"    // Interviewer is speaking (streaming audio deltas)
   | "listening"     // Candidate's turn — mic streaming, AI doing turn detection
   | "processing"    // Candidate's turn closed, waiting on scoring / next question
-  | "coding"        // Live coding round active (not sent by this backend release — kept inert)
+  | "coding"        // Coding round of a "technical+coding" session
   | "completed";    // All questions done
 
 interface CodingRoundState {
-  problemSlug: string;
-  problemTitle: string;
+  problem: LiveCodingProblem;
+  instructions?: string;
   timeLimitS: number;
 }
+
+// careerbot-api's coding_round_start carries no time limit (yet); this is
+// the web-side default for the coding round's countdown.
+const DEFAULT_CODING_ROUND_TIME_LIMIT_S = 30 * 60;
+// The api's `error` codes that answer (and drop) a submit_code /
+// followup_answer frame — only these end the "grading…" wait.
+const CODING_REPLY_ERROR_CODES = new Set([
+  "CODE_GRADING_FAILED", "EMPTY_CODE", "NO_PROBLEM_LOADED", "INVALID_ACTION",
+  "INVALID_FOLLOWUP", "FOLLOWUP_GRADING_FAILED", "EVENT_RATE_LIMITED",
+]);
 
 interface Question {
   number: number;
@@ -64,6 +74,13 @@ interface Question {
 interface ScoreToast {
   questionNumber: number;
   score: number;
+}
+
+function formatSessionDuration(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
 interface StoredInterviewerSelection {
@@ -374,10 +391,21 @@ export default function LiveInterviewSessionPage() {
   const router = useRouter();
   const sessionId = params.sessionId as string;
   const interviewer = useMemo<MockInterviewer>(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
+  const sessionStartedAtRef = useRef(Date.now());
+  const [sessionDuration, setSessionDuration] = useState(0);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
   const phaseRef = useRef<InterviewPhase>("connecting");
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => {
+    if (phase === "completed") return;
+    const updateDuration = () => {
+      setSessionDuration(Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000)));
+    };
+    updateDuration();
+    const timerId = window.setInterval(updateDuration, 1000);
+    return () => window.clearInterval(timerId);
+  }, [phase]);
   const [sessionType, setSessionType] = useState("Live");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [visibleQuestionText, setVisibleQuestionText] = useState("");
@@ -792,6 +820,15 @@ export default function LiveInterviewSessionPage() {
   // ─── Coding round state ────────────────────────────────────────────────────
   const [codingRound, setCodingRound] = useState<CodingRoundState | null>(null);
   const [showCodingTransition, setShowCodingTransition] = useState(false);
+  // Separate from `phase`: the technical+coding AI leg stays connected during
+  // the coding round, and its voice events still move `phase`; the editor
+  // must stay on screen regardless.
+  const [codingActive, setCodingActive] = useState(false);
+  const [codeGrade, setCodeGrade] = useState<CodeGraded | null>(null);
+  const [followupGrades, setFollowupGrades] = useState<FollowupGraded[]>([]);
+  const [codingPending, setCodingPending] = useState(false);
+  const finishRequestedRef = useRef(false);   // "Finish interview" sent end_interview
+  const codingErrorRef = useRef<string | null>(null); // banner text of the last coding error frame
 
   const [showEndModal, setShowEndModal] = useState(false);
   const lastEventIdRef = useRef<number>(0);                // event dedup baseline
@@ -959,7 +996,9 @@ export default function LiveInterviewSessionPage() {
   const wsSend = useCallback((msg: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
+      return true;
     }
+    return false;
   }, []);
 
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1058,17 +1097,37 @@ export default function LiveInterviewSessionPage() {
   // the second mount uses the ticket even after sessionStorage was cleared.
   const initialWsUrlRef = useRef<string | null>(null);
 
+  // A grade answers the coding error before it: drop that banner, but not a later, unrelated error.
+  const clearCodingError = useCallback(() => {
+    const text = codingErrorRef.current;
+    codingErrorRef.current = null;
+    if (text !== null) setServerError((current) => (current === text ? null : current));
+  }, []);
+
   const handleWsMessage = useCallback((msg: WsServerMessage) => {
     switch (msg.type) {
-      // Not sent by this backend release (no live-interview coding round
-      // exists yet) — kept only so the coding-round UI stays intact.
       case "coding_round_start":
+        if (!msg.problem?.slug) return;
         setCodingRound({
-          problemSlug: msg.problem_slug,
-          problemTitle: msg.problem_title,
-          timeLimitS: msg.time_limit_s,
+          problem: msg.problem,
+          instructions: msg.instructions,
+          timeLimitS: typeof msg.time_limit_s === "number" && msg.time_limit_s > 0
+            ? msg.time_limit_s : DEFAULT_CODING_ROUND_TIME_LIMIT_S,
         });
+        setCodeGrade(null);
+        setFollowupGrades([]);
+        setCodingPending(false);
         setShowCodingTransition(true);
+        return;
+      case "code_graded":
+        setCodeGrade(msg);
+        setCodingPending(false);
+        clearCodingError();
+        return;
+      case "followup_graded":
+        setFollowupGrades((prev) => [...prev.filter((f) => f.attempt_number !== msg.attempt_number), msg]);
+        setCodingPending(false);
+        clearCodingError();
         return;
       case "session_ready":
         sessionReadyRef.current = true;
@@ -1275,13 +1334,18 @@ export default function LiveInterviewSessionPage() {
         break;
       case "heartbeat":
         break;
-      case "error":
-        setServerError(msg.message || "The interview service reported an issue. You can retry or end for a partial report.");
+      case "error": {
+        const text = msg.message || "The interview service reported an issue. You can retry or end for a partial report.";
+        setServerError(text);
+        // An unrelated error replaces the coding error's banner; a grade must not clear it.
+        codingErrorRef.current = CODING_REPLY_ERROR_CODES.has(msg.code) ? text : null;
+        if (CODING_REPLY_ERROR_CODES.has(msg.code)) setCodingPending(false);
         break;
+      }
       default:
         break;
     }
-  }, [showScoreToast, disconnectAvatar, clearPartialTranscript, clearAnswerCaptureTimer, scheduleAnswerCaptureFallback, setIsAnswerCaptureFallback]);
+  }, [showScoreToast, disconnectAvatar, clearPartialTranscript, clearAnswerCaptureTimer, scheduleAnswerCaptureFallback, setIsAnswerCaptureFallback, clearCodingError]);
 
   const openWebSocket = useCallback((wsUrl: string) => {
     if (wsRef.current) {
@@ -1313,8 +1377,16 @@ export default function LiveInterviewSessionPage() {
     ws.onclose = (event) => {
       setWsConnected(false);
 
-      // Clean close — interview ended normally; nothing more to do.
-      if (event.code === 1000 || event.code === 1001) return;
+      // Clean close — interview ended normally; nothing more to do, unless
+      // the candidate pressed Finish and is still waiting on interview_complete.
+      if (event.code === 1000 || event.code === 1001) {
+        if (finishRequestedRef.current && phaseRef.current !== "completed") {
+          // interview_complete normally stops the avatar; it never arrived here.
+          disconnectAvatar();
+          setPhase("completed");
+        }
+        return;
+      }
 
       // AI_SESSION_UNAVAILABLE: the AI provider itself was unreachable when
       // the server tried to connect — no interview ever started, nothing to
@@ -1415,27 +1487,26 @@ export default function LiveInterviewSessionPage() {
       : currentQuestion.text
     : "Your interviewer is preparing the first question.";
 
-  const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
-    wsSend({
-      type: "coding_answer",
-      submission_id: result.submission_id,
-      score: result.score,
-      problem_slug: result.problem_slug,
-    });
-    setPhase("processing");
-    setCodingRound(null);
+  const handleSubmitCode = useCallback((code: string, language: string) => {
+    if (wsSend({ type: "submit_code", code, language })) setCodingPending(true);
   }, [wsSend]);
 
-  const handleCodingTimeExpired = useCallback(() => {
-    wsSend({
-      type: "coding_answer",
-      submission_id: null,
-      score: null,
-      problem_slug: codingRound?.problemSlug ?? "",
-    });
-    setPhase("processing");
-    setCodingRound(null);
-  }, [wsSend, codingRound]);
+  const handleSubmitFollowup = useCallback((code: string, attemptNumber: number) => {
+    if (wsSend({ type: "followup_answer", code, attempt_number: attemptNumber })) setCodingPending(true);
+  }, [wsSend]);
+
+  // The normal end of a technical+coding interview: unlike "End early", stay
+  // in the room until the api's interview_complete (or the socket closing)
+  // moves to the completed screen, which also uploads the proctoring video.
+  const handleFinishCoding = useCallback(() => {
+    finishRequestedRef.current = true;
+    if (wsSend({ type: "end_interview" })) {
+      setCodingPending(true);
+    } else {
+      disconnectAvatar();
+      setPhase("completed");
+    }
+  }, [wsSend, disconnectAvatar]);
 
   if (phase === "completed") {
     return <CompletedScreen sessionId={sessionId} reportId={completedReportId} />;
@@ -1452,10 +1523,11 @@ export default function LiveInterviewSessionPage() {
 
       {showCodingTransition && codingRound && (
         <CodingTransition
-          problemTitle={codingRound.problemTitle}
+          problemTitle={codingRound.problem.title}
           timeLimitMin={Math.ceil(codingRound.timeLimitS / 60)}
           onDone={() => {
             setShowCodingTransition(false);
+            setCodingActive(true);
             setPhase("coding");
           }}
         />
@@ -1478,7 +1550,7 @@ export default function LiveInterviewSessionPage() {
 
 
         {/* Status bar */}
-        <header className="mi-room-header mi-live-room-header">
+        <header className="mi-room-header mi-live-room-header flex-wrap">
           <div className="flex items-center gap-3">
             {wsConnected ? (
               <span className="flex items-center gap-1.5 rounded-lg border border-[#2557a7]/15 bg-[#2557a7]/5 px-2.5 py-1 text-xs font-semibold text-[#2557a7]">
@@ -1491,7 +1563,14 @@ export default function LiveInterviewSessionPage() {
             )}
             <span className="text-xs text-white/55">Session: {sessionId.slice(-8)}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-white/85"
+              aria-label={`Session duration ${formatSessionDuration(sessionDuration)}`}
+            >
+              <Clock size={12} aria-hidden="true" />
+              {formatSessionDuration(sessionDuration)}
+            </span>
             <span className="flex items-center gap-1 text-xs text-white/55">
               <Clock size={11} />
               {sessionType} Interview
@@ -1558,7 +1637,7 @@ export default function LiveInterviewSessionPage() {
         )}
 
         {/* Inactivity banner */}
-        {showInactivityBanner && (
+        {showInactivityBanner && !codingActive && (
           <div className="bg-[#2557a7]/20 border-b border-[#2557a7]/40 px-4 py-2.5 flex items-center justify-between">
             <p className="text-xs text-[#2557a7] flex items-center gap-2">
               <AlertCircle size={13} className="shrink-0" />
@@ -1571,20 +1650,27 @@ export default function LiveInterviewSessionPage() {
         )}
 
         {/* Coding phase — full-height editor */}
-        {phase === "coding" && codingRound && (
+        {codingActive && codingRound && (
           <div className="flex-1 overflow-hidden">
             <CodingStep
-              problemSlug={codingRound.problemSlug}
+              key={codingRound.problem.slug}
+              problem={codingRound.problem}
+              instructions={codingRound.instructions}
               timeLimitS={codingRound.timeLimitS}
-              onSubmitted={handleCodingSubmitted}
-              onTimeExpired={handleCodingTimeExpired}
+              grade={codeGrade}
+              followups={followupGrades}
+              pending={codingPending}
+              onSubmitCode={handleSubmitCode}
+              onSubmitFollowup={handleSubmitFollowup}
+              onFinish={handleFinishCoding}
             />
           </div>
         )}
 
-        {/* Main content — verbal interview phases */}
-        {phase !== "coding" && (
-        <div className="mi-live-room-content min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4">
+        {/* Main content — verbal interview phases. Hidden, never unmounted,
+            during the coding round: it holds the avatar's <video>/<audio>,
+            and the interviewer keeps talking (follow-ups) while coding. */}
+        <div className={`mi-live-room-content min-h-0 flex-1 overflow-hidden bg-gray-100 px-4 py-4 ${codingActive && codingRound ? "hidden" : ""}`}>
           <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-3">
             <div className="mi-live-room-grid grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)_280px] lg:overflow-hidden">
               {/* Interviewer */}
@@ -1819,7 +1905,6 @@ export default function LiveInterviewSessionPage() {
             </div>
           </div>
         </div>
-        )}
       </div>
     </>
   );

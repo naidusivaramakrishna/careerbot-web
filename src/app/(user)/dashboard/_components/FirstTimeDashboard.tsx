@@ -74,7 +74,7 @@ const activityIcons: Record<string, React.ElementType> = {
 
 const formatPlan = (planId: string, planName?: string) => planName || planId.replace(/[_-]/g, " ").trim() || "Free Plan";
 
-const firstName = (name: string) => {
+const displayName = (name: string) => {
   const trimmed = name?.trim();
   if (!trimmed) return "there";
   return trimmed
@@ -119,7 +119,7 @@ const Header = ({ data }: { data: DashboardSummary }) => {
       <div className="min-w-0">
         <p className="text-xs font-bold text-gray-500">{today}</p>
         <h1 className="mt-1 text-[22px] font-black leading-tight tracking-[-0.03em] text-gray-950 sm:text-[26px]">
-          {greeting}, {firstName(data.user.name)}
+          {greeting}, {displayName(data.user.name)}
         </h1>
         <p className="mt-1.5 max-w-3xl text-[13px] leading-5 text-gray-600">
           Complete your resume setup, improve ATS readiness, match better jobs, and keep your applications moving.
@@ -274,14 +274,14 @@ const ProfileGaps = ({ data }: { data: DashboardSummary }) => {
 
 const OperationsTable = ({ data }: { data: DashboardSummary }) => {
   const rows = [
-    { label: "Resume Builder", detail: "Create, parse, and maintain your resume workspace", href: "/builder/start", Icon: FileText, metric: `${data.usage_counts.resumes_created + data.usage_counts.resumes_parsed} used` },
-    { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
-    { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
-    { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobslogin", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
-    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: `${data.usage_counts.mock_interviews_taken ?? 0} sessions` },
-    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} sessions` },
-    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.mock_tests_taken ?? 0} tests` },
-    { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: `${data.usage_counts.coding_tests_taken ?? 0} sessions` },
+    { label: "Resume Builder", detail: "Create, parse, and maintain your resume workspace", Icon: FileText, metric: `${data.usage_counts.resumes_created + data.usage_counts.resumes_parsed} used` },
+    { label: "ATS Scan", detail: "Check screening compatibility before applying", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
+    { label: "Job Match", detail: "Compare roles against your resume and profile", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
+    { label: "Browse Jobs", detail: "Find roles and continue your application momentum", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
+    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", Icon: MessageSquare, metric: `${data.usage_counts.mock_interviews_taken ?? 0} sessions` },
+    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} sessions` },
+    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", Icon: MessageSquare, metric: `${data.usage_counts.mock_tests_taken ?? 0} tests` },
+    { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", Icon: Code2, metric: `${data.usage_counts.coding_tests_taken ?? 0} sessions` },
   ];
 
   return (

@@ -1,7 +1,9 @@
 import React from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
+// Fast Testing Library selectors and a 60 s test limit for these heavy renders (see the file).
+import "@/tests/shared/pageSuiteSetup";
 
 // mock-interview-simli-avatar.txt — dedicated coverage for the Simli avatar
 // integration (joinAvatar, the audio-relay rule, the mute guard, and
@@ -97,6 +99,13 @@ class MockSimliClient {
     this.listeners.get(event)?.forEach((cb) => cb(...args));
   }
 }
+
+// Monaco does not run in jsdom; a textarea stands in for the coding editor.
+vi.mock("@/app/coding-test/_components/CodeEditor", () => ({
+  default: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <textarea aria-label="Code editor" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
 
 vi.mock("simli-client", () => ({
   SimliClient: MockSimliClient,
@@ -203,6 +212,12 @@ afterEach(() => {
 });
 
 describe("Simli avatar integration", () => {
+  // The first import compiles the whole live-session page tree. Pay that once here,
+  // with its own generous limit, instead of inside whichever test runs first.
+  beforeAll(async () => {
+    await importLiveSessionPage();
+  }, 60_000);
+
   it("never constructs a Simli client when avatar is null — stays on the static fallback", async () => {
     mocks.consumePendingAvatarSession.mockReturnValue(null);
     const LiveSessionPage = await importLiveSessionPage();
@@ -479,6 +494,38 @@ describe("Simli avatar integration", () => {
     const client = MockSimliClient.instances[0];
 
     act(() => { MockWebSocket.instances[0].emit({ type: "interview_complete", report_id: "r1", overall_score: 80 }); });
+    expect(client.stop).toHaveBeenCalledTimes(1);
+  });
+
+  // Technical + Coding: "Finish interview" after the grade. Two ways to the completed screen
+  // without interview_complete: the api closes the socket cleanly after end_interview, or the
+  // socket had already closed cleanly, so end_interview cannot be sent.
+  it.each([
+    ["the socket closes cleanly after Finish", false],
+    ["Finish is pressed after the socket closed cleanly", true],
+  ])("stops the Simli client when %s, without interview_complete", async (_label, closedBeforeFinish) => {
+    mocks.consumePendingAvatarSession.mockReturnValue(simliAvatarSession());
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+
+    await waitFor(() => expect(MockSimliClient.instances).toHaveLength(1));
+    const client = MockSimliClient.instances[0];
+    act(() => { client.emit("start"); });
+
+    act(() => {
+      ws.emit({ type: "coding_round_start", problem: { slug: "two-sum", title: "Two Sum", difficulty: "easy", statement: "Add two numbers.", examples: [], constraints: [], starter_code: {} } });
+      ws.emit({ type: "code_graded", score: 60, follow_up_count: 0 });
+    });
+    const finish = await screen.findByRole("button", { name: "Finish interview" }, { timeout: 15_000 });
+    if (closedBeforeFinish) act(() => { ws.readyState = 3; ws.onclose?.({ code: 1000 } as CloseEvent); });
+    fireEvent.click(finish);
+    if (!closedBeforeFinish) {
+      expect(ws.send.mock.calls.map(([raw]) => JSON.parse(raw as string))).toContainEqual({ type: "end_interview" });
+      act(() => { ws.onclose?.({ code: 1000 } as CloseEvent); });
+    }
+    expect(screen.getByRole("button", { name: /view my report/i })).toBeInTheDocument();
     expect(client.stop).toHaveBeenCalledTimes(1);
   });
 });

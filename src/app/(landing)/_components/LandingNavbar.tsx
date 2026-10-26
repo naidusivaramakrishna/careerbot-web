@@ -385,7 +385,7 @@ export default function LandingNavbar({
           scrolled ? 'pb-2' : 'pb-0'
         }`}
       >
-        <nav className="mx-auto flex h-[78px] max-w-[1800px] items-center justify-between gap-4 rounded-[18px] border border-slate-200/80 bg-white/92 px-5 shadow-[0_14px_38px_rgba(15,35,75,0.08)] backdrop-blur-xl lg:grid lg:grid-cols-[140px_minmax(0,1fr)_auto] lg:px-5 xl:grid-cols-[170px_minmax(0,1fr)_auto] xl:px-7">
+        <nav className="mx-auto flex h-[78px] max-w-[1800px] items-center justify-between gap-4 rounded-[18px] border border-[#C9D8EE] bg-white px-5 lg:grid lg:grid-cols-[140px_minmax(0,1fr)_auto] lg:px-5 xl:grid-cols-[170px_minmax(0,1fr)_auto] xl:px-7">
           {/* Logo */}
           <Link href="/" className="-ml-1 flex min-w-0 shrink-0 items-center transition-opacity hover:opacity-80 lg:w-[140px] xl:w-[170px]" aria-label="CareerBOT home">
             <Image

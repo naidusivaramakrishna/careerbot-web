@@ -8,7 +8,7 @@ import { useMockInterview } from "../../_context/MockInterviewContext";
 import { Loader2, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
 
 interface SessionParams {
-  session_type: "hr" | "technical" | "managerial";
+  session_type: "hr" | "technical" | "managerial" | "technical+coding";
   resume_id?: string;
   target_role?: string;
   experience_level?: "fresher" | "mid" | "senior";

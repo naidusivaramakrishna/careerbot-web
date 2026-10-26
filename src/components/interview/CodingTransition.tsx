@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Code2, Timer } from "lucide-react";
 
 interface CodingTransitionProps {
@@ -11,12 +11,16 @@ interface CodingTransitionProps {
 
 export function CodingTransition({ problemTitle, timeLimitMin, onDone }: CodingTransitionProps) {
   const [count, setCount] = useState(3);
+  // The room re-renders every second (session timer) with a new onDone; keyed
+  // on onDone, this effect would restart the 1 s tick forever.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
 
   useEffect(() => {
-    if (count <= 0) { onDone(); return; }
+    if (count <= 0) { onDoneRef.current(); return; }
     const t = setTimeout(() => setCount((c) => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [count, onDone]);
+  }, [count]);
 
   return (
     <div className="fixed inset-0 z-50 bg-[#2557a7] flex flex-col items-center justify-center text-white text-center px-6">

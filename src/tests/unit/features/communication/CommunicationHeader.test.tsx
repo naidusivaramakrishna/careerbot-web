@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import React from 'react';
+import { useRouter } from 'next/navigation';
 
 // Mock next/navigation
 const mockPush = vi.fn();
@@ -21,7 +22,7 @@ const mockVideoRecordingState = {
 // Test component
 const CommunicationHeader = () => {
   const { isCameraLost, isMicLost, restartRecording } = mockVideoRecordingState;
-  const router = require('next/navigation').useRouter();
+  const router = useRouter();
   const [restarting, setRestarting] = React.useState(false);
   const [restartError, setRestartError] = React.useState('');
   const [showConfirm, setShowConfirm] = React.useState(false);

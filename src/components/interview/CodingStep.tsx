@@ -3,25 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
-  Play, BarChart2, Clock, Loader2, CheckCircle2, BookOpen, AlertCircle,
+  Play, BarChart2, Clock, Loader2, CheckCircle2, BookOpen,
 } from "lucide-react";
-import type {
-  CodingTestLanguage,
-  SubmitSolutionResponse,
-  RunResult,
-  CodingProblemDetail,
-} from "@/app/coding-test/_lib/types";
-import { fetchProblem } from "@/app/coding-test/_lib/api";
-import { mockGrade } from "@/app/coding-test/_lib/gradingApi";
+import type { CodingTestLanguage, RunResult } from "@/app/coding-test/_lib/types";
 import { runAsync } from "@/app/coding-test/_lib/runApi";
+import type { LiveCodingProblem, WsServerMessage } from "@/api/mockInterviewApi";
 
 const CodeEditor = dynamic(
   () => import("@/app/coding-test/_components/CodeEditor"),
   { ssr: false, loading: () => <div className="flex-1 bg-[#1e1e1e] rounded-lg animate-pulse" /> },
-);
-const GradingResultPanel = dynamic(
-  () => import("@/app/coding-test/_components/GradingResultPanel"),
-  { ssr: false },
 );
 const OutputPanel = dynamic(
   () => import("@/app/coding-test/_components/OutputPanel"),
@@ -41,67 +31,87 @@ const DIFF_COLORS: Record<string, string> = {
   hard: "bg-red-100 text-red-700",
 };
 
+export type CodeGraded = Extract<WsServerMessage, { type: "code_graded" }>;
+export type FollowupGraded = Extract<WsServerMessage, { type: "followup_graded" }>;
+
+// The problem comes in the coding_round_start frame and grading goes over the
+// interview socket (submit_code / followup_answer); the room passes the
+// server's code_graded / followup_graded replies back in as props.
 export interface CodingStepProps {
-  problemSlug: string;
+  problem: LiveCodingProblem;
+  instructions?: string;
   timeLimitS: number;
-  onSubmitted: (result: SubmitSolutionResponse) => void;
-  onTimeExpired: () => void;
+  grade: CodeGraded | null;
+  followups: FollowupGraded[];
+  pending: boolean;
+  onSubmitCode: (code: string, language: CodingTestLanguage) => void;
+  onSubmitFollowup: (code: string, attemptNumber: number) => void;
+  onFinish: () => void;
 }
 
-export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired }: CodingStepProps) {
-  const [problem, setProblem] = useState<CodingProblemDetail | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+export function CodingStep({
+  problem, instructions, timeLimitS, grade, followups, pending, onSubmitCode, onSubmitFollowup, onFinish,
+}: CodingStepProps) {
+  const problemSlug = problem.slug;
   const [language, setLanguage] = useState<CodingTestLanguage>("python");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(problem.starter_code.python ?? "");
   const [timeLeft, setTimeLeft] = useState(timeLimitS);
   const [isRunning, setIsRunning] = useState(false);
-  const [isGrading, setIsGrading] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [gradingResult, setGradingResult] = useState<SubmitSolutionResponse | null>(null);
   const [showStatement, setShowStatement] = useState(true);
   const [outputOpen, setOutputOpen] = useState(false);
   const [outputTab, setOutputTab] = useState<"run" | "grade">("run");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasExpiredRef = useRef(false);
   const hasSubmittedRef = useRef(false);
+  // Read by the timer on expiry: the current editor content, not the
+  // value captured when the interval was created.
+  const latestRef = useRef({ code, language, onSubmitCode });
+  useEffect(() => { latestRef.current = { code, language, onSubmitCode }; });
 
-  useEffect(() => {
-    fetchProblem(problemSlug)
-      .then((p) => {
-        setProblem(p);
-        setCode(p.starter_code.python ?? "");
-      })
-      .catch(() => setLoadError("Could not load problem. Please continue with the interview."));
-  }, [problemSlug]);
+  const selectLanguage = (next: CodingTestLanguage) => {
+    if (next === language) return;
+    setLanguage(next);
+    setCode(problem.starter_code[next] ?? "");
+  };
 
-  useEffect(() => {
-    if (problem) setCode(problem.starter_code[language] ?? "");
-  }, [language, problem]);
+  const submitCode = useCallback(() => {
+    const { code: current, language: lang, onSubmitCode: send } = latestRef.current;
+    if (!current.trim()) return;
+    hasSubmittedRef.current = true;
+    setOutputTab("grade");
+    setOutputOpen(true);
+    send(current, lang);
+  }, []);
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(timerRef.current!);
-          if (!hasExpiredRef.current && !hasSubmittedRef.current) {
-            hasExpiredRef.current = true;
-            onTimeExpired();
-          }
-          return 0;
-        }
-        return t - 1;
-      });
+      setTimeLeft((t) => (t <= 1 ? 0 : t - 1));
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current!); };
-  }, [onTimeExpired]);
+  }, []);
+
+  // Show each server grade (code_graded / followup_graded) as it arrives.
+  useEffect(() => {
+    if (!grade) return;
+    setOutputTab("grade");
+    setOutputOpen(true);
+  }, [grade, followups.length]);
+
+  // Time up: submit what is in the editor (if anything) so the round is
+  // still graded, instead of dropping the candidate's work.
+  useEffect(() => {
+    if (timeLeft > 0) return;
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (!hasSubmittedRef.current) submitCode();
+  }, [timeLeft, submitCode]);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
   const handleRun = useCallback(async () => {
-    if (!problem || isRunning || isGrading) return;
+    if (isRunning || pending) return;
     setIsRunning(true);
     setRunResult(null);
     setOutputTab("run");
@@ -118,59 +128,29 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
     } finally {
       setIsRunning(false);
     }
-  }, [problem, problemSlug, language, code, isRunning, isGrading]);
+  }, [problemSlug, language, code, isRunning, pending]);
 
-  const handleGrade = useCallback(async () => {
-    if (!problem || isGrading || gradingResult) return;
-    setIsGrading(true);
-    stopTimer();
-    setOutputTab("grade");
-    setOutputOpen(true);
-    try {
-      const r = await mockGrade(problemSlug, language, code, problem?.title);
-      setGradingResult(r);
-      hasSubmittedRef.current = true;
-      onSubmitted(r);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Grading failed.";
-      const fallback: SubmitSolutionResponse = {
-        submission_id: "",
-        problem_slug: problemSlug,
-        language,
-        score: null,
-        grading_result: null,
-        error: msg,
-        submitted_at: new Date().toISOString(),
-      };
-      setGradingResult(fallback);
-      onSubmitted(fallback);
-    } finally {
-      setIsGrading(false);
-    }
-  }, [problem, problemSlug, language, code, isGrading, gradingResult, stopTimer, onSubmitted]);
+  const handleGrade = useCallback(() => {
+    if (pending || grade) return;
+    submitCode();
+  }, [pending, grade, submitCode]);
+
+  // The clock stops once the code is graded; a rejected submit (error frame)
+  // leaves it running, so the deadline and Finish still come.
+  useEffect(() => { if (grade) stopTimer(); }, [grade, stopTimer]);
+
+  // Follow-ups: the server sends only how many there are, not their text.
+  const lastFollowup = followups[followups.length - 1];
+  const nextFollowup = followups.length + 1;
+  const canAnswerFollowup = Boolean(grade) && nextFollowup <= (grade?.follow_up_count ?? 0)
+    && (!lastFollowup || lastFollowup.next_followup_available);
 
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 
   const isLow = timeLeft > 0 && timeLeft < 120;
-  const isGraded = !!gradingResult;
-
-  if (loadError) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-3">
-        <AlertCircle size={32} className="text-gray-400" />
-        <p className="text-sm text-gray-600">{loadError}</p>
-      </div>
-    );
-  }
-
-  if (!problem) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 size={24} className="text-[#2557a7] animate-spin" />
-      </div>
-    );
-  }
+  const isGraded = !!grade;
+  const isGrading = pending && !grade;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50">
@@ -189,8 +169,8 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
             {LANGUAGES.map((l) => (
               <button
                 key={l.value}
-                disabled={isGraded}
-                onClick={() => setLanguage(l.value)}
+                disabled={isGraded || pending}
+                onClick={() => selectLanguage(l.value)}
                 className={`px-2 py-0.5 rounded text-xs font-semibold transition-all disabled:opacity-50 ${
                   language === l.value
                     ? "bg-[#2557a7] text-white"
@@ -205,14 +185,14 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setShowStatement((s) => !s)}
-            className="hidden lg:flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-semibold hover:bg-gray-200 transition-all"
+            className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-semibold hover:bg-gray-200 transition-all"
           >
             <BookOpen size={11} />
             {showStatement ? "Hide" : "Problem"}
           </button>
           <button
             onClick={handleRun}
-            disabled={isRunning || isGrading || isGraded}
+            disabled={isRunning || pending}
             className="flex items-center gap-1 px-2.5 py-1 bg-gray-800 text-white rounded text-xs font-semibold hover:bg-gray-700 transition-all disabled:opacity-50"
           >
             {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
@@ -221,7 +201,7 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
           {/* Grade Code button */}
           <button
             onClick={handleGrade}
-            disabled={isGrading || isGraded || isRunning || timeLeft === 0}
+            disabled={pending || isGraded || isRunning || !code.trim()}
             className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded text-xs font-semibold hover:bg-[#1e4a8f] transition-all disabled:opacity-50"
           >
             {isGrading ? (
@@ -232,14 +212,32 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
               <><BarChart2 size={11} /> Grade Code</>
             )}
           </button>
+          {canAnswerFollowup && (
+            <button
+              onClick={() => { if (code.trim()) onSubmitFollowup(code, nextFollowup); }}
+              disabled={pending || !code.trim()}
+              className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded text-xs font-semibold hover:bg-[#1e4a8f] transition-all disabled:opacity-50"
+            >
+              Submit follow-up {nextFollowup} of {grade?.follow_up_count}
+            </button>
+          )}
+          {(isGraded || timeLeft === 0) && (
+            <button
+              onClick={onFinish}
+              disabled={pending}
+              className="flex items-center gap-1 px-2.5 py-1 bg-gray-800 text-white rounded text-xs font-semibold hover:bg-gray-700 transition-all disabled:opacity-50"
+            >
+              Finish interview
+            </button>
+          )}
         </div>
       </div>
 
       {/* Body: statement + editor */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Problem statement — desktop only */}
         {showStatement && (
-          <div className="hidden lg:flex flex-col w-72 shrink-0 overflow-y-auto border-r border-gray-200 bg-white px-4 py-3 text-xs gap-3">
+          <div className="flex max-h-[40%] flex-col shrink-0 overflow-y-auto border-b border-gray-200 lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r bg-white px-4 py-3 text-xs gap-3">
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <span
@@ -249,12 +247,10 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
                 >
                   {problem.difficulty}
                 </span>
-                <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                  {problem.tag}
-                </span>
               </div>
               <h2 className="text-sm font-bold text-gray-900 mb-1.5">{problem.title}</h2>
               <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{problem.statement}</p>
+              {instructions && <p className="mt-2 text-gray-500">{instructions}</p>}
             </div>
 
             {problem.examples.length > 0 && (
@@ -285,11 +281,6 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
                 </ul>
               </div>
             )}
-
-            <div className="text-[10px] text-gray-400 space-y-0.5 border-t border-gray-100 pt-2">
-              <p>Time: {problem.expected_time_complexity}</p>
-              <p>Space: {problem.expected_space_complexity}</p>
-            </div>
           </div>
         )}
 
@@ -339,8 +330,21 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
                         <Loader2 size={16} className="animate-spin text-[#2557a7]" />
                         Grading your solution…
                       </div>
-                    ) : gradingResult ? (
-                      <GradingResultPanel result={gradingResult} />
+                    ) : grade ? (
+                      <div className="space-y-1.5 p-1 text-xs text-gray-700">
+                        <p className="text-sm font-bold text-gray-900">Score: {grade.score}/100</p>
+                        {grade.summary && <p>{grade.summary}</p>}
+                        {followups.map((f) => (
+                          <p key={f.attempt_number}>
+                            <span className="font-semibold">Follow-up {f.attempt_number}:</span> {f.score}/100{f.summary ? ` — ${f.summary}` : ""}
+                          </p>
+                        ))}
+                        {canAnswerFollowup && (
+                          <p className="text-gray-500">
+                            Your interviewer has {grade.follow_up_count} follow-up{grade.follow_up_count === 1 ? "" : "s"} for this problem. Improve your code and submit follow-up {nextFollowup}.
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center h-full text-xs text-gray-400">
                         Click &quot;Grade Code&quot; to evaluate your solution.

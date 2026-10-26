@@ -96,12 +96,7 @@ const cardVariants = {
 
 export default function ProblemStatement() {
   return (
-    <section className="scroll-mt-24 relative overflow-hidden bg-[#FBFCFF] py-10 lg:py-14 xl:py-16 2xl:py-20">
-      {/* Background effects */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-1/2 -top-[120px] h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[#2557A7] opacity-[0.08] blur-[180px]" />
-        <div className="absolute -bottom-24 -right-24 h-[420px] w-[420px] rounded-full bg-white opacity-20 blur-[140px]" />
-      </div>
+    <section className="scroll-mt-24 relative overflow-hidden bg-white py-10 lg:py-14 xl:py-16 2xl:py-20">
 
       <div className="mx-auto w-full max-w-[1728px] px-5 lg:px-[60px]">
         <motion.div
@@ -144,21 +139,9 @@ export default function ProblemStatement() {
             return (
               <motion.article
                 key={problem.title}
-                className="group relative flex min-h-[340px] min-w-0 cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[rgba(37,87,167,0.08)] bg-white/[.98] px-5 pb-4 pt-5 backdrop-blur-[16px] transition-all duration-[350ms] ease-out hover:-translate-y-2 hover:scale-[1.015] lg:min-h-[368px] lg:px-6 lg:pb-5 lg:pt-6 xl:min-h-[400px] xl:rounded-[22px] xl:px-7 2xl:min-h-[430px] 2xl:rounded-[24px] 2xl:px-7 2xl:pb-5 2xl:pt-6"
-                style={{
-                  boxShadow:
-                    '0 1px 2px rgba(16,24,40,.03), 0 8px 24px rgba(37,87,167,.05), 0 20px 60px rgba(37,87,167,.08), 0 40px 120px rgba(37,87,167,.06)',
-                }}
+                className="group relative flex min-h-[340px] min-w-0 cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#C9D8EE] bg-white px-5 pb-4 pt-5 transition-all hover:border-[#2557A7] duration-[350ms] ease-out hover:-translate-y-2 hover:scale-[1.015] lg:min-h-[368px] lg:px-6 lg:pb-5 lg:pt-6 xl:min-h-[400px] xl:rounded-[22px] xl:px-7 2xl:min-h-[430px] 2xl:rounded-[24px] 2xl:px-7 2xl:pb-5 2xl:pt-6"
                 variants={cardVariants}
                 transition={{ duration: 0.6, ease: 'easeOut' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow =
-                    '0 4px 12px rgba(37,87,167,.06), 0 16px 48px rgba(37,87,167,.10), 0 40px 100px rgba(37,87,167,.12)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow =
-                    '0 1px 2px rgba(16,24,40,.03), 0 8px 24px rgba(37,87,167,.05), 0 20px 60px rgba(37,87,167,.08), 0 40px 120px rgba(37,87,167,.06)';
-                }}
               >
                 {/* Top accent glow behind icon */}
                 <div
@@ -207,10 +190,7 @@ export default function ProblemStatement() {
                 <div className="relative mt-3 h-px w-full bg-[linear-gradient(90deg,transparent,#DCE7F7,transparent)] 2xl:mt-3" />
 
                 {/* Bottom pain box */}
-                <div
-                  className="relative mt-3 rounded-[14px] border border-[rgba(37,87,167,0.06)] bg-[#FCFDFF] p-[12px] 2xl:mt-3 2xl:p-[14px]"
-                  style={{ boxShadow: '0 10px 30px rgba(37,87,167,.05)' }}
-                >
+                <div className="relative mt-3 rounded-[14px] border border-[rgba(37,87,167,0.06)] bg-white p-[12px] 2xl:mt-3 2xl:p-[14px]">
                   <div className="flex items-center gap-3">
                     <div
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg 2xl:h-8 2xl:w-8"
@@ -229,8 +209,7 @@ export default function ProblemStatement() {
         </motion.div>
 
         <motion.div
-          className="mt-10 flex items-center justify-center gap-3 rounded-[18px] border border-[rgba(37,87,167,0.06)] bg-[#FCFDFF] px-6 py-5 text-center text-[15px] font-semibold text-[#081C45] 2xl:mt-14 2xl:py-6 2xl:text-[17px]"
-          style={{ boxShadow: '0 10px 30px rgba(37,87,167,.05)' }}
+          className="mt-10 flex items-center justify-center gap-3 rounded-[18px] border border-[rgba(37,87,167,0.06)] bg-white px-6 py-5 text-center text-[15px] font-semibold text-[#081C45] 2xl:mt-14 2xl:py-6 2xl:text-[17px]"
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}

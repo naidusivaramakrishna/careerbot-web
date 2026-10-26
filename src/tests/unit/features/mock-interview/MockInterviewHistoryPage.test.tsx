@@ -1,7 +1,9 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
+// Fast Testing Library selectors and a 60 s test limit for these heavy renders (see the file).
+import "@/tests/shared/pageSuiteSetup";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -105,6 +107,11 @@ afterEach(() => {
 });
 
 describe("MockInterview HistoryPage", () => {
+  // Warm the history page's import tree once, outside any single test's time limit.
+  beforeAll(async () => {
+    await importHistoryPage();
+  }, 60_000);
+
   it("loads sessions, filters out practice sessions, and resolves the score per row from the report", async () => {
     mocks.getLiveHistory.mockResolvedValue({
       sessions: [
@@ -416,7 +423,7 @@ describe("MockInterview HistoryPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "2" }));
     await waitFor(() => expect(screen.getByText(/page 2 of 2/i)).toBeInTheDocument());
     expect(screen.getAllByText("HR Mock Interview")).toHaveLength(2);
-  });
+  }, 15_000);
 
   it("labels the page's session count in the singular when one session is left", async () => {
     const sessions = Array.from({ length: 11 }, (_, i) =>

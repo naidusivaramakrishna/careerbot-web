@@ -170,6 +170,16 @@ const CommunicationPage = () => {
 // Add React import for the test
 import React from 'react';
 
+// The submit button stays disabled until the profile email has loaded. Clicking it
+// inside waitFor() hits the disabled button on the first attempt without throwing,
+// so the click would be lost: wait until it is enabled, then click once.
+const submitWhenReady = async () => {
+  const submitBtn = screen.getByTestId('submit-btn') as HTMLButtonElement;
+  await waitFor(() => expect(submitBtn).toBeEnabled());
+  fireEvent.click(submitBtn);
+  return submitBtn;
+};
+
 describe('CommunicationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -230,15 +240,9 @@ describe('CommunicationPage', () => {
   it('submits form with selected difficulty', async () => {
     render(<CommunicationPage />);
 
-    await waitFor(() => {
-      const hardBtn = screen.getByTestId('difficulty-hard');
-      fireEvent.click(hardBtn);
-    });
+    fireEvent.click(screen.getByTestId('difficulty-hard'));
 
-    await waitFor(() => {
-      const submitBtn = screen.getByTestId('submit-btn');
-      fireEvent.click(submitBtn);
-    });
+    await submitWhenReady();
 
     await waitFor(() => {
       expect(mockGenerateTest).toHaveBeenCalledWith(
@@ -254,11 +258,8 @@ describe('CommunicationPage', () => {
 
     render(<CommunicationPage />);
 
-    await waitFor(() => {
-      const submitBtn = screen.getByTestId('submit-btn') as HTMLButtonElement;
-      fireEvent.click(submitBtn);
-      expect(submitBtn.disabled).toBe(true);
-    });
+    const submitBtn = await submitWhenReady();
+    await waitFor(() => expect(submitBtn.disabled).toBe(true));
   });
 
   it('shows error message on failed test generation', async () => {
@@ -268,10 +269,7 @@ describe('CommunicationPage', () => {
 
     render(<CommunicationPage />);
 
-    await waitFor(() => {
-      const submitBtn = screen.getByTestId('submit-btn');
-      fireEvent.click(submitBtn);
-    });
+    await submitWhenReady();
 
     await waitFor(() => {
       expect(screen.getByTestId('error-message')).toHaveTextContent('Failed to generate test');
@@ -283,10 +281,7 @@ describe('CommunicationPage', () => {
 
     render(<CommunicationPage />);
 
-    await waitFor(() => {
-      const submitBtn = screen.getByTestId('submit-btn');
-      fireEvent.click(submitBtn);
-    });
+    await submitWhenReady();
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/communication/sections');
@@ -298,10 +293,7 @@ describe('CommunicationPage', () => {
 
     render(<CommunicationPage />);
 
-    await waitFor(() => {
-      const submitBtn = screen.getByTestId('submit-btn');
-      fireEvent.click(submitBtn);
-    });
+    await submitWhenReady();
 
     await waitFor(() => {
       expect(localStorage.getItem('test_id')).toBe('test-789');

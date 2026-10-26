@@ -1,7 +1,9 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
+// Fast Testing Library selectors and a 60 s test limit for these heavy renders (see the file).
+import "@/tests/shared/pageSuiteSetup";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -114,6 +116,12 @@ vi.mock("framer-motion", () => ({
       return React.createElement(tag, domProps, children);
     },
   }),
+}));
+// Monaco does not run in jsdom; a textarea stands in for the coding editor.
+vi.mock("@/app/coding-test/_components/CodeEditor", () => ({
+  default: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <textarea aria-label="Code editor" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
 }));
 vi.mock("next/image", () => ({
   default: (props: ImageMockProps) => {
@@ -262,6 +270,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Compile each page's import tree once, outside any single test's time limit: on a
+// loaded CI runner the first test of a group otherwise spends its limit on the
+// import, times out and is retried (the PR-touched chunk ran past 420 s).
+beforeAll(async () => {
+  await Promise.all([importMockInterviewPage(), importMockSidebar(), importReadinessGate(), importLiveSetupPage(), importLiveStartingPage(), importLiveSessionPage()]);
+}, 120_000);
+
 describe("MockInterviewPage", () => {
   it("asks unauthenticated users to sign in before starting the live interview", async () => {
     const MockInterviewPage = await importMockInterviewPage();
@@ -399,7 +414,7 @@ describe("LiveSetupPage", () => {
     fireEvent.click(proceed());
     expect(screen.getByRole("button", { name: /test microphone/i })).toBeInTheDocument();
     expect(mocks.push).not.toHaveBeenCalled();
-  }, 15_000);
+  }, 60_000);
 
   it("stores the single fixed interviewer identity before starting", async () => {
     const LiveSetupPage = await importLiveSetupPage();
@@ -421,7 +436,85 @@ describe("LiveSetupPage", () => {
       session_type_label: "Technical",
     }));
     expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/starting");
-  }, 15_000);
+  }, 60_000);
+
+  it("sends Technical + Coding to the backend as the technical+coding session type", async () => {
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    fireEvent.click(screen.getByRole("button", { name: /choose your role/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Frontend Developer" }));
+    const setup = screen.getByRole("region", { name: /set up your mock interview/i });
+    fireEvent.click(within(setup).getByText("Technical + Coding", { exact: true }));
+    fireEvent.click(within(setup).getByRole("button", { name: /^mid/i }));
+    fireEvent.click(await within(setup).findByRole("radio", { name: /frontend resume/i }));
+    fireEvent.click(within(setup).getByRole("button", { name: /continue to room check/i }));
+    await completeRoomCheck();
+
+    const stored = vi.mocked(window.sessionStorage.setItem).mock.calls.find(([key]) => key === "live_session_params")?.[1];
+    expect(JSON.parse(stored as string)).toMatchObject({ session_type: "technical+coding", session_type_label: "Technical + Coding" });
+  }, 60_000);
+
+  it("goes back from the room check to step 2 with the role, type and level kept, and from step 2 to step 1", async () => {
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    await completeRoleSetup();
+    expect(screen.getByRole("button", { name: /test microphone/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /back to step 2/i }));
+    const setup = screen.getByRole("region", { name: /set up your mock interview/i });
+    expect(setup).toHaveTextContent("Frontend Developer");
+    expect(within(setup).getByText("Technical", { exact: true }).closest("button")).toHaveAttribute("aria-pressed", "true");
+    expect(within(setup).getByRole("button", { name: /^mid/i })).toHaveAttribute("aria-pressed", "true");
+    expect(await within(setup).findByRole("button", { name: /continue to room check/i })).toBeEnabled();
+    // "Back to step 1" is only offered on the role list, not inside a chosen role.
+    expect(screen.queryByRole("button", { name: /back to step 1/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(setup).getByRole("button", { name: /back to role selection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /back to step 1/i }));
+    expect(screen.getByRole("heading", { name: /get ready for your next interview/i })).toBeInTheDocument();
+  }, 60_000);
+
+  // One render for the three exits: each extra room-check setup costs several seconds on a loaded runner.
+  it("stops the camera stream on every way out of the camera check: device list failure, device list still loading, late stream", async () => {
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    await completeRoleSetup();
+    const { getUserMedia, enumerateDevices } = navigator.mediaDevices;
+    const camera = () => {
+      const stop = vi.fn();
+      return { stop, stream: { getTracks: () => [{ stop }] } as unknown as MediaStream };
+    };
+
+    // The device list cannot be read: the check fails as before, and the camera is released.
+    const failed = camera();
+    vi.mocked(getUserMedia).mockResolvedValueOnce(failed.stream);
+    vi.mocked(enumerateDevices).mockRejectedValueOnce(new Error("device list unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+    expect(await screen.findByText("Could not access camera. Please retry.")).toBeInTheDocument();
+    expect(failed.stop).toHaveBeenCalled();
+
+    // Back to step 2 while the device list is still loading: stopped at once, not when (or if) the list answers.
+    const loading = camera();
+    vi.mocked(getUserMedia).mockResolvedValueOnce(loading.stream);
+    let resolveDevices: (devices: MediaDeviceInfo[]) => void = () => {};
+    vi.mocked(enumerateDevices).mockImplementationOnce(() => new Promise<MediaDeviceInfo[]>((resolve) => { resolveDevices = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+    await act(async () => {}); // the stream arrives; the device list is still loading
+    fireEvent.click(screen.getByRole("button", { name: /back to step 2/i }));
+    expect(loading.stop).toHaveBeenCalled();
+    await act(async () => { resolveDevices([]); });
+
+    // Back to step 2 before the stream arrives: stopped at once, even if the device list never answers.
+    fireEvent.click(await screen.findByRole("button", { name: /continue to room check/i }));
+    const late = camera();
+    let resolveCamera: (stream: MediaStream) => void = () => {};
+    vi.mocked(getUserMedia).mockImplementationOnce(() => new Promise<MediaStream>((resolve) => { resolveCamera = resolve; }));
+    vi.mocked(enumerateDevices).mockImplementation(() => new Promise<MediaDeviceInfo[]>(() => {}));
+    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+    fireEvent.click(screen.getByRole("button", { name: /back to step 2/i }));
+    await act(async () => { resolveCamera(late.stream); });
+    expect(late.stop).toHaveBeenCalled();
+  }, 60_000);
 
   it("creates the live session and relays the avatar session in memory, never through storage", async () => {
     mocks.createLiveSession.mockResolvedValue({
@@ -951,7 +1044,142 @@ describe("LiveInterviewSessionPage", () => {
   });
 });
 
+describe("LiveInterviewSessionPage session timer", () => {
+  it("shows the elapsed session time as HH:MM:SS in the room header", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123" }); });
+    expect(screen.getByLabelText("Session duration 00:00:00")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(65_000); });
+    expect(screen.getByLabelText("Session duration 00:01:05")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(3_600_000); });
+    expect(screen.getByLabelText("Session duration 01:01:05")).toBeInTheDocument();
+  }, 15_000);
+});
+
+describe("LiveInterviewSessionPage coding round (technical+coding)", () => {
+  // careerbot-api develop2 mock_interview_live.py: the frame it really sends.
+  const codingRoundStart = {
+    type: "coding_round_start",
+    problem: {
+      slug: "two-sum",
+      title: "Two Sum",
+      difficulty: "medium",
+      statement: "Return the indices of the two numbers that add up to target.",
+      examples: [{ input: "[2,7,11,15], 9", output: "[0,1]" }],
+      constraints: ["2 <= n <= 10^4"],
+      starter_code: { python: "def two_sum(nums, target):\n    pass\n" },
+    },
+    instructions: "Write your solution below. You'll have follow-up questions to optimize your approach.",
+  };
+  const sentFrames = (ws: MockWebSocket) => ws.send.mock.calls.map(([raw]) => JSON.parse(raw as string));
+
+  async function startCodingRound() {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123" }); ws.emit(codingRoundStart); });
+    return ws;
+  }
+
+  it("shows the api's problem and a default time limit, grades over the socket and handles code_graded / followup_graded", async () => {
+    const ws = await startCodingRound();
+    const avatarAudio = document.querySelector("audio");
+    expect(avatarAudio).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Two Sum" })).toBeInTheDocument();
+    expect(screen.getByText("30 min time limit")).toBeInTheDocument();
+
+    const editor = await screen.findByLabelText("Code editor", {}, { timeout: 15_000 });
+    expect(editor).toHaveValue("def two_sum(nums, target):\n    pass\n");
+    expect(screen.getByText(/add up to target/)).toBeInTheDocument();
+    // The avatar's media elements stay mounted (only hidden) so the
+    // interviewer can still be heard during the coding round.
+    expect(avatarAudio!.isConnected).toBe(true);
+
+    fireEvent.change(editor, { target: { value: "def two_sum(n, t): return [0, 1]" } });
+    fireEvent.click(screen.getByRole("button", { name: /grade code/i }));
+    expect(sentFrames(ws)).toContainEqual({ type: "submit_code", code: "def two_sum(n, t): return [0, 1]", language: "python" });
+    expect(sentFrames(ws).some((f) => f.type === "coding_answer")).toBe(false);
+    expect(screen.getByRole("button", { name: "Grading…" })).toBeDisabled();
+
+    // The technical+coding AI leg stays connected: its voice events must not swap the editor out.
+    act(() => { ws.emit({ type: "turn_complete" }); });
+    expect(screen.getByLabelText("Code editor")).toBeInTheDocument();
+
+    act(() => { ws.emit({ type: "code_graded", score: 82, criteria: {}, summary: "Correct, O(n).", follow_up_count: 1 }); });
+    expect(screen.getByText("Score: 82/100")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Submit follow-up 1 of 1" }));
+    expect(sentFrames(ws)).toContainEqual({ type: "followup_answer", code: "def two_sum(n, t): return [0, 1]", attempt_number: 1 });
+
+    act(() => { ws.emit({ type: "followup_graded", attempt_number: 1, score: 90, summary: "Optimal.", next_followup_available: false }); });
+    expect(screen.getByText(/90\/100/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /submit follow-up/i })).not.toBeInTheDocument();
+
+    // Finish waits for the api's interview_complete (the completed screen
+    // uploads the proctoring video) instead of leaving like "End early".
+    fireEvent.click(screen.getByRole("button", { name: "Finish interview" }));
+    expect(sentFrames(ws)).toContainEqual({ type: "end_interview" });
+    expect(mocks.push).not.toHaveBeenCalledWith("/mock-interview/history");
+    act(() => { ws.emit({ type: "interview_complete", report_id: "report-coding", overall_score: 82 }); });
+    fireEvent.click(screen.getByRole("button", { name: /view my report/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/report/report-coding");
+  }, 45_000);
+
+  it("lets the candidate submit again after a grading error frame", async () => {
+    const ws = await startCodingRound();
+    await screen.findByLabelText("Code editor", {}, { timeout: 15_000 });
+    fireEvent.click(screen.getByRole("button", { name: /grade code/i }));
+    expect(screen.getByRole("button", { name: "Grading…" })).toBeDisabled();
+
+    // An unrelated error (e.g. from the voice leg) does not end the wait.
+    act(() => { ws.emit({ type: "error", code: "STT_TIMEOUT", message: "Speech service timed out." }); });
+    expect(screen.getByRole("button", { name: "Grading…" })).toBeDisabled();
+
+    act(() => { ws.emit({ type: "error", code: "CODE_GRADING_FAILED", message: "Could not grade your code. Please try again." }); });
+    expect(screen.getByText("Could not grade your code. Please try again.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /grade code/i }));
+    expect(sentFrames(ws).filter((f) => f.type === "submit_code")).toHaveLength(2);
+
+    // The grade that follows clears the grading error.
+    act(() => { ws.emit({ type: "code_graded", score: 70, summary: "Works.", follow_up_count: 1 }); });
+    expect(screen.getByText("Score: 70/100")).toBeInTheDocument();
+    expect(screen.queryByText("Could not grade your code. Please try again.")).not.toBeInTheDocument();
+
+    // But not an unrelated error that replaced it, even one with the same (fallback) text.
+    fireEvent.click(screen.getByRole("button", { name: "Submit follow-up 1 of 1" }));
+    act(() => { ws.emit({ type: "error", code: "FOLLOWUP_GRADING_FAILED" }); });
+    act(() => { ws.emit({ type: "error", code: "STT_TIMEOUT" }); });
+    act(() => { ws.emit({ type: "followup_graded", attempt_number: 1, score: 80, summary: "Better.", next_followup_available: false }); });
+    expect(screen.getByText(/the interview service reported an issue/i)).toBeInTheDocument();
+  }, 45_000);
+
+  it("lands on the completed screen when the socket closes cleanly after Finish without interview_complete", async () => {
+    const ws = await startCodingRound();
+    await screen.findByLabelText("Code editor", {}, { timeout: 15_000 });
+    act(() => { ws.emit({ type: "code_graded", score: 60, follow_up_count: 0 }); });
+    fireEvent.click(screen.getByRole("button", { name: "Finish interview" }));
+    expect(sentFrames(ws)).toContainEqual({ type: "end_interview" });
+    act(() => { ws.onclose?.({ code: 1000 } as CloseEvent); });
+    expect(screen.getByRole("button", { name: /view my report/i })).toBeInTheDocument();
+  }, 45_000);
+
+  it("uses the frame's time_limit_s when the backend sends one", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123" }); ws.emit({ ...codingRoundStart, time_limit_s: 900 }); });
+    expect(screen.getByText("15 min time limit")).toBeInTheDocument();
+  });
+});
+
 describe("ReportPage", () => {
+  // Warm the report page's import tree once, outside any single test's time limit.
+  beforeAll(async () => {
+    await importReportPage();
+  }, 60_000);
+
   it("loads completed report with summary, transcript and actions", async () => {
     mocks.params = { sessionId: "report-123" };
     mocks.getReport.mockResolvedValue(report());

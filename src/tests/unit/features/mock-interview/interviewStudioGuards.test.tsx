@@ -88,8 +88,15 @@ describe("mock-interview sidebar on small screens", () => {
     const below1024 = mediaBlock(css, "max-width:1023px");
     expect(lastDisplayFor(below1024, room)).toBe("none");
     // Later blocks must not bring it back (same specificity: source order wins).
-    const after = css.slice(css.indexOf("@media(max-width:1023px){"));
-    expect(after.indexOf(".mi-sidebar", after.indexOf("}}") + 2)).toBe(-1);
+    // Spacing rules for the sidebar's children (.mi-sidebar .mi-logo, nav, ...) are fine;
+    // what must not follow is a rule that sets display on the sidebar element itself.
+    const start = css.indexOf("@media(max-width:1023px){");
+    const after = css.slice(css.indexOf("}}", start) + 2).replace(/\/\*[\s\S]*?\*\//g, "");
+    const sidebarSelectors = new Set([".mi-sidebar", room]);
+    const reshown = [...after.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, sel, body]) => /(?:^|;)\s*display\s*:/.test(body) && sel.split(",").some((s) => sidebarSelectors.has(s.trim())))
+      .map(([, sel]) => sel.trim());
+    expect(reshown).toEqual([]);
   });
 
   it("keeps the sidebar as a top bar on the other mock-interview pages at <=640px", () => {

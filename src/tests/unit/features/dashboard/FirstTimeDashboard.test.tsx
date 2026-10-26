@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
+// Fast Testing Library selectors and a 60 s test limit for these heavy renders (see the file).
+import '@/tests/shared/pageSuiteSetup';
 import DashboardContent from '@/app/(user)/dashboard/_components/FirstTimeDashboard';
 import { useResumeProfileFill } from '@/hooks/useResumeProfileFill';
+import { runAtsScan } from '@/api/resumeatsapi';
 import type { DashboardSummary } from '@/types/dashboard.types';
 
 // ── useDashboard ─────────────────────────────────────────────────────────────
@@ -16,6 +19,9 @@ vi.mock('@/hooks/useResumeProfileFill', () => ({
   useResumeProfileFill: vi.fn(),
 }));
 const mockUseResumeProfileFill = vi.mocked(useResumeProfileFill);
+
+// ── ATS scan API (the dashboard now scans in a popup instead of navigating) ──
+vi.mock('@/api/resumeatsapi', () => ({ runAtsScan: vi.fn() }));
 
 // ── sonner toast ─────────────────────────────────────────────────────────────
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), error: vi.fn() } }));
@@ -190,11 +196,14 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
       expect(h1).not.toHaveTextContent('Welcome back');
     });
 
-    it('displays only the first word of a multi-word name', () => {
+    it('displays the full name of a multi-word name', () => {
       renderDash({ user: { name: 'Ada Lovelace' } });
-      const h1 = screen.getByRole('heading', { level: 1 });
-      expect(h1).toHaveTextContent('Ada');
-      expect(h1).not.toHaveTextContent('Lovelace');
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Ada Lovelace');
+    });
+
+    it('capitalises each word of the name', () => {
+      renderDash({ user: { name: 'aDA lovelace' } });
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Ada Lovelace');
     });
 
     it('renders plan name and Manage link to /payments', () => {
@@ -328,12 +337,17 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
       await waitFor(() => expect(window.location.href).toBe('/atslogin'));
     });
 
-    it('navigates to /atslogin/report?resume_id=... when a resumeId is available', async () => {
+    it('scans in a popup and links its Full report to /atslogin/report?resume_id=... when a resumeId is available', async () => {
+      vi.mocked(runAtsScan).mockResolvedValue(82);
       setHookState({ resumeId: 'res-abc123' });
       renderDash(step3);
       fireEvent.click(screen.getByRole('button', { name: /Run ATS scan/i }));
-      await waitFor(() =>
-        expect(window.location.href).toBe('/atslogin/report?resume_id=res-abc123')
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      expect(runAtsScan).toHaveBeenCalledWith('res-abc123');
+      expect(await screen.findByRole('link', { name: 'Full report' })).toHaveAttribute(
+        'href',
+        '/atslogin/report?resume_id=res-abc123'
       );
     });
   });
@@ -491,39 +505,39 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
       expect(screen.getByRole('heading', { level: 2, name: 'Career operations' })).toBeInTheDocument();
     });
 
-    it('renders all operation links with the correct hrefs', () => {
+    // The workflow rows are display-only; navigation lives in the primary action panel.
+    const operationsSection = () =>
+      screen.getByRole('heading', { level: 2, name: 'Career operations' }).closest('section') as HTMLElement;
+
+    it('renders every career operation row with its label', () => {
       renderDash();
-      // Check unique names directly
-      const byName: [RegExp, string][] = [
-        [/Resume Builder/i, '/builder/start'],
-        [/Browse Jobs/i, '/jobslogin'],
-        [/Interview Prep/i, '/mock-interview'],
-        [/Mock Test/i, '/mock-test'],
-        [/Coding Practice/i, '/coding-test'],
-      ];
-      for (const [name, href] of byName) {
-        expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
+      const section = within(operationsSection());
+      for (const label of [
+        'Resume Builder',
+        'ATS Scan',
+        'Job Match',
+        'Browse Jobs',
+        'Mock Interview',
+        'Communication Assessment',
+        'Mock Test',
+        'Coding Practice',
+      ]) {
+        expect(section.getByText(label, { exact: true })).toBeInTheDocument();
       }
-      // "Job Match" link name also matches "Job Match Extension" (ExtensionsPanel), so assert by href
-      const allLinks = screen.getAllByRole('link');
-      expect(allLinks.some((el) => el.getAttribute('href') === '/jobmatch')).toBe(true);
     });
 
-    it('renders an ATS Scan link in the operations table pointing to /atslogin', () => {
+    it('does not render the career operation rows as links', () => {
       renderDash();
-      const atsLinks = screen
-        .getAllByRole('link')
-        .filter((el) => el.getAttribute('href') === '/atslogin');
-      expect(atsLinks.length).toBeGreaterThanOrEqual(1);
+      expect(within(operationsSection()).queryAllByRole('link')).toHaveLength(0);
     });
   });
 
   // ── Activity ledger ─────────────────────────────────────────────────────────
 
   describe('Activity ledger', () => {
-    it('renders the Work completed heading', () => {
+    it('renders the Recent activity heading', () => {
       renderDash();
-      expect(screen.getByRole('heading', { level: 2, name: 'Work completed' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'Recent activity' })).toBeInTheDocument();
     });
 
     it('links View all to /dashboard/recent-activity', () => {

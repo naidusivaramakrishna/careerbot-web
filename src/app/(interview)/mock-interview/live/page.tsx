@@ -9,6 +9,7 @@ import { parseResume } from "@/api/parserApi";
 import { getAllResumesUnified } from "@/api/resumeApi";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   FileText,
@@ -114,6 +115,14 @@ const ROLE_CATEGORY_FILTERS: Array<RoleCategory | "All"> = [
   ...Array.from(new Set(ROLE_CARDS.map((role) => role.category))),
 ];
 
+const ROLES_BY_CATEGORY = ROLE_CATEGORY_FILTERS.slice(1).map((category) =>
+  ROLE_CARDS.filter((role) => role.category === category),
+);
+const MIXED_ROLE_CARDS: RoleCard[] = Array.from(
+  { length: Math.max(...ROLES_BY_CATEGORY.map((roles) => roles.length)) },
+  (_, index) => ROLES_BY_CATEGORY.flatMap((roles) => (roles[index] ? [roles[index]] : [])),
+).flat();
+
 function getNetworkSummary(): { state: NetworkState; label: string } {
   if (typeof navigator === "undefined") return { state: "checking", label: "Checking connection" };
   if (!navigator.onLine) {
@@ -189,7 +198,7 @@ function InfoScreen({ onContinue }: { onContinue: () => void }) {
     </main>
   );
 }
-function PreflightScreen({ onContinue }: { onContinue: () => void }) {
+function PreflightScreen({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
   const [micState, setMicState] = useState<CheckState>("idle");
   const [camState, setCamState] = useState<CheckState>("idle");
   const [speakerState, setSpeakerState] = useState<AudioCheckState>("idle");
@@ -202,6 +211,19 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
   const [micLevel, setMicLevel] = useState(0);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // "Back to step 2" can unmount this screen while a camera request is
+  // still pending; a stream that arrives after that must be stopped.
+  const mountedRef = useRef(true);
+  // A stream held while the device list loads is not in cameraStream yet; leaving stops it too.
+  const pendingCameraRef = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pendingCameraRef.current?.getTracks().forEach((track) => track.stop());
+      pendingCameraRef.current = null;
+    };
+  }, []);
 
   const refreshDevices = async () => {
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -271,7 +293,22 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
         video: selectedCam ? { deviceId: { exact: selectedCam } } : true,
         audio: false,
       });
-      await refreshDevices();
+      const stopStream = () => stream.getTracks().forEach((track) => track.stop());
+      if (!mountedRef.current) {
+        stopStream();
+        return;
+      }
+      // Leaving while the device list loads stops it from the unmount cleanup.
+      pendingCameraRef.current = stream;
+      try {
+        await refreshDevices();
+      } catch (err) {
+        stopStream();
+        throw err;
+      } finally {
+        if (pendingCameraRef.current === stream) pendingCameraRef.current = null;
+      }
+      if (!mountedRef.current) return;
       setCameraStream(stream);
       setCamState("ok");
     } catch (err) {
@@ -309,6 +346,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
   const readyCount = [micState === "ok", camState === "ok", speakerState === "ok", network.state === "ok" || network.state === "warning"].filter(Boolean).length;
   return (
     <main className="mi-page">
+      <button type="button" className="mi-back-link mi-step-back-link" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" /> Back to step 2</button>
       <PageHeading eyebrow="STEP 02 / ROOM CHECK" title="Set up your interview room" description="A quick check now helps you stay focused on the conversation later." />
       <div className="mi-preflight-layout">
         <section className="mi-device-grid" aria-label="Device checks">
@@ -354,16 +392,24 @@ function ConnectingScreen({ sessionType }: { sessionType: SessionType }) {
 function PreInterviewScreen({
   isMobile,
   onStart,
+  onBack,
   onTypeChange,
+  selectedRoleTitle,
+  initialSessionType,
+  initialExperienceLevel,
   starting,
 }: {
   isMobile: boolean;
   onStart: (type: SessionType, targetRole: string, resumeId: string, experienceLevel: ExperienceLevel) => void;
+  onBack: () => void;
   onTypeChange: (t: SessionType) => void;
+  selectedRoleTitle?: string;
+  initialSessionType?: SessionType;
+  initialExperienceLevel?: ExperienceLevel;
   starting: boolean;
 }) {
-  const [selectedRole, setSelectedRole] = useState<RoleCard | null>(null);
-  const [modalType, setModalType] = useState<SessionType | null>(null);
+  const [selectedRole, setSelectedRole] = useState<RoleCard | null>(() => ROLE_CARDS.find((role) => role.title === selectedRoleTitle) ?? null);
+  const [modalType, setModalType] = useState<SessionType | null>(initialSessionType ?? null);
   const [selectedCategory, setSelectedCategory] = useState<RoleCategory | "All">("All");
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [resumeUploadError, setResumeUploadError] = useState<string | null>(null);
@@ -376,9 +422,21 @@ function PreInterviewScreen({
     return localStorage.getItem("current_resume_id") ?? undefined;
   });
   const [uploadedResumeId, setUploadedResumeId] = useState<string | undefined>();
-  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | undefined>();
+  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | undefined>(initialExperienceLevel);
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
-  const visibleRoles = selectedCategory === "All" ? ROLE_CARDS : ROLE_CARDS.filter((role) => role.category === selectedCategory);
+  const visibleRoles = selectedCategory === "All" ? MIXED_ROLE_CARDS : ROLE_CARDS.filter((role) => role.category === selectedCategory);
+
+  useEffect(() => {
+    if (!selectedRole) return;
+    requestAnimationFrame(() => {
+      const scrollContainer = document.querySelector(".mi-content") as HTMLElement | null;
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: 0, behavior: "auto" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+    });
+  }, [selectedRole]);
 
   useEffect(() => {
     let active = true;
@@ -498,6 +556,7 @@ function PreInterviewScreen({
 
   return (
     <main className={selectedRole ? "mi-page mi-role-page mi-role-setup-host" : "mi-page mi-role-page"}>
+      {!selectedRole && <button type="button" className="mi-back-link mi-step-back-link" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" /> Back to step 1</button>}
       <PageHeading eyebrow="STEP 02 / MAKE IT YOURS" title="Choose your interview role" description="Choose the role you want to practise for. Then select your interview format and choose a resume to personalise your interview." action={<span className="mi-pill"><UserRound size={15} />{visibleRoles.length} roles shown</span>} />
       {isMobile && <div className="mi-notice"><Smartphone size={19} /><p><strong>Mobile device detected.</strong> For best results, use a laptop or desktop with stable internet. Mobile browsers may limit microphone and fullscreen behavior.</p></div>}
       <section className="mi-panel mi-role-browser"><div className="mi-role-filters" aria-label="Filter roles by discipline">{ROLE_CATEGORY_FILTERS.map(category => <button type="button" key={category} aria-pressed={selectedCategory === category} onClick={() => setSelectedCategory(category)} className={selectedCategory === category ? "is-active" : ""}>{category}</button>)}</div><div className="mi-role-grid">{visibleRoles.map(role => <button type="button" key={role.title} aria-label={role.title} onClick={() => openRoleModal(role)} className="mi-role-card"><span className="mi-icon-tile"><UserRound size={21} /></span><span><strong>{role.title}</strong><small>{role.category}</small></span><ArrowRight size={17} aria-hidden="true" /></button>)}</div></section>
@@ -507,7 +566,7 @@ function PreInterviewScreen({
         <div className="mi-role-setup-grid">
           <section className="mi-role-setup-main">
             <p className="mi-eyebrow">STEP 02 / MAKE IT YOURS</p><h1 id="role-confirm-title">Set up your mock interview</h1><p className="mi-role-setup-lede">You&apos;re preparing for a <strong>{selectedRole.title}</strong> interview. Choose the format that best matches the conversation you want to practise.</p>
-            <div className="mi-modal-section"><div className="mi-panel-heading"><h3>Interview type</h3><span className="mi-caption">Required</span></div><div className="mi-type-grid">{availableInterviewTypes.map(type => <button type="button" key={type} aria-pressed={modalType === type} onClick={() => { setModalType(type); onTypeChange(type); }} className={modalType === type ? "is-active" : ""}><span>{type}</span><small>{type === "HR" ? "Experience & communication" : type === "Managerial" ? "Leadership & decision-making" : type === "Technical + Coding" ? "Technical interview format" : "Skills & problem-solving"}</small>{modalType === type && <CheckCircle2 size={17} />}</button>)}</div></div>
+            <div className="mi-modal-section"><div className="mi-panel-heading"><h3>Interview type</h3><span className="mi-caption">Required</span></div><div className="mi-type-grid">{availableInterviewTypes.map(type => <button type="button" key={type} aria-pressed={modalType === type} onClick={() => { setModalType(type); onTypeChange(type); }} className={modalType === type ? "is-active" : ""}><span>{type}</span><small>{type === "HR" ? "Experience & communication" : type === "Managerial" ? "Leadership & decision-making" : type === "Technical + Coding" ? "Technical questions, then a coding round" : "Skills & problem-solving"}</small>{modalType === type && <CheckCircle2 size={17} />}</button>)}</div></div>
             <div className="mi-modal-section"><div className="mi-panel-heading"><h3>Experience level</h3><span className="mi-caption">Required</span></div><div className="mi-type-grid mi-experience-grid">{([['fresher', 'Fresher', 'Starting your career'], ['mid', 'Mid', 'Growing professional experience'], ['senior', 'Senior', 'Experienced specialist or lead']] as const).map(([value, label, description]) => <button type="button" key={value} aria-pressed={experienceLevel === value} onClick={() => setExperienceLevel(value)} className={experienceLevel === value ? "is-active" : ""}><span>{label}</span><small>{description}</small>{experienceLevel === value && <CheckCircle2 size={17} />}</button>)}</div></div>
           <div className="mi-upload-area"><span className="mi-icon-tile">{isUploadingResume ? <Loader2 size={22} className="animate-spin" /> : <FileText size={22} />}</span><div><strong>{resumeFileName ?? "Upload your resume"}</strong><p>Required · PDF, DOC, or DOCX. Max 10MB.</p></div><button type="button" className="mi-button mi-button-secondary" onClick={() => resumeInputRef.current?.click()} disabled={starting || isUploadingResume}>{isUploadingResume ? "Uploading" : resumeFileName ? "Replace" : "Upload"}</button><input ref={resumeInputRef} type="file" aria-label="Upload resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={event => void handleResumeUpload(event.target.files?.[0])} /></div>
           <div className="mi-resume-picker" aria-label="Choose a saved resume"><div className="mi-panel-heading"><h3>Choose a resume</h3><span className="mi-caption">Required</span></div>{resumesLoading ? <p className="mi-caption">Loading your resumes…</p> : resumesError ? <p className="mi-form-error"><AlertCircle size={15} />{resumesError}</p> : resumes.length === 0 ? <p className="mi-caption">No saved resumes found. Upload one above to continue.</p> : <div className="mi-resume-list">{resumes.map((resume) => <label className={selectedResumeId === resume.id ? "mi-resume-option is-selected" : "mi-resume-option"} key={resume.id}><input type="radio" name="mock-interview-resume" value={resume.id} checked={selectedResumeId === resume.id} onChange={() => { setSelectedResumeId(resume.id); setResumeFileName(null); localStorage.setItem("current_resume_id", resume.id); }} /><span className="mi-resume-file"><FileText size={18} /><span><strong>{resume.name}</strong><small>{resume.updatedAt ? `Updated ${new Date(resume.updatedAt).toLocaleDateString()}` : "Saved resume"}</small></span></span><CheckCircle2 size={17} aria-hidden="true" /></label>)}</div>}</div>
@@ -580,11 +639,8 @@ export default function LiveSetupPage() {
 
     // Store params for the starting page, then navigate immediately so the user
     // doesn't wait on the API call before seeing any progress.
-    // "technical_coding" is not a valid session_type on the backend anymore —
-    // this release has no live-interview coding round at all. "Technical + Coding"
-    // still maps to plain "technical" for now (see live-interview.txt section 6/9).
-    const typeMap: Record<SessionType, "hr" | "technical" | "managerial"> = {
-      HR: "hr", Technical: "technical", Managerial: "managerial", "Technical + Coding": "technical",
+    const typeMap: Record<SessionType, "hr" | "technical" | "managerial" | "technical+coding"> = {
+      HR: "hr", Technical: "technical", Managerial: "managerial", "Technical + Coding": "technical+coding",
     };
     const interviewerIndex = pickRandomInterviewerIndex();
     const selectedInterviewer = MOCK_INTERVIEWERS[interviewerIndex];
@@ -621,7 +677,7 @@ export default function LiveSetupPage() {
         </nav>
       )}
       {phase === "info" && <InfoScreen onContinue={() => setPhase("pre-interview")} />}
-      {phase === "preflight" && <PreflightScreen onContinue={() => handleStart(sessionType, targetRole, selectedResumeId, experienceLevel)} />}
+      {phase === "preflight" && <PreflightScreen onContinue={() => handleStart(sessionType, targetRole, selectedResumeId, experienceLevel)} onBack={() => setPhase("pre-interview")} />}
       {phase === "connecting" && <ConnectingScreen sessionType={sessionType} />}
       {phase === "pre-interview" && (
         <>
@@ -640,6 +696,10 @@ export default function LiveSetupPage() {
               setPhase("preflight");
             }}
             onTypeChange={setSessionType}
+            onBack={() => setPhase("info")}
+            selectedRoleTitle={targetRole}
+            initialSessionType={sessionType}
+            initialExperienceLevel={experienceLevel}
             starting={false}
           />
         </>

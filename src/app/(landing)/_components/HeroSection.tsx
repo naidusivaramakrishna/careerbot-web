@@ -44,16 +44,8 @@ function HeroDashboard() {
 export default function HeroSection() {
   return (
     <section
-      className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_82%_21%,rgba(125,211,252,0.46),transparent_28%),radial-gradient(circle_at_74%_76%,rgba(99,102,241,0.22),transparent_31%),radial-gradient(circle_at_21%_62%,rgba(219,234,254,0.72),transparent_36%),linear-gradient(135deg,#ffffff_0%,#f7fbff_42%,#eef6ff_100%)] pb-8 pt-12 md:pb-11 md:pt-16 lg:pt-10"
+      className="relative isolate overflow-hidden bg-white pb-8 pt-12 md:pb-11 md:pt-16 lg:pt-10"
     >
-      <div className="pointer-events-none absolute inset-0 -z-10 opacity-70">
-        <div className="absolute -left-28 bottom-5 h-72 w-[620px] rotate-[-17deg] rounded-[999px] bg-[linear-gradient(90deg,rgba(219,234,254,0),rgba(147,197,253,0.36),rgba(255,255,255,0))] blur-2xl" />
-        <div className="absolute bottom-20 right-[-7%] h-40 w-[760px] rotate-[-5deg] rounded-[999px] bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(79,70,229,0.22),rgba(14,165,233,0.2),rgba(255,255,255,0))] blur-xl" />
-        <div className="absolute left-[45%] top-[38%] h-px w-[680px] -rotate-[21deg] bg-gradient-to-r from-transparent via-white/90 to-transparent" />
-        <div className="absolute right-6 top-20 h-3 w-3 rounded-full bg-white shadow-[0_0_22px_rgba(37,99,235,0.34)]" />
-        <div className="absolute bottom-24 left-[43%] h-2 w-2 rounded-full bg-white shadow-[0_0_18px_rgba(37,99,235,0.32)]" />
-      </div>
-
       <div className="mx-auto max-w-[1728px] px-5 lg:px-[60px]">
         <div className="grid items-center gap-8 lg:grid-cols-[40%_minmax(0,1fr)] lg:gap-[28px]">
           <motion.div
@@ -68,7 +60,7 @@ export default function HeroSection() {
                 return (
                   <span
                     key={badge.label}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#cfe0ff] bg-white/58 px-3 py-1.5 text-[10px] font-semibold text-[#2b78bc] shadow-[0_12px_30px_rgba(37,99,235,0.08)] backdrop-blur-md lg:px-4 lg:py-2 lg:text-[11px]"
+                    className="inline-flex items-center gap-2 rounded-full border border-[#cfe0ff] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#2b78bc] lg:px-4 lg:py-2 lg:text-[11px]"
                   >
                     <Icon size={13} strokeWidth={2.7} />
                     {badge.label}
@@ -101,7 +93,7 @@ export default function HeroSection() {
               </Link>
               <Link
                 href="/browse-templates"
-                className="inline-flex h-12 items-center justify-center whitespace-nowrap rounded-lg border border-[#d6e3f8] bg-white/88 px-7 text-[13px] font-medium text-[#22679f] shadow-[0_18px_34px_rgba(37,87,167,0.1)] backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_20px_40px_rgba(37,87,167,0.14)]"
+                className="inline-flex h-12 items-center justify-center whitespace-nowrap rounded-lg border border-[#d6e3f8] bg-white px-7 text-[13px] font-medium text-[#22679f] transition hover:-translate-y-0.5"
               >
                 View Resume Templates
               </Link>
@@ -124,7 +116,7 @@ export default function HeroSection() {
             return (
               <div
                 key={item.label}
-                className="flex items-center gap-3 rounded-lg border border-[#dce8fb] bg-white/80 px-4 py-3 shadow-[0_16px_36px_rgba(37,87,167,0.09)] backdrop-blur transition hover:-translate-y-0.5 hover:border-[#bdd4ff] hover:bg-white"
+                className="flex items-center gap-3 rounded-lg border border-[#dce8fb] bg-white px-4 py-3 transition hover:-translate-y-0.5 hover:border-[#bdd4ff]"
               >
                 <Icon size={18} className="shrink-0 text-[#2b78bc]" />
                 <span className="text-[11px] font-semibold leading-5 text-[#08184b] lg:text-xs">{item.label}</span>
