@@ -46,6 +46,20 @@ describe("runAtsScan (dashboard ATS step) finds the role on the stored resume", 
     expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "auto", target_role: "Data Analyst" });
   });
 
+  it("keeps the fixes the scan applied in the stored scan, so the report can list them", async () => {
+    mocks.getResume.mockResolvedValue(storedDoc({ headline: "Software Developer" }));
+    const applied = [{ suggestion_id: "suggested_summary_0", auto: true, suggestion: { id: "suggested_summary_0" } }];
+    mocks.enhanceResume.mockResolvedValue({
+      success: true, enhanced_resume_id: "enh-1", ats_display: { score: 72, sections: [] }, enhancer_state: { resume: {} }, applied_fixes: applied,
+    });
+
+    await runAtsScan("r-1");
+
+    for (const key of ["atsAnalysis_r-1", "atsAnalysisData"]) {
+      expect(JSON.parse(localStorage.getItem(key)!).applied_fixes).toEqual(applied);
+    }
+  });
+
   it("asks for a role, without calling enhance, when the resume names none", async () => {
     mocks.getResume.mockResolvedValue(storedDoc({ contact: { name: "Asha" } }));
 

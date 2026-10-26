@@ -121,8 +121,6 @@ interface ResumeSideProps {
   openSectionRequestId?: number;
   /** Use the entire parent panel instead of the builder page's percentage width. */
   embedded?: boolean;
-  /** ATS Scan exposes score health only; issue cards open the relevant form directly. */
-  atsFixMode?: boolean;
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -142,7 +140,6 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   tabRequest,
   openSectionRequestId = 0,
   embedded = false,
-  atsFixMode = false,
 }) => {
   // ✅ Get context first
   const {
@@ -686,7 +683,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       `}
     >
 
-      {isOpen && !atsFixMode && (
+      {isOpen && (
         <Tabs
           isOpen={isOpen}
           onToggle={() => setIsOpen(!isOpen)}
@@ -699,7 +696,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       {isOpen && (
         <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
           {/* Always mounted so the fixed modal overlay works from any tab */}
-          <div className={atsFixMode ? "h-0 overflow-hidden" : activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
+          <div className={activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
             <EditorTab
               sections={sections}
               extraSections={extraSections}
@@ -722,9 +719,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               onClearPendingSection={() => { setPendingOpenSection(null); setPendingEditEntryIndex(null); }}
             />
           </div>
-          {atsFixMode
-            ? <ScoreTab onFixNow={handleFixNow} compact />
-            : activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} compact={embedded} />}
+          {activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} compact={embedded} />}
           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
           {activeTab === "AI Review" && <AIReviewTab />}
         </div>

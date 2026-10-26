@@ -18,7 +18,8 @@ vi.mock("@/api/resumeatsapi", async (importOriginal) => ({
 
 import ResumeUpload from "@/app/(resume)/ats/_components/upload/ResumeUpload";
 
-type Options = { targetRole?: string; onStage?: (stage: "parsing" | "scoring" | "finishing") => void };
+type Options = { targetRole?: string; parsed?: unknown; onStage?: (stage: "parsing" | "scoring" | "finishing") => void };
+const KEPT_PARSE = { resume_id: "src-1", parsed_data: { contact: { name: "Asha" } } };   // the parse the first attempt already paid for
 
 function upload(container: HTMLElement) {
   const file = new File(["%PDF-1.4 test"], "resume.pdf", { type: "application/pdf" });
@@ -112,7 +113,7 @@ describe("public ATS upload asks for a role when the resume names none", () => {
     options.onStage?.("scoring");
     return Promise.resolve(options.targetRole
       ? { success: true, resume_id: "r-2", finalWeightedScore: 64, parsed_data: {}, missingFields: [] }
-      : { success: false, code: "target_role_required", error: "We could not tell which role to score your resume for." });
+      : { success: false, code: "target_role_required", parsed: KEPT_PARSE, error: "We could not tell which role to score your resume for." });
   };
 
   it("asks instead of failing, then scans again with the role the user typed", async () => {
@@ -129,6 +130,8 @@ describe("public ATS upload asks for a role when the resume names none", () => {
     await waitFor(() => expect(mockProcessResumeComplete).toHaveBeenCalledTimes(2));
     expect(mockProcessResumeComplete.mock.calls[0][1].targetRole).toBeUndefined();
     expect(mockProcessResumeComplete.mock.calls[1][1].targetRole).toBe("Data Analyst");
+    expect(mockProcessResumeComplete.mock.calls[0][1].parsed).toBeUndefined();
+    expect(mockProcessResumeComplete.mock.calls[1][1].parsed).toBe(KEPT_PARSE);     // the file is not uploaded and parsed again
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Which role are you aiming for?" })).toBeNull());
     expect(localStorage.getItem("currentScore") ?? sessionStorage.getItem("currentScore")).toBe("64");
   });

@@ -14,7 +14,8 @@ vi.mock("@/api/resumeatsapi", () => ({ processResumeComplete: scan }));
 
 import ATSLoginPage from "@/app/(resume)/atslogin/_components/ATSLoginPage";
 
-type Options = { targetRole?: string; onStage?: (stage: "parsing" | "scoring" | "finishing") => void };
+type Options = { targetRole?: string; parsed?: unknown; onStage?: (stage: "parsing" | "scoring" | "finishing") => void };
+const KEPT_PARSE = { resume_id: "src-1", parsed_data: { contact: { name: "Asha" } } };   // the parse the first attempt already paid for
 
 /** A scan the test drives by hand: each real stage waits for the test to release it. */
 function controlledScan() {
@@ -138,7 +139,7 @@ describe("a resume with no role anywhere is asked for one", () => {
     options.onStage?.("scoring");
     return Promise.resolve(options.targetRole
       ? { success: true, resume_id: "r-2" }
-      : { success: false, code: "target_role_required", error: "We could not tell which role to score your resume for." });
+      : { success: false, code: "target_role_required", parsed: KEPT_PARSE, error: "We could not tell which role to score your resume for." });
   };
 
   it("asks instead of failing, then scans with the role the user typed", async () => {
@@ -158,6 +159,8 @@ describe("a resume with no role anywhere is asked for one", () => {
     await waitFor(() => expect(scan).toHaveBeenCalledTimes(2));
     expect(scan.mock.calls[0][1].targetRole).toBeUndefined();
     expect(scan.mock.calls[1][1].targetRole).toBe("Software Developer");
+    expect(scan.mock.calls[0][1].parsed).toBeUndefined();
+    expect(scan.mock.calls[1][1].parsed).toBe(KEPT_PARSE);            // the file is not uploaded and parsed again
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/atslogin/report?resume_id=r-2"));
   });
 
@@ -176,6 +179,7 @@ describe("a resume with no role anywhere is asked for one", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Analyze My Resume|Upload & Scan Resume/i }));
 
     expect((await screen.findByLabelText("Target role") as HTMLInputElement).value).toBe("");
+    expect(scan.mock.calls[1][1].parsed).toBeUndefined();            // another file is parsed on its own, not scored on the old parse
   });
 
   it("does not scan again when the user cancels", async () => {

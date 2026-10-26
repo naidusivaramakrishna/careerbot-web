@@ -6,10 +6,13 @@ import { getResume } from "./parserApi";
 import { apiErrorCode, TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
 import { cleanTargetRole, resolveTargetRole } from "@/utils/targetRole";
 
-/** No role anywhere on the resume: the caller asks the user for one (the API requires it, as careerbot-ai does). */
-const targetRoleRequired = () => Object.assign(
+/**
+ * No role anywhere on the resume: the caller asks the user for one (the API requires it, as careerbot-ai does).
+ * The parse that was already done travels with the error, so the scan can go on from it once the role is typed.
+ */
+const targetRoleRequired = (parsed?: unknown) => Object.assign(
   new Error("We could not tell which role to score your resume for. Open ATS Scan, enter the role you are targeting and try again."),
-  { code: TARGET_ROLE_REQUIRED },
+  { code: TARGET_ROLE_REQUIRED, parsed },
 );
 
 // Same-origin build (NEXT_PUBLIC_BASE_URL=/api/v1): '' so requests go to the
@@ -241,23 +244,30 @@ export type ScanStage = "parsing" | "scoring" | "finishing";
 export interface ScanOptions {
   /** Role to score the resume for. Needed when the resume names none (e.g. a fresher with no headline). */
   targetRole?: string;
+  /**
+   * The parse of this same file from an earlier attempt (returned with `target_role_required`): the scan goes on
+   * from it, so asking for a role does not upload and parse the file a second time.
+   */
+  parsed?: Awaited<ReturnType<typeof parseResume>>;
   onStage?: (stage: ScanStage) => void;
 }
 
 export const processResumeComplete = async (file: File, options: ScanOptions = {}) => {
   const { targetRole, onStage } = options;
   try {
-    // Step 1: Parse Resume
-    let parsed;
-    onStage?.("parsing");
-    try {
-      parsed = await parseResume(file);
-    } catch (parseErr) {
-      const parseMessage = (parseErr as { message?: string })?.message ?? String(parseErr);
-      throw new Error(isServerFailure(parseErr) ? PARSE_SERVER_ERROR_MESSAGE : parseMessage);
+    // Step 1: Parse Resume (skipped when an earlier attempt on this file already did it)
+    let parsed = options.parsed;
+    if (!parsed) {
+      onStage?.("parsing");
+      try {
+        parsed = await parseResume(file);
+      } catch (parseErr) {
+        const parseMessage = (parseErr as { message?: string })?.message ?? String(parseErr);
+        throw new Error(isServerFailure(parseErr) ? PARSE_SERVER_ERROR_MESSAGE : parseMessage);
+      }
+      const parserError = parserFailureMessage(parsed);
+      if (parserError) throw new Error(parserError);
     }
-    const parserError = parserFailureMessage(parsed);
-    if (parserError) throw new Error(parserError);
 
     const resumeId = parsed.resume_id;
     const parsedData = parsed?.parsed_data ?? {};
@@ -268,6 +278,21 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
     if (parsed.cache_hit && resumeId) {
       const localKey = `atsAnalysis_${resumeId}`;
 
+      // Reusing a stored scan is still a new scan of this file as far as the report is concerned: stamp it, and keep
+      // the stamp where the report reads it. The report asks about earlier fixes once per scan (keyed by
+      // `scanned_at`), so a re-upload of the same file must not look like the scan it already asked about.
+      // A role the user typed for this scan decides: a stored scan made for another role is not it.
+      const wantedRole = cleanTargetRole(targetRole)?.toLowerCase();
+      const madeForWantedRole = (payload: { target_role?: unknown }) =>
+        !wantedRole || cleanTargetRole(payload.target_role)?.toLowerCase() === wantedRole;
+
+      const reuseStored = <T extends object>(payload: T) => {
+        const reused = { ...payload, scanned_at: new Date().toISOString() };
+        storeAtsAnalysis(localKey, reused);
+        storeAtsAnalysis("atsAnalysisData", reused);
+        return { success: true as const, ...reused };
+      };
+
       // Check resume-specific key first
       const cached = readAtsAnalysis(localKey);
       if (cached) {
@@ -275,10 +300,7 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
           const cachedPayload = JSON.parse(cached);
           // Old local payloads do not contain the backend projection contract.
           // Force one fresh enhancement after the backend rollout.
-          if (hasScoreProjectionContract(cachedPayload)) {
-            try { localStorage.setItem("atsAnalysisData", cached); } catch { /* non-fatal: still a valid cache hit */ }
-            return { success: true as const, ...cachedPayload };
-          }
+          if (hasScoreProjectionContract(cachedPayload) && madeForWantedRole(cachedPayload)) return reuseStored(cachedPayload);
         } catch { /* corrupted — fall through */ }
       }
 
@@ -288,10 +310,7 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
       if (legacy) {
         try {
           const legacyPayload = JSON.parse(legacy);
-          if (legacyPayload.resume_id === resumeId && hasScoreProjectionContract(legacyPayload)) {
-            try { localStorage.setItem(localKey, legacy); } catch { /* non-fatal migration */ }
-            return { success: true as const, ...legacyPayload };
-          }
+          if (legacyPayload.resume_id === resumeId && hasScoreProjectionContract(legacyPayload) && madeForWantedRole(legacyPayload)) return reuseStored(legacyPayload);
         } catch { /* fall through to fresh analysis */ }
       }
     }
@@ -299,7 +318,7 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
     // Step 2: Enhance — now also returns the ATS breakdown
     let enhanceResult;
     const role = cleanTargetRole(targetRole) || resolveTargetRole(parsedData);
-    if (!role) throw targetRoleRequired();
+    if (!role) throw targetRoleRequired(parsed);
     onStage?.("scoring");
     try {
       enhanceResult = await enhanceResume({
@@ -414,7 +433,12 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
       message = "You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.";
     }
 
-    return { success: false as const, error: message, code: (err as { code?: string } | null)?.code };
+    return {
+      success: false as const,
+      error: message,
+      code: (err as { code?: string } | null)?.code,
+      parsed: (err as { parsed?: Awaited<ReturnType<typeof parseResume>> } | null)?.parsed,   // lets the caller go on from it
+    };
   }
 };
 
@@ -453,6 +477,8 @@ export const runAtsScan = async (resumeId: string, targetRole?: string): Promise
     ats_breakdown_id: null,
     parsed_data: {},
     resume_data: null,
+    // The fixes the scan applied for the user (mode "auto"), so the report can say what changed.
+    applied_fixes: Array.isArray((enhanceResult as { applied_fixes?: unknown }).applied_fixes) ? (enhanceResult as { applied_fixes: unknown[] }).applied_fixes : [],
     enhanced_resume: enhanceResult.enhanced_resume || enhanceResult.enhancer_state?.resume || null,
     ats_score: atsBreakdown,
     ats_display: atsDisplay || null,

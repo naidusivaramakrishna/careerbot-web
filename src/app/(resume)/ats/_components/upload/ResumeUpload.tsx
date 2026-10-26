@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { FaFileUpload } from "react-icons/fa";
 import { formatFileSize, clearAtsUploadStorage, validateResumeFile, safeSetItem, readCachedAtsAnalysis } from "../../utils/helpers";
-import { processResumeComplete, storeAtsAnalysis, type ScanStage } from "@/api/resumeatsapi";
+import { processResumeComplete, storeAtsAnalysis, type ScanOptions, type ScanStage } from "@/api/resumeatsapi";
 import { buildAtsReportRoute, normalizeResumeScanError } from "../../utils/scanFlow";
 import { useAuth } from "@/hooks/useAuth";
 import SignUpModal from "@/components/SignUpModal";
@@ -39,6 +39,8 @@ const ResumeUpload: React.FC = () => {
   // Asked for when the resume names no role (a fresher with no headline).
   const [askRole, setAskRole] = useState<boolean>(false);
   const [roleInput, setRoleInput] = useState<string>("");
+  // The parse of this file when a role had to be asked for: the scan goes on from it instead of uploading the file again.
+  const parsedRef = useRef<ScanOptions["parsed"]>(undefined);
   const [currentScore, setCurrentScore] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -86,10 +88,11 @@ const ResumeUpload: React.FC = () => {
   // Scores an uploaded file. `targetRole` is sent only when the user had to type one.
   const scanFile = async (f: File, targetRole?: string) => {
     try {
-      const result = await processResumeComplete(f, { targetRole, onStage: setScanStage });
+      const result = await processResumeComplete(f, { targetRole, parsed: parsedRef.current, onStage: setScanStage });
       setIsProcessing(false);
 
       if (!result.success) {
+        parsedRef.current = result.parsed;       // kept only when a role is needed; any other failure starts over
         // A resume with no role anywhere cannot be scored: ask for one instead of failing.
         if (result.code === TARGET_ROLE_REQUIRED) {
           setAskRole(true);
@@ -135,6 +138,7 @@ const ResumeUpload: React.FC = () => {
       safeSetItem("currentScore", String(result.finalWeightedScore ?? 0));
       safeSetItem("isImageBased", "false");
       setRoleInput("");
+      parsedRef.current = undefined;
       setTimeout(() => setStep(3), 500);
     } catch (err: unknown) {
       setError(normalizeResumeScanError(err, "Processing failed. Try again."));
@@ -149,7 +153,7 @@ const ResumeUpload: React.FC = () => {
     const role = roleInput.trim();
     if (!role || !uploadedFile) return;
     setAskRole(false);
-    setScanStage("parsing");
+    setScanStage(parsedRef.current ? "scoring" : "parsing");
     setIsProcessing(true);
     await scanFile(uploadedFile, role);
   };
@@ -174,6 +178,7 @@ const ResumeUpload: React.FC = () => {
 
     setUploadedFile(f);
     setRoleInput("");                 // a role typed for the previous file is not this file's
+    parsedRef.current = undefined;    // nor is its parse
     setStep(2);
     setScanStage("parsing");
     setIsProcessing(true);
@@ -194,6 +199,7 @@ const ResumeUpload: React.FC = () => {
   const removeFile = () => {
     setUploadedFile(null);
     setRoleInput("");
+    parsedRef.current = undefined;
     setStep(0);
     setError(null);
     setCurrentScore(0);

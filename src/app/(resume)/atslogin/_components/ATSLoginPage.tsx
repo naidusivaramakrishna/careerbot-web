@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Check, ArrowRight, Clock, X, UploadCloud, FileCheck2, BookOpenCheck, ShieldCheck, BarChart3, Target, FileWarning, Scissors, TrendingUp, Users, Star } from "lucide-react";
 import { FaFilePdf, FaFileWord } from "react-icons/fa";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { processResumeComplete, type ScanStage } from "@/api/resumeatsapi";
+import { processResumeComplete, type ScanOptions, type ScanStage } from "@/api/resumeatsapi";
 import ErrorModal from "./ErrorModal";
 import TargetRolePrompt from "@/components/common/TargetRolePrompt";
 import { useElapsedSeconds } from "@/hooks/useElapsedSeconds";
@@ -435,6 +435,8 @@ export default function ATSLoginPage() {
 
   // Set the moment a scan starts: a held-down Enter or a double click must not send a second parse + enhance.
   const scanInFlight = useRef(false);
+  // The parse of this file when a role had to be asked for: the scan goes on from it instead of uploading the file again.
+  const parsedRef = useRef<ScanOptions["parsed"]>(undefined);
   const canScan = Boolean(file && agreed) && !isLoading;
 
   const handleDragOver  = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
@@ -448,7 +450,7 @@ export default function ATSLoginPage() {
     if (e.target.files?.[0]) validateAndSetFile(e.target.files[0]);
     e.target.value = "";
   };
-  const handleRemoveFile = () => { setFile(null); setError(""); setAgreed(false); setRoleInput(""); };
+  const handleRemoveFile = () => { setFile(null); setError(""); setAgreed(false); setRoleInput(""); parsedRef.current = undefined; };
 
   const validateAndSetFile = (f: File) => {
     setError("");
@@ -456,6 +458,7 @@ export default function ATSLoginPage() {
     if (err) { setErrorSource("file"); setError(err); return; }
     setFile(f);
     setRoleInput("");                 // a role typed for the previous file is not this file's
+    parsedRef.current = undefined;    // nor is its parse
   };
 
   const runScan = async (targetRole?: string) => {
@@ -463,11 +466,12 @@ export default function ATSLoginPage() {
     scanInFlight.current = true;
     setError("");
     setAskRole(false);
-    setScanStage("parsing");
+    setScanStage(parsedRef.current ? "scoring" : "parsing");
     setIsLoading(true);
     try {
-      const result = await processResumeComplete(file, { targetRole, onStage: setScanStage });
+      const result = await processResumeComplete(file, { targetRole, parsed: parsedRef.current, onStage: setScanStage });
       if (!result.success) {
+        parsedRef.current = result.parsed;       // kept only when a role is needed; any other failure starts over
         // A resume with no role anywhere cannot be scored: ask for one instead of failing.
         if (result.code === TARGET_ROLE_REQUIRED) {
           scanInFlight.current = false;
@@ -479,6 +483,7 @@ export default function ATSLoginPage() {
       }
       setScanStage("done");
       setRoleInput("");
+      parsedRef.current = undefined;
       const resumeId = typeof result.resume_id === "string" ? result.resume_id : "";
       setTimeout(() => router.push(buildAtsReportRoute(resumeId)), 600);
     } catch (err: unknown) {
