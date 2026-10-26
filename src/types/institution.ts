@@ -194,13 +194,20 @@ export interface LeaderboardEntry {
 /** The top of a cohort.
  *
  *  NO cohort_size AND NO RANKS. Both were removed after review: a size lets a
- *  reader who knows the year group subtract to find who opted out, and ranks
+ *  reader who knows the year group subtract to find who is not listed, and ranks
  *  leave a visible gap that says somebody is missing and brackets their score
  *  between the two names either side. Number the rows as displayed positions. */
 export type Leaderboard =
   | { available: true; entries: LeaderboardEntry[] }
   | { available: false; reason: string; min_cohort?: number;
       entries: LeaderboardEntry[] };
+
+/** The answer to PUT /students/me/leaderboard. `changed` is false when the
+ *  student repeated the choice they had already made. */
+export interface LeaderboardConsent {
+  opt_in: boolean;
+  changed: boolean;
+}
 
 /** One department's numbers. Never a student. */
 export type CohortComparisonGroup =
@@ -411,6 +418,12 @@ export interface Student {
    *  sections. Staff screens resolve the ids against those lists instead. */
   department_name?: string | null;
   section_name?: string | null;
+  /** Whether this student's NAME is shown on the leaderboard. Sent only on a
+   *  student's own profile (GET /students/me), and it is the answer the board
+   *  acts on, not a raw stored field: OPT-IN, so a row from before consent
+   *  existed reads false. Changed only by the student, via
+   *  setMyLeaderboardConsent. */
+  leaderboard_opt_in?: boolean;
   status: StudentStatus;
   photo_url?: string | null;
   created_at?: string;

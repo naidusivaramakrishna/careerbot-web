@@ -57,6 +57,7 @@ import type {
   Readiness,
   Standing,
   Leaderboard,
+  LeaderboardConsent,
   CohortComparison,
   RosterReport,
   MyPeople,
@@ -802,7 +803,7 @@ export async function getMyStanding(): Promise<Standing> {
 
 /** The top of the caller's cohort.
  *
- *  Students who opted out are ABSENT -- not anonymised, not placeholders --
+ *  Students who have not opted in are ABSENT -- not anonymised, not placeholders --
  *  and the response carries no cohort size, because "ten in the year, nine
  *  names" identifies the tenth. Entries carry no rank for the same reason: a
  *  gap in the numbering would say somebody is missing and bracket their score
@@ -811,6 +812,25 @@ export async function getLeaderboard(limit = 10): Promise<Leaderboard> {
   try {
     const response = await httpClient.get<Leaderboard>(
       `${BASE}/leaderboard?limit=${encodeURIComponent(String(limit))}`,
+      withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Turn the caller's OWN name on the leaderboard on or off. STUDENTS ONLY.
+ *
+ *  OPT-IN: nobody is named until they turn this on. There is no student id in
+ *  the request -- the server resolves the caller's own row -- so this cannot
+ *  be pointed at anybody else. Withdrawing is never refused; turning it on is
+ *  refused while the college is paused, like any other write. */
+export async function setMyLeaderboardConsent(
+  optIn: boolean,
+): Promise<LeaderboardConsent> {
+  try {
+    const response = await httpClient.put<LeaderboardConsent>(
+      `${BASE}/students/me/leaderboard`, { opt_in: optIn },
       withInstitutionAuth());
     return response.data;
   } catch (err) {

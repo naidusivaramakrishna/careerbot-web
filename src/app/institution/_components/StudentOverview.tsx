@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import {
   useCohortComparison,
   useInstitutionContext,
@@ -21,6 +22,7 @@ import { ProgressStatusPill, ScoreCell } from './StatusPill';
 import { ComparisonCard } from './ComparisonCard';
 import { EnabledFeaturesCard } from './EnabledFeaturesCard';
 import { LeaderboardCard } from './LeaderboardCard';
+import { LeaderboardConsentToggle } from './LeaderboardConsentToggle';
 import { ReadinessCard } from './ReadinessCard';
 import { StandingCard } from './StandingCard';
 import { CARD } from './tokens';
@@ -189,7 +191,30 @@ export function StudentOverview() {
               missing position is not a missing progress list. */}
           <div className="mb-5 grid gap-5 lg:grid-cols-2">
             {standing.data ? <StandingCard standing={standing.data} /> : null}
-            {board.data ? <LeaderboardCard board={board.data} /> : null}
+            {/* The CONSENT SWITCH sits with the board it controls, and is
+                shown even when the board failed to load: a student must be
+                able to take their name down whatever else is broken. */}
+            <div className="space-y-5">
+              {/* A FAILED RELOAD HIDES THE OLD BOARD. The hook keeps the last
+                  list when a refetch fails, so after a withdrawal the student's
+                  own name would stay on screen beside a switch that says Off.
+                  Say it could not be refreshed instead of showing that list. */}
+              {board.data && board.error ? (
+                <section className={`${CARD} p-5`} role="alert">
+                  <Caption>
+                    The leaderboard could not be refreshed, so it is not shown
+                    here. Your choice below is saved separately.
+                  </Caption>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={board.refetch}>
+                    Try again
+                  </Button>
+                </section>
+              ) : board.data ? <LeaderboardCard board={board.data} /> : null}
+              <LeaderboardConsentToggle
+                optIn={student.leaderboard_opt_in === true}
+                onChanged={board.refetch}
+              />
+            </div>
           </div>
 
           {comparison.data ? (

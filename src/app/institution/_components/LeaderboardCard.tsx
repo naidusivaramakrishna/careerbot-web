@@ -10,7 +10,7 @@ import { CARD, INK, TABULAR } from './tokens';
  *
  * THE ROWS ARE NUMBERED HERE, NOT BY THE SERVER, and that is a privacy
  * decision rather than a rendering one. The API returns no rank on any entry,
- * because a true competition rank leaves a GAP where somebody opted out --
+ * because a true competition rank leaves a GAP where somebody is not listed --
  * 1, 3, 4 says a person is missing and brackets their score between the two
  * names either side. What this list shows are POSITIONS IN THIS LIST, which
  * is what a leaderboard is for, and the caption says so rather than letting a
@@ -25,8 +25,11 @@ export function LeaderboardCard({ board }: { board: Leaderboard }) {
       <section className={`${CARD} p-5`} aria-labelledby="board-heading">
         <SectionTitle id="board-heading">Top of your year</SectionTitle>
         <Caption>
+          {/* Not "nobody has a score yet": listing is OPT-IN, so an empty
+              board usually means nobody has chosen to be shown, and saying
+              otherwise would be untrue. */}
           {board.available
-            ? 'Nobody in your year has a score yet.'
+            ? 'Nobody in your year is listed yet. Students appear here once they choose to show their name.'
             : 'Not enough of your year group have taken anything yet.'}
         </Caption>
       </section>
@@ -62,10 +65,11 @@ export function LeaderboardCard({ board }: { board: Leaderboard }) {
       {/* WHY SOMEBODY THEY EXPECT MIGHT NOT BE HERE. Without this line, a
           student who knows the top of their year and cannot find them assumes
           the list is broken -- and starts working out who is missing, which is
-          the thing the opt-out exists to prevent. */}
+          the thing consent exists to prevent. Listing is OPT-IN, so most of a
+          year group may be absent. */}
       <Caption className="mt-4">
-        Anyone can choose not to appear here. This shows positions in this
-        list, not everyone&apos;s rank.
+        Only students who chose to show their name appear here. This shows
+        positions in this list, not everyone&apos;s rank.
       </Caption>
     </section>
   );

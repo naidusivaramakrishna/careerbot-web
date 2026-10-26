@@ -38,7 +38,7 @@ const SERVER_MESSAGE_IS_USEFUL = new Set<InstitutionErrorReason>([
   'CONFLICT',
 ]);
 
-function displayMessage(error: InstitutionApiError): string {
+export function displayMessage(error: InstitutionApiError): string {
   if (SERVER_MESSAGE_IS_USEFUL.has(error.reason) && error.message) {
     return error.message;
   }

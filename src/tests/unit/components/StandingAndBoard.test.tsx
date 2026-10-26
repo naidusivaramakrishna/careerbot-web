@@ -61,13 +61,21 @@ describe('the leaderboard card', () => {
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
-  it('says the numbering is not a ranking, and that people may opt out', () => {
+  it('says the numbering is not a ranking, and that only students who opted in are listed', () => {
     /** Without this, a student who knows the top of their year and cannot
      *  find them assumes the list is broken -- and starts working out who is
-     *  missing, which is what the opt-out exists to prevent. */
+     *  missing, which is what consent exists to prevent. */
     render(<LeaderboardCard board={board} />);
-    expect(screen.getByText(/choose not to appear/i)).toBeInTheDocument();
+    expect(screen.getByText(/only students who chose to show their name/i)).toBeInTheDocument();
     expect(screen.getByText(/not everyone.s rank/i)).toBeInTheDocument();
+  });
+
+  it('an empty board says nobody is LISTED, not that nobody has a score', () => {
+    /** Listing is opt-in, so an empty board usually means nobody has chosen
+     *  to be shown; "nobody has a score" would be untrue. */
+    render(<LeaderboardCard board={{ available: true, entries: [] }} />);
+    expect(screen.getByText(/nobody in your year is listed yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/has a score/i)).not.toBeInTheDocument();
   });
 
   it('handles a withheld board without pretending it is empty data', () => {
