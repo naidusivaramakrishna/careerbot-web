@@ -56,6 +56,7 @@ import ATSLoginReportPage from "@/app/(resume)/atslogin/report/page";
 const photo = "data:image/png;base64," + "A".repeat(4096);
 const report = (extra: Record<string, unknown> = {}) => ({
   resume_id: "src-1",
+  target_role: "Software Developer",
   enhanced_resume_id: null,
   ats_score: { final_score: 60 },
   enhanced_resume: { contact: { name: "Avery" } },
@@ -263,6 +264,57 @@ describe("ATS report workspace setup", () => {
     expect(enhanceResume).toHaveBeenCalledTimes(1);
   });
 
+  describe("fixes the scan applied by itself (auto: true) are not the user's work", () => {
+    const autoOnly = [{ suggestion_id: "a", auto: true }, { suggestion_id: "b", auto: true }];
+
+    it("shows no banner when the enhance response carries only automatic fixes", async () => {
+      window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+      vi.mocked(enhanceResume).mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {}, applied_fixes: autoOnly,
+      } as never);
+
+      render(<ATSLoginReportPage />);
+
+      await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+      expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+    });
+
+    it("shows no banner when the saved record the report names has only automatic fixes", async () => {
+      window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-1" })));
+      vi.mocked(getEnhancedResume).mockResolvedValue({ applied_fixes: autoOnly, enhanced_data: {} } as never);
+
+      render(<ATSLoginReportPage />);
+
+      await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+      expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+    });
+
+    it("shows no banner when the count falls back to the saved record and it has only automatic fixes", async () => {
+      window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+      vi.mocked(enhanceResume).mockResolvedValueOnce({ success: true, enhanced_resume_id: "enh-1", enhanced_resume: {} } as never);
+      vi.mocked(getEnhancedResume).mockResolvedValue({ applied_fixes: autoOnly } as never);
+
+      render(<ATSLoginReportPage />);
+
+      await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
+      expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull();
+    });
+
+    it("counts only the user's own fixes when automatic ones are mixed in", async () => {
+      window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
+      vi.mocked(enhanceResume).mockResolvedValueOnce({
+        success: true, enhanced_resume_id: "enh-1", enhanced_resume: {},
+        applied_fixes: [...autoOnly, { suggestion_id: "c" }],
+      } as never);
+
+      render(<ATSLoginReportPage />);
+
+      const banner = await screen.findByTestId("prior-fixes-dialog");
+      expect(banner.textContent).toContain("1 fix");
+      expect(banner.textContent).not.toContain("3 fix");
+    });
+  });
+
   it("shows no banner for a record with no applied fixes", async () => {
     window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report()));
     vi.mocked(enhanceResume).mockResolvedValueOnce({
@@ -295,7 +347,7 @@ describe("ATS report workspace setup", () => {
 
     fireEvent.click(screen.getByText("Yes, start fresh"));
     await waitFor(() => expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull());
-    expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", force_refresh: true });
+    expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", force_refresh: true, mode: "auto", target_role: "Software Developer" });
     // The fresh record reuses the old ID: what this browser kept for it (green
     // cards, highlights) must be forgotten or the new workspace shows old fixes.
     expect(clearStored).toHaveBeenCalledWith("enh-2");
@@ -353,8 +405,23 @@ describe("ATS report workspace setup", () => {
 
     await waitFor(() => expect(screen.getByTestId("resume-side")).toBeTruthy());
     expect(enhanceResume).toHaveBeenCalledTimes(1);
-    expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1" });
+    expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Software Developer" });
     expect(screen.queryByText("Could not prepare ATS fixes")).toBeNull();
+  });
+
+  it("scans again for the role the user typed, even one a headline would not give (\"Student\")", async () => {
+    // The prompt accepts any role the API accepts; the report must send the same role back, not drop it.
+    window.localStorage.setItem("atsAnalysis_src-1", JSON.stringify(report({ enhanced_resume_id: "enh-old", target_role: "Student" })));
+    const notFound = Object.assign(new Error("not found"), { __raw: { detail: { error: "enhanced_resume_not_found" } } });
+    vi.mocked(getEnhancedResume).mockRejectedValue(notFound);
+    vi.mocked(enhanceResume).mockResolvedValueOnce({
+      success: true, enhanced_resume_id: "enh-new", enhanced_resume: { contact: { name: "Avery" } }, applied_fixes: [],
+    } as never);
+
+    render(<ATSLoginReportPage />);
+
+    await waitFor(() => expect(enhanceResume).toHaveBeenCalledTimes(1));
+    expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Student" });
   });
 
   it("asks again, like the upload dialog, when the service keeps the saved fixes on a fresh scan", async () => {
@@ -401,6 +468,6 @@ describe("ATS report workspace setup", () => {
     fireEvent.click(screen.getByText("Yes, start fresh"));
 
     await waitFor(() => expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull());
-    expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", force_refresh: true, ats_breakdown: "bd-9" });
+    expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", force_refresh: true, ats_breakdown: "bd-9", mode: "auto", target_role: "Software Developer" });
   });
 });

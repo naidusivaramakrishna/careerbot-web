@@ -1,4 +1,5 @@
 import { getEnhancedResume } from "@/api/enhancerApi";
+import { countUserAppliedFixes } from "@/utils/appliedFixes";
 
 type RefreshResult = {
   enhanced_resume_id: string;
@@ -17,14 +18,13 @@ export async function verifyFreshEnhancement(
   result: RefreshResult,
 ): Promise<FreshEnhancementVerification> {
   if (Array.isArray(result.applied_fixes)) {
-    return result.applied_fixes.length === 0 ? "cleared" : "retained";
+    // Fixes the scan applied by itself (mode "auto") are not saved work that was retained.
+    return countUserAppliedFixes(result.applied_fixes) === 0 ? "cleared" : "retained";
   }
 
   try {
     const record = await getEnhancedResume(result.enhanced_resume_id);
-    return Array.isArray(record?.applied_fixes) && record.applied_fixes.length > 0
-      ? "retained"
-      : "cleared";
+    return countUserAppliedFixes(record?.applied_fixes) > 0 ? "retained" : "cleared";
   } catch {
     return "unknown";
   }

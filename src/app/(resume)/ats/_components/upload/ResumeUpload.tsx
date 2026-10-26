@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, ChangeEvent, useEffect } from "react";
+import React, { useRef, useState, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload,
@@ -14,10 +14,13 @@ import {
 } from "lucide-react";
 import { FaFileUpload } from "react-icons/fa";
 import { formatFileSize, clearAtsUploadStorage, validateResumeFile, safeSetItem, readCachedAtsAnalysis } from "../../utils/helpers";
-import { processResumeComplete, storeAtsAnalysis } from "@/api/resumeatsapi";
+import { processResumeComplete, storeAtsAnalysis, type ScanStage } from "@/api/resumeatsapi";
 import { buildAtsReportRoute, normalizeResumeScanError } from "../../utils/scanFlow";
 import { useAuth } from "@/hooks/useAuth";
 import SignUpModal from "@/components/SignUpModal";
+import TargetRolePrompt from "@/components/common/TargetRolePrompt";
+import { TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
+import { formatElapsed, useElapsedSeconds } from "@/hooks/useElapsedSeconds";
 
 const PRIMARY_COLOR = "#0275dd";
 
@@ -31,44 +34,29 @@ const ResumeUpload: React.FC = () => {
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [step, setStep] = useState<number>(0);
-  const [progress, setProgress] = useState<number>(0);
+  // The stage the scan is really in (reported by processResumeComplete) and the real elapsed time.
+  const [scanStage, setScanStage] = useState<ScanStage>("parsing");
+  // Asked for when the resume names no role (a fresher with no headline).
+  const [askRole, setAskRole] = useState<boolean>(false);
+  const [roleInput, setRoleInput] = useState<string>("");
   const [currentScore, setCurrentScore] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
-  const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isImageBased, setIsImageBased] = useState<boolean>(false);
   const [scanErrorKind, setScanErrorKind] = useState<"auth" | "credits" | "generic" | null>(null);
   const [scanErrorMessage, setScanErrorMessage] = useState<string | null>(null);
 
-  const radius = 50;
-  const strokeWidth = 8;
-  const circumference = 2 * Math.PI * (radius - strokeWidth / 2);
-  const progressOffset = circumference - (progress / 100) * circumference;
+  const isScanRunning = isProcessing;
+  const elapsedTime = useElapsedSeconds(isScanRunning);
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
-    if (isProcessing) {
-      timer = setInterval(() => setElapsedTime((p) => p + 1), 1000);
-    } else {
-      setElapsedTime(0);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [isProcessing]);
-
-  const formatTime = (s: number) =>
-    `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
-
-  const getStatusMessage = (t: number) => {
-    if (t < 10) return "Validating file format...";
-    if (t < 30) return "Uploading resume to AI analysis...";
-    if (t < 60) return "AI is parsing document content...";
-    if (t < 90) return "Analyzing resume structure...";
-    if (t < 120) return "Calculating ATS compatibility...";
-    if (t < 150) return "Generating recommendations...";
-    return "Finalizing analysis...";
-  };
+  // The scan's real stages, in order. Each is announced when its API call starts.
+  const SCAN_STAGES: ReadonlyArray<{ id: ScanStage; label: string; message: string }> = [
+    { id: "parsing",   label: "Read",   message: "Uploading and reading your resume..." },
+    { id: "scoring",   label: "Score",  message: "Scoring your resume..." },
+    { id: "finishing", label: "Report", message: "Preparing your report..." },
+  ];
+  const stageIndex = Math.max(0, SCAN_STAGES.findIndex((item) => item.id === scanStage));
+  const stageArc = stageIndex / SCAN_STAGES.length;   // share of stages already finished
 
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -95,49 +83,18 @@ const ResumeUpload: React.FC = () => {
     return false;
   };
 
-  const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const extErr = validateResumeFile(f);
-    if (extErr) { setError(extErr); return; }
-
-    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-    setError(null);
-    setIsImageBased(false);
-    setScanErrorKind(null);
-    setScanErrorMessage(null);
-
-    const valid = await validateFileContent(f, ext);
-    if (!valid) {
-      setError(`Invalid ${ext.toUpperCase()} file – corrupted or wrong format.`);
-      return;
-    }
-
-    setUploadedFile(f);
-    setStep(2);
-    setProgress(5);
-    setIsProcessing(true);
-
+  // Scores an uploaded file. `targetRole` is sent only when the user had to type one.
+  const scanFile = async (f: File, targetRole?: string) => {
     try {
-      const b64 = await fileToBase64(f);
-      localStorage.setItem("uploadedResumeFile", b64);
-      localStorage.setItem("uploadedFileName", f.name);
-      localStorage.setItem("uploadedFileSize", String(f.size));
-      localStorage.setItem("uploadedFileType", f.type);
-    } catch {
-      // ignore preview failures
-    }
-
-    const progInt = setInterval(() => {
-      setProgress((p) => (p < 95 ? Math.min(p + 1, 95) : p));
-    }, 600);
-
-    try {
-      const result = await processResumeComplete(f);
-      clearInterval(progInt);
+      const result = await processResumeComplete(f, { targetRole, onStage: setScanStage });
       setIsProcessing(false);
 
       if (!result.success) {
+        // A resume with no role anywhere cannot be scored: ask for one instead of failing.
+        if (result.code === TARGET_ROLE_REQUIRED) {
+          setAskRole(true);
+          return;
+        }
         const msg = result.error ?? "Something went wrong while analyzing your resume.";
         const lower = msg.toLowerCase();
         const kind: "auth" | "credits" | "generic" =
@@ -148,7 +105,6 @@ const ResumeUpload: React.FC = () => {
         setScanErrorKind(kind);
         setScanErrorMessage(msg);
         setCurrentScore(0);
-        setProgress(100);
         setStep(3);
         safeSetItem("isImageBased", "false");
         safeSetItem("currentScore", "0");
@@ -158,7 +114,6 @@ const ResumeUpload: React.FC = () => {
       if (result.parsed_data?.ocr_needed) {
         setIsImageBased(true);
         setCurrentScore(0);
-        setProgress(100);
         setStep(3);
         safeSetItem("isImageBased", "true");
         safeSetItem("currentScore", "0");
@@ -179,10 +134,9 @@ const ResumeUpload: React.FC = () => {
       });
       safeSetItem("currentScore", String(result.finalWeightedScore ?? 0));
       safeSetItem("isImageBased", "false");
-      setProgress(100);
+      setRoleInput("");
       setTimeout(() => setStep(3), 500);
     } catch (err: unknown) {
-      clearInterval(progInt);
       setError(normalizeResumeScanError(err, "Processing failed. Try again."));
       setStep(0);
       setUploadedFile(null);
@@ -191,14 +145,61 @@ const ResumeUpload: React.FC = () => {
     }
   };
 
+  const submitTargetRole = async () => {
+    const role = roleInput.trim();
+    if (!role || !uploadedFile) return;
+    setAskRole(false);
+    setScanStage("parsing");
+    setIsProcessing(true);
+    await scanFile(uploadedFile, role);
+  };
+
+  const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const extErr = validateResumeFile(f);
+    if (extErr) { setError(extErr); return; }
+
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    setError(null);
+    setIsImageBased(false);
+    setScanErrorKind(null);
+    setScanErrorMessage(null);
+
+    const valid = await validateFileContent(f, ext);
+    if (!valid) {
+      setError(`Invalid ${ext.toUpperCase()} file – corrupted or wrong format.`);
+      return;
+    }
+
+    setUploadedFile(f);
+    setRoleInput("");                 // a role typed for the previous file is not this file's
+    setStep(2);
+    setScanStage("parsing");
+    setIsProcessing(true);
+
+    try {
+      const b64 = await fileToBase64(f);
+      localStorage.setItem("uploadedResumeFile", b64);
+      localStorage.setItem("uploadedFileName", f.name);
+      localStorage.setItem("uploadedFileSize", String(f.size));
+      localStorage.setItem("uploadedFileType", f.type);
+    } catch {
+      // ignore preview failures
+    }
+
+    await scanFile(f);
+  };
+
   const removeFile = () => {
     setUploadedFile(null);
+    setRoleInput("");
     setStep(0);
-    setProgress(0);
     setError(null);
     setCurrentScore(0);
     setIsProcessing(false);
     setIsImageBased(false);
+    setAskRole(false);
     setScanErrorKind(null);
     setScanErrorMessage(null);
     clearAtsUploadStorage();
@@ -368,7 +369,7 @@ const ResumeUpload: React.FC = () => {
               </>
             )}
 
-            {step >= 1 && step < 3 && (
+            {step >= 1 && step < 3 && !askRole && (
               <div className="flex flex-col items-center w-full">
 
                 {/* Gradient arc ring + pulse */}
@@ -407,21 +408,20 @@ const ResumeUpload: React.FC = () => {
                       strokeWidth="10"
                       strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 58}
-                      strokeDashoffset={2 * Math.PI * 58 * (1 - progress / 100)}
+                      strokeDashoffset={2 * Math.PI * 58 * (1 - stageArc)}
                       style={{ transition: "stroke-dashoffset 0.7s ease-out" }}
                     />
                   </svg>
 
-                  {/* Center % */}
+                  {/* Centre: which real stage the scan is in (never an invented percentage) */}
                   <div style={{
                     position: "absolute", inset: 0,
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                   }}>
-                    <span style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", lineHeight: 1 }}>
-                      {Math.round(progress)}
+                    <span data-testid="ats-step" style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", lineHeight: 1.1, textAlign: "center" }}>
+                      Step {stageIndex + 1}<br />of {SCAN_STAGES.length}
                     </span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8" }}>%</span>
                   </div>
                 </div>
 
@@ -430,49 +430,44 @@ const ResumeUpload: React.FC = () => {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 4 }}>
                     <Loader2 className="animate-spin" style={{ width: 13, height: 13, color: "#0275dd" }} />
                     <p style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", margin: 0 }}>
-                      {getStatusMessage(elapsedTime)}
+                      {SCAN_STAGES[stageIndex].message}
                     </p>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 11, color: "#94A3B8" }}>
                     <Clock style={{ width: 11, height: 11 }} />
-                    <span>{formatTime(elapsedTime)}</span>
+                    <span data-testid="ats-elapsed">{formatElapsed(elapsedTime)} elapsed</span>
                   </div>
                 </div>
 
-                {/* Stage tracker */}
+                {/* Stage tracker: lit by the stage the scan is really in */}
                 <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                  {[
-                    { label: "Upload",  pct: 8  },
-                    { label: "Parse",   pct: 35 },
-                    { label: "Analyze", pct: 65 },
-                    { label: "Score",   pct: 90 },
-                  ].map(({ label, pct }, i) => (
-                    <React.Fragment key={label}>
-                      {i > 0 && (
-                        <div style={{
-                          width: 22, height: 2, borderRadius: 2,
-                          background: progress >= pct ? "linear-gradient(90deg,#0275dd,#06b6d4)" : "#E2E8F0",
-                          transition: "background 0.3s",
-                          flexShrink: 0,
-                        }} />
-                      )}
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                        <div style={{
-                          width: 9, height: 9, borderRadius: "50%",
-                          background: progress >= pct ? "#0275dd" : "#E2E8F0",
-                          boxShadow: progress >= pct ? "0 0 8px rgba(2,117,221,0.55)" : "none",
-                          transition: "all 0.35s ease",
-                        }} />
-                        <span style={{
-                          fontSize: 10, fontWeight: 600,
-                          color: progress >= pct ? "#0275dd" : "#CBD5E1",
-                          transition: "color 0.35s",
-                        }}>
-                          {label}
-                        </span>
-                      </div>
-                    </React.Fragment>
-                  ))}
+                  {SCAN_STAGES.map(({ id, label }, i) => {
+                    const reached = i <= stageIndex;
+                    return (
+                      <React.Fragment key={id}>
+                        {i > 0 && (
+                          <div style={{
+                            width: 22, height: 2, borderRadius: 2,
+                            background: reached ? "linear-gradient(90deg,#0275dd,#06b6d4)" : "#E2E8F0",
+                            transition: "background 0.3s",
+                            flexShrink: 0,
+                          }} />
+                        )}
+                        <div data-testid={`ats-stage-${id}`} data-state={i < stageIndex ? "done" : i === stageIndex ? "active" : "queued"}
+                          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{
+                            width: 9, height: 9, borderRadius: "50%",
+                            background: reached ? "#0275dd" : "#E2E8F0",
+                            boxShadow: reached ? "0 0 8px rgba(2,117,221,0.55)" : "none",
+                            transition: "all 0.35s ease",
+                          }} />
+                          <span style={{ fontSize: 10, fontWeight: 600, color: reached ? "#0275dd" : "#CBD5E1", transition: "color 0.35s" }}>
+                            {label}
+                          </span>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
 
                 {elapsedTime > 60 && (
@@ -498,7 +493,7 @@ const ResumeUpload: React.FC = () => {
                       {uploadedFile.name}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {formatFileSize(uploadedFile.size)} • {formatTime(elapsedTime)}
+                      {formatFileSize(uploadedFile.size)} • {formatElapsed(elapsedTime)}
                     </p>
                   </div>
                   <button
@@ -568,7 +563,7 @@ const ResumeUpload: React.FC = () => {
                       {uploadedFile.name}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {formatFileSize(uploadedFile.size)} • {formatTime(elapsedTime)}
+                      {formatFileSize(uploadedFile.size)} • {formatElapsed(elapsedTime)}
                     </p>
                   </div>
                   <button
@@ -662,7 +657,7 @@ const ResumeUpload: React.FC = () => {
                       {uploadedFile.name}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {formatFileSize(uploadedFile.size)} • {formatTime(elapsedTime)}
+                      {formatFileSize(uploadedFile.size)} • {formatElapsed(elapsedTime)}
                     </p>
                   </div>
                   <button
@@ -768,6 +763,15 @@ const ResumeUpload: React.FC = () => {
           }
         `}</style>
       </div>
+
+      {askRole && (
+        <TargetRolePrompt
+          value={roleInput}
+          onChange={setRoleInput}
+          onSubmit={() => { void submitTargetRole(); }}
+          onCancel={removeFile}
+        />
+      )}
 
       <SignUpModal
         open={showAuthModal}

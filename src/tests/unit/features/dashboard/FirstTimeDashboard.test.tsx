@@ -344,7 +344,8 @@ describe('FirstTimeDashboard (DashboardContent)', () => {
       fireEvent.click(screen.getByRole('button', { name: /Run ATS scan/i }));
 
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
-      expect(runAtsScan).toHaveBeenCalledWith('res-abc123');
+      // No role typed yet: the scan sends none and the API resolves it from the resume.
+      expect(runAtsScan).toHaveBeenCalledWith('res-abc123', undefined);
       expect(await screen.findByRole('link', { name: 'Full report' })).toHaveAttribute(
         'href',
         '/atslogin/report?resume_id=res-abc123'

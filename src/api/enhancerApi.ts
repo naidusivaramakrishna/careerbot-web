@@ -4,6 +4,7 @@ import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
 import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest } from '@/types/api.types';
+import { normalizeScanResponse } from '@/utils/aiScanResponse';
 
 // The Skills API declares `category` as FastAPI `{category:path}`, so a slash
 // belongs to a category such as `CI/CD` or `AI/ML`. Preserve `/` for that path
@@ -12,6 +13,9 @@ import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeRespo
 const encodeCategoryPath = (category: string): string =>
   category.split("/").map(encodeURIComponent).join("/");
 /* ========== SAFE HELPERS ========== */
+/** Longer than the AI layer's 180 s request limit plus the backend's own retry overhead. */
+export const ENHANCER_REQUEST_TIMEOUT_MS = 330_000;
+
 interface ApiErrorWithRaw extends Error {
   __raw: unknown;
   /** HTTP status of the failed response, when there was one. */
@@ -32,8 +36,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * into a toast/thrown message is what previously leaked raw JSON to the user
  * on any apply-fix rejection (e.g. AI_FIX_REJECTED).
  */
+export const SCAN_TIMEOUT_MESSAGE =
+  'The scan is taking longer than usual and did not finish in time. Please try again in a minute. If it keeps happening, contact support.';
+export const REQUEST_TIMEOUT_MESSAGE = 'The request timed out. Please try again.';
+const TIMEOUT_TEXT = /timeout of \d+\s*ms exceeded/i;
+
 function friendlyErrorMessage(raw: unknown): string {
-  if (typeof raw === 'string') return raw;
+  // axios' own text ("timeout of 330000ms exceeded") means nothing to a user
+  if (typeof raw === 'string') return TIMEOUT_TEXT.test(raw) ? REQUEST_TIMEOUT_MESSAGE : raw;
   if (isRecord(raw)) {
     const error = isRecord(raw.error) ? raw.error : undefined;
     const details = error && isRecord(error.details) ? error.details : undefined;
@@ -47,7 +57,13 @@ function friendlyErrorMessage(raw: unknown): string {
     }
 
     const errorMessage = error && typeof error.message === 'string' ? error.message : undefined;
-    if (errorMessage && !/^HTTP \d{3}$/i.test(errorMessage)) return errorMessage;
+    if (errorMessage && !/^HTTP \d{3}$/i.test(errorMessage)) {
+      // The enhancement gate ("no Experience, Internships or Projects") also returns what to add.
+      const hints = Array.isArray(details?.suggestions)
+        ? details.suggestions.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+        : [];
+      return hints.length > 0 ? `${errorMessage} ${hints.join(' ')}` : errorMessage;
+    }
   }
   return JSON.stringify(raw);
 }
@@ -67,7 +83,10 @@ async function safePost<T = unknown>(
     logApiError('POST', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(friendlyErrorMessage(raw)) as ApiErrorWithRaw;
+      // Only the scan itself gets the "taking longer" wording; any other timed-out call keeps the neutral text.
+      const isScan = url.split('?')[0].endsWith('/resume/enhance');
+      const message = isScan && typeof raw === 'string' && TIMEOUT_TEXT.test(raw) ? SCAN_TIMEOUT_MESSAGE : friendlyErrorMessage(raw);
+      const apiError: ApiErrorWithRaw = new Error(message) as ApiErrorWithRaw;
       apiError.__raw = raw;
       // Keep the status: a gateway 502/503/504 has an HTML or plain-text body,
       // so callers (e.g. processResumeComplete) can only classify it by status.
@@ -143,6 +162,13 @@ export interface EnhanceResumeRequest {
   target_jd?: string | string[];
   job_description?: string;
   region?: string;
+  /**
+   * Role to score the resume for. Required, as in careerbot-ai: a different role gives a different score
+   * and different fixes. Find it with `resolveTargetRole` (resume headline, latest job ...); a resume with
+   * none of those (e.g. a fresher with no headline) needs the user to type one. The ATS scan always sends it.
+   * Typed optional so callers outside the ATS scan keep compiling until they are updated; the API rejects a request without it.
+   */
+  target_role?: string;
   /** Persisted ATS template used by enhanced preview and export. */
   template_id?: string;
   /**
@@ -152,6 +178,12 @@ export interface EnhanceResumeRequest {
    * explicitly asks to scan the original again.
    */
   force_refresh?: boolean;
+  /**
+   * "manual" (default) returns the score and every suggestion. "auto" also applies every automatic
+   * fix first, so only the fixes that need the user's own value stay pending. The fixes that were
+   * applied are listed in the response's `apply_all`.
+   */
+  mode?: 'manual' | 'auto';
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -201,7 +233,11 @@ export async function enhanceResume(request: EnhanceResumeRequest): Promise<Enha
     has_jd: !!(request.job_description || request.target_jd),
   });
 
-  const response = await safePost<EnhanceResumeResponse>(`/resume/enhance`, request);
+  // An uncached scan makes several LLM calls and the AI layer allows up to 180 s, so wait longer.
+  // The API answers in careerbot-ai's format; the app reads the shape it was built around (see aiScanResponse).
+  const response = normalizeScanResponse(await safePost<EnhanceResumeResponse>(`/resume/enhance`, request, {
+    timeout: ENHANCER_REQUEST_TIMEOUT_MS,
+  }));
 
   // Normalize any oddly formatted summary variants returned by backend.
   try {
@@ -265,7 +301,7 @@ export async function enhanceResume(request: EnhanceResumeRequest): Promise<Enha
  */
 export async function getEnhancedResume(enhanced_id: string): Promise<EnhancedResumeHistoryItem> {
   const response = await safeGet<EnhancedResumeHistoryItem>(`/resume/enhance/${enhanced_id}`);
-  return response;
+  return normalizeScanResponse(response);
 }
 /**
  * Every enhanced mutation must notify the ResumeProvider. If an older endpoint
@@ -316,7 +352,7 @@ export async function updateEnhancedResume(
   enhanced_id: string,
   request: UpdateEnhancedResumeRequest
 ): Promise<EnhanceResumeResponse> {
-  const response = await safePatch<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
+  const response = normalizeScanResponse(await safePatch<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request));
   // The request sent each of these sections in full, so the response is
   // authoritative for them: ResumeProvider must not re-append its local
   // id-less copies of their items (they are in the response, now with ids).
@@ -337,10 +373,10 @@ export async function autoSaveEnhancedResume(
   enhanced_id: string,
   sections: Record<string, unknown>
 ): Promise<EnhanceResumeResponse> {
-  const response = await safePatch<EnhanceResumeResponse>(
+  const response = normalizeScanResponse(await safePatch<EnhanceResumeResponse>(
     `/resume/enhance/${enhanced_id}/autosave`,
     sections,
-  );
+  ));
   publishEnhancedResumeSync(enhanced_id, response, { origin: "autosave" });
   return response;
 }
@@ -650,7 +686,9 @@ export async function applyFix(request: ApplyFixRequest): Promise<EnhanceResumeR
     suggestion_id: request.suggestion_id,
     fix_type: request.fix_type,
   });
-  const response = await safePost<EnhanceResumeResponse>('/resume/enhance/apply', request);
+  const response = normalizeScanResponse(await safePost<EnhanceResumeResponse>('/resume/enhance/apply', request, {
+    timeout: ENHANCER_REQUEST_TIMEOUT_MS,
+  }));
   logger.debug('Fix applied', { suggestion_id: request.suggestion_id });
   return response;
 }
@@ -673,7 +711,10 @@ export async function deleteFix(request: DeleteFixRequest): Promise<EnhanceResum
   logger.api.request('POST', '/resume/enhance/delete-fix', {
     suggestion_id: request.suggestion_id,
   });
-  const response = await safePost<EnhanceResumeResponse>('/resume/enhance/delete-fix', request);
+  // Undoing a fix replays the fixes applied after it, so it can take as long as an apply chain: allow the same time.
+  const response = normalizeScanResponse(await safePost<EnhanceResumeResponse>('/resume/enhance/delete-fix', request, {
+    timeout: ENHANCER_REQUEST_TIMEOUT_MS,
+  }));
   logger.debug('Fix deleted', { suggestion_id: request.suggestion_id });
   return response;
 }
@@ -690,11 +731,13 @@ export async function deleteFix(request: DeleteFixRequest): Promise<EnhanceResum
  * @param file - Resume file to enhance
  * @param jobDescription - Optional job description for tailoring
  * @param region - Region for ATS standards (default: "india")
+ * @param targetRole - Role to score the resume for (required by the API)
  */
 export async function processResumeEnhancement(
   file: File,
-  jobDescription?: string,
-  region: string = "india"
+  jobDescription: string | undefined,
+  region: string,
+  targetRole: string
 ): Promise<{
   parseResult: ParseResumeResponse;
   enhanceResult: EnhanceResumeResponse;
@@ -707,7 +750,7 @@ export async function processResumeEnhancement(
   }
 
   // Step 2: Enhance (also computes ATS breakdown)
-  const enhanceRequest: EnhanceResumeRequest = { resume_id: resumeId, region };
+  const enhanceRequest: EnhanceResumeRequest = { resume_id: resumeId, region, target_role: targetRole };
   if (jobDescription) enhanceRequest.job_description = jobDescription;
 
   const enhanceResult = await enhanceResume(enhanceRequest);

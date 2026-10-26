@@ -21,7 +21,7 @@ import { processResumeComplete } from "@/api/resumeatsapi";
 
 const file = () => new File(["x"], "resume.pdf", { type: "application/pdf" });
 const parsedOk = () =>
-  new Response(JSON.stringify({ resume_id: "r-1", parsed_data: {} }), {
+  new Response(JSON.stringify({ resume_id: "r-1", parsed_data: { headline: "Software Developer" } }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });

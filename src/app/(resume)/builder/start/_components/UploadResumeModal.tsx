@@ -6,33 +6,57 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { parseResumeForEnhancer, enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
 import PriorFixesDialog from "@/components/common/PriorFixesDialog";
+import TargetRolePrompt from "@/components/common/TargetRolePrompt";
 import { clearStoredFixedSuggestions } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
 import { forgetFixedTextFor } from "@/app/(resume)/builder/creation/_hooks/useFixedTextHighlights";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { verifyFreshEnhancement } from "@/utils/verifyEnhancedRefresh";
+import { countUserAppliedFixes } from "@/utils/appliedFixes";
+import { apiErrorCode, TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
+import { cleanTargetRole, resolveTargetRole } from "@/utils/targetRole";
 
 interface UploadResumeModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type UploadStep = "upload" | "parsing" | "enhancing";
+type UploadStep = "upload" | "parsing" | "role" | "enhancing";
 
 type EnhanceResult = Awaited<ReturnType<typeof enhanceResume>>;
 
-/** Fixes the returned record already carries: from the response, else the saved record. */
+/**
+ * Fixes the user applied that the returned record already carries: from the response, else the saved record.
+ * Fixes an ATS scan applied by itself (mode "auto", flagged `auto: true`) are not the user's earlier work.
+ */
 async function countAppliedFixes(result: EnhanceResult): Promise<number> {
   const inline = result.applied_fixes;
-  if (Array.isArray(inline)) return inline.length;
+  if (Array.isArray(inline)) return countUserAppliedFixes(inline);
   try {
     const record = await getEnhancedResume(result.enhanced_resume_id);
-    return Array.isArray(record?.applied_fixes) ? record.applied_fixes.length : 0;
+    return countUserAppliedFixes(record?.applied_fixes);
   } catch {
     return 0; // informational only: never block opening the editor on it
   }
 }
 
 const MAX_FILE_SIZE_MB = 10;
+
+/**
+ * The API refused the role: `target_role_required` (the resume names none), or a 422 whose
+ * validation error is on `target_role` (blank or a placeholder such as "string").
+ * The 422 lists its errors at `error.validation_errors` and, for older clients, `error.details.validation_errors`.
+ */
+function isTargetRoleRejected(err: unknown): boolean {
+  if (apiErrorCode(err) === TARGET_ROLE_REQUIRED) return true;
+  const error = ((err as { __raw?: unknown } | null)?.__raw as {
+    error?: { validation_errors?: unknown; details?: { validation_errors?: unknown } };
+  } | null | undefined)?.error;
+  return [error?.validation_errors, error?.details?.validation_errors].some((fields) =>
+    Array.isArray(fields) && fields.some((f) => (f as { field?: unknown } | null)?.field === "target_role"));
+}
+
+/** Prompt text when the API refused the role sent: the resume may well name one, so do not say it has none. */
+const roleRefusedReason = (role: string) => `We couldn't score your resume for "${role}".`;
 
 export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModalProps) {
   const router = useRouter();
@@ -42,11 +66,17 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Set when the uploaded file already has fixes saved: asks "continue or start fresh".
-  const [prior, setPrior] = useState<{ count: number; resumeId: string; result: EnhanceResult } | null>(null);
+  const [prior, setPrior] = useState<{ count: number; resumeId: string; role: string; result: EnhanceResult } | null>(null);
   const [startingFresh, setStartingFresh] = useState(false);
+  // Set when the parsed resume names no role (e.g. a fresher with no headline): the API needs one to score it.
+  // `refusedRole` is set when the API refused the role sent, so the prompt says that instead.
+  const [roleNeeded, setRoleNeeded] = useState<{ resumeId: string; refusedRole?: string } | null>(null);
+  const [roleInput, setRoleInput] = useState("");
 
   const reset = () => {
     setPrior(null);
+    setRoleNeeded(null);
+    setRoleInput("");
     setStartingFresh(false);
     setStep("upload");
     setDragActive(false);
@@ -103,6 +133,42 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
     router.push(`/builder/creation/${enhancedResumeId}?source=enhanced`);
   };
 
+  // Call 2: enhance with AI. The builder import shows every suggestion for the user to apply ("manual").
+  const enhanceAndOpen = async (resumeId: string, role: string) => {
+    setStep("enhancing");
+    try {
+      const enhanceResult = await enhanceResume({ resume_id: resumeId, mode: "manual", target_role: role });
+
+      // Re-uploading the same file returns its saved record, fixes included: ask which to use.
+      const fixCount = await countAppliedFixes(enhanceResult);
+      if (fixCount > 0) {
+        setPrior({ count: fixCount, resumeId, role, result: enhanceResult });
+        return;
+      }
+      finishImport(enhanceResult);
+    } catch (err) {
+      if (isTargetRoleRejected(err)) {
+        // Ask for the role instead of starting over: the file is already parsed.
+        toast.error("Enter the role you are targeting, for example Software Developer.");
+        setRoleInput("");
+        setRoleNeeded({ resumeId, refusedRole: role });
+        setStep("role");
+        return;
+      }
+      const msg = err instanceof Error ? err.message : "Failed to import resume. Please try again.";
+      toast.error(msg);
+      reset();
+    }
+  };
+
+  const submitRole = () => {
+    const role = cleanTargetRole(roleInput);
+    if (!roleNeeded || !role) return;
+    const { resumeId } = roleNeeded;
+    setRoleNeeded(null);
+    void enhanceAndOpen(resumeId, role);
+  };
+
   const processFile = useCallback(async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
@@ -119,17 +185,15 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
       const parseResult = await parseResumeForEnhancer(file);
       const resumeId = parseResult.resume_id;
 
-      // Call 2: enhance with AI using the parsed resume_id
-      setStep("enhancing");
-      const enhanceResult = await enhanceResume({ resume_id: resumeId });
-
-      // Re-uploading the same file returns its saved record, fixes included: ask which to use.
-      const fixCount = await countAppliedFixes(enhanceResult);
-      if (fixCount > 0) {
-        setPrior({ count: fixCount, resumeId, result: enhanceResult });
+      // The API scores a resume for a role: the one the resume names (headline, latest job ...), else ask once.
+      const role = resolveTargetRole(parseResult);
+      if (!role) {
+        setRoleInput("");
+        setRoleNeeded({ resumeId });
+        setStep("role");
         return;
       }
-      finishImport(enhanceResult);
+      await enhanceAndOpen(resumeId, role);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to import resume. Please try again.";
       toast.error(msg);
@@ -149,7 +213,12 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
     if (!prior || startingFresh) return;
     setStartingFresh(true);
     try {
-      const fresh = await enhanceResume({ resume_id: prior.resumeId, force_refresh: true });
+      const fresh = await enhanceResume({
+        resume_id: prior.resumeId,
+        mode: "manual",
+        target_role: prior.role,
+        force_refresh: true,
+      });
       const verification = await verifyFreshEnhancement(fresh);
       if (verification === "retained") {
         // Keep the latest server response, not the pre-refresh browser copy.
@@ -158,6 +227,7 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
         setPrior({
           count: Math.max(1, await countAppliedFixes(fresh)),
           resumeId: prior.resumeId,
+          role: prior.role,
           result: fresh,
         });
         toast.error("The saved fixes are still present. Please try again.");
@@ -187,7 +257,7 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
       // explicit empty list counts; a missing list or a failed GET keeps it as is.
       const recordId = prior.result.enhanced_resume_id;
       const record = await getEnhancedResume(recordId).catch(() => null);
-      if (Array.isArray(record?.applied_fixes) && record.applied_fixes.length === 0) {
+      if (Array.isArray(record?.applied_fixes) && countUserAppliedFixes(record.applied_fixes) === 0) {
         clearStoredFixedSuggestions(recordId);
         forgetFixedTextFor(recordId);
         toast.error(`${message} The earlier fixes were already removed from this resume.`);
@@ -330,6 +400,11 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
             </div>
           )}
 
+          {/* STEP: Role (the TargetRolePrompt below asks for it) */}
+          {step === "role" && (
+            <p className="py-10 text-center text-sm text-gray-500">Waiting for the role you are targeting…</p>
+          )}
+
           {/* STEP: Enhancing */}
           {step === "enhancing" && (
             <div className="flex flex-col items-center gap-4 py-10">
@@ -349,6 +424,16 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
         </div>
       </div>
     </div>
+    {/* After the modal, so it is drawn above it (both are z-50). */}
+    {roleNeeded && (
+      <TargetRolePrompt
+        value={roleInput}
+        onChange={setRoleInput}
+        onSubmit={submitRole}
+        onCancel={reset}
+        reason={roleNeeded.refusedRole ? roleRefusedReason(roleNeeded.refusedRole) : undefined}
+      />
+    )}
     </>
   );
 }

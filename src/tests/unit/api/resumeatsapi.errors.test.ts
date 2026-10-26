@@ -84,7 +84,7 @@ describe("processResumeComplete error reporting", () => {
   });
 
   it("labels careerbot-api's JSON 500 envelope from the enhance step as an ATS analysis failure", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: {} }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: { headline: "Software Developer" } }));
     // enhancerApi.safePost rethrows axios errors as Error(JSON.stringify(response.data)).
     vi.mocked(enhanceResume).mockRejectedValueOnce(new Error(JSON.stringify(apiUnhandled500)));
 
@@ -96,7 +96,7 @@ describe("processResumeComplete error reporting", () => {
   });
 
   it("labels a 500 from the enhance step as an ATS analysis failure", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: {} }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: { headline: "Software Developer" } }));
     vi.mocked(enhanceResume).mockRejectedValueOnce(new Error("Internal Server Error"));
 
     const result = await processResumeComplete(file());
@@ -110,7 +110,7 @@ describe("processResumeComplete error reporting", () => {
     vi.mocked(window.localStorage.getItem).mockImplementation((key: string) =>
       key === "atsAnalysis_r-1" ? JSON.stringify(cachedPayload) : null);
     vi.mocked(window.localStorage.setItem).mockImplementation(() => { throw new DOMException("quota", "QuotaExceededError"); });
-    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: {} }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: { headline: "Software Developer" } }));
 
     const result = await processResumeComplete(file());
 

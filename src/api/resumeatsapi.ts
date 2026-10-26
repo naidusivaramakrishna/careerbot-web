@@ -3,6 +3,14 @@ import { getCorrelationId } from "@/lib/correlationId";
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import { enhanceResume } from "./enhancerApi";
 import { getResume } from "./parserApi";
+import { apiErrorCode, TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
+import { cleanTargetRole, resolveTargetRole } from "@/utils/targetRole";
+
+/** No role anywhere on the resume: the caller asks the user for one (the API requires it, as careerbot-ai does). */
+const targetRoleRequired = () => Object.assign(
+  new Error("We could not tell which role to score your resume for. Open ATS Scan, enter the role you are targeting and try again."),
+  { code: TARGET_ROLE_REQUIRED },
+);
 
 // Same-origin build (NEXT_PUBLIC_BASE_URL=/api/v1): '' so requests go to the
 // page's own address -- the only host a college address's sign-in cookies are
@@ -227,10 +235,21 @@ export const clearCacheForResume = async (resumeId: string) => {
    Step 1: POST /parser/parse_resume/ → resume_id + parsed_data
    Step 2: POST /resume/enhance       → enhancer_state.ats_breakdown (ATS score)
 ------------------------------------------------------ */
-export const processResumeComplete = async (file: File) => {
+/** The real stages of a scan, reported as each one starts. */
+export type ScanStage = "parsing" | "scoring" | "finishing";
+
+export interface ScanOptions {
+  /** Role to score the resume for. Needed when the resume names none (e.g. a fresher with no headline). */
+  targetRole?: string;
+  onStage?: (stage: ScanStage) => void;
+}
+
+export const processResumeComplete = async (file: File, options: ScanOptions = {}) => {
+  const { targetRole, onStage } = options;
   try {
     // Step 1: Parse Resume
     let parsed;
+    onStage?.("parsing");
     try {
       parsed = await parseResume(file);
     } catch (parseErr) {
@@ -279,12 +298,23 @@ export const processResumeComplete = async (file: File) => {
 
     // Step 2: Enhance — now also returns the ATS breakdown
     let enhanceResult;
+    const role = cleanTargetRole(targetRole) || resolveTargetRole(parsedData);
+    if (!role) throw targetRoleRequired();
+    onStage?.("scoring");
     try {
-      enhanceResult = await enhanceResume({ resume_id: resumeId });
+      enhanceResult = await enhanceResume({
+        resume_id: resumeId,
+        // The scan applies the automatic fixes itself; the report lists what still needs the user.
+        mode: "auto",
+        target_role: role,
+      });
     } catch (enhanceErr) {
       const enhanceMessage = (enhanceErr as { message?: string })?.message ?? String(enhanceErr);
-      throw new Error(isServerFailure(enhanceErr) ? ENHANCE_SERVER_ERROR_MESSAGE : enhanceMessage);
+      const failure = new Error(isServerFailure(enhanceErr) ? ENHANCE_SERVER_ERROR_MESSAGE : enhanceMessage) as Error & { code?: string };
+      failure.code = apiErrorCode(enhanceErr);
+      throw failure;
     }
+    onStage?.("finishing");
     if (!enhanceResult || enhanceResult.success === false) {
       throw new Error("ATS analysis could not be completed after your resume was parsed. Please try again.");
     }
@@ -348,12 +378,16 @@ export const processResumeComplete = async (file: File) => {
     const payload = {
       resume_id: resumeId,
       enhanced_resume_id: enhancedResumeId,
+      target_role: role,
+      scanned_at: new Date().toISOString(),     // tells one scan from another (the report asks about earlier fixes once per scan)
       ats_breakdown_id: null,
       parsed_data: parsedData,
       resume_data: resumeData,        // full MongoDB doc — most complete source
       enhanced_resume: enhancedResume,
       ats_score: atsBreakdown,
       ats_display: atsDisplay || null,
+      // The fixes the scan applied for the user (mode "auto"), so the report can say what changed.
+      applied_fixes: Array.isArray(enhanceResultRec.applied_fixes) ? enhanceResultRec.applied_fixes : [],
       finalWeightedScore: finalScore,
       missingFields: [],
       scanned_pdf: false,
@@ -380,7 +414,7 @@ export const processResumeComplete = async (file: File) => {
       message = "You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.";
     }
 
-    return { success: false as const, error: message };
+    return { success: false as const, error: message, code: (err as { code?: string } | null)?.code };
   }
 };
 
@@ -389,8 +423,12 @@ export const processResumeComplete = async (file: File) => {
    Returns the final ATS score as a number and caches the result so
    /atslogin/report can reuse it without a second enhance call.
 ------------------------------------------------------ */
-export const runAtsScan = async (resumeId: string): Promise<number> => {
-  const enhanceResult = await enhanceResume({ resume_id: resumeId });
+export const runAtsScan = async (resumeId: string, targetRole?: string): Promise<number> => {
+  let role = cleanTargetRole(targetRole);
+  // A failed read (session, network) is reported as it is: only a resume that names no role asks for one.
+  if (!role) role = resolveTargetRole(await getResume(resumeId));
+  if (!role) throw targetRoleRequired();
+  const enhanceResult = await enhanceResume({ resume_id: resumeId, mode: "auto", target_role: role });
   const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
   const atsDisplay = enhanceResult.ats_display;
   const atsBreakdownRec = atsBreakdown as Record<string, unknown>;
@@ -410,6 +448,8 @@ export const runAtsScan = async (resumeId: string): Promise<number> => {
   const payload = {
     resume_id: resumeId,
     enhanced_resume_id: enhanceResult.enhanced_resume_id ?? null,
+    target_role: role,
+    scanned_at: new Date().toISOString(),
     ats_breakdown_id: null,
     parsed_data: {},
     resume_data: null,

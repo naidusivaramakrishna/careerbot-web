@@ -45,7 +45,7 @@ describe("ATS analysis storage when localStorage is full", () => {
       if (key.startsWith("atsAnalysis")) throw new DOMException("quota", "QuotaExceededError");
       realLocalSetItem(key, value);
     });
-    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: {} }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", parsed_data: { headline: "Software Developer" } }));
     vi.mocked(enhanceResume).mockResolvedValueOnce({
       success: true,
       enhanced_resume_id: "enh-new",
@@ -54,7 +54,7 @@ describe("ATS analysis storage when localStorage is full", () => {
 
     const result = await processResumeComplete(file());
 
-    expect(result).toMatchObject({ success: true, enhanced_resume_id: "enh-new" });
+    expect(result).toMatchObject({ success: true, enhanced_resume_id: "enh-new", scanned_at: expect.any(String) });
     expect(JSON.parse(readReport("atsAnalysis_r-1")!).enhanced_resume_id).toBe("enh-new");
     expect(JSON.parse(readReport("atsAnalysisData")!).enhanced_resume_id).toBe("enh-new");
   });
@@ -62,7 +62,7 @@ describe("ATS analysis storage when localStorage is full", () => {
   it("reuses a report that only fits in sessionStorage on a parser cache hit instead of enhancing again", async () => {
     const cachedPayload = { resume_id: "r-1", ats_score: { score_status: "ok" }, finalWeightedScore: 71 };
     window.sessionStorage.setItem("atsAnalysis_r-1", JSON.stringify(cachedPayload));
-    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: {} }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: { headline: "Software Developer" } }));
 
     const result = await processResumeComplete(file());
 
@@ -74,7 +74,7 @@ describe("ATS analysis storage when localStorage is full", () => {
     const cachedPayload = { resume_id: "r-1", ats_score: { score_status: "ok" }, finalWeightedScore: 64 };
     window.sessionStorage.setItem("atsAnalysis_r-1", JSON.stringify(cachedPayload));
     vi.mocked(window.localStorage.getItem).mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
-    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: {} }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ resume_id: "r-1", cache_hit: true, parsed_data: { headline: "Software Developer" } }));
 
     const result = await processResumeComplete(file());
 

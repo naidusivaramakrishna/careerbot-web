@@ -12,6 +12,8 @@ import { ResumeProvider, useResume } from "@/app/(resume)/builder/creation/_cont
 import { getEnhancedCurrentScore } from "@/app/(resume)/builder/creation/_utils/enhancedScore";
 import { ScoreProvider } from "@/app/(resume)/builder/creation/_context/ScoreContext";
 import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
+import { cleanTargetRole, resolveTargetRole } from "@/utils/targetRole";
+import { countUserAppliedFixes } from "@/utils/appliedFixes";
 import { verifyFreshEnhancement } from "@/utils/verifyEnhancedRefresh";
 import PriorFixesDialog from "@/components/common/PriorFixesDialog";
 import { clearStoredFixedSuggestions, clearStoredFixedText } from "@/app/(resume)/builder/creation/_utils/fixedSuggestionsStorage";
@@ -472,8 +474,11 @@ function ATSLoginReport() {
       return { enhancedResumeId, report: updated };
     }
 
+    // Same mode as the scan, so the score matches the first scan (the automatic fixes are applied again).
     const result = await enhanceResume({
       resume_id: resumeId,
+      mode: "auto",
+      target_role: reportRole(d),
       ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),
     });
     if (!result.enhanced_resume_id) throw new Error("Enhancement did not return an enhanced resume ID.");
@@ -487,11 +492,11 @@ function ATSLoginReport() {
     return { enhancedResumeId: result.enhanced_resume_id, report: updated };
   };
 
-  /** Applied fixes on a saved record, or "missing" when the server no longer has it. */
+  /** Fixes the user applied on a saved record (not the scan's own automatic ones), or "missing" when the server no longer has it. */
   const readSavedFixCount = async (enhancedResumeId: string): Promise<number | "missing"> => {
     try {
       const record = await getEnhancedResume(enhancedResumeId);
-      return Array.isArray(record?.applied_fixes) ? record.applied_fixes.length : 0;
+      return countUserAppliedFixes(record?.applied_fixes);
     } catch (error) {
       const raw = (error as { __raw?: unknown } | null)?.__raw;
       const text = (() => { try { return JSON.stringify(raw ?? "") + String((error as Error)?.message ?? ""); } catch { return ""; } })();
@@ -499,12 +504,12 @@ function ATSLoginReport() {
     }
   };
 
-  /** Fixes the returned record already carries: from the response, else the saved record. */
+  /** User-applied fixes the returned record already carries: from the response, else the saved record. */
   const countAppliedFixes = async (response: Record<string, unknown>, enhancedResumeId: string): Promise<number> => {
-    if (Array.isArray(response.applied_fixes)) return response.applied_fixes.length;
+    if (Array.isArray(response.applied_fixes)) return countUserAppliedFixes(response.applied_fixes);
     try {
       const record = await getEnhancedResume(enhancedResumeId);
-      return Array.isArray(record.applied_fixes) ? record.applied_fixes.length : 0;
+      return countUserAppliedFixes(record.applied_fixes);
     } catch {
       return 0; // the note is informational; never block the workspace on it
     }
@@ -520,6 +525,8 @@ function ATSLoginReport() {
       const result = await enhanceResume({
         resume_id: resumeId,
         force_refresh: true,
+        mode: "auto",
+        target_role: reportRole(d),
         // Same breakdown the first scan was tied to.
         ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),
       });
@@ -649,6 +656,15 @@ function ATSLoginReport() {
 }
 
 /* ─── EXPORT ──────────────────────────────────────────── */
+/** The role the report was scored for (stored with it), else the one the scanned resume names. */
+const reportRole = (d: Record<string, unknown>): string => {
+  // The stored role may be one the user typed ("Student"): it is read with the typed-role rules, as the scan sent it.
+  const role = cleanTargetRole(d.target_role) ?? resolveTargetRole(d) ?? resolveTargetRole(d.resume_data) ?? resolveTargetRole(d.parsed_data)
+    ?? resolveTargetRole(d.enhanced_resume);
+  if (!role) throw new Error("We could not tell which role this resume was scored for. Please scan the resume again.");
+  return role;
+};
+
 export default function ATSLoginReportPage() {
   return (
     <Suspense fallback={

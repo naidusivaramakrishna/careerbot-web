@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "error": {
+    "message": "We could not tell which role to score your resume for. Enter the role you are targeting (for example, Software Developer) and try again.",
+    "error_code": "HTTP_422",
+    "details": {
+      "error": "target_role_required"
+    }
+  }
+}

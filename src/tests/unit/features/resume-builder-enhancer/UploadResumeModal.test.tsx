@@ -57,6 +57,9 @@ const oversizedFile = () => {
   return file;
 };
 
+// The API requires target_role (blank or placeholder -> 422) and takes mode manual|auto.
+const ENHANCE_REQUEST = { resume_id: 'parsed-resume-1', mode: 'manual', target_role: 'Software Developer' };
+
 const renderModal = (isOpen = true) => render(<UploadResumeModal isOpen={isOpen} onClose={onClose} />);
 
 describe('UploadResumeModal', () => {
@@ -64,7 +67,10 @@ describe('UploadResumeModal', () => {
     vi.clearAllMocks();
     vi.mocked(window.localStorage.getItem).mockReturnValue(null);
     mockGetEnhancedResume.mockResolvedValue({ applied_fixes: [] } as never);
-    mockParseResumeForEnhancer.mockResolvedValue({ resume_id: 'parsed-resume-1' } as never);
+    mockParseResumeForEnhancer.mockResolvedValue({
+      resume_id: 'parsed-resume-1',
+      parsed_data: { headline: 'Software Developer' },
+    } as never);
     mockEnhanceResume.mockResolvedValue({
       enhanced_resume_id: 'enhanced-resume-1',
       enhanced_resume: {
@@ -146,7 +152,7 @@ describe('UploadResumeModal', () => {
     });
 
     expect(mockParseResumeForEnhancer).toHaveBeenCalledWith(expect.any(File));
-    expect(mockEnhanceResume).toHaveBeenCalledWith({ resume_id: 'parsed-resume-1' });
+    expect(mockEnhanceResume).toHaveBeenCalledWith(ENHANCE_REQUEST);
     expect(mockMapParserOutputToBuilderData).toHaveBeenCalledWith({
       personalInfo: { fullname: 'Jane Candidate' },
     });
@@ -173,7 +179,7 @@ describe('UploadResumeModal', () => {
     await waitFor(() => {
       expect(mockParseResumeForEnhancer).toHaveBeenCalledWith(expect.any(File));
     });
-    expect(mockEnhanceResume).toHaveBeenCalledWith({ resume_id: 'parsed-resume-1' });
+    expect(mockEnhanceResume).toHaveBeenCalledWith(ENHANCE_REQUEST);
   });
 
   it('uses enhancer_state.resume when enhanced_resume is absent', async () => {
@@ -279,6 +285,245 @@ describe('UploadResumeModal', () => {
     expect(screen.getByText('Drag & drop your resume')).toBeInTheDocument();
   });
 
+  // Each case renders the modal and a dialog several times; the 5 s default is too tight on the CI runners.
+  describe('target role', { timeout: 30_000 }, () => {
+    const upload = () => {
+      const view = renderModal();
+      fireEvent.change(view.container.querySelector('input[type="file"]') as HTMLInputElement, {
+        target: { files: [pdfFile()] },
+      });
+      return view;
+    };
+    const noRoleInResume = () =>
+      mockParseResumeForEnhancer.mockResolvedValue({
+        resume_id: 'parsed-resume-1',
+        parsed_data: { headline: 'Fresher', experience: [] },
+      } as never);
+    const roleRejected = (raw: unknown) =>
+      Object.assign(new Error('We could not tell which role to score your resume for.'), { __raw: raw, status: 422 });
+    const scanButton = () => screen.getByRole('button', { name: 'Scan my resume' }) as HTMLButtonElement;
+
+    it('sends the role the resume names and mode "manual"', async () => {
+      mockParseResumeForEnhancer.mockResolvedValue({
+        resume_id: 'parsed-resume-1',
+        parsed_data: { experience: [{ title: 'Data Analyst' }] },
+      } as never);
+      upload();
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalled());
+      expect(mockEnhanceResume).toHaveBeenCalledWith({
+        resume_id: 'parsed-resume-1', mode: 'manual', target_role: 'Data Analyst',
+      });
+    });
+
+    it('asks once when the resume names no role, and sends nothing until a usable role is typed', async () => {
+      noRoleInResume();
+      upload();
+
+      expect(await screen.findByRole('dialog', { name: 'Which role are you aiming for?' })).toBeInTheDocument();
+      expect(mockEnhanceResume).not.toHaveBeenCalled();
+
+      // Look the controls up once: role queries are slow in jsdom and the dialog keeps the same nodes.
+      const roleField = screen.getByLabelText('Target role');
+      const button = scanButton();
+      for (const refused of ['   ', 'string', 'n/a', 'x']) {
+        fireEvent.change(roleField, { target: { value: refused } });
+        expect(button.disabled).toBe(true);
+        fireEvent.submit(button.closest('form') as HTMLFormElement);
+      }
+      expect(mockEnhanceResume).not.toHaveBeenCalled();
+
+      fireEvent.change(roleField, { target: { value: '  Product Manager  ' } });
+      fireEvent.click(button);
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(mockEnhanceResume).toHaveBeenCalledTimes(1);
+      expect(mockEnhanceResume).toHaveBeenCalledWith({
+        resume_id: 'parsed-resume-1', mode: 'manual', target_role: 'Product Manager',
+      });
+      expect(mockParseResumeForEnhancer).toHaveBeenCalledTimes(1);   // the file is not parsed again
+    });
+
+    it('goes back to the upload step when the role prompt is cancelled', async () => {
+      noRoleInResume();
+      upload();
+
+      await screen.findByRole('dialog', { name: 'Which role are you aiming for?' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByText('Drag & drop your resume')).toBeInTheDocument();
+      expect(mockEnhanceResume).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['target_role_required', { success: false, error: { message: 'HTTP 422', details: { error: 'target_role_required' } } }],
+      ['a 422 validation error on target_role', {
+        success: false,
+        error: { message: 'Invalid target_role: ...', error_code: 'VALIDATION_ERROR', validation_errors: [{ field: 'target_role', message: 'Value error' }] },
+      }],
+      ['a 422 validation error on target_role under details', {
+        success: false,
+        error: { message: 'Invalid target_role: ...', error_code: 'VALIDATION_ERROR', details: { validation_errors: [{ field: 'target_role', message: 'Value error' }] } },
+      }],
+    ])('asks for the role when the API refuses it (%s), then retries with the typed role', async (_label, raw) => {
+      mockEnhanceResume.mockRejectedValueOnce(roleRejected(raw));
+      upload();
+
+      const dialog = await screen.findByRole('dialog', { name: 'Which role are you aiming for?' });
+      expect(mockToast.error).toHaveBeenCalledWith('Enter the role you are targeting, for example Software Developer.');
+      // The resume named "Software Developer": say that role was refused, not that the resume has none.
+      expect(dialog).toHaveTextContent('We couldn\'t score your resume for "Software Developer".');
+      expect(dialog).not.toHaveTextContent('no headline or job title');
+      expect(mockPush).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText('Target role'), { target: { value: 'Backend Engineer' } });
+      fireEvent.click(scanButton());
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(mockEnhanceResume).toHaveBeenLastCalledWith({
+        resume_id: 'parsed-resume-1', mode: 'manual', target_role: 'Backend Engineer',
+      });
+    });
+
+    it('asks again, naming the typed role, when the API refuses that one too', async () => {
+      noRoleInResume();
+      mockEnhanceResume.mockRejectedValueOnce(roleRejected({
+        success: false,
+        error: { message: 'Invalid target_role: ...', error_code: 'VALIDATION_ERROR', validation_errors: [{ field: 'target_role', message: 'Value error' }] },
+      }));
+      upload();
+
+      const first = await screen.findByRole('dialog', { name: 'Which role are you aiming for?' });
+      expect(first).toHaveTextContent('no headline or job title');            // nothing was sent yet
+      fireEvent.change(screen.getByLabelText('Target role'), { target: { value: 'Chief Vibes Officer' } });
+      fireEvent.click(scanButton());
+
+      await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('We couldn\'t score your resume for "Chief Vibes Officer".'));
+      expect(screen.getByLabelText('Target role')).toHaveValue('');
+      expect(mockEnhanceResume).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockParseResumeForEnhancer).toHaveBeenCalledTimes(1);
+
+      fireEvent.change(screen.getByLabelText('Target role'), { target: { value: 'Data Analyst' } });
+      fireEvent.click(scanButton());
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(mockEnhanceResume).toHaveBeenLastCalledWith({
+        resume_id: 'parsed-resume-1', mode: 'manual', target_role: 'Data Analyst',
+      });
+    });
+
+    it('keeps the saved-fixes choice open when start-fresh gets a role 422 (the same role was just accepted)', async () => {
+      mockEnhanceResume
+        .mockResolvedValueOnce({
+          enhanced_resume_id: 'enhanced-resume-1',
+          enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+          applied_fixes: [{ suggestion_id: 's0' }],
+        } as never)
+        .mockRejectedValueOnce(roleRejected({
+          success: false,
+          error: { message: 'HTTP 422', details: { error: 'target_role_required' } },
+        }));
+      mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 's0' }] } as never);
+      upload();
+
+      await screen.findByText('Start with fresh data');
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('We could not tell which role to score your resume for.'));
+      expect(screen.getByRole('dialog', { name: 'Start with fresh data?' })).toBeInTheDocument();   // still the saved-fixes choice
+      expect(screen.getByText('Yes, start fresh')).not.toBeDisabled();
+      expect(screen.queryByRole('dialog', { name: 'Which role are you aiming for?' })).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('shows the error and resets for any other 422', async () => {
+      mockEnhanceResume.mockRejectedValueOnce(Object.assign(new Error('Add your name to the resume.'), {
+        __raw: { success: false, error: { message: 'HTTP 422', details: { error: 'contact_name_required' } } },
+        status: 422,
+      }));
+      upload();
+
+      await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Add your name to the resume.'));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByText('Drag & drop your resume')).toBeInTheDocument();
+    });
+
+    it('sends the typed role again when starting fresh', async () => {
+      noRoleInResume();
+      mockEnhanceResume
+        .mockResolvedValueOnce({
+          enhanced_resume_id: 'enhanced-resume-1',
+          enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+          applied_fixes: [{ suggestion_id: 's0' }],
+        } as never)
+        .mockResolvedValueOnce({
+          enhanced_resume_id: 'enhanced-resume-2',
+          enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+          applied_fixes: [],
+        } as never);
+      upload();
+      await screen.findByRole('dialog', { name: 'Which role are you aiming for?' });
+      fireEvent.change(screen.getByLabelText('Target role'), { target: { value: 'QA Engineer' } });
+      fireEvent.click(scanButton());
+
+      await screen.findByText('Start with fresh data');
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-2?source=enhanced'));
+      expect(mockEnhanceResume).toHaveBeenLastCalledWith({
+        resume_id: 'parsed-resume-1', mode: 'manual', target_role: 'QA Engineer', force_refresh: true,
+      });
+    });
+
+    it('does not count fixes an ATS scan applied by itself (auto) as the user\'s saved work', async () => {
+      mockEnhanceResume.mockResolvedValueOnce({
+        enhanced_resume_id: 'enhanced-resume-1',
+        enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+        applied_fixes: [{ suggestion_id: 'a1', auto: true }, { suggestion_id: 'a2', auto: true }],
+      } as never);
+      upload();
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(screen.queryByText('Continue with my changes')).toBeNull();
+    });
+
+    it('does not count auto fixes from the saved record either (no inline fix list)', async () => {
+      mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 'a1', auto: true }] } as never);
+      upload();
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-1?source=enhanced'));
+      expect(mockGetEnhancedResume).toHaveBeenCalledWith('enhanced-resume-1');
+      expect(screen.queryByText('Continue with my changes')).toBeNull();
+    });
+
+    it('treats a record left with only auto fixes after a failed start-fresh as "fixes already removed"', async () => {
+      mockEnhanceResume
+        .mockResolvedValueOnce({
+          enhanced_resume_id: 'enhanced-resume-1',
+          enhanced_resume: { personalInfo: { fullname: 'Jane Candidate' } },
+          applied_fixes: [{ suggestion_id: 's0' }],
+        } as never)
+        .mockRejectedValueOnce(new Error('Insufficient credits'));
+      mockGetEnhancedResume.mockResolvedValueOnce({ applied_fixes: [{ suggestion_id: 'a1', auto: true }] } as never);
+      upload();
+
+      await screen.findByText('Start with fresh data');
+      fireEvent.click(screen.getByText('Start with fresh data'));
+      fireEvent.click(screen.getByText('Yes, start fresh'));
+
+      await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(
+        'Insufficient credits The earlier fixes were already removed from this resume.',
+      ));
+      expect(mockClearStoredFixedSuggestions).toHaveBeenCalledWith('enhanced-resume-1');
+      expect(mockForgetFixedTextFor).toHaveBeenCalledWith('enhanced-resume-1');
+      expect(screen.queryByText('Continue with my changes')).toBeNull();
+    });
+  });
+
   describe('a file that already has saved fixes', () => {
     const uploadPdf = () => {
       const { container } = renderModal();
@@ -319,7 +564,7 @@ describe('UploadResumeModal', () => {
       fireEvent.click(screen.getByText('Yes, start fresh'));
 
       await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/builder/creation/enhanced-resume-2?source=enhanced'));
-      expect(mockEnhanceResume).toHaveBeenLastCalledWith({ resume_id: 'parsed-resume-1', force_refresh: true });
+      expect(mockEnhanceResume).toHaveBeenLastCalledWith({ ...ENHANCE_REQUEST, force_refresh: true });
     });
 
     it('keeps browser fixed-card state when the server says its saved fixes remain', async () => {

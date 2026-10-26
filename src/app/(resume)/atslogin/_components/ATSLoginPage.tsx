@@ -1,30 +1,21 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Check, ArrowRight, Clock, X, UploadCloud, UserRound, Briefcase, GraduationCap, BadgeCheck, Tags, FileCheck2, BookOpenCheck, ShieldCheck, BarChart3, Target, FileWarning, Scissors, TrendingUp, Users, Star } from "lucide-react";
+import { Sparkles, Check, ArrowRight, Clock, X, UploadCloud, FileCheck2, BookOpenCheck, ShieldCheck, BarChart3, Target, FileWarning, Scissors, TrendingUp, Users, Star } from "lucide-react";
 import { FaFilePdf, FaFileWord } from "react-icons/fa";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { processResumeComplete } from "@/api/resumeatsapi";
+import { processResumeComplete, type ScanStage } from "@/api/resumeatsapi";
 import ErrorModal from "./ErrorModal";
+import TargetRolePrompt from "@/components/common/TargetRolePrompt";
+import { useElapsedSeconds } from "@/hooks/useElapsedSeconds";
+import { TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
 import { validateResumeFile, formatFileSize } from "@/app/(resume)/ats/utils/helpers";
 import { buildAtsReportRoute, normalizeResumeScanError } from "@/app/(resume)/ats/utils/scanFlow";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-
-enum AnalysisPhase {
-  Uploading = "Uploading",
-  Analyzing = "Analyzing",
-  Complete  = "Complete",
-}
-
-const SLIDES = [
-  "Improve Your Resume with AI Auto-Customization",
-  "Calculating Your ATS Compatibility Score",
-  "Generating Your Personalized Action Plan",
-] as const;
 
 const STEPS = [
   { n: "01", label: "Upload"  },
@@ -59,32 +50,6 @@ const DROPZONE_INDICATORS = [
   },
 ] as const;
 
-const LIVE_MESSAGES = [
-  "Analyzing work experience...",
-  "Checking ATS compatibility...",
-  "Finding missing keywords...",
-  "Evaluating resume structure...",
-  "Calculating recruiter readability...",
-] as const;
-
-const ANALYSIS_CHECKLIST = [
-  { label: "Resume Uploaded", start: 0, Icon: UploadCloud },
-  { label: "Contact Information", start: 15, Icon: UserRound },
-  { label: "Experience Analysis", start: 35, Icon: Briefcase },
-  { label: "Education Review", start: 45, Icon: GraduationCap },
-  { label: "Skills Validation", start: 55, Icon: BadgeCheck },
-  { label: "Keyword Optimization", start: 70, Icon: Tags },
-  { label: "ATS Formatting Check", start: 82, Icon: FileCheck2 },
-  { label: "Readability Analysis", start: 92, Icon: BookOpenCheck },
-] as const;
-
-
-const WORKFLOW = [
-  { id: "upload",  label: "Upload",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg> },
-  { id: "analyze", label: "Analyze", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> },
-  { id: "report",  label: "Report",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> },
-];
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 
@@ -106,8 +71,9 @@ interface UploadZoneProps {
 }
 
 interface LoadingOverlayProps {
-  displayProgress: number;
-  loadingPhase: AnalysisPhase | "";
+  /** The stage the scan is really in, or "done" once the report is ready. */
+  stage: ScanStage | "done";
+  elapsedSeconds: number;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -305,24 +271,23 @@ function FilePreview({ file, onRemove, agreed, onAgree }: FilePreviewProps) {
   );
 }
 
-function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) {
-  const isComplete = loadingPhase === AnalysisPhase.Complete;
-  const reduceMotion = useReducedMotion();
-  const [liveMsg, setLiveMsg] = useState(0);
+/** The scan's real stages: each flips when its API call starts or finishes. Nothing here is estimated. */
+const SCAN_STAGES: ReadonlyArray<{ id: ScanStage; label: string; Icon: typeof UploadCloud }> = [
+  { id: "parsing",   label: "Uploading and reading your resume", Icon: UploadCloud },
+  { id: "scoring",   label: "Scoring your resume",               Icon: BarChart3 },
+  { id: "finishing", label: "Preparing your report",             Icon: FileCheck2 },
+];
 
-  useEffect(() => {
-    if (isComplete || reduceMotion) return;
-    const id = setInterval(() => setLiveMsg((m) => (m + 1) % LIVE_MESSAGES.length), 3000);
-    return () => clearInterval(id);
-  }, [isComplete, reduceMotion]);
+function LoadingOverlay({ stage, elapsedSeconds }: LoadingOverlayProps) {
+  const isComplete = stage === "done";
+  const reduceMotion = useReducedMotion();
+  const activeIndex = isComplete ? SCAN_STAGES.length : SCAN_STAGES.findIndex((item) => item.id === stage);
 
   const ringSize = 155;
   const center = ringSize / 2;
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
-  const clampedProgress = Math.max(0, Math.min(100, displayProgress));
-  const progressLabel = Math.round(clampedProgress);
-  const remainingSeconds = Math.max(0, Math.ceil((100 - clampedProgress) * 18 / 28));
+  const completedFraction = Math.max(0, Math.min(1, activeIndex / SCAN_STAGES.length));
 
   return (
     <motion.div
@@ -333,6 +298,9 @@ function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) 
       transition={{ duration: 0.25 }}
       className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4"
       style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Scanning your resume"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.93, y: 18 }}
@@ -348,87 +316,95 @@ function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) 
         <div className="relative z-10 px-4 py-3 flex flex-col items-center gap-2">
           {!isComplete ? (
             <>
-              {/* Ring card */}
               <div className="w-full rounded-2xl border border-[#E8EEF7] bg-linear-to-b from-white to-[#F0F6FF] px-4 py-3 flex flex-col items-center gap-2"
                 style={{ boxShadow: "0 4px 24px rgba(37,99,235,0.08)" }}>
+                <p className="text-[15px] font-bold text-[#2563EB]">ATS Scan</p>
 
-                <p className="text-[15px] font-bold text-[#2563EB]">Premium ATS Scan</p>
-
-                {/* Ring */}
+                {/* Ring: the arc is the share of stages already finished; the turning arc shows work in progress. */}
                 <div className="relative grid place-items-center" style={{ width: ringSize, height: ringSize }}>
-                  {/* Glow */}
                   <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%)", filter: "blur(8px)" }} />
-
-                  <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} overflow="visible">
+                  <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} overflow="visible" aria-hidden="true">
                     <defs>
                       <linearGradient id="atsRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#1D4ED8" />
                         <stop offset="100%" stopColor="#60A5FA" />
                       </linearGradient>
                     </defs>
-                    {/* Track */}
                     <circle cx={center} cy={center} r={radius} fill="white" stroke="#DBEAFE" strokeWidth="16" />
-                    {/* Progress arc */}
                     <motion.circle
                       cx={center} cy={center} r={radius}
                       fill="none" stroke="url(#atsRingGrad)" strokeWidth="16" strokeLinecap="round"
                       strokeDasharray={circumference}
                       initial={{ strokeDashoffset: circumference }}
-                      animate={{ strokeDashoffset: circumference * (1 - clampedProgress / 100) }}
+                      animate={{ strokeDashoffset: circumference * (1 - completedFraction) }}
                       transition={{ duration: reduceMotion ? 0 : 0.6, ease: "easeOut" }}
                       style={{ transform: "rotate(-90deg)", transformOrigin: `${center}px ${center}px`, filter: "drop-shadow(0 0 6px rgba(37,99,235,0.5))" }}
                     />
+                    {!reduceMotion && (
+                      <motion.circle
+                        cx={center} cy={center} r={radius - 14}
+                        fill="none" stroke="#93C5FD" strokeWidth="3" strokeLinecap="round"
+                        strokeDasharray={`${circumference * 0.18} ${circumference}`}
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
+                        style={{ transformOrigin: `${center}px ${center}px` }}
+                      />
+                    )}
                   </svg>
-
-                  {/* Center content */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-                    <span className="text-[34px] font-black text-[#101828] leading-none tabular-nums">{progressLabel}%</span>
-                    <span className="text-[12px] font-medium text-[#6B7280]">{remainingSeconds} sec left</span>
+                    <span data-testid="scan-step" className="whitespace-nowrap text-[15px] font-extrabold text-[#101828] leading-none tabular-nums">
+                      Step {Math.min(activeIndex + 1, SCAN_STAGES.length)} of {SCAN_STAGES.length}
+                    </span>
                   </div>
                 </div>
 
-                {/* Live message */}
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={liveMsg}
-                    initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.2 }}
-                    className="text-[14px] font-bold text-[#2563EB] text-center"
-                  >
-                    {LIVE_MESSAGES[liveMsg]}
-                  </motion.p>
-                </AnimatePresence>
+                <p className="text-[14px] font-bold text-[#2563EB] text-center" aria-live="polite">
+                  {SCAN_STAGES[Math.max(0, activeIndex)].label}…
+                </p>
+                {elapsedSeconds >= 45 && (
+                  <p className="text-[11.5px] text-[#6B7280] text-center">
+                    Long or scanned resumes can take a little longer. Please keep this page open.
+                  </p>
+                )}
               </div>
 
-              {/* Checklist */}
-              <div className="w-full rounded-[8px] border border-[#E6EAF0] overflow-hidden bg-white">
-                {ANALYSIS_CHECKLIST.map((item, index) => {
-                  const next = ANALYSIS_CHECKLIST[index + 1]?.start ?? 101;
-                  const done = clampedProgress >= next;
-                  const scanning = !done && clampedProgress >= item.start;
+              <ul className="w-full rounded-[8px] border border-[#E6EAF0] overflow-hidden bg-white">
+                {SCAN_STAGES.map((item, index) => {
+                  const done = index < activeIndex;
+                  const active = index === activeIndex;
                   return (
-                    <div key={item.label} className="flex h-8 items-center gap-3 border-b border-[#F1F5F9] px-4 last:border-b-0">
-                      <span className="grid h-3 w-3 shrink-0 place-items-center rounded-full" style={{ background: done ? "#ECFDF3" : scanning ? "#FFFBEB" : "#F1F5F9", color: done ? "#22C55E" : scanning ? "#F59E0B" : "#94A3B8" }}>
-                        {done ? <Check className="h-2 w-2" strokeWidth={3} /> : scanning ? (
-                          <motion.span animate={reduceMotion ? undefined : { rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} className="block h-2.5 w-2.5 rounded-full border border-current border-t-transparent" />
+                    <li key={item.id} data-testid={`scan-stage-${item.id}`} data-state={done ? "done" : active ? "active" : "queued"}
+                      className="flex h-9 items-center gap-3 border-b border-[#F1F5F9] px-4 last:border-b-0">
+                      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full" style={{ background: done ? "#ECFDF3" : active ? "#FFFBEB" : "#F1F5F9", color: done ? "#22C55E" : active ? "#F59E0B" : "#94A3B8" }}>
+                        {done ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : active ? (
+                          <motion.span animate={reduceMotion ? undefined : { rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} className="block h-3 w-3 rounded-full border border-current border-t-transparent" />
                         ) : <span className="h-1 w-1 rounded-full bg-current" />}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#101828]">{item.label}</span>
-                      <span className="text-[12px] font-bold" style={{ color: done ? "#16A34A" : scanning ? "#F59E0B" : "#94A3B8" }}>
-                        {done ? "Done" : scanning ? "Scanning" : "Queued"}
+                      <span className="text-[12px] font-bold" style={{ color: done ? "#16A34A" : active ? "#F59E0B" : "#94A3B8" }}>
+                        {done ? "Done" : active ? "In progress" : "Waiting"}
                       </span>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </>
           ) : (
-            <div className="flex flex-col items-center py-4 text-center">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
-                <Check className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
+            <div className="flex flex-col items-center py-4 text-center" role="status">
+              <div className="relative mb-3 grid h-12 w-12 place-items-center">
+                {/* The report can take a moment to open: a turning ring says the page is still working. */}
+                <span aria-hidden="true" className="absolute inset-0 rounded-full border-2 border-emerald-200 border-t-emerald-500 motion-safe:animate-spin" />
+                <Check className="h-5 w-5 text-emerald-600" strokeWidth={2.5} aria-hidden="true" />
               </div>
               <p className="text-[13px] font-bold text-slate-900">Analysis Complete</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Redirecting...</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
+                Opening your report
+                <span aria-hidden="true" className="inline-flex gap-0.5">
+                  {[0, 150, 300].map((delay) => (
+                    <span key={delay} className="h-1 w-1 rounded-full bg-slate-400 motion-safe:animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                  ))}
+                </span>
+              </p>
             </div>
           )}
         </div>
@@ -437,301 +413,6 @@ function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) 
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function LegacyLoadingOverlay({ displayProgress, displaySlide, loadingPhase }: { displayProgress: number; displaySlide: number; loadingPhase: AnalysisPhase | "" }) {
-  const isComplete = loadingPhase === AnalysisPhase.Complete;
-  const [liveMsg, setLiveMsg] = useState(0);
-
-  useEffect(() => {
-    if (isComplete) return;
-    const id = setInterval(() => setLiveMsg((m) => (m + 1) % LIVE_MESSAGES.length), 1800);
-    return () => clearInterval(id);
-  }, [isComplete]);
-
-  const workflowActive =
-    displayProgress < 18 ? 0 :
-    displayProgress < 40 ? 1 :
-    displayProgress < 65 ? 2 :
-    displayProgress < 88 ? 3 : 4;
-
-  return (
-    <motion.div
-      key="loading-overlay"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
-      className="fixed inset-0 z-40 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }}
-    >
-      {/* Modal card */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.93, y: 18 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.93, y: 18 }}
-        transition={{ duration: 0.3, ease: EASE }}
-        className="relative w-full max-w-md rounded-3xl overflow-hidden"
-        style={{
-          background: "#F8F9FF",
-          boxShadow: "0 0 0 1px rgba(226,232,240,0.9), 0 32px 80px rgba(15,23,42,0.35), 0 8px 24px rgba(15,23,42,0.12)",
-        }}
-      >
-        {/* Inner glow + dot grid */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
-          <div style={{ position:"absolute", top:"-20%", left:"5%", width:380, height:280,
-            background:"radial-gradient(ellipse,rgba(37,87,167,0.07) 0%,transparent 60%)", filter:"blur(40px)" }}/>
-          <div style={{ position:"absolute", bottom:"-15%", right:"-5%", width:280, height:240,
-            background:"radial-gradient(ellipse,rgba(13,148,136,0.05) 0%,transparent 60%)", filter:"blur(35px)" }}/>
-        </div>
-        <div className="absolute inset-0 pointer-events-none" style={{
-          backgroundImage: "radial-gradient(circle,rgba(148,163,184,0.09) 1px,transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}/>
-
-        {/* Card content */}
-        <div className="relative z-10 px-8 pt-8 pb-6 flex flex-col items-center">
-          {!isComplete ? (
-            <>
-              {/* ── GAUGE WITH GLOWING TIP DOT ── */}
-              <div className="relative mb-5" style={{ width:172, height:172 }}>
-
-                {/* Ambient halo */}
-                <motion.div
-                  animate={{ opacity:[0.28,0.55,0.28], scale:[1,1.09,1] }}
-                  transition={{ duration:3.2, repeat:Infinity, ease:"easeInOut" }}
-                  className="absolute rounded-full pointer-events-none"
-                  style={{
-                    inset:"-16%",
-                    background:"radial-gradient(circle,rgba(37,87,167,0.13) 0%,rgba(6,182,212,0.05) 50%,transparent 70%)",
-                    filter:"blur(20px)",
-                  }}
-                />
-
-                <svg width="172" height="172" viewBox="0 0 172 172" style={{ position:"relative", zIndex:2 }}>
-                  <defs>
-                    <linearGradient id="atsLoginArcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#2557a7"/>
-                      <stop offset="55%" stopColor="#3b82f6"/>
-                      <stop offset="100%" stopColor="#06b6d4"/>
-                    </linearGradient>
-                    <filter id="tipGlow" x="-80%" y="-80%" width="260%" height="260%">
-                      <feGaussianBlur stdDeviation="4" result="blur"/>
-                      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                    </filter>
-                  </defs>
-
-                  {/* Outer decorative tick marks */}
-                  {Array.from({ length: 36 }, (_, i) => {
-                    const a = ((i / 36) * 360 - 90) * (Math.PI / 180);
-                    const r1 = 82, r2 = i % 3 === 0 ? 77 : 79;
-                    return (
-                      <line key={i}
-                        x1={86 + r1 * Math.cos(a)} y1={86 + r1 * Math.sin(a)}
-                        x2={86 + r2 * Math.cos(a)} y2={86 + r2 * Math.sin(a)}
-                        stroke={i % 3 === 0 ? "rgba(37,87,167,0.22)" : "rgba(37,87,167,0.10)"}
-                        strokeWidth={i % 3 === 0 ? 1.5 : 1} strokeLinecap="round"
-                      />
-                    );
-                  })}
-
-                  {/* Track ring */}
-                  <circle cx="86" cy="86" r="66" fill="none"
-                    stroke="rgba(226,232,240,0.7)" strokeWidth="9"
-                    style={{ transform:"rotate(-90deg)", transformOrigin:"86px 86px" }}
-                  />
-
-                  {/* Progress arc */}
-                  <motion.circle
-                    cx="86" cy="86" r="66"
-                    fill="none" stroke="url(#atsLoginArcGrad)" strokeWidth="9" strokeLinecap="round"
-                    strokeDasharray={2 * Math.PI * 66}
-                    initial={{ strokeDashoffset: 2 * Math.PI * 66 }}
-                    animate={{ strokeDashoffset: 2 * Math.PI * 66 * (1 - displayProgress / 100) }}
-                    transition={{ duration:0.55, ease:"easeOut" }}
-                    style={{
-                      transform:"rotate(-90deg)", transformOrigin:"86px 86px",
-                      filter:"drop-shadow(0 0 5px rgba(37,87,167,0.45))",
-                    }}
-                  />
-
-                  {/* Glowing tip dot that travels with progress */}
-                  {(() => {
-                    const angle = (-90 + (displayProgress / 100) * 360) * (Math.PI / 180);
-                    const x = 86 + 66 * Math.cos(angle);
-                    const y = 86 + 66 * Math.sin(angle);
-                    return (
-                      <g filter="url(#tipGlow)">
-                        <circle cx={x} cy={y} r="8"  fill="white" opacity="0.6"/>
-                        <circle cx={x} cy={y} r="5.5" fill="#2557a7"/>
-                        <circle cx={x} cy={y} r="2.5" fill="white" opacity="0.95"/>
-                      </g>
-                    );
-                  })()}
-                </svg>
-
-                {/* Center % */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex:3 }}>
-                  <motion.div
-                    animate={{ scale:[1,1.22,1], opacity:[0.14,0.28,0.14] }}
-                    transition={{ duration:2.6, repeat:Infinity, ease:"easeInOut" }}
-                    className="absolute rounded-full pointer-events-none"
-                    style={{ width:72, height:72, background:"radial-gradient(circle,rgba(37,87,167,0.55) 0%,transparent 70%)" }}
-                  />
-                  <span className="relative font-black text-slate-900 leading-none"
-                    style={{ fontSize:40, letterSpacing:"-0.04em", zIndex:1 }}>
-                    {Math.round(displayProgress)}
-                  </span>
-                  <span className="relative text-[11px] text-slate-400 font-bold tracking-[0.15em] uppercase mt-0.5" style={{ zIndex:1 }}>
-                    %
-                  </span>
-                </div>
-              </div>
-
-            {/* Live rotating AI message */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={liveMsg}
-                initial={{ opacity:0, y:5 }}
-                animate={{ opacity:1, y:0 }}
-                exit={{ opacity:0, y:-5 }}
-                transition={{ duration:0.22, ease:EASE }}
-                className="flex items-center gap-2 mb-2.5 h-5"
-              >
-                <motion.span
-                  animate={{ opacity:[1,0.3,1] }}
-                  transition={{ duration:1.2, repeat:Infinity }}
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ background:"linear-gradient(135deg,#2557a7,#3b82f6)" }}
-                />
-                <span className="text-[11.5px] text-slate-500 font-medium">{LIVE_MESSAGES[liveMsg]}</span>
-              </motion.div>
-            </AnimatePresence>
-
-            {/* Slide heading */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={displaySlide}
-                initial={{ opacity:0, y:8 }}
-                animate={{ opacity:1, y:0 }}
-                exit={{ opacity:0, y:-8 }}
-                transition={{ duration:0.3, ease:EASE }}
-                className="text-center mb-4"
-              >
-                <h2 className="font-bold text-slate-900 leading-snug"
-                  style={{ fontSize:17, letterSpacing:"-0.025em" }}>
-                  {SLIDES[displaySlide]}
-                </h2>
-              </motion.div>
-            </AnimatePresence>
-
-            {/* Slide dots */}
-            <div className="flex items-center gap-2 mb-6">
-              {SLIDES.map((_, i) => (
-                <motion.div
-                  key={i}
-                  animate={{
-                    width: i === displaySlide ? 20 : 6,
-                    background: i === displaySlide ? "#2557a7" : "#CBD5E1",
-                  }}
-                  transition={{ duration:0.3 }}
-                  className="h-1.5 rounded-full"
-                />
-              ))}
-            </div>
-
-            {/* Animated workflow timeline */}
-            <div className="flex items-start w-full">
-              {WORKFLOW.map((step, idx) => {
-                const isDone   = workflowActive > idx;
-                const isActive = workflowActive === idx;
-                return (
-                  <Fragment key={step.id}>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <motion.div
-                        animate={isActive ? {
-                          boxShadow:[
-                            "0 0 0 0px rgba(37,87,167,0.35)",
-                            "0 0 0 8px rgba(37,87,167,0.0)",
-                          ],
-                        } : {}}
-                        transition={{ duration:1.6, repeat:Infinity }}
-                        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                        style={
-                          isDone
-                            ? { background:"linear-gradient(135deg,#2557a7,#3b82f6)", color:"white", boxShadow:"0 2px 8px rgba(37,87,167,0.3)" }
-                            : isActive
-                            ? { background:"linear-gradient(135deg,#1a3a5c,#2557a7)", color:"white", boxShadow:"0 4px 14px rgba(37,87,167,0.45)" }
-                            : { background:"#F1F5F9", color:"#94A3B8" }
-                        }
-                      >
-                        {isDone ? (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M20 6L9 17l-5-5"/>
-                          </svg>
-                        ) : (
-                          step.icon
-                        )}
-                      </motion.div>
-                      <span className={`text-[10.5px] font-semibold tracking-wide ${isDone || isActive ? "text-slate-700" : "text-slate-400"}`}>
-                        {step.label}
-                      </span>
-                    </div>
-                    {idx < WORKFLOW.length - 1 && (
-                      <div className="flex-1 mx-1.5 overflow-hidden rounded-full mb-5 mt-4"
-                        style={{ height:2, minWidth:20, background:"rgba(226,232,240,0.8)" }}>
-                        <motion.div
-                          className="h-full rounded-full"
-                          style={{ background:"linear-gradient(90deg,#2557a7,#3b82f6)" }}
-                          initial={{ width:"0%" }}
-                          animate={{ width: workflowActive > idx ? "100%" : workflowActive === idx ? "55%" : "0%" }}
-                          transition={{ duration:0.7, ease:EASE }}
-                        />
-                      </div>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </div>
-
-          </>
-        ) : (
-          <motion.div
-            initial={{ opacity:0, scale:0.92 }}
-            animate={{ opacity:1, scale:1 }}
-            transition={{ duration:0.3, ease:EASE }}
-            className="flex flex-col items-center text-center"
-          >
-            <motion.div
-              initial={{ scale:0.4, opacity:0 }}
-              animate={{ scale:1, opacity:1 }}
-              transition={{ type:"spring", stiffness:260, damping:18 }}
-              className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-5"
-              style={{ boxShadow:"0 0 0 8px rgba(16,185,129,0.08), 0 8px 24px rgba(16,185,129,0.24)" }}
-            >
-              <Check className="w-8 h-8 text-emerald-600" strokeWidth={2.5}/>
-            </motion.div>
-            <p className="text-[20px] font-bold text-slate-900 mb-1.5">Scan Complete!</p>
-            <p className="text-[14px] text-slate-500">Redirecting to your report…</p>
-            <div className="flex gap-1.5 mt-6">
-              {[0, 140, 280].map((d) => (
-                <span key={d} className="w-2 h-2 rounded-full animate-bounce" style={{ background:"#2557a7", animationDelay:`${d}ms` }}/>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </div>
-
-      {/* Bottom security note */}
-      <div className="relative z-10 py-5 flex items-center justify-center gap-1.5">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-          <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/>
-        </svg>
-        <span className="text-[11.5px] text-slate-400">Your resume is never stored · TLS encrypted · SOC 2</span>
-      </div>
-      </motion.div>
-    </motion.div>
-  );
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -746,11 +427,15 @@ export default function ATSLoginPage() {
   // "scan" = the upload/analysis itself failed and can be retried with the same file.
   const [errorSource,     setErrorSource]     = useState<"file" | "scan">("scan");
   const [isLoading,       setIsLoading]       = useState(false);
-  const [loadingPhase,    setLoadingPhase]    = useState<AnalysisPhase | "">("");
-  const [progress,        setProgress]        = useState(0);
-  const [displayProgress, setDisplayProgress] = useState(0);
+  // The stage the scan is REALLY in (set from processResumeComplete's callbacks) and the real elapsed time.
+  const [scanStage,       setScanStage]       = useState<ScanStage | "done">("parsing");
+  // Asked for when the resume names no role (a fresher with no headline).
+  const [askRole,         setAskRole]         = useState(false);
+  const [roleInput,       setRoleInput]       = useState("");
 
-  const canScan = Boolean(file && agreed);
+  // Set the moment a scan starts: a held-down Enter or a double click must not send a second parse + enhance.
+  const scanInFlight = useRef(false);
+  const canScan = Boolean(file && agreed) && !isLoading;
 
   const handleDragOver  = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
@@ -763,53 +448,52 @@ export default function ATSLoginPage() {
     if (e.target.files?.[0]) validateAndSetFile(e.target.files[0]);
     e.target.value = "";
   };
-  const handleRemoveFile = () => { setFile(null); setError(""); setAgreed(false); };
+  const handleRemoveFile = () => { setFile(null); setError(""); setAgreed(false); setRoleInput(""); };
 
   const validateAndSetFile = (f: File) => {
     setError("");
     const err = validateResumeFile(f, { allowDoc: true, checkSize: true });
     if (err) { setErrorSource("file"); setError(err); return; }
     setFile(f);
+    setRoleInput("");                 // a role typed for the previous file is not this file's
   };
 
-  const handleScanResume = async () => {
-    if (!file) return;
+  const runScan = async (targetRole?: string) => {
+    if (!file || scanInFlight.current) return;
+    scanInFlight.current = true;
     setError("");
+    setAskRole(false);
+    setScanStage("parsing");
     setIsLoading(true);
-    setProgress(0);
     try {
-      setLoadingPhase(AnalysisPhase.Uploading);
-      setProgress(30);
-      const result = await processResumeComplete(file);
-      setProgress(70);
-      setLoadingPhase(AnalysisPhase.Analyzing);
+      const result = await processResumeComplete(file, { targetRole, onStage: setScanStage });
       if (!result.success) {
+        // A resume with no role anywhere cannot be scored: ask for one instead of failing.
+        if (result.code === TARGET_ROLE_REQUIRED) {
+          scanInFlight.current = false;
+          setIsLoading(false);
+          setAskRole(true);
+          return;
+        }
         throw new Error(normalizeResumeScanError(result, "Upload failed"));
       }
-      setProgress(100);
-      setLoadingPhase(AnalysisPhase.Complete);
+      setScanStage("done");
+      setRoleInput("");
       const resumeId = typeof result.resume_id === "string" ? result.resume_id : "";
       setTimeout(() => router.push(buildAtsReportRoute(resumeId)), 600);
     } catch (err: unknown) {
       setErrorSource("scan");
       setError(normalizeResumeScanError(err, "Unable to process your resume. Please try again."));
+      scanInFlight.current = false;
       setIsLoading(false);
-      setProgress(0);
-      setLoadingPhase("");
     }
   };
 
-  useEffect(() => {
-    if (!isLoading) { setDisplayProgress(0); return; }
-    const ceiling = progress >= 100 ? 100 : progress >= 70 ? 95 : 68;
-    const id = setInterval(() => {
-      setDisplayProgress((prev) => {
-        if (prev >= ceiling) return prev;
-        return Math.min(prev + (prev < progress ? 2 : 0.4), ceiling);
-      });
-    }, 120);
-    return () => clearInterval(id);
-  }, [isLoading, progress]);
+  // Not (e: MouseEvent) => runScan(e): the click event must never be taken for a role.
+  const handleScanResume = () => { void runScan(roleInput.trim() || undefined); };
+
+  // Real elapsed time while a scan is running; it is not an estimate of how long is left.
+  const elapsedSeconds = useElapsedSeconds(isLoading);
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -852,12 +536,18 @@ export default function ATSLoginPage() {
 
       <AnimatePresence>
         {isLoading && (
-          <LoadingOverlay
-            displayProgress={displayProgress}
-            loadingPhase={loadingPhase}
-          />
+          <LoadingOverlay stage={scanStage} elapsedSeconds={elapsedSeconds} />
         )}
       </AnimatePresence>
+
+      {askRole && !isLoading && (
+        <TargetRolePrompt
+          value={roleInput}
+          onChange={setRoleInput}
+          onSubmit={() => { void runScan(roleInput.trim()); }}
+          onCancel={() => { setAskRole(false); setRoleInput(""); }}   // a cancelled role is not sent by the next Analyze
+        />
+      )}
 
       {/* ── Main workspace ── */}
       <div className="relative mx-auto w-full max-w-[1380px] px-5 sm:px-8 lg:px-12">

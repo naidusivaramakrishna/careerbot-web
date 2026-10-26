@@ -25,6 +25,9 @@ import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
 import { useDashboard } from "@/contexts/DashboardContext";
 import ProfileFillModal from "./ProfileFillModal";
 import { runAtsScan } from "@/api/resumeatsapi";
+import TargetRolePrompt from "@/components/common/TargetRolePrompt";
+import { apiErrorCode, TARGET_ROLE_REQUIRED } from "@/utils/apiErrorCode";
+import { cleanTargetRole } from "@/utils/targetRole";
 import {
   EnterpriseAtsScanIcon as IcoAtsScan,
   EnterpriseInterviewPrepIcon as IcoInterview,
@@ -604,6 +607,18 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
   const [atsScanScore, setAtsScanScore] = useState<number | null>(null);
   const [atsScanError, setAtsScanError] = useState<string | null>(null);
   const [atsScanDismissed, setAtsScanDismissed] = useState(false);
+  // Asked for when the resume names no role (a fresher with no headline): the scan needs one, as on ATS Scan.
+  const [askRole, setAskRole] = useState(false);
+  const [roleInput, setRoleInput] = useState("");
+  // Set when the scan needs a role: the question opens only after the popup has closed and handed focus
+  // back to "Run ATS scan", so the question's input keeps focus and Cancel returns it to that button.
+  const [roleNeeded, setRoleNeeded] = useState(false);
+  React.useEffect(() => {
+    if (roleNeeded && !showAtsScanPopup) {
+      setRoleNeeded(false);
+      setAskRole(true);
+    }
+  }, [roleNeeded, showAtsScanPopup]);
   const [resumeJustUploaded, setResumeJustUploaded] = useState(false);
 
   // When upload completes, mark step done optimistically and refresh backend data
@@ -632,15 +647,22 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
     event.target.value = "";
   };
 
-  const executeScan = async () => {
+  const executeScan = async (targetRole?: string) => {
     if (!resumeId) return;
     setAtsScanRunning(true);
     setAtsScanError(null);
     setAtsScanScore(null);
     try {
-      const score = await runAtsScan(resumeId);
+      const score = await runAtsScan(resumeId, targetRole);
       setAtsScanScore(score);
     } catch (err) {
+      // No role on the resume (or one the API refused): ask for it instead of ending on an error.
+      const code = (err as { code?: unknown } | null)?.code ?? apiErrorCode(err);
+      if (code === TARGET_ROLE_REQUIRED) {
+        setShowAtsScanPopup(false);
+        setRoleNeeded(true);
+        return;
+      }
       setAtsScanError(err instanceof Error ? err.message : "Failed to calculate ATS score");
     } finally {
       setAtsScanRunning(false);
@@ -669,6 +691,20 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
     setAtsScanError(null);
     setShowAtsScanPopup(true);
     executeScan();
+  };
+
+  const submitRole = () => {
+    const role = cleanTargetRole(roleInput);
+    if (!role) return;
+    setAskRole(false);
+    setShowAtsScanPopup(true);
+    void executeScan(role);
+  };
+
+  // A cancelled role is forgotten: the next run asks again rather than scoring for it.
+  const cancelRole = () => {
+    setAskRole(false);
+    setRoleInput("");
   };
 
   const handleAtsScanCancel = () => {
@@ -745,9 +781,13 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
           score={atsScanScore}
           error={atsScanError}
           resumeId={resumeId}
-          onRetry={executeScan}
+          onRetry={() => { void executeScan(cleanTargetRole(roleInput) ?? undefined); }}
           onCancel={handleAtsScanCancel}
         />
+      )}
+
+      {askRole && (
+        <TargetRolePrompt value={roleInput} onChange={setRoleInput} onSubmit={submitRole} onCancel={cancelRole} />
       )}
 
       <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-gray-950 sm:px-6 lg:px-8 lg:py-6">
