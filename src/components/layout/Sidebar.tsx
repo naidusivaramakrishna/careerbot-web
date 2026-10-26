@@ -7,6 +7,8 @@ import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
 import { getEnhancementHistory } from "@/api/enhancerApi";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useHasCollegeMembership, useStudentCollege } from "@/hooks/useCollegeMembership";
+import { useCollegeDisabledFeatures } from "@/hooks/useCollegeFeatureAccess";
+import { withoutDisabledFeatures } from "@/lib/collegeFeatures";
 import {
   EnterpriseApplicationTrackerIcon as IcoTracker,
   EnterpriseAtsScanIcon as IcoAtsScan,
@@ -388,10 +390,17 @@ export default function Sidebar() {
   const hasCollege = useHasCollegeMembership();
   const studentCollege = useStudentCollege();
   const studentCollegeName = studentCollege?.name ?? null;
+  // What the student's college has switched off (G6). Asked only for an
+  // account with a membership; the server answers [] for staff. The server
+  // refuses these engines anyway -- this only stops the menu offering a door
+  // that will not open.
+  const collegeDisabled = useCollegeDisabledFeatures(hasCollege);
   const navGroups = useMemo(() => {
-    if (studentCollegeName) return studentNavGroups(studentCollegeName);
-    return hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS;
-  }, [hasCollege, studentCollegeName]);
+    const groups = studentCollegeName
+      ? studentNavGroups(studentCollegeName)
+      : hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS;
+    return withoutDisabledFeatures(groups, collegeDisabled);
+  }, [hasCollege, studentCollegeName, collegeDisabled]);
 
   const activeId = activeNavId(navGroups, pathname);
 

@@ -10,6 +10,7 @@ import {
 } from './correlationId';
 import { getTenantId, clearTenantId } from './tenantStorage';
 import { sanitizeAuthRedirect } from './authRedirect';
+import { collegeFeatureFromError, notifyCollegeFeatureRefused } from './collegeFeatures';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
   console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to proxy. Set this in production.');
@@ -309,6 +310,11 @@ client.interceptors.response.use(
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
+      // A college switched this engine off for this student (G6). Announced
+      // here, once, so every engine gets the same friendly message and the
+      // menu hides the feature -- without each page learning a new branch.
+      const collegeFeature = collegeFeatureFromError(error);
+      if (collegeFeature) notifyCollegeFeatureRefused(collegeFeature);
       return Promise.reject(error);
     }
 

@@ -4,6 +4,7 @@
  * 1:1 with careerbot-api's `/api/v1/institution/*` routes:
  *
  *   GET  /institution/memberships                  listMemberships
+ *   GET  /institution/feature-access               getMyFeatureAccess
  *   POST /institution/session                      createInstitutionSession
  *   POST /institution/departments                  createDepartment
  *   GET  /institution/departments                  listDepartments
@@ -381,6 +382,27 @@ export async function listMemberships(): Promise<InstitutionMembership[]> {
       headers: SKIP_REDIRECT_HEADERS,
     });
     return Array.isArray(response.data) ? response.data : [];
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * GET /institution/feature-access
+ *
+ * What the caller's college has switched off FOR THEM -- the same answer the
+ * engines use to refuse a start (careerbot-api feature_gate.py). Runs on the
+ * ordinary consumer session. `[]` for a jobseeker, for staff, and when the
+ * server could not tell (it allows in that case too).
+ */
+export async function getMyFeatureAccess(): Promise<string[]> {
+  try {
+    const response = await httpClient.get<{ disabled_features?: unknown }>(
+      `${BASE}/feature-access`,
+      { headers: SKIP_REDIRECT_HEADERS },
+    );
+    const list = response.data?.disabled_features;
+    return Array.isArray(list) ? list.filter((f): f is string => typeof f === 'string') : [];
   } catch (err) {
     return fail(err);
   }

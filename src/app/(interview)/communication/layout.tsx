@@ -4,6 +4,7 @@ import { VideoRecordingProvider } from "@/contexts/VideoRecordingContext";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import CommunicationHeader from "./components/CommunicationHeader";
 import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
+import CollegeFeatureGate from "@/components/college/CollegeFeatureGate";
 
 export default function CommunicationLayout({
   children,
@@ -20,7 +21,7 @@ export default function CommunicationLayout({
         <div className={`antialiased font-sans h-screen flex flex-col overflow-hidden`}>
           {isLandingPage ? <LandingNavbar /> : <CommunicationHeader />}
           <div className={`flex-1 min-h-0 ${isLandingPage ? "overflow-auto" : "overflow-hidden"}`}>
-            {children}
+            <CollegeFeatureGate feature="english_assessment">{children}</CollegeFeatureGate>
           </div>
         </div>
       </VideoRecordingProvider>

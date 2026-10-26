@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import CollegeFeatureGate from '@/components/college/CollegeFeatureGate';
 
 export const metadata: Metadata = {
   title: 'Coding Practice — CareerBOT',
@@ -10,5 +11,5 @@ export default function CodingTestLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <CollegeFeatureGate feature="coding_test">{children}</CollegeFeatureGate>;
 }

@@ -6,6 +6,7 @@ import { DashboardProvider } from "@/contexts/DashboardContext";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { usePathname } from "next/navigation";
+import CollegeFeatureGate from "@/components/college/CollegeFeatureGate";
 
 export default function NotesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,7 +28,7 @@ export default function NotesLayout({ children }: { children: React.ReactNode })
             style={{ marginLeft: "var(--sidebar-width, 56px)" }}
           >
             <NotesSidebar />
-            {children}
+            <CollegeFeatureGate feature="mock_interview">{children}</CollegeFeatureGate>
           </div>
         </div>
         )}

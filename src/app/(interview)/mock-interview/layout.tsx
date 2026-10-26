@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import MockSidebar from "./_components/MockSidebar";
 import { MockInterviewProvider } from "./_context/MockInterviewContext";
 import { usePathname } from "next/navigation";
+import CollegeFeatureGate from "@/components/college/CollegeFeatureGate";
 
 // Inter Variable is already registered globally via @fontsource-variable in
 // src/app/layout.tsx — this just points --font-inter at that family for the
@@ -34,7 +35,7 @@ export default function MockInterviewLayout({
               placed against the viewport, escape overflow-hidden above, and
               stretch the document into a blank scroll area below the layout. */}
           <div className="mi-content">
-            {children}
+            <CollegeFeatureGate feature="mock_interview">{children}</CollegeFeatureGate>
           </div>
         </div>
       </div>

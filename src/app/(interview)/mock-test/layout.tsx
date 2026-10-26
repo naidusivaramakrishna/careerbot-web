@@ -19,6 +19,7 @@
 import '@fontsource-variable/montserrat';
 import { usePathname } from 'next/navigation';
 import MockTestSidebar from './_components/MockTestSidebar';
+import CollegeFeatureGate from '@/components/college/CollegeFeatureGate';
 
 // Whitelist of "browse / configure" routes that get the sidebar.
 // Everything else — the test runner ('/mock-test/<companyId>',
@@ -39,7 +40,7 @@ export default function MockTestLayout({
     <div data-mock-test className="antialiased font-montserrat min-h-screen" style={{ background: '#F4F2EC' }}>
       {showSidebar && <MockTestSidebar />}
       <main className={showSidebar ? 'pl-52' : ''}>
-        {children}
+        <CollegeFeatureGate feature="mock_test">{children}</CollegeFeatureGate>
       </main>
     </div>
   );

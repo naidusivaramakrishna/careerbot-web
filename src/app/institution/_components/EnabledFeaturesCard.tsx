@@ -3,6 +3,7 @@
 import React from 'react';
 import type { InstitutionContext } from '@/types/institution';
 import { activityLabel } from '@/lib/institutionMessages';
+import { normaliseDisabledFeatures } from '@/lib/collegeFeatures';
 import { Caption, SectionTitle } from './Typography';
 import { CARD, INK } from './tokens';
 
@@ -33,9 +34,9 @@ const STUDENT_FEATURES = [
 ] as const;
 
 export function EnabledFeaturesCard({ context }: { context: InstitutionContext }) {
-  const off = new Set(
-    (context.disabled_features ?? []).map((f) => String(f).trim().toLowerCase()),
-  );
+  // The same reading the student's navigation uses (lib/collegeFeatures), so
+  // this card and the menu cannot disagree about what is switched off.
+  const off = normaliseDisabledFeatures(context.disabled_features);
   const on = STUDENT_FEATURES.filter((f) => !off.has(f));
 
   if (on.length === 0) {

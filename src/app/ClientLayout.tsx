@@ -8,6 +8,7 @@ import { TenantProvider } from "@/contexts/TenantContext";
 import { VerificationRecovery } from "@/components/VerificationRecovery";
 import dynamic from "next/dynamic";
 import { isChatbotAllowedOnPage } from "@/lib/chatbotVisibility";
+import CollegeFeatureNotice from "@/components/college/CollegeFeatureNotice";
 
 // Lazy-load so the heavy chatbot code stays out of the root layout chunk.
 const ChatbotWidget = dynamic(() => import("@/components/chatbot/ChatbotWidget"), { ssr: false });
@@ -117,6 +118,7 @@ export default function ClientLayout({
     <TenantProvider>
       <Toaster richColors position="bottom-right" />
       <VerificationRecovery />
+      <CollegeFeatureNotice />
       {isChatbotAllowed && <ChatbotWidget />}
       {children}
     </TenantProvider>
