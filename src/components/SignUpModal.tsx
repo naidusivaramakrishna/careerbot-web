@@ -22,6 +22,11 @@ interface Props {
      * another modal that renders its own backdrop, to avoid stacking two
      * expensive backdrop-blur layers (causes visible jank on open). */
     hideOverlay?: boolean
+    /** College front door: sign in only. No "Sign up" switch and no social
+     *  buttons -- a college's students are put on the roster by staff, and
+     *  social sign-in does not work on college addresses. Forgot-password
+     *  keeps the way back to the college door. */
+    signInOnly?: boolean
 }
 
 /**
@@ -39,11 +44,18 @@ function getUnverifiedUserId(err: unknown): string | null {
     return typeof details.user_id === "string" && details.user_id ? details.user_id : null
 }
 
-const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo, onSuccess, hideOverlay = false }) => {
+const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo, onSuccess, hideOverlay = false, signInOnly = false }) => {
     const router = useRouter()
     const authRedirectTo = sanitizeAuthRedirect(redirectTo)
 
-    const [formType, setFormType] = useState<FormType>(initialFormType)
+    const [formType, setFormTypeState] = useState<FormType>(signInOnly ? "signin" : initialFormType)
+    // Every switch goes through here, so no path (verification "back", the
+    // switch link, the open-sync below) can reach the signup form when the
+    // modal is the college door.
+    const setFormType = (next: FormType) => setFormTypeState(signInOnly ? "signin" : next)
+    const forgotPasswordHref = signInOnly
+        ? "/forgot-password?return=%2Finstitution%2Flogin"
+        : "/forgot-password"
     const [showPassword, setShowPassword] = useState(false)
     const [isEmailVerified, setIsEmailVerified] = useState(false)
     const [isVerifyingEmail, setIsVerifyingEmail] = useState(false)
@@ -59,14 +71,14 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
     // Sync formType whenever the modal opens
     useEffect(() => {
-        if (open) setFormType(initialFormType)
-    }, [open, initialFormType])
+        if (open) setFormTypeState(signInOnly ? "signin" : initialFormType)
+    }, [open, initialFormType, signInOnly])
 
     // Check for email verified in sessionStorage (set by home page)
     useEffect(() => {
         if (sessionStorage.getItem("emailVerified") === "true") {
             setIsEmailVerified(true)
-            setFormType("signin")
+            setFormTypeState("signin")
             sessionStorage.removeItem("emailVerified")
         }
     }, [])
@@ -350,7 +362,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     data-testid="forgot-password-link"
                     className="text-xs font-semibold cursor-pointer flex justify-end mb-4 text-blue-600 hover:text-blue-700 transition-colors"
                     onClick={() => {
-                        router.push('/forgot-password')
+                        router.push(forgotPasswordHref)
                         onClose()
                     }}
                 >
@@ -538,7 +550,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                         data-testid="forgot-password-link"
                         className="text-xs font-semibold cursor-pointer flex justify-end mb-4 text-blue-600 hover:text-blue-700 transition-colors"
                         onClick={() => {
-                            router.push('/forgot-password')
+                            router.push(forgotPasswordHref)
                             onClose()
                         }}
                     >
@@ -572,17 +584,21 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     )}
                 </button>
 
-                {/* Divider */}
-                <div className="flex items-center my-4">
-                    <div className="grow h-px bg-gray-300"></div>
-                    <p className="text-gray-500 text-center px-4 text-xs font-semibold">
-                        Or continue with
-                    </p>
-                    <div className="grow h-px bg-gray-300"></div>
-                </div>
+                {!signInOnly && (
+                    <>
+                        {/* Divider */}
+                        <div className="flex items-center my-4">
+                            <div className="grow h-px bg-gray-300"></div>
+                            <p className="text-gray-500 text-center px-4 text-xs font-semibold">
+                                Or continue with
+                            </p>
+                            <div className="grow h-px bg-gray-300"></div>
+                        </div>
 
-                {/* Social Login Buttons */}
-                <SocialLoginButtons redirectTo={authRedirectTo} />
+                        {/* Social Login Buttons */}
+                        <SocialLoginButtons redirectTo={authRedirectTo} />
+                    </>
+                )}
 
                 {/* Consent notice (restored from develop2): kept below both the
                     submit and the social buttons so it covers every way to continue. */}
@@ -594,6 +610,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 </div>
 
                 {/* Switch Form Link */}
+                {!signInOnly && (
                 <p className="text-sm text-center mt-4 text-gray-700">
                     {formType === "signup" ? (
                         <>
@@ -619,6 +636,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                         </>
                     )}
                 </p>
+                )}
             </>
         )
     }

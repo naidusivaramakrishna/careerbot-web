@@ -48,6 +48,7 @@ vi.mock('@/lib/logger', () => {
   return { default: l, logger: l };
 });
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@/hooks/useCollegeMembership', () => ({ useStudentCollege: () => null, useHasCollegeMembership: () => false, useCollegeMembershipResolved: () => true }));
 
 import Header from '@/components/layout/Header';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';

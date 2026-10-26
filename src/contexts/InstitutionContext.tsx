@@ -34,6 +34,7 @@ import {
   setInstitutionSession,
   type StoredInstitutionSession,
 } from '@/lib/institutionSession';
+import { primeCollegeMemberships } from '@/hooks/useCollegeMembership';
 import { can, type InstitutionCapability } from '@/lib/institutionPermissions';
 import type { InstitutionMembership, InstitutionRole } from '@/types/institution';
 
@@ -107,6 +108,9 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
       const rows = await listMemberships();
       if (!mountedRef.current) return;
       setMemberships(rows);
+      // The Header/Sidebar membership cache gets the same answer, so a student
+      // who just claimed an invite sees their college nav without a reload.
+      primeCollegeMemberships(rows);
       // THE STORED COLLEGE SESSION MUST BELONG TO THIS ACCOUNT. sessionStorage
       // survives logout -> login in the same tab, and the college token in it is
       // sent as Authorization on every college call, so a session left by a

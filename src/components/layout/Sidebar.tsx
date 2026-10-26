@@ -6,7 +6,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
 import { getEnhancementHistory } from "@/api/enhancerApi";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { useHasCollegeMembership } from "@/hooks/useCollegeMembership";
+import { useHasCollegeMembership, useStudentCollege } from "@/hooks/useCollegeMembership";
 import {
   EnterpriseApplicationTrackerIcon as IcoTracker,
   EnterpriseAtsScanIcon as IcoAtsScan,
@@ -50,6 +50,27 @@ const IcoCollege = ({ size = 18, className = "", sw = 1.6 }: IP) => (
     <path d="M4 17.5V8.5L10 5.5l6 3v9" stroke="currentColor" strokeWidth={sw} />
     <path d="M10 5.5V2.5l3 1-3 1" stroke="currentColor" strokeWidth={sw * 0.9} />
     <path d="M8 17.5v-4h4v4" stroke="currentColor" strokeWidth={sw * 0.9} />
+  </svg>
+);
+
+/** College tasks — a checklist with one item ticked */
+const IcoTasks = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M3 5.5l1.5 1.5L7 4.5" stroke="currentColor" strokeWidth={sw} />
+    <path d="M9.5 5.5h7.5M9.5 10h7.5M9.5 14.5h7.5" stroke="currentColor" strokeWidth={sw} />
+    <path d="M3.5 10h2M3.5 14.5h2" stroke="currentColor" strokeWidth={sw * 0.9} />
+  </svg>
+);
+
+/** My people — two heads, the student's faculty and placement officer */
+const IcoPeople = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="7.5" cy="7" r="2.75" stroke="currentColor" strokeWidth={sw} />
+    <path d="M2.5 16.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4" stroke="currentColor" strokeWidth={sw} />
+    <circle cx="13.75" cy="7.75" r="2.25" stroke="currentColor" strokeWidth={sw * 0.9} />
+    <path d="M14 12.5c1.7.2 3 1.4 3.5 3.25" stroke="currentColor" strokeWidth={sw * 0.9} />
   </svg>
 );
 
@@ -167,6 +188,66 @@ const COLLEGE_NAV_GROUP: (typeof NAV_GROUPS)[number] = {
     { id: "institution", label: "My College", icon: IcoCollege, path: "/institution" },
   ],
 };
+
+/**
+ * A STUDENT's nav (spec: student section, "Proposed"): their college first and
+ * named after it, then the tools their college watches -- results reach the
+ * placement officer automatically and the student should be told so -- then
+ * everything else as "YOUR OWN", in today's order. Nothing is removed; this is
+ * a regrouping of the same items. Staff and jobseekers never get it.
+ */
+export function studentNavGroups(collegeName: string): (typeof NAV_GROUPS)[number][] {
+  const prepare = VISIBLE_NAV_GROUPS.find((g) => g.label === "PREPARE");
+  const own = VISIBLE_NAV_GROUPS
+    .filter((g) => g.label !== "PREPARE")
+    .flatMap((g) => g.items);
+  return [
+    {
+      label: collegeName,
+      items: [
+        { id: "college_progress", label: "My progress", icon: IcoCollege, path: "/institution" },
+        { id: "college_tasks",    label: "Tasks",       icon: IcoTasks,   path: "/institution/me/tasks" },
+        { id: "college_people",   label: "My people",   icon: IcoPeople,  path: "/institution/me/people" },
+      ],
+    },
+    ...(prepare ? [{ label: "YOUR COLLEGE SEES THESE", items: prepare.items }] : []),
+    ...(own.length ? [{ label: "YOUR OWN", items: own }] : []),
+  ];
+}
+
+/**
+ * The active item. An EXACT path match wins over a prefix match:
+ * "/institution" (My progress) is a prefix of "/institution/me/tasks", and the
+ * first-prefix-wins rule alone would light up the wrong item.
+ */
+export function activeNavId(
+  navGroups: (typeof NAV_GROUPS)[number][],
+  pathname: string,
+): string {
+  for (const group of navGroups) {
+    for (const item of group.items) {
+      if (item.path && pathname === item.path) return item.id;
+    }
+  }
+  for (const group of navGroups) {
+    for (const item of group.items) {
+      if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
+        return item.id;
+      }
+      if (item.path && (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path)))) {
+        return item.id;
+      }
+    }
+  }
+  if (pathname === "/prep" || pathname.startsWith("/prep/"))                  return "interview_notes";
+  if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
+  if (pathname.startsWith("/communication"))                                  return "comm_assess";
+  if (pathname.startsWith("/mock-test"))                                      return "mock_test";
+  if (pathname.startsWith("/settings"))                                       return "settings";
+  if (pathname.startsWith("/account/subscriptions"))  return "subscription";
+  if (pathname.startsWith("/settings/billing"))       return "billing_history";
+  return "";
+}
 
 const SIDEBAR_EXPANDED_STORAGE_KEY = "careerbot:sidebar-expanded";
 
@@ -300,36 +381,19 @@ export default function Sidebar() {
   const { data: dashboardData } = useDashboard();
   const profileCompleteness = dashboardData?.profile.completeness ?? 0;
 
-  // Appended, not interleaved: a college user is still a jobseeker, so their
-  // own tools stay where they have always been and the college is one more
-  // place they can go.
+  // A STUDENT gets their college first (studentNavGroups). Staff keep the
+  // appended "My College" link -- a member of staff is still a jobseeker with
+  // their own tools, and the college is one more place they can go. A
+  // jobseeker sees exactly the static groups.
   const hasCollege = useHasCollegeMembership();
-  const navGroups = useMemo(
-    () => (hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS),
-    [hasCollege],
-  );
+  const studentCollege = useStudentCollege();
+  const studentCollegeName = studentCollege?.name ?? null;
+  const navGroups = useMemo(() => {
+    if (studentCollegeName) return studentNavGroups(studentCollegeName);
+    return hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS;
+  }, [hasCollege, studentCollegeName]);
 
-  const getActiveId = () => {
-    for (const group of navGroups) {
-      for (const item of group.items) {
-        if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
-          return item.id;
-        }
-        if (item.path && (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path)))) {
-          return item.id;
-        }
-      }
-    }
-    if (pathname === "/prep" || pathname.startsWith("/prep/"))                  return "interview_notes";
-    if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
-    if (pathname.startsWith("/communication"))                                  return "comm_assess";
-    if (pathname.startsWith("/mock-test"))                                      return "mock_test";
-    if (pathname.startsWith("/settings"))                                       return "settings";
-    if (pathname.startsWith("/account/subscriptions"))  return "subscription";
-    if (pathname.startsWith("/settings/billing"))       return "billing_history";
-    return "";
-  };
-  const activeId = getActiveId();
+  const activeId = activeNavId(navGroups, pathname);
 
   // Track the last resume-related page the user visited so the resume icon restores it exactly
   useEffect(() => {

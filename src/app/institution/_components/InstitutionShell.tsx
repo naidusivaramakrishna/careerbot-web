@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Header from '@/components/layout/Header';
+import Sidebar from '@/components/layout/Sidebar';
 import { cn } from '@/lib/utils';
 import { useInstitution } from '@/contexts/InstitutionContext';
+import { DashboardProvider } from '@/contexts/DashboardContext';
 import { CollegeSwitcher } from './CollegeSwitcher';
 import { PausedBanner } from './PausedBanner';
 import { isNavItemActive, navGroupsForRole } from './nav';
@@ -22,21 +24,39 @@ import { FOCUS_RING } from './tokens';
  * the area gets its own rail in the same visual language — same 240px width,
  * same solid `#2557a7` active pill with its glow, same 12px medium labels.
  *
- * A STUDENT gets no rail at all. They have one screen about one person; a
- * navigation column with a single item is furniture, not navigation.
+ * A STUDENT gets no college rail -- they get the product's own Sidebar, whose
+ * student nav puts their college first (My progress, Tasks, My people), so the
+ * same navigation is on screen inside and outside the college area. The whole
+ * area below the header is offset by the Sidebar's width, banner included:
+ * the Sidebar is fixed, and offsetting only <main> would put it over the
+ * paused-college banner. The Sidebar reads the profile-completeness badge
+ * from DashboardProvider, as every other layout that mounts it provides; outside
+ * one it silently shows 0%.
  */
 export function InstitutionShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { role, readOnlyReason } = useInstitution();
 
   const groups = role ? navGroupsForRole(role) : [];
+  const isStudent = role === 'student';
   // One item total = nothing to navigate between (the student case).
-  const showRail = groups.reduce((n, g) => n + g.items.length, 0) > 1;
+  const showRail = !isStudent && groups.reduce((n, g) => n + g.items.length, 0) > 1;
 
   return (
     <>
       <Header />
-      <div className="flex min-h-screen flex-col pt-14" style={{ backgroundColor: '#eef2fb' }}>
+      {isStudent ? (
+        <DashboardProvider>
+          <Sidebar />
+        </DashboardProvider>
+      ) : null}
+      <div
+        className="flex min-h-screen flex-col pt-14 transition-[margin] duration-300"
+        style={{
+          backgroundColor: '#eef2fb',
+          ...(isStudent ? { marginLeft: 'var(--sidebar-width, 64px)' } : {}),
+        }}
+      >
         {readOnlyReason ? <PausedBanner reason={readOnlyReason} /> : null}
 
         <div className="flex flex-1 items-stretch">

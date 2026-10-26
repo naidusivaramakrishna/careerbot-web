@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { GraduationCap, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import SignUpModal from '@/components/SignUpModal';
 import { getCollegeBranding, type CollegeBranding } from '@/api/institutionPublicApi';
 import { Body, Caption, PageTitle } from '../_components/Typography';
 import { CARD } from '../_components/tokens';
@@ -28,10 +29,16 @@ import { CARD } from '../_components/tokens';
  * who guessed the address create an account that looks like it belongs to the
  * college. Somebody without an invitation is told to ask their placement
  * officer, which is the true answer and also the only useful one.
+ *
+ * THE SIGN-IN FORM OPENS HERE, in sign-in-only mode. It used to send the
+ * student to the consumer home page (/?showLogin=true), whose modal offers
+ * "Sign up" and social buttons -- the very create-account path this page
+ * exists not to have, one click away.
  */
 export default function CollegeLoginPage() {
   const [college, setCollege] = useState<CollegeBranding | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -40,8 +47,6 @@ export default function CollegeLoginPage() {
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, []);
-
-  const signInHref = '/?showLogin=true&next=%2Finstitution';
 
   return (
     <main className="min-h-screen bg-[#eef2fb] px-4 py-16">
@@ -74,11 +79,9 @@ export default function CollegeLoginPage() {
           </Body>
 
           <div className="mt-6 flex flex-col gap-3">
-            <Link href={signInHref}>
-              <Button className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
-              </Button>
-            </Link>
+            <Button className="w-full" onClick={() => setSignInOpen(true)}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
+            </Button>
 
             {/* THE OTHER DOOR, and it is not "create an account". A student
                 with a code from their college turns it into an account link;
@@ -99,6 +102,14 @@ export default function CollegeLoginPage() {
             : 'Your college will invite you when your account is ready.'}
         </p>
       </div>
+
+      <SignUpModal
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        initialFormType="signin"
+        signInOnly
+        redirectTo="/institution"
+      />
     </main>
   );
 }

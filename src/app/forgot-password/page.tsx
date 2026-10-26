@@ -1,13 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useRef } from "react";
 import { Mail, CircleCheck } from "lucide-react";
 import { toast } from "sonner";
 import { requestPasswordReset } from "@/api/authApi";
+import { useSearchParams } from "next/navigation";
 import { useEmailForm } from "@/hooks/useEmailForm";
 
+// The ONE place "Back to Sign In" may return to instead of the consumer
+// sign-in: the college front door, which opens this page in sign-in-only mode.
+// An exact match, not a prefix or a URL parse -- anything else (another path,
+// an absolute or protocol-relative URL) falls back to the default.
+const COLLEGE_DOOR = "/institution/login";
+
 const ForgotPasswordPage = () => {
+  const returnTo = useSearchParams()?.get("return");
   const { email, setEmail, emailError, status, handleSubmit, goToSignIn } = useEmailForm({
+    redirectPath: returnTo === COLLEGE_DOOR ? COLLEGE_DOOR : undefined,
     onSubmit: (email) => requestPasswordReset({ email }),
     errorContext: "password_reset",
     successMessage: "Password reset email sent successfully!",
@@ -188,4 +197,12 @@ const ForgotPasswordPage = () => {
   );
 };
 
-export default ForgotPasswordPage;
+// useSearchParams needs a Suspense boundary or the production build refuses to
+// prerender this page.
+export default function ForgotPasswordRoute() {
+  return (
+    <Suspense fallback={null}>
+      <ForgotPasswordPage />
+    </Suspense>
+  );
+}

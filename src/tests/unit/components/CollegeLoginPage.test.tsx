@@ -6,6 +6,17 @@ vi.mock('@/api/institutionPublicApi', () => ({
   getCollegeBranding: () => getCollegeBranding(),
 }));
 
+// The real modal is covered by AuthModalSignInOnly.test.tsx; here only the
+// props this page passes to it matter.
+const modalProps = vi.fn();
+vi.mock('@/components/SignUpModal', () => ({
+  default: (props: Record<string, unknown>) => {
+    modalProps(props);
+    return props.open ? <div data-testid="signin-modal" /> : null;
+  },
+}));
+
+import { fireEvent } from '@testing-library/react';
 import CollegeLoginPage from '@/app/institution/login/page';
 
 beforeEach(() => getCollegeBranding.mockReset());
@@ -77,5 +88,27 @@ describe('the branded college login page', () => {
     for (const leak of ['subscription', 'trial', 'students', 'paid', 'expired']) {
       expect(text).not.toContain(leak);
     }
+  });
+});
+
+describe('the college sign-in opens on this page, sign-in only', () => {
+  beforeEach(() => modalProps.mockReset());
+
+  it('Sign in opens the modal here (no trip to the consumer home page)', async () => {
+    getCollegeBranding.mockResolvedValue({ id: 'vit', name: 'VIT University' });
+    render(<CollegeLoginPage />);
+    await waitFor(() => screen.getByText('VIT University'));
+    expect(screen.queryByTestId('signin-modal')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    expect(screen.getByTestId('signin-modal')).toBeInTheDocument();
+    const last = modalProps.mock.calls.at(-1)?.[0];
+    expect(last).toMatchObject({ open: true, signInOnly: true, initialFormType: 'signin', redirectTo: '/institution' });
+  });
+
+  it('the page has no link to the consumer sign-in', async () => {
+    getCollegeBranding.mockResolvedValue({ id: 'vit', name: 'VIT University' });
+    const { container } = render(<CollegeLoginPage />);
+    await waitFor(() => screen.getByText('VIT University'));
+    expect(container.querySelector('a[href*="showLogin"]')).toBeNull();
   });
 });

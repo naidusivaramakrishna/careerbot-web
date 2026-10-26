@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/api/resumeApi", () => ({ getAllResumesUnified: vi.fn(), getAllResumes: vi.fn() }));
 vi.mock("@/api/enhancerApi", () => ({ getEnhancementHistory: vi.fn() }));
 vi.mock("@/contexts/DashboardContext", () => ({ useDashboard: () => ({ data: null }) }));
-vi.mock("@/hooks/useCollegeMembership", () => ({ useHasCollegeMembership: () => false }));
+vi.mock("@/hooks/useCollegeMembership", () => ({ useHasCollegeMembership: () => false, useStudentCollege: () => null }));
 
 import Sidebar from "@/components/layout/Sidebar";
 

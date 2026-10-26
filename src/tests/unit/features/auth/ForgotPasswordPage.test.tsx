@@ -26,8 +26,11 @@ import React from 'react';
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockPush = vi.fn();
+// The college front door opens this page with ?return=/institution/login.
+let mockSearch = new URLSearchParams();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => mockSearch,
 }));
 
 const mockRequestPasswordReset = vi.fn();
@@ -165,6 +168,46 @@ describe('ForgotPasswordPage — navigation', () => {
     fireEvent.click(screen.getByTestId('send-reset-link-btn'));
     await waitFor(() => expect(screen.getByTestId('goto-signin-btn')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('goto-signin-btn'));
+    expect(mockPush).toHaveBeenCalledWith('/?showLogin=true');
+  });
+});
+
+describe('ForgotPasswordPage — return to the college door', () => {
+  beforeEach(() => { vi.clearAllMocks(); mockSearch = new URLSearchParams(); });
+
+  it('?return=/institution/login sends "Sign in" back to the college door', () => {
+    mockSearch = new URLSearchParams({ return: '/institution/login' });
+    render(<ForgotPasswordPage />);
+    fireEvent.click(screen.getByTestId('remember-password-signin-btn'));
+    expect(mockPush).toHaveBeenCalledWith('/institution/login');
+  });
+
+  it('?return=/institution/login also applies to "Go to Sign In" after sending', async () => {
+    mockSearch = new URLSearchParams({ return: '/institution/login' });
+    mockRequestPasswordReset.mockResolvedValue({ message: 'Reset email sent' });
+    render(<ForgotPasswordPage />);
+    fireEvent.change(screen.getByTestId('forgot-email-input'), { target: { value: 'user@example.com' } });
+    fireEvent.click(screen.getByTestId('send-reset-link-btn'));
+    await waitFor(() => expect(screen.getByTestId('goto-signin-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('goto-signin-btn'));
+    expect(mockPush).toHaveBeenCalledWith('/institution/login');
+  });
+
+  // Only the exact college-door path is accepted. Anything else -- another
+  // path, an absolute URL, a protocol-relative URL, a look-alike -- falls back
+  // to the consumer sign-in, so this cannot become an open redirect.
+  it.each([
+    '/dashboard',
+    'https://evil.example',
+    '//evil.example',
+    '/institution/login/../../admin',
+    '/institution/login?x=1',
+    '/institution/loginx',
+    '',
+  ])('?return=%j falls back to /?showLogin=true', (value) => {
+    mockSearch = new URLSearchParams({ return: value });
+    render(<ForgotPasswordPage />);
+    fireEvent.click(screen.getByTestId('remember-password-signin-btn'));
     expect(mockPush).toHaveBeenCalledWith('/?showLogin=true');
   });
 });

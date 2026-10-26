@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Settings, LogOut, CheckCheck, X, ChevronRight, Crown,
-  ArrowUpRight,
+  ArrowUpRight, GraduationCap,
 } from 'lucide-react';
 import {
   EnterpriseInterviewPrepIcon as IcoInterview,
@@ -15,6 +15,7 @@ import {
   EnterpriseSystemNotificationIcon as IcoSystem,
 } from '@/components/icons/EnterpriseNavIcons';
 import { useCreditsBalance } from '@/hooks/useCreditsBalance';
+import { useCollegeMembershipResolved, useStudentCollege } from '@/hooks/useCollegeMembership';
 import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
@@ -156,6 +157,13 @@ const getNotifMeta = (notification: Pick<Notification, 'type' | 'title' | 'body'
 export default function Header() {
   const router = useRouter();
   const { data: balance, loading } = useCreditsBalance();
+  // A student whose college provides the product is not sold an upgrade
+  // (spec: student section, "Provided by <college>"). Staff and jobseekers
+  // keep the plan + credits panel exactly as it was.
+  const studentCollege = useStudentCollege();
+  // Until the membership answer is in, show the skeleton: a student must not
+  // be shown the upgrade panel for the instant before "Provided by" arrives.
+  const membershipResolved = useCollegeMembershipResolved();
   const { unreadCount: apiUnreadCount, refetch: refetchUnreadCount } = useUnreadNotificationsCount({
     autoRefresh: true,
     refreshInterval: 30000, // Refresh every 30 seconds
@@ -350,8 +358,21 @@ export default function Header() {
         {/* Right actions */}
         <div className="flex items-center gap-3">
 
-          {/* Plan + credits */}
-          {loading ? (
+          {/* Plan + credits -- or, for a student, the college that provides it */}
+          {studentCollege ? (
+            <Link
+              href="/institution"
+              className="flex h-11 max-w-[240px] items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 shadow-sm transition-all hover:-translate-y-px hover:border-[#2557a7]/30 hover:shadow-md"
+              style={{ boxShadow: "0 5px 18px rgba(37,87,167,0.08)" }}
+              aria-label={`Provided by ${studentCollege.name}`}
+              data-testid="provided-by-college"
+            >
+              <GraduationCap size={14} className="shrink-0 text-[#2557a7]" aria-hidden />
+              <span className="hidden sm:block truncate text-[12px] font-semibold text-[#2557a7]">
+                Provided by {studentCollege.name}
+              </span>
+            </Link>
+          ) : loading || !membershipResolved ? (
             <div className="hidden sm:flex h-11 w-44 rounded-xl border border-blue-100 bg-blue-50/70 animate-pulse" />
           ) : (
             <Link
