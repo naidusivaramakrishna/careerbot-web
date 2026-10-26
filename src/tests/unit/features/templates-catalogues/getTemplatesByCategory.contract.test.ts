@@ -79,11 +79,11 @@ describe('getTemplatesByCategory', () => {
     expect(await getTemplatesByCategory()).toHaveLength(2);
   });
 
-  it('sends a category filter as `category`, as develop2 does', async () => {
-    mockGet.mockImplementation(develop2Server);
-    await getTemplatesByCategory('Classic');
-    expect(query(mockGet.mock.calls[0][0]).get('category')).toBe('classic');
-    expect(query(mockGet.mock.calls[0][0]).get('domain_family')).toBeNull();
+  it('sends a domain family filter as `domain_family`', async () => {
+    mockGet.mockImplementation(pr387Server);
+    await getTemplatesByCategory('software_engineering');
+    expect(query(mockGet.mock.calls[0][0]).get('domain_family')).toBe('software_engineering');
+    expect(query(mockGet.mock.calls[0][0]).get('category')).toBeNull();
   });
 
   it('stops on an empty page even when `total` overstates the list', async () => {

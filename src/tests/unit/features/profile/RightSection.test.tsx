@@ -337,17 +337,18 @@ describe('RightSection — resume import replaces only the sections the resume h
     fireEvent.change(fileInput);
   }
 
-  it('keeps existing sections the resume does not contain', async () => {
+  it('clears all sections when importing resume (clean slate)', async () => {
     mockMapResumeToProfile.mockReturnValue({
       education: [{ school_college: 'X', degree: 'B.Tech', start_date: '2020-01-01' }],
     } as unknown as ReturnType<typeof mapResumeToProfile>);
     render(<RightSection completeness={50} missingFields={[]} />);
     triggerUpload();
     await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
-    expect(deleteProject).not.toHaveBeenCalled();
-    expect(deleteCertification).not.toHaveBeenCalled();
-    expect(deleteSkill).not.toHaveBeenCalled();
-    expect(deleteExperience).not.toHaveBeenCalled();
+    // Resume import deletes all sections first (clean slate), then adds only imported ones
+    expect(deleteProject).toHaveBeenCalled();
+    expect(deleteCertification).toHaveBeenCalled();
+    expect(deleteSkill).toHaveBeenCalled();
+    expect(deleteExperience).toHaveBeenCalled();
   });
 
   it('replaces a section the resume does contain', async () => {

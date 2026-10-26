@@ -13,7 +13,9 @@ import { logger } from '@/lib/logger';
  * - Refreshes on mount if token is stale (>50% of lifetime)
  * - Refreshes when tab comes back into focus
  * - Retries failed refreshes up to 3 times (1-minute intervals)
- * - Logs user out with clear message if all retries fail
+ * - Logs user out immediately on 401 (session expired)
+ * - Logs user out after all retries fail (network/backend errors)
+ * - Stops polling immediately when session expires
  * - Only runs when user is authenticated
  *
  * Usage: Call this hook in a root layout or provider that wraps authenticated pages
@@ -34,6 +36,8 @@ let isRefreshing = false;
 let refreshStartTime = 0;
 const REFRESH_TIMEOUT_MS = 30 * 1000; // 30 second timeout to prevent hung refreshes
 let retryTimeoutId: NodeJS.Timeout | null = null;
+let sessionExpired = false;
+let refreshIntervalId: NodeJS.Timeout | null = null;
 
 const getTokenExpirySeconds = (): number => {
   if (typeof window === 'undefined') return DEFAULT_TOKEN_EXPIRY_SECONDS;
@@ -77,8 +81,20 @@ function axiosLikeResponse(
   return response as { status?: number; data?: { detail?: unknown } };
 }
 
-const handleUserSessionExpired = () => {
-  logger.error('[Token Refresh] User session expired - redirecting to login');
+/**
+ * True when the backend has definitively rejected the session, as opposed to
+ * failing transiently (same logic as http.ts interceptor).
+ */
+function isDefinitiveAuthRejection(err: unknown): boolean {
+  const response = axiosLikeResponse(err);
+  if (!response || (response.status !== 401 && response.status !== 403)) return false;
+  const detail = response.data?.detail;
+  if (typeof detail !== 'string') return false;
+  return /revoked|already used|suspended|rotation failed|sign in again/i.test(detail);
+}
+
+const handleUserSessionExpired = (isAdminRoute?: boolean) => {
+  logger.error('[Token Refresh] User session expired - clearing tokens');
 
   if (typeof window !== 'undefined') {
     // Clear local session state (backend clears httpOnly cookies automatically)
@@ -86,8 +102,28 @@ const handleUserSessionExpired = () => {
     localStorage.removeItem(LAST_ATTEMPT_KEY);
     localStorage.removeItem('token_expires_in_seconds');
 
-    // Redirect to login with reason - backend will expire httpOnly cookies
-    window.location.href = '/?showLogin=true&reason=session_expired';
+    // Stop polling immediately
+    sessionExpired = true;
+    isRefreshing = false;
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId);
+      retryTimeoutId = null;
+    }
+    if (refreshIntervalId) {
+      clearInterval(refreshIntervalId);
+      refreshIntervalId = null;
+    }
+
+    // For user routes: redirect immediately
+    // For admin routes: let http.ts interceptor handle the redirect (it's admin-aware)
+    if (!isAdminRoute) {
+      const params = new URLSearchParams({ showLogin: 'true' });
+      const currentPath = window.location.pathname + window.location.search + window.location.hash;
+      if (currentPath && currentPath !== '/') {
+        params.set('next', currentPath);
+      }
+      window.location.href = `/?${params.toString()}`;
+    }
   }
 };
 
@@ -143,12 +179,21 @@ export const useTokenRefresh = (
           fullError: error
         });
 
+        // Stop polling immediately on definitive 401s (revoked token, suspended account, etc)
+        const isDefinitive = statusCode === 401 && isDefinitiveAuthRejection(error);
+        if (isDefinitive) {
+          logger.error('[Token Refresh] Received definitive 401 - session expired. Stopping polling.');
+          handleUserSessionExpired(isAdminRoute);
+          return false;
+        }
+
         // If we haven't exhausted retries, schedule another attempt
         if (attempt < MAX_RETRY_ATTEMPTS) {
           // Update attempt timestamp to signal that we're actively retrying
           // This prevents http.ts interceptor from logging user out during retry window
           setLastRefreshAttemptAt();
-          logger.info(`[Token Refresh] Scheduling retry in ${RETRY_DELAY_MS / 1000 / 60} minute...`);
+          const waitMinutes = RETRY_DELAY_MS / 1000 / 60;
+          logger.info(`[Token Refresh] Scheduling retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} in ${waitMinutes} minute...`);
           retryTimeoutId = setTimeout(() => {
             doRefreshWithRetry(attempt + 1);
           }, RETRY_DELAY_MS);
@@ -156,14 +201,20 @@ export const useTokenRefresh = (
         }
 
         // All retries failed - session is expired
-        logger.error('[Token Refresh] All retry attempts failed. User session has expired.');
-        handleUserSessionExpired();
+        logger.error('[Token Refresh] All retry attempts failed after ${MAX_RETRY_ATTEMPTS} attempts. User session has expired.');
+        handleUserSessionExpired(isAdminRoute);
         return false;
       }
     };
 
     // Only apply retry logic to user routes (not admin)
     const doRefresh = async () => {
+      // Stop if session is already expired
+      if (sessionExpired) {
+        logger.debug('[Token Refresh] Session already expired, skipping refresh');
+        return;
+      }
+
       // Prevent concurrent refresh requests to avoid token rotation issues
       // Also check if a previous refresh is stuck (timeout)
       if (isRefreshing) {
@@ -187,7 +238,7 @@ export const useTokenRefresh = (
       }
 
       if (isAdminRoute) {
-        // Admin token refresh - keep original logic, no retries
+        // Admin token refresh - no retries, let http.ts interceptor handle 401s
         try {
           logger.info('[Token Refresh] Refreshing admin token...');
           await refreshAdminToken();
@@ -196,6 +247,8 @@ export const useTokenRefresh = (
           dispatchTokenRefreshed();
         } catch (error) {
           logger.error('[Token Refresh] Failed to refresh admin token:', error);
+          // For admin: let http.ts interceptor handle the redirect
+          // Just log the error, don't redirect here
         }
       } else {
         // User token refresh - use retry logic with concurrency protection
@@ -237,7 +290,7 @@ export const useTokenRefresh = (
     const intervalMinutes = Math.round(refreshIntervalMs / 1000 / 60);
     logger.info(`[Token Refresh] Setting up token refresh interval every ${intervalMinutes} minutes (will refresh 10 minutes before expiry)`);
 
-    const refreshTimer = setInterval(doRefresh, refreshIntervalMs);
+    refreshIntervalId = setInterval(doRefresh, refreshIntervalMs);
 
     // Refresh token when tab comes back into focus (handles long idle periods)
     const handleVisibilityChange = () => {
@@ -257,7 +310,10 @@ export const useTokenRefresh = (
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(refreshTimer);
+      if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+      }
       if (retryTimeoutId) {
         clearTimeout(retryTimeoutId);
         retryTimeoutId = null;

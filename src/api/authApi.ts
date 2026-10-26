@@ -422,6 +422,12 @@ export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
     return response.data;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Token refresh failed";
-    throw new Error(errorMessage);
+    // Preserve the response object from axios errors so useTokenRefresh can detect 401
+    const axiosError = error as { response?: { status?: number; data?: unknown } };
+    const err = new Error(errorMessage);
+    if (axiosError?.response) {
+      Object.assign(err, { response: axiosError.response });
+    }
+    throw err;
   }
 };

@@ -60,6 +60,7 @@ function TemplatesPageContent() {
   const [templates, setTemplates] = useState<TemplateResponse[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('Catalogues');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedDomainModal, setSelectedDomainModal] = useState<DomainModal | null>(null);
   const [loading, setLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -285,15 +286,42 @@ function TemplatesPageContent() {
     fetchCategories();
   }, []);
 
-  // Fetch all templates on mount
+  // Fetch templates with server-side pagination (api #387)
+  // Skip fetch for Catalogues view (template style selection)
+  // For "All" category: fetch all templates (client groups into domain cards)
+  // For specific category: fetch all templates for that category
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        // Fetch all templates (no category filter to API)
-        const tmps = await getTemplatesByCategory();
-        setTemplates(tmps);
-        logger.debug('Templates: fetched all templates', { count: tmps.length });
+        let allTemplates: TemplateResponse[] = [];
+
+        // Skip fetching for Catalogues view - user selects template style, not browse templates
+        if (selectedCategory === 'Catalogues') {
+          setTemplates([]);
+          setLoading(false);
+          return;
+        }
+
+        if (selectedCategory === 'All') {
+          // For "All" category: fetch all templates to preserve domain grouping
+          // Client then groups into domain cards and paginates those cards
+          allTemplates = await getTemplatesByCategory();
+
+          logger.debug('Templates: fetched all templates', {
+            count: allTemplates.length,
+          });
+        } else {
+          // For specific category: fetch all templates for that category
+          allTemplates = await getTemplatesByCategory(selectedCategory);
+
+          logger.debug('Templates: fetched category', {
+            category: selectedCategory,
+            count: allTemplates.length,
+          });
+        }
+
+        setTemplates(allTemplates);
       } catch (err) {
         logger.error('Templates: failed to fetch templates', err);
         setTemplates([]);
@@ -301,8 +329,18 @@ function TemplatesPageContent() {
         setLoading(false);
       }
     };
+
     fetchTemplates();
-  }, []);
+  }, [selectedCategory]);
+
+  // Debounce search query to avoid filtering on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Group templates by domain family and domain
   const groupedTemplates = useMemo(() => {
@@ -335,7 +373,7 @@ function TemplatesPageContent() {
     return groups;
   }, [templates]);
 
-  // Filter templates by category (domain family) and search query
+  // Filter templates by category (domain family) and search query (uses debounced query)
   const filteredTemplates = templates.filter((template) => {
     // Filter by domain family if not "All"
     if (selectedCategory !== 'All') {
@@ -345,8 +383,8 @@ function TemplatesPageContent() {
       }
     }
 
-    // Filter by search query
-    const query = searchQuery.toLowerCase();
+    // Filter by search query (debounced)
+    const query = debouncedSearchQuery.toLowerCase();
     if (!query) return true; // If no search query, show all (already filtered by category)
 
     const name = (template.name || '').toLowerCase();
@@ -369,10 +407,10 @@ function TemplatesPageContent() {
     return matchesBasicInfo || matchesDomain;
   });
 
-  // Group filtered templates by domain
+  // Group filtered templates by domain (uses debounced search query)
   const filteredGroupedTemplates = useMemo(() => {
     const groups: Record<string, Record<string, TemplateResponse[]>> = {};
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearchQuery.toLowerCase();
 
     // Check if search query matches a family name (e.g., "Core Engineering")
     const matchingFamilyKey = Object.entries(DOMAIN_NAMES).find(
@@ -425,7 +463,7 @@ function TemplatesPageContent() {
     });
 
     return groups;
-  }, [filteredTemplates, searchQuery]);
+  }, [filteredTemplates, debouncedSearchQuery]);
 
   const openDomainModal = (family: string, domain: string) => {
     setSelectedDomainModal({

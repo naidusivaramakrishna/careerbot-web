@@ -118,7 +118,7 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
             // 1️⃣ Extract resume first — some backends auto-save parsed data to profile
             const result: ResumeExtractResponse = await extractResume(file);
 
-            // 3️⃣ Map to ProfileData format
+            // 2️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);
 
             // Ensure mapped is defined BEFORE destroying anything.
@@ -127,20 +127,15 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
             }
 
             // =====================================================
-            // 3️⃣ DELETE existing data AFTER parse so we also clear
-            //    any entries auto-saved by the parse endpoint itself
+            // 3️⃣ DELETE ALL existing data BEFORE adding new resume data
+            //    Resume import is a full profile replacement, not a merge
             // =====================================================
-            // Each delete below is gated on the import ACTUALLY carrying
-            // replacement data for that section. Previously every section was
-            // cleared unconditionally, so importing a profile with no projects
-            // deleted the projects the user had already entered -- the resume
-            // path even recorded such a section as 'skipped' ("not in resume")
-            // while having just destroyed it. Import replaces the sections it
-            // covers; it must not empty the others.
+            // Always delete all sections to prevent mixing data from different resumes.
+            // Each new upload is a clean slate - we delete everything unconditionally,
+            // then add only the sections that exist in the newly uploaded resume.
 
-
-            // DELETE EDUCATION
-            if (mapped.education?.length) try {
+            // DELETE ALL EDUCATION
+            try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
                     if (edu.id) await deleteEducation(edu.id);
@@ -149,8 +144,8 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
                 logger.warn("Error deleting education:", err);
             }
 
-            // DELETE EXPERIENCE
-            if (mapped.workExperience?.length) try {
+            // DELETE ALL EXPERIENCE
+            try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
                     if (exp.id) await deleteExperience(exp.id);
@@ -159,8 +154,8 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
                 logger.warn("Error deleting experience:", err);
             }
 
-            // DELETE SKILLS
-            if (mapped.skills?.length) try {
+            // DELETE ALL SKILLS
+            try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
                     if (skill.id) await deleteSkill(skill.id);
@@ -169,8 +164,8 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
                 logger.warn("Error deleting skills:", err);
             }
 
-            // DELETE PROJECTS
-            if (mapped.projects?.length) try {
+            // DELETE ALL PROJECTS
+            try {
                 const existingProjects = await getProjects();
                 for (const project of existingProjects) {
                     await deleteProject(project.id!);
@@ -179,8 +174,8 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
                 logger.warn("Error deleting projects:", err);
             }
 
-            // DELETE CERTIFICATIONS
-            if (mapped.certifications?.length) try {
+            // DELETE ALL CERTIFICATIONS
+            try {
                 const existingCertifications = await getCertification();
                 for (const cert of existingCertifications) {
                     if (cert.id) await deleteCertification(cert.id);

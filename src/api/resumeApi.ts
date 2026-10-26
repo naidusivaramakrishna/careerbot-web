@@ -1101,11 +1101,6 @@ export const downloadResume = async (
 
 // getTemplatesByCategory: every template, as an array (all callers use it
 // that way). develop2's GET /templates/ ignores offset/limit and returns the
-// whole list; careerbot-api #387 pages it (limit 12 by default, max 100,
-// with `total`). Follow `total` page by page so both return the full list.
-const TEMPLATES_PAGE_SIZE = 100;
-const TEMPLATES_MAX_PAGES = 50;
-
 const parseTemplatesPage = (data: unknown): { templates: TemplateResponse[]; total?: number } => {
   if (Array.isArray(data)) return { templates: data as TemplateResponse[] };
   if (data && typeof data === 'object') {
@@ -1121,33 +1116,95 @@ const parseTemplatesPage = (data: unknown): { templates: TemplateResponse[]; tot
   return { templates: [] };
 };
 
-export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
-  try {
-    logger.debug("📋 Fetching templates by category:", category);
+/**
+ * Server-side template fetch with optional pagination, domain filtering, and search.
+ * - Called without pagination params: returns TemplateResponse[] for backward compatibility (TemplatesTab, useTemplateRedirect)
+ * - Called with pagination params: returns TemplatesResponse for client-side domain-card pagination
+ * Backend: careerbot-api #387 (supports domain_family, search, offset, limit).
+ */
+export interface TemplatesResponse {
+  templates: TemplateResponse[];
+  total: number;
+  offset: number;
+  limit: number;
+}
 
-    const templates: TemplateResponse[] = [];
-    for (let page = 0; page < TEMPLATES_MAX_PAGES; page++) {
-      const params = new URLSearchParams();
-      if (category && category !== 'All') params.append('category', category.toLowerCase());
-      params.append('offset', String(templates.length));
-      params.append('limit', String(TEMPLATES_PAGE_SIZE));
+export async function getTemplatesByCategory(): Promise<TemplateResponse[]>;
+export async function getTemplatesByCategory(domainFamily: string): Promise<TemplateResponse[]>;
+export async function getTemplatesByCategory(
+  domainFamily: string | undefined,
+  search: string | undefined,
+  offset: number,
+  limit: number
+): Promise<TemplatesResponse>;
+export async function getTemplatesByCategory(
+  domainFamily?: string,
+  search?: string,
+  offset?: number,
+  limit?: number
+): Promise<TemplateResponse[] | TemplatesResponse> {
+  try {
+    logger.debug("📋 Fetching templates:", { domainFamily, search, offset, limit });
+
+    const params = new URLSearchParams();
+    // domainFamily from UI (e.g., 'Catalogues', 'Core Engineering') maps to API domain_family parameter
+    if (domainFamily && domainFamily !== 'All') {
+      params.append('domain_family', domainFamily.toLowerCase());
+    }
+    if (search) {
+      params.append('search', search);
+    }
+
+    // For pagination: fetch single page
+    if (typeof offset === 'number' && typeof limit === 'number') {
+      params.append('offset', String(offset));
+      params.append('limit', String(limit));
 
       const response = await httpClient.get<unknown>(`/templates/?${params.toString()}`);
       const { templates: pageTemplates, total } = parseTemplatesPage(response.data);
-      templates.push(...pageTemplates);
 
-      // develop2 returns the whole list with total = its length, so it ends
-      // after one request; an empty page or reaching `total` ends the list.
-      if (total === undefined || pageTemplates.length === 0 || templates.length >= total) break;
+      logger.info("✅ Paginated templates fetched:", {
+        returned: pageTemplates.length,
+        total: total ?? 0,
+        offset,
+        limit,
+      });
+
+      return {
+        templates: pageTemplates,
+        total: total ?? 0,
+        offset,
+        limit,
+      };
     }
 
-    logger.info("✅ Templates fetched:", templates.length);
-    return templates;
+    // For non-pagination (backward compatibility): fetch all templates
+    const allTemplates: TemplateResponse[] = [];
+    let currentOffset = 0;
+    const pageSize = 100;
+    const maxPages = 50;
+
+    for (let page = 0; page < maxPages; page++) {
+      const pageParams = new URLSearchParams(params);
+      pageParams.append('offset', String(currentOffset));
+      pageParams.append('limit', String(pageSize));
+
+      const response = await httpClient.get<unknown>(`/templates/?${pageParams.toString()}`);
+      const { templates: pageTemplates, total } = parseTemplatesPage(response.data);
+      allTemplates.push(...pageTemplates);
+
+      if (total === undefined || pageTemplates.length === 0 || allTemplates.length >= total) break;
+      // Use actual fetched length as next offset (handles servers that cap limit below pageSize)
+      currentOffset = allTemplates.length;
+    }
+
+    logger.info("✅ All templates fetched:", allTemplates.length);
+    return allTemplates;
   } catch (error) {
-    logger.error("❌ Error fetching templates by category:", error);
+    logger.error("❌ Error fetching templates:", error);
     throw error;
   }
-};
+}
 
 
 export const applyTemplateToResume = async (
