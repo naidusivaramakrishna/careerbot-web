@@ -260,6 +260,23 @@ export function findSoftSkillSuggestion<T extends ConfirmableSuggestion>(
  * the server's own rescore after a Save can be unavailable, and then this is the only
  * thing that clears the card.
  */
+/**
+ * Is `original` still the same pending card in `latest` (the cards as they are NOW)?
+ *
+ * A save can confirm several cards one after another. Each confirmation returns a fresh scan, and
+ * careerbot-ai renumbers some ids between scans (Contact: once LinkedIn is fixed, `contact_issue_0`
+ * names the GitHub problem). An id captured before the loop can therefore stop meaning what it meant,
+ * and confirming it would put the value on the wrong field. Skip a card that is gone, already fixed,
+ * or whose message changed.
+ */
+export function isSameCardStillPending(
+  latest: ConfirmableSuggestion[],
+  original: ConfirmableSuggestion,
+): boolean {
+  const current = latest.find((item) => item.id === original.id);
+  return Boolean(current) && current!.status !== "fixed" && current!.message === original.message;
+}
+
 export function suggestionsToConfirm<T extends ConfirmableSuggestion>(
   savedResume: ResumeData,
   suggestions: T[],

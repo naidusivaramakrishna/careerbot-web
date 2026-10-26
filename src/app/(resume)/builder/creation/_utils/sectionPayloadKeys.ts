@@ -106,6 +106,18 @@ export const isSectionKnownEmpty = (
 };
 
 /**
+ * The sections the Customize › Section Order list shows: those the resume has content in (they
+ * render in the preview) plus the ones the user added in the editor this session (still empty,
+ * but they belong in the list). Sections the resume does not have stay out. Names this module does
+ * not recognise count as having content, so no resume can end up with a section missing.
+ */
+export const sectionsForOrderList = <T extends { name: string }>(
+  sections: T[],
+  data: Parameters<typeof isSectionKnownEmpty>[0],
+  addedNames: string[] = [],
+): T[] => sections.filter((s) => addedNames.includes(s.name) || !isSectionKnownEmpty(data, s.name));
+
+/**
  * True when `name` is a section whose saved data shows it is filled in. Used so the
  * "Resume Sections n/m" counter and the sidebar ticks reflect what the preview
  * renders, not only whether the section's modal was Saved in this session.

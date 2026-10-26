@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "sonner";
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
+import GeneratingLabel from "../GeneratingLabel";
 import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 import {
   SUMMARY_MAX_LENGTH,
@@ -423,7 +424,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
                   className="flex items-center gap-1.5 px-6 py-2 text-sm font-medium border bg-gradient-to-br from-[#194386] to-[#3b6ecb] text-white hover:bg-blue-700 rounded-full disabled:bg-gray-400"
                 >
                   <NibPenSparkleIcon className="w-4 h-4" />
-                  {loadingIndex === 0 ? "Generating..." : "AI Writer"}
+                  {loadingIndex === 0 ? <GeneratingLabel /> : "AI Writer"}
                 </button>
               </div>
 
@@ -515,6 +516,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
                 // that contract -- the other eight append -- so it is the one
                 // that opts into single-select.
                 selectionMode="single"
+                description="Based on your target role and career level, here are some professional summary suggestions."
                 onSelect={(s) => handleSuggestionSelect(s)}
                 onClose={() => {
                   setActivePopup(null);

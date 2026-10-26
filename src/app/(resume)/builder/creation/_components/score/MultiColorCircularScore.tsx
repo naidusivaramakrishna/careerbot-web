@@ -9,6 +9,12 @@ interface Props {
   showMax?: boolean;
   /** Decimal places to show in the center number (default 0). */
   precision?: number;
+  /** Small label under the number, inside the ring (e.g. "Good Match"). */
+  caption?: string;
+  /** Overrides the tier colour of the arc and the number. */
+  color?: string;
+  /** Small suffix after the number, e.g. "%". */
+  unit?: string;
 }
 
 const TIER = {
@@ -21,7 +27,7 @@ function getTier(v: number) {
   return v >= 70 ? "good" : v >= 40 ? "mid" : "low";
 }
 
-export default function MultiColorCircularScore({ value, size = 128, duration = 900, showMax = false, precision = 0 }: Props) {
+export default function MultiColorCircularScore({ value, size = 128, duration = 900, showMax = false, precision = 0, caption, color, unit }: Props) {
   const [anim, setAnim] = useState(0);
   const uid = useId().replace(/:/g, "s");
 
@@ -41,7 +47,11 @@ export default function MultiColorCircularScore({ value, size = 128, duration = 
   }, [value, duration]);
 
   const tier = getTier(anim);
-  const c = TIER[tier];
+  // With an explicit colour (builder Score tab) the ring is a single blue arc on a neutral track,
+  // a dark number and a coloured caption.
+  const c = color
+    ? { arc: color, arcLight: color, track: "#E5E9F2", text: "#111827", glow: "transparent", caption: color }
+    : { ...TIER[tier], caption: TIER[tier].text };
   const R = 15.9155;
   const C = 2 * Math.PI * R;
   const filled = (Math.min(anim, 100) / 100) * C;
@@ -81,18 +91,18 @@ export default function MultiColorCircularScore({ value, size = 128, duration = 
       </svg>
 
       {/* Center number */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
         {showMax ? (
           <span className="flex items-baseline leading-none">
             <span
               className="font-bold tabular-nums"
-              style={{ fontSize: Math.round(size * 0.255), color: c.text }}
+              style={{ fontSize: Math.round(size * (color ? 0.14 : caption ? 0.24 : 0.255)), color: c.text }}
             >
               {precision > 0 ? anim.toFixed(precision) : Math.round(anim)}
             </span>
             <span
-              className="font-semibold tabular-nums text-gray-400"
-              style={{ fontSize: Math.round(size * 0.11) }}
+              className={`tabular-nums ${color ? "font-bold text-gray-900" : "font-semibold text-gray-400"}`}
+              style={{ fontSize: Math.round(size * (color ? 0.14 : 0.1)) }}
             >
               /100
             </span>
@@ -103,6 +113,15 @@ export default function MultiColorCircularScore({ value, size = 128, duration = 
             style={{ fontSize: Math.round(size * 0.255), color: c.text }}
           >
             {precision > 0 ? anim.toFixed(precision) : Math.round(anim)}
+            {unit}
+          </span>
+        )}
+        {caption && (
+          <span
+            className="mt-1.5 font-semibold leading-none"
+            style={{ fontSize: Math.max(10, Math.round(size * (color ? 0.08 : 0.088))), color: c.caption }}
+          >
+            {caption}
           </span>
         )}
       </div>

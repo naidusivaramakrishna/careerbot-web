@@ -31,7 +31,7 @@ function clean(value: unknown): string | null {
 }
 
 /** First usable segment of a headline: a string ("A | B"), a list, or a `{ value }` wrapper. */
-function headlineRole(headline: unknown): string | null {
+export function headlineRole(headline: unknown): string | null {
   let parts: unknown = isRec(headline) ? headline.value : headline;
   if (typeof parts === "string") parts = parts.split("|");
   if (!Array.isArray(parts)) return null;

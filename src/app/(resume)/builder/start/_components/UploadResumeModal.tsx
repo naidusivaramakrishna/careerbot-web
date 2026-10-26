@@ -104,7 +104,13 @@ export default function UploadResumeModal({ isOpen, onClose }: UploadResumeModal
   };
 
   const finishImport = (enhanceResult: EnhanceResult) => {
-    const enhancedResumeId = enhanceResult.enhanced_resume_id;
+    // A stored record names itself `id`; the scan response calls it `enhanced_resume_id`.
+    const enhancedResumeId = enhanceResult.enhanced_resume_id ?? (enhanceResult as { id?: string }).id;
+    if (!enhancedResumeId) {
+      toast.error("We couldn't open your resume in the editor. Please try again.");
+      reset();
+      return;
+    }
 
     // Backend may return resume data in enhanced_resume OR enhancer_state.resume — use whichever is present
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

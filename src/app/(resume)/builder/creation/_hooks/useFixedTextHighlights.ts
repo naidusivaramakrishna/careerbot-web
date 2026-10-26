@@ -8,6 +8,8 @@ const NONE: TextUnit[] = [];
 const STORAGE_PREFIX = FIXED_TEXT_STORAGE_PREFIX;
 const MAX_UNITS_PER_FIX = 80;
 const MAX_UNIT_LENGTH = 2000;
+// Shorter text ("AWS") would match everywhere in a resume; only a real sentence or phrase is painted
+const MIN_WRITTEN_TEXT_LENGTH = 12;
 
 interface ResumeBaselines {
   /** Unit keys present when each suggestion was last seen pending. */
@@ -116,6 +118,17 @@ export const resetFixedTextBaselines = (options: { keepStored?: boolean } = {}):
  * applied before anything was kept highlights nothing rather than a whole
  * section. Undo removes the text (or the card), and the stored copy with it.
  */
+/** The parts of the resume that hold `written` (a fix's own text), as highlight units. */
+export function unitsWritingText(currentUnits: TextUnit[], written?: string | null): TextUnit[] {
+  const target = (written ?? "").replace(/\s+/g, " ").trim();
+  if (target.length < MIN_WRITTEN_TEXT_LENGTH) return NONE;
+  const found: TextUnit[] = [];
+  for (const unit of currentUnits) {
+    if (unit.text.replace(/\s+/g, " ").includes(target)) found.push({ key: unit.key, text: target });
+  }
+  return found.length > 0 ? found : NONE;
+}
+
 export function useFixedTextHighlights(
   resumeKey: string,
   resumeData: unknown,
@@ -248,6 +261,13 @@ export function useFixedTextHighlights(
       // What the fix added, as kept from before a reload.
       for (const unit of state.stored.get(suggestion.id) ?? []) {
         if (currentKeys.has(unitKey(unit))) units.set(unitKey(unit), unit);
+      }
+      // A fix applied before this browser saw the resume (the automatic fixes made when it was uploaded) has
+      // no "before" to compare with, but the server says what it wrote: paint that text where it is in the resume.
+      if (!added && !baseline && !state.stored.has(suggestion.id)) {
+        for (const unit of unitsWritingText(currentUnits, suggestion.after_example)) {
+          units.set(unitKey(unit), unit);
+        }
       }
     }
     return units.size > 0 ? Array.from(units.values()) : NONE;

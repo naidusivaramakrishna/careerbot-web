@@ -3,6 +3,7 @@
 
 import type { ResumeData, CategorizedSkills, CustomSection, CustomField, CustomCategory } from "@/app/(resume)/builder/creation/_context/ResumeContext";
 import { mergeEducationDegree } from "@/utils/educationPersistence";
+import { headlineRole } from "@/utils/targetRole";
 import { isAbbreviationPeriod, normalizeCustomSectionName } from "@/app/(resume)/builder/creation/_utils/customSectionIdentity";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -204,6 +205,18 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       cat.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
   };
 
+  // `category` is a fixed internal slug (e.g. "devops_tools") kept for grouping/scoring; the group
+  // heading the candidate actually wrote ("Cloud & DevOps") arrives in `category_display` (a list,
+  // missing when the resume had no heading). Screens show category_display and fall back to category.
+  const skillGroupKeys = (s: AnyRecord): string[] => {
+    const shown = Array.isArray(s.category_display)
+      ? (s.category_display as unknown[]).map((c) => str(c)).filter(Boolean)
+      : [];
+    if (shown.length > 0) return Array.from(new Set(shown));
+    const cat = str(s.category);
+    return cat ? [cat] : [];
+  };
+
   // enhanced_data: technical_skills is a flat array of {skill, category} objects
   // It lives in llm_data.technical_skills OR top-level p.technical_skills (both are the same data)
   const llmTechArr = arr<AnyRecord>(
@@ -214,9 +227,9 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   // skill_id_map from flat technical_skills array: keyed as "DisplayName:SkillName"
   const llmSkillIdMap: Record<string, string> = {};
   for (const s of llmTechArr) {
-    const cat = str(s.category);
     const skill = str(s.skill);
-    if (cat && skill) {
+    if (!skill) continue;
+    for (const cat of skillGroupKeys(s)) {
       if (!llmByCategory[cat]) llmByCategory[cat] = [];
       llmByCategory[cat].push(skill);
       // Store both raw key and display-name key so Skills.tsx lookup always hits
@@ -239,14 +252,15 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   // by category+name, for any entry the loop above missed one for.
   if (llm.technical_skills && Array.isArray(p.technical_skills)) {
     for (const s of p.technical_skills as AnyRecord[]) {
-      const cat = str(s.category);
       const skill = str(s.skill) || str(s.name);
-      if (!cat || !skill || !s.id) continue;
-      const displayName = categoryDisplayName(cat);
-      const rawKey = `${cat}:${skill}`;
-      const displayKey = `${displayName}:${skill}`;
-      if (!llmSkillIdMap[rawKey]) llmSkillIdMap[rawKey] = str(s.id);
-      if (!llmSkillIdMap[displayKey]) llmSkillIdMap[displayKey] = str(s.id);
+      if (!skill || !s.id) continue;
+      for (const cat of skillGroupKeys(s)) {
+        const displayName = categoryDisplayName(cat);
+        const rawKey = `${cat}:${skill}`;
+        const displayKey = `${displayName}:${skill}`;
+        if (!llmSkillIdMap[rawKey]) llmSkillIdMap[rawKey] = str(s.id);
+        if (!llmSkillIdMap[displayKey]) llmSkillIdMap[displayKey] = str(s.id);
+      }
     }
   }
 
@@ -382,10 +396,12 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     str(llm.summary) ||
     str(p.professional_summary) ||
     "";
+  // The title the export prints under the name is this target role, or else the headline the parser read from
+  // the uploaded file. Showing the headline here makes that title visible (and editable) in the editor and preview.
   const targetRole =
     (typeof profSumRaw === "object" && profSumRaw !== null
       ? str((profSumRaw as AnyRecord).targetRole)
-      : "") || "";
+      : "") || headlineRole(p.headline) || "";
 
   /* ── Work Experience ── */
   const workExperience = arr<AnyRecord>(
@@ -406,6 +422,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       ...mappedId(exp),
       company: str(exp.company) || str(exp.organization),
       role: str(exp.role) || str(exp.title) || str(exp.position),
+      projectTitle: str(exp.project_title) || str(exp.projectTitle),
       location: str(exp.location),
       startDate: str(exp.start_date) || str(exp.from) || str(exp.startDate),
       endDate: str(exp.end_date) || str(exp.to) || str(exp.endDate) || (isCurrent ? "Present" : ""),
@@ -468,6 +485,15 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     };
   });
 
+  /* ── Target roles ── */
+  // Job titles the candidate listed inside their Skills section. careerbot-ai (schema 2.5 only)
+  // keeps them out of technical_skills in role_based_skills; show them as "Target roles".
+  const targetRoles: string[] = Array.from(new Set(
+    arr<AnyRecord>(p.role_based_skills || llm.role_based_skills)
+      .map((r) => (typeof r === "string" ? str(r) : str(r.role)))
+      .filter(Boolean)
+  ));
+
   /* ── Projects ── */
   const projects = arr<AnyRecord>(
     p.projects || p.project_details || llm.projects
@@ -509,6 +535,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       ...mappedId(intern),
       company: str(intern.company) || str(intern.organization),
       role: str(intern.role) || str(intern.title),
+      projectTitle: str(intern.project_title) || str(intern.projectTitle),
       location: str(intern.location),
       startDate: str(intern.start_date) || str(intern.from) || str(intern.startDate),
       endDate: str(intern.end_date) || str(intern.to) || str(intern.endDate) || (isCurrentIntern ? "Present" : ""),
@@ -835,6 +862,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     declarationDate: str(p.declarationDate || p.declaration_date || llm.declarationDate || llm.declaration_date),
     declarationPlace: str(p.declarationPlace || p.declaration_place || llm.declarationPlace || llm.declaration_place),
     customSections: buildCustomSections(p, llm),
+    targetRoles,
     coreCompetenciesDismissed: p.coreCompetenciesDismissed === true || p.core_competencies_dismissed === true,
   };
 }

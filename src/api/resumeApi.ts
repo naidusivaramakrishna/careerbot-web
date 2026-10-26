@@ -227,6 +227,10 @@ export interface BuilderScoreResponse {
   resume_id: string;
   score: number;
   calculated_at: string;
+  /** "completed" once the AI score is finished; absent on older responses (then score > 0 means done). */
+  status?: string;
+  /** Per-section points of the AI score, by the scorer's section key. */
+  section_breakdown?: Record<string, { score: number; max_pts?: number }> | null;
 }
 
 

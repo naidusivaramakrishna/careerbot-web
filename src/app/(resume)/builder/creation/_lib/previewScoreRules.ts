@@ -1,7 +1,7 @@
 import type { NormalizedResumeData } from "./normalizeResumeData";
 import type { PreviewScoreBreakdown, PreviewScoreSuggestion } from "./previewScoreTypes";
 
-const WEIGHTS = {
+export const SCORE_WEIGHTS = {
   contact: 10,
   summary: 10,
   education: 15,

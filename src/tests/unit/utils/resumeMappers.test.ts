@@ -690,3 +690,57 @@ describe("hobbies aliases", () => {
     expect((mapped.hobbies ?? []).map((h: { name?: string }) => h.name)).toEqual(["Cycling"]);
   });
 });
+
+describe("resume parser Oct 2026 fields", () => {
+  it("maps project dates and keeps a single printed date in endDate", () => {
+    const mapped = mapParserOutputToBuilderData({
+      projects: [
+        { title: "Inventory App", start_date: "Jan 2023", end_date: "Present" },
+        { title: "Blog", start_date: null, end_date: "2023" },
+      ],
+    } as never);
+    expect(mapped.projects?.[0]).toMatchObject({ startDate: "Jan 2023", endDate: "Present" });
+    expect(mapped.projects?.[1]).toMatchObject({ startDate: "", endDate: "2023" });
+  });
+
+  it("maps project_title onto jobs and internships", () => {
+    const mapped = mapParserOutputToBuilderData({
+      experience: [{ company: "ABC Tech", role: "Software Engineer", project_title: "Billing System" }],
+      internships: [{ company: "XYZ", role: "Intern", project_title: "CRM" }],
+    } as never);
+    expect(mapped.workExperience?.[0]).toMatchObject({ projectTitle: "Billing System" });
+    expect(mapped.internships?.[0]).toMatchObject({ projectTitle: "CRM" });
+  });
+
+  it("groups skills by category_display and falls back to category", () => {
+    const mapped = mapParserOutputToBuilderData({
+      technical_skills: [
+        { skill: "Docker", category: "devops_tools", category_display: ["Cloud & DevOps"], id: "s1" },
+        { skill: "AWS", category: "devops_tools", category_display: ["Cloud & DevOps"] },
+        { skill: "Python", category: "programming_languages" },
+      ],
+    } as never);
+    const cats = (mapped.categorizedSkills?.custom_categories ?? []) as { name: string; skills: string[] }[];
+    expect(cats.find((c) => c.name === "Cloud & DevOps")?.skills).toEqual(["Docker", "AWS"]);
+    expect(cats.find((c) => c.name === "Programming Languages")?.skills).toEqual(["Python"]);
+    expect(cats.some((c) => c.name === "Devops Tools")).toBe(false);
+  });
+
+  it("maps role_based_skills to targetRoles (deduped) and keeps them out of skills", () => {
+    const mapped = mapParserOutputToBuilderData({
+      technical_skills: [{ skill: "Python", category: "programming_languages" }],
+      role_based_skills: [
+        { role: "Frontend Developer", exact_source: "Frontend Developer", confidence: 0.9 },
+        { role: "Frontend Developer", exact_source: "frontend developer", confidence: 0.8 },
+        { role: "Data Analyst", exact_source: "Data Analyst", confidence: 0.9 },
+      ],
+    } as never);
+    expect(mapped.targetRoles).toEqual(["Frontend Developer", "Data Analyst"]);
+    const names = ((mapped.categorizedSkills?.custom_categories ?? []) as { skills: string[] }[]).flatMap((c) => c.skills);
+    expect(names).toEqual(["Python"]);
+  });
+
+  it("gives an empty targetRoles when the parser sent none (schema 2.0)", () => {
+    expect(mapParserOutputToBuilderData({ technical_skills: [] } as never).targetRoles).toEqual([]);
+  });
+});

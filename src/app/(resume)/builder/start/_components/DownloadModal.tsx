@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import { useState } from "react";
 
 const DownloadModal = ({
     isOpen,
@@ -11,7 +12,15 @@ const DownloadModal = ({
     onDownload: (format: 'pdf' | 'docx') => void;
     downloading: boolean;
 }) => {
+    // Only the format the user picked shows the spinner; the other one is just disabled.
+    const [pendingFormat, setPendingFormat] = useState<'pdf' | 'docx' | null>(null);
+
     if (!isOpen) return null;
+
+    const start = (format: 'pdf' | 'docx') => {
+        setPendingFormat(format);
+        onDownload(format);
+    };
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -32,7 +41,7 @@ const DownloadModal = ({
 
                 <div className="space-y-3 mb-6">
                     <button
-                        onClick={() => onDownload('pdf')}
+                        onClick={() => start('pdf')}
                         disabled={downloading}
                         className="w-full flex items-center gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -45,13 +54,13 @@ const DownloadModal = ({
                             <p className="font-semibold text-gray-900">PDF Document</p>
                             <p className="text-xs text-gray-500">Best for sharing and printing</p>
                         </div>
-                        {downloading && (
+                        {downloading && pendingFormat === 'pdf' && (
                             <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                         )}
                     </button>
 
                     <button
-                        onClick={() => onDownload('docx')}
+                        onClick={() => start('docx')}
                         disabled={downloading}
                         className="w-full flex items-center gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -64,7 +73,7 @@ const DownloadModal = ({
                             <p className="font-semibold text-gray-900">Word Document</p>
                             <p className="text-xs text-gray-500">Editable in Microsoft Word</p>
                         </div>
-                        {downloading && (
+                        {downloading && pendingFormat === 'docx' && (
                             <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                         )}
                     </button>

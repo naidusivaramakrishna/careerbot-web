@@ -1,6 +1,8 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import React, { useContext, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { Check, ChevronRight, Sparkles, X } from "lucide-react";
+import { InlineEditorContext } from "./InlineEditorContext";
 
 /**
  * Click bookkeeping depends on what the CALLER's onSelect does:
@@ -18,10 +20,32 @@ interface Props {
   onSelect: (s: string) => void;
   onClose: () => void;
   selectionMode?: SuggestionSelectionMode;
+  /** Sentence under the title in the modal shown on the builder page. */
+  description?: string;
 }
 
-const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose, selectionMode = "append" }) => {
+const AISuggestions: React.FC<Props> = ({
+  options,
+  onSelect,
+  onClose,
+  selectionMode = "append",
+  description = "Based on your resume, here are some suggestions. Pick one to add it.",
+}) => {
   const isSingleSelect = selectionMode === "single";
+  // Inside the inline (accordion) editor there is no side column, so the suggestions open as a
+  // centred modal over a blurred page and close as soon as one is picked.
+  const inlineContext = useContext(InlineEditorContext);
+  const isPopover = inlineContext !== null;
+  const host = inlineContext?.overlayHost ?? null;
+
+  useEffect(() => {
+    if (!isPopover) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isPopover, onClose]);
   // The card shown as chosen: in "single" mode the one in the box, in
   // "append" mode just the most recent pick.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -47,10 +71,11 @@ const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose, selectionM
     setSelectedIndex(i);
     if (!isSingleSelect) setAppliedIndices(prev => new Set(prev).add(i));
     onSelect(s);
-    // Popup stays open — only X closes it
+    // Side-panel mode stays open (only X closes it); the popover closes once a suggestion is used.
+    if (isPopover) onClose();
   };
 
-  return (
+  const panel = (
     <div className="w-full bg-[#faf9f8] border-[#e5e5e5] shadow-lg rounded-lg border p-4 flex flex-col gap-3">
       {/* Header */}
       <div className="flex justify-between items-center">
@@ -60,9 +85,10 @@ const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose, selectionM
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close suggestions"
           className="text-gray-500 hover:text-gray-800 text-xl font-bold"
         >
-          ×
+          {isPopover ? <X size={18} /> : "×"}
         </button>
       </div>
 
@@ -106,6 +132,61 @@ const AISuggestions: React.FC<Props> = ({ options, onSelect, onClose, selectionM
         </p>
       )}
     </div>
+  );
+
+  if (!isPopover) return panel;
+  if (typeof document === "undefined") return null;
+
+  // Over the editor panel when there is one (the preview beside it stays clear); otherwise the page.
+  return createPortal(
+    <div className={`${host ? "absolute" : "fixed"} inset-0 z-[90] flex items-start justify-center p-3 sm:p-4 lg:items-center`}>
+      {/* Blurred backdrop: clicking it closes the modal */}
+      <div className={`absolute inset-0 bg-slate-900/25 backdrop-blur-[3px] ${host ? "rounded-xl" : ""}`} onClick={onClose} aria-hidden="true" />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="AI Suggestions"
+        className="relative flex max-h-full w-full max-w-[520px] flex-col rounded-2xl bg-white p-5 shadow-[0_24px_60px_-12px_rgba(15,23,42,0.35)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} className="text-[#1d4fa8]" fill="currentColor" />
+            <h2 className="text-base font-bold text-gray-900">AI Suggestions</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close suggestions"
+            className="-mr-1 -mt-1 rounded-md p-1 text-gray-700 transition hover:bg-gray-100"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-gray-600">{description}</p>
+
+        <div className="mt-4 flex flex-col gap-2.5 overflow-y-auto pr-0.5 scrollbar-hide">
+          {options.map((s, i) =>
+            s.startsWith("⚠️") ? (
+              <p key={i} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                {s}
+              </p>
+            ) : (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handleSelect(s, i)}
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-[#d9e3f3] bg-white px-4 py-3 text-left text-[13px] leading-snug text-gray-900 transition-colors hover:border-[#9db9e6] hover:bg-[#eef4fd] focus-visible:border-[#9db9e6] focus-visible:bg-[#eef4fd] focus-visible:outline-none"
+              >
+                <span className="flex-1">{s}</span>
+                <ChevronRight size={18} className="shrink-0 text-gray-900" aria-hidden="true" />
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+    </div>,
+    host ?? document.body,
   );
 };
 

@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useRe
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix, deleteFix, addSkillToEnhancedResume } from "@/api/enhancerApi";
-import type { ATSScore, ATSSectionScore, ATSSectionDeduction, EnhancedSuggestion, EnhanceResumeResponse } from "@/types/api.types";
+import type { ATSScore, ATSSectionScore, ATSSectionDeduction, AtsDisplay, EnhancedSuggestion, EnhanceResumeResponse } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { normalizeEducationForBuilder } from "@/utils/educationPersistence";
 import { toast } from "sonner";
@@ -31,14 +31,43 @@ function normalizeEnhancedSuggestions(value: unknown): EnhancedSuggestion[] {
         ? "info"
         : "manual";
     const ui_action = typeof raw.ui_action === "string" ? raw.ui_action : undefined;
+    // What the fix changed (kept so a completed card can show before -> after)
+    const detail = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
+    const beforeExample = detail(raw.before_example);
+    const afterExample = detail(raw.after_example);
+    const reason = detail(raw.reason);
     return [{
       id,
       section,
       message,
       fix_type,
       ...(ui_action ? { ui_action } : {}),
+      ...(beforeExample ? { before_example: beforeExample } : {}),
+      ...(afterExample ? { after_example: afterExample } : {}),
+      ...(reason ? { reason } : {}),
     }];
   });
+}
+
+/**
+ * Cards for the fixes the scan applied for the user (mode "auto"). The server's applied-fix list says
+ * which ones, and carries the suggestion each came from, so the editor shows them as completed cards with
+ * Undo even though this browser never saw them pending.
+ */
+export function autoFixedCardsFromLedger(ledger: unknown): EnhancedSuggestion[] {
+  if (!Array.isArray(ledger)) return [];
+  return ledger.flatMap((item): EnhancedSuggestion[] => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : null;
+    if (!entry || entry.auto !== true || !entry.suggestion || typeof entry.suggestion !== "object") return [];
+    const [card] = normalizeEnhancedSuggestions([entry.suggestion]);
+    return card ? [{ ...card, status: "fixed" as const, undoAvailable: entry.undo_available !== false }] : [];
+  });
+}
+
+/** Adds the cards `previous` does not hold yet, ahead of it (they were applied first). */
+function withAutoFixedCards(previous: EnhancedSuggestion[], cards: EnhancedSuggestion[]): EnhancedSuggestion[] {
+  const missing = cards.filter(card => !previous.some(existing => existing.id === card.id));
+  return missing.length > 0 ? [...missing, ...previous] : previous;
 }
 
 /**
@@ -835,6 +864,8 @@ export interface ResumeData {
     id?: string;
     company: string;
     role: string;
+    // Project the job was about (parser project_title); optional, not shown by every template.
+    projectTitle?: string;
     startDate: string;
     endDate: string;
     currentlyWorking: boolean;
@@ -978,6 +1009,8 @@ export interface ResumeData {
     id?: string;
     company: string;
     role: string;
+    // Project the job was about (parser project_title); optional, not shown by every template.
+    projectTitle?: string;
     startDate: string;
     endDate: string;
     currentlyWorking: boolean;
@@ -1031,6 +1064,8 @@ export interface ResumeData {
   declarationPlace?: string;
   customSections?: CustomSection[];
   coreCompetenciesDismissed?: boolean;
+  // Read-only: roles the parser found listed under Skills (role_based_skills); shown as "Target roles".
+  targetRoles?: string[];
   templateDomain?: string; // Domain from template (healthcare, legal, government, etc.)
 }
 
@@ -1047,6 +1082,11 @@ export interface ResumeStyle {
   bodyColor: string;
   sectionHeaderBg?: string;
   accentColor?: string;
+  /** Style & Layout tab: sent to the preview and the export (see api/layoutOptions.ts) */
+  fontSize?: string;
+  pageMargin?: string;
+  sectionSpacing?: string;
+  alignment?: string;
 }
 
 export type EnhancedAtsScore = ATSScore | null;
@@ -1675,7 +1715,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               languages: "Add at least one language and proficiency level.",
             };
             const restoredBreakdown = Object.fromEntries(
-              Object.entries(normalizedLoadedScore.section_breakdown).map(([name, section]) => {
+              Object.entries(normalizedLoadedScore.section_breakdown as Record<string, ATSSectionScore>).map(([name, section]) => {
                 const token = name.toLowerCase().replace(/[^a-z0-9]/g, "");
                 const data = sectionDataByToken[token];
                 const percentage = section.percentage ?? 0;
@@ -1727,6 +1767,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           // load can still surface a "not demonstrated" card for a skill the
           // freshly-fetched resume (mapped) no longer has at all.
           const loadedSkillNames = currentSkillNames(mapped as unknown as ResumeData);
+          const autoFixedCards = autoFixedCardsFromLedger((resumeData as { applied_fixes?: unknown } | undefined)?.applied_fixes);
           if (serverSuggestions.length > 0) {
             // This is the full enhancer GET on load -- the one case where a
             // previously-pending card (including one just re-seeded from
@@ -1747,7 +1788,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               }
             }
             setEnhancedSuggestions(previous => reconcileServerSuggestions(
-              previous,
+              withAutoFixedCards(previous, autoFixedCards),
               resolveRemovedSkillDeductions(
                 serverSuggestions,
                 loadedSkillNames,
@@ -1765,7 +1806,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             // A score-only or partial refresh is not evidence that every
             // pending recommendation was resolved. Keep the known server-
             // issued cards so an auto fix cannot erase unrelated manual fixes.
-            setEnhancedSuggestions(previous => previous);
+            setEnhancedSuggestions(previous => withAutoFixedCards(previous, autoFixedCards));
           }
         } else {
           processedData = resumeData || data;
@@ -2196,6 +2237,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   const hasExplicitSuggestionsFromFixResponse = (response: EnhanceResumeResponse): boolean => {
     const nestedState = response.enhancer_state as unknown as {
       suggestions?: unknown;
+      ats_display?: AtsDisplay;
       ats_breakdown?: { suggestions?: unknown };
     } | undefined;
     const topLevelBreakdown = response.ats_breakdown as unknown as
@@ -2453,7 +2495,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     };
 
     setResumeData(previous => {
-      const mappedInfo = mapped.personalInfo ?? {};
+      const mappedInfo: Partial<ResumeData["personalInfo"]> = mapped.personalInfo ?? {};
       // A delete-fix response is authoritative. In particular `location: null`
       // means the user has undone the location fix; do not use `|| previous`
       // because that silently restores the old value in the browser.
@@ -2552,7 +2594,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       topLevelBreakdown?.suggestions,
       nestedBreakdown?.suggestions,
     ].some(Array.isArray) || hasAtsDisplaySuggestions(atsDisplay);
-    const hasAppliedFixLedger = Array.isArray(response.applied_fixes);
+    const appliedFixLedger = Array.isArray(response.applied_fixes) ? response.applied_fixes : null;
+    const hasAppliedFixLedger = appliedFixLedger !== null;
     // GET can race with an apply mutation and return an older empty ledger.
     // An empty ledger therefore clears a locally fixed card only when this is
     // an explicit server mutation snapshot (not an ordinary refresh).
@@ -2566,8 +2609,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       ? (typeof operation.suggestion_id === "string" ? operation.suggestion_id : undefined)
       : undefined;
     const appliedFixes = new Map<string, boolean>();
-    if (hasAppliedFixLedger) {
-      for (const item of response.applied_fixes) {
+    if (appliedFixLedger) {
+      for (const item of appliedFixLedger) {
         if (!item || typeof item !== "object") continue;
         const fix = item as Record<string, unknown>;
         const id = typeof fix.suggestion_id === "string" ? fix.suggestion_id : "";

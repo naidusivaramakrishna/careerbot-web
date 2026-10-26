@@ -1166,3 +1166,20 @@ section.docx {
 @media(min-width:641px){.mi-prep-note{margin-top:auto}.mi-sidebar-bottom{margin-top:0}}
 .mi-exit{width:100%;border-radius:8px;text-align:left;transition:background-color .15s ease,color .15s ease}.mi-exit:hover{background:var(--mi-tint);color:var(--mi-brand)}
 .mi-back-link.mi-step-back-link svg{transform:none}
+
+/* AI "Generating" dots: they bounce one after another. People who ask their system to reduce
+   motion still get a progress cue (a soft fade, no movement) instead of frozen dots. */
+@keyframes ai-generating-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+@keyframes ai-generating-dot-fade {
+  0%, 80%, 100% { opacity: 0.35; }
+  40% { opacity: 1; }
+}
+.ai-generating-dot {
+  animation: ai-generating-dot 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-generating-dot { animation-name: ai-generating-dot-fade; }
+}

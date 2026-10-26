@@ -3,6 +3,7 @@ import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
+import { appendLayoutParams, type LayoutOptions } from "./layoutOptions";
 import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest } from '@/types/api.types';
 import { normalizeScanResponse } from '@/utils/aiScanResponse';
 
@@ -558,6 +559,7 @@ export async function getEnhancementHistory(limit: number = 20): Promise<Enhance
  * @param fontFamily - Font family for resume
  * @param lineSpacing - Line spacing/height
  * @param careerLevel - Career level for template selection
+ * @param layout - Font size, page margin, section spacing and alignment from the Style & Layout tab
  * @returns Blob of the file
  */
 export async function downloadEnhancedResume(
@@ -570,7 +572,8 @@ export async function downloadEnhancedResume(
   sectionOrder?: string[],
   fontFamily?: string,
   lineSpacing?: string,
-  careerLevel?: string
+  careerLevel?: string,
+  layout?: LayoutOptions
 ): Promise<Blob> {
   try {
     // careerbot-api defaults preserve_template to false (resume_enhancer.py
@@ -587,6 +590,7 @@ export async function downloadEnhancedResume(
     if (fontFamily) params.append('font_family', fontFamily);
     if (lineSpacing) params.append('line_height', lineSpacing);
     if (careerLevel) params.append('career_level', careerLevel);
+    appendLayoutParams(params, layout);
 
     const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/download?${params.toString()}`, {
       responseType: 'blob',

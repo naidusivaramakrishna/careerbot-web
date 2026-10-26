@@ -66,10 +66,13 @@ describe("ScoreTab enhancement progress counts", () => {
     resumeState.enhancedSuggestions = [...manual, ...children, bulk];
     render(<ScoreTab />);
 
-    // 3 keywords fixed + 2 manual pending = 5 recommendations.
-    expect(screen.getByText("3 of 5 addressed")).toBeInTheDocument();
-    expect(screen.getByText("3/5 addressed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Keywords: 60% of recommendations addressed")).toBeInTheDocument();
+    // 3 keywords fixed + 2 manual pending: only the 2 still open are counted
+    // the Progress card counts the recommendations addressed (3 of 5), as a bar
+    expect(screen.getByText("3/5")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "ATS recommendations addressed" })).toHaveAttribute("aria-valuenow", "3");
+    expect(screen.getByText("2 recommendations left. Each fix you confirm updates your ATS score.")).toBeInTheDocument();
+    // the section's red badge counts only what is still left to fix
+    expect(screen.getByRole("img", { name: "2 suggestions pending" })).toHaveTextContent("2");
   });
 
   it("does not count the pending bulk card on top of its own child cards", () => {
@@ -77,8 +80,7 @@ describe("ScoreTab enhancement progress counts", () => {
     render(<ScoreTab />);
 
     // 3 child cards + 2 manual; the bulk card is a shortcut, not a 6th issue.
-    expect(screen.getByText("0 of 5 addressed")).toBeInTheDocument();
-    expect(screen.getByText("0/5 addressed")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "5 suggestions pending" })).toHaveTextContent("5");
   });
 
   it("overall progress equals the sum of the section lists it displays", () => {
@@ -91,8 +93,10 @@ describe("ScoreTab enhancement progress counts", () => {
     ];
     render(<ScoreTab />);
 
-    expect(screen.getByText("3 of 5 addressed")).toBeInTheDocument();
-    expect(screen.queryByText("3 of 6 addressed")).not.toBeInTheDocument();
+    // the unlisted finding is counted nowhere (no badge of 3, and no card for it)
+    expect(screen.getByRole("img", { name: "2 suggestions pending" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "3 suggestions pending" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Orphan finding")).not.toBeInTheDocument();
   });
 
   it("does not announce the score that is simply loading in as a gain", () => {
