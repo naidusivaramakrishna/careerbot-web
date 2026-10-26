@@ -280,6 +280,8 @@ describe('/templates industry grid', () => {
     await screen.findByTestId('domain-card-d00');
 
     fireEvent.change(screen.getByTestId('template-search-input'), { target: { value: 'quantum' } });
+    // The search is debounced (300 ms): d05's card is already on screen before the filter applies.
+    await waitFor(() => expect(screen.queryAllByTestId(/^domain-card-/)).toHaveLength(1));
     expect(await screen.findByTestId('domain-card-d05')).toHaveTextContent('1');
     expect(screen.queryAllByTestId(/^domain-card-/)).toHaveLength(1);
   });

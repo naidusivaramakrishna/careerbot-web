@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { mapResumeToProfile } from "../_utils/resumeMapper";
 import { logger } from "@/lib/logger";
+import type { ProfileData } from "../_types/ProfileData";
 
 import {
     updateProfile,
@@ -39,6 +40,31 @@ interface RightSectionProps {
     /** The backend used the student formula (every membership a student one). */
     weightedForStudent?: boolean;
 }
+
+/** A non-blank string anywhere in the value (numbers and flags alone are not resume content). */
+const hasText = (value: unknown): boolean =>
+    typeof value === "string" ? value.trim() !== ""
+        : Array.isArray(value) ? value.some(hasText)
+            : value !== null && typeof value === "object" ? Object.values(value).some(hasText)
+                : false;
+
+// Values the mapper fills in by itself (resumeMapper.ts): a missing degree / stream becomes "Other",
+// a phone gets a "+91 " prefix. On their own they are not resume content.
+const EDUCATION_PLACEHOLDER = "Other";
+const PHONE_PREFIX = /^\+91 /;
+
+/**
+ * True when the parsed resume brought something to import: a contact field or a section entry
+ * with text. mapResumeToProfile returns {} for a failed parse (no parsed_data); importing that
+ * deleted every section and wrote blank contact fields (issue #296).
+ */
+const hasImportableSection = (mapped: Partial<ProfileData>): boolean => {
+    const { phone, ...contact } = mapped.personalInformation ?? {};
+    return hasText(contact) || hasText(phone?.replace(PHONE_PREFIX, ""))
+        || [mapped.workExperience, mapped.skills, mapped.projects, mapped.certifications].some(hasText)
+        || (mapped.education ?? []).some(({ degree, stream, ...rest }) =>
+            hasText(rest) || [degree, stream].some((value) => hasText(value) && value !== EDUCATION_PLACEHOLDER));
+};
 
 const RightSection = ({ completeness, missingFields, weightedForStudent = false }: RightSectionProps) => {
     const router = useRouter();
@@ -88,6 +114,19 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
         };
     }, [completionPercentage]);
 
+    // Stores the uploaded file on the profile (fire-and-forget; a failure only warns).
+    const storeResumeFile = (file: File) => {
+        uploadResume(file)
+            .then((res) => {
+                if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url, filename: file.name }));
+                localStorage.setItem('uploaded_resume_filename', file.name);
+            })
+            .catch((err) => {
+                logger.warn("Resume file storage failed:", err);
+                toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
+            });
+    };
+
     const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return
@@ -124,6 +163,15 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
             // Ensure mapped is defined BEFORE destroying anything.
             if (!mapped) {
                 throw new Error('Failed to parse resume data');
+            }
+
+            // Nothing to import (a failed parse): change nothing on the profile and show the failure
+            // toast. The file is still stored, as for every parse (see storeResumeFile).
+            if (!hasImportableSection(mapped)) {
+                storeResumeFile(file);
+                toast.error("Failed to import resume. Please try again.", { id: "resume-upload" });
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
             }
 
             // =====================================================
@@ -467,15 +515,7 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
             // resume happened to populate. The branch's early return for
             // "no sections imported" skipped this entirely, so a resume that
             // parsed but yielded no sections was never stored.
-            uploadResume(file)
-                .then((res) => {
-                    if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url, filename: file.name }));
-                    localStorage.setItem('uploaded_resume_filename', file.name);
-                })
-                .catch((err) => {
-                    logger.warn("Resume file storage failed:", err);
-                    toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
-                });
+            storeResumeFile(file);
 
             if (successSections.length > 0) {
                 const message = failedSections.length > 0

@@ -87,6 +87,7 @@ import {
   uploadResume, getEmploymentInfo, updateEmploymentInfo,
   getEducation, getExperience, getSkills, getProjects, getCertification,
   deleteEducation, deleteExperience, deleteSkill, deleteProject, deleteCertification,
+  updateProfile, addEducationAutoFill, addExperienceAutoFill, addSkillAutoFill, addProjectAutoFill, addCertificationAutoFill,
 } from '@/api/userApi';
 import { extractResume } from '@/api/resumeParsingApi';
 import { mapResumeToProfile } from '@/app/(user)/profile/_utils/resumeMapper';
@@ -373,5 +374,151 @@ describe('RightSection — "weighted for a student" label', () => {
   it('not shown for a jobseeker or staff (default)', () => {
     render(<RightSection completeness={15} missingFields={['Resume']} />);
     expect(screen.queryByTestId('weighted-for-student')).not.toBeInTheDocument();
+  });
+});
+
+// Issue #296 (follow-up to #295) P1: a failed parse wiped the profile. mapResumeToProfile returns {}
+// when the parser sent no parsed_data; {} passed the `!mapped` guard, so all five sections were
+// deleted and the user saw "Failed to import resume". Codex review of the fix: blank contact fields
+// were also written over the user's, and a blank entry ({}) counted as content. Nothing on the
+// profile may change unless the resume brought some text. (Replace vs merge for a parse with
+// content is unchanged.)
+describe('RightSection — a parse that yields nothing changes nothing', () => {
+  const mockMapResumeToProfile = vi.mocked(mapResumeToProfile);
+  const deletes = [deleteEducation, deleteExperience, deleteSkill, deleteProject, deleteCertification];
+  const writes = [updateProfile, addEducationAutoFill, addExperienceAutoFill, addSkillAutoFill, addProjectAutoFill, addCertificationAutoFill];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(extractResume).mockResolvedValue({} as Awaited<ReturnType<typeof extractResume>>);
+    vi.mocked(uploadResume).mockResolvedValue({ resume_url: 'u', message: 'ok', filename: 'resume.pdf' });
+    vi.mocked(getEmploymentInfo).mockResolvedValue({ employment_status: 'student' });
+    vi.mocked(getEducation).mockResolvedValue([{ id: 'edu-1' }] as Awaited<ReturnType<typeof getEducation>>);
+    vi.mocked(getExperience).mockResolvedValue([{ id: 'exp-1' }] as Awaited<ReturnType<typeof getExperience>>);
+    vi.mocked(getSkills).mockResolvedValue([{ id: 'skill-1' }] as Awaited<ReturnType<typeof getSkills>>);
+    vi.mocked(getProjects).mockResolvedValue([{ id: 'proj-1' }] as Awaited<ReturnType<typeof getProjects>>);
+    vi.mocked(getCertification).mockResolvedValue([{ id: 'cert-1' }] as Awaited<ReturnType<typeof getCertification>>);
+  });
+
+  function triggerUpload() {
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File(['content'], 'resume.pdf', { type: 'application/pdf' })], configurable: true,
+    });
+    fireEvent.change(fileInput);
+  }
+
+  it('keeps every section and shows the failure toast when the mapper returns {}', async () => {
+    mockMapResumeToProfile.mockReturnValue({} as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockToast.error).toHaveBeenCalledWith('Failed to import resume. Please try again.', { id: 'resume-upload' })
+    );
+    for (const del of deletes) expect(del).not.toHaveBeenCalled();
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+    expect(mockToast.success).not.toHaveBeenCalled();
+    // the file itself is still stored, as before (fire-and-forget)
+    expect(vi.mocked(uploadResume)).toHaveBeenCalled();
+  });
+
+  it('keeps every section when the parse has only empty contact fields and empty lists', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      personalInformation: { fullName: '', phone: '', location: ' ', linkedin: '', github: '', website: '', summary: '', headline: '' },
+      education: [], workExperience: [], skills: [], projects: [], certifications: [],
+    } as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockToast.error).toHaveBeenCalledWith('Failed to import resume. Please try again.', { id: 'resume-upload' })
+    );
+    for (const del of deletes) expect(del).not.toHaveBeenCalled();
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps every section when the entries have no text (a blank project, a grade with no school)', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      projects: [{}], education: [{ cgpa: 8 }], workExperience: [{ currently_working: false }],
+    } as unknown as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockToast.error).toHaveBeenCalledWith('Failed to import resume. Please try again.', { id: 'resume-upload' })
+    );
+    for (const del of deletes) expect(del).not.toHaveBeenCalled();
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps every section when the real mapper turns a blank education entry into "Other" placeholders', async () => {
+    const real = await vi.importActual<typeof import('@/app/(user)/profile/_utils/resumeMapper')>('@/app/(user)/profile/_utils/resumeMapper');
+    const mapped = real.mapResumeToProfile({ parsed_data: { education: [{}] } } as unknown as Parameters<typeof mapResumeToProfile>[0]);
+    expect(mapped.education?.[0]).toMatchObject({ institution: '', degree: 'Other', stream: 'Other' });
+    mockMapResumeToProfile.mockReturnValue(mapped);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockToast.error).toHaveBeenCalledWith('Failed to import resume. Please try again.', { id: 'resume-upload' })
+    );
+    for (const del of deletes) expect(del).not.toHaveBeenCalled();
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps every section when the only contact text is the "+91 " the mapper puts before a blank phone', async () => {
+    const real = await vi.importActual<typeof import('@/app/(user)/profile/_utils/resumeMapper')>('@/app/(user)/profile/_utils/resumeMapper');
+    const mapped = real.mapResumeToProfile({ parsed_data: { contact: { phone: ' ' } } } as unknown as Parameters<typeof mapResumeToProfile>[0]);
+    expect(mapped.personalInformation?.phone).toMatch(/^\+91 /);
+    mockMapResumeToProfile.mockReturnValue(mapped);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockToast.error).toHaveBeenCalledWith('Failed to import resume. Please try again.', { id: 'resume-upload' })
+    );
+    for (const del of deletes) expect(del).not.toHaveBeenCalled();
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+  });
+
+  it('control: a real phone number counts as content and replaces every section (unchanged)', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      personalInformation: { phone: '+91 9876543210' },
+    } as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    for (const del of deletes) expect(del).toHaveBeenCalled();
+  });
+
+  it('control: an education entry with a school still counts as content and replaces every section (unchanged)', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      education: [{ institution: 'Some College', degree: 'Other', stream: 'Other', start_date: '', end_date: '' }],
+    } as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    for (const del of deletes) expect(del).toHaveBeenCalled();
+    expect(addEducationAutoFill).toHaveBeenCalled();
+  });
+
+  it('control: a parse with one section still replaces every section (unchanged)', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      skills: ['TypeScript'],
+    } as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    expect(deleteEducation).toHaveBeenCalledWith('edu-1');
+    expect(deleteExperience).toHaveBeenCalledWith('exp-1');
+    expect(deleteSkill).toHaveBeenCalledWith('skill-1');
+    expect(deleteProject).toHaveBeenCalledWith('proj-1');
+    expect(deleteCertification).toHaveBeenCalledWith('cert-1');
+  });
+
+  it('control: a parse with only contact details still replaces every section (unchanged)', async () => {
+    mockMapResumeToProfile.mockReturnValue({
+      personalInformation: { fullName: 'A Person' },
+    } as ReturnType<typeof mapResumeToProfile>);
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
+    for (const del of deletes) expect(del).toHaveBeenCalled();
   });
 });
