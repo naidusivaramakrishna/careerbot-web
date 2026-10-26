@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback,useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 // Module-level constant — single source of truth for all section → backend key mapping.
 // Previously duplicated three times inside the component (component body, triggerAutoSave, handleSaveForm).
@@ -65,20 +65,20 @@ import {
   DraggableStateSnapshot,
 } from "@hello-pangea/dnd";
 import SectionItem from "./SectionItem";
-import AddNewSection from "./AddNewSection";
 import CircularProgress from "./CircularProgress";
 import CustomSectionEditor from "./CustomSectionEditor";
 import { sectionIcons } from "../../_utils/sectionsConfig";
 import { buildBuilderSectionPayload, isSectionKnownEmpty, sectionHasSavedData, SECTION_STATE_KEYS } from "../../_utils/sectionPayloadKeys";
 import { findCustomSectionByName, normalizeCustomSectionName } from "../../_utils/customSectionIdentity";
 import { prepareEducationForPersistence } from "@/utils/educationPersistence";
-import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
+import { Plus, X, LayoutGrid, ChevronDown, ChevronUp, FilePlus2, CodeXml } from "lucide-react";
 import { useResume, CustomSection } from "../../_context/ResumeContext";
+import { InlineEditorContext } from "./InlineEditorContext";
 import { useModalMountVersion } from "../../_hooks/useModalMountVersion";
 import { useSavedResumeSnapshot } from "../../_hooks/useSavedResumeSnapshot";
 import { updateResume, getAllResumes, autoSaveResume, transformCustomSectionsForBackend } from "@/api/resumeApi";
 import { autoSaveEnhancedResume, updateEnhancedResume } from "@/api/enhancerApi";
-import { findSoftSkillSuggestion, getSectionValue, suggestionsToConfirm, toSuggestionSectionKey } from "../../_utils/suggestionSection";
+import { findSoftSkillSuggestion, getSectionValue, isSameCardStillPending, suggestionsToConfirm, toSuggestionSectionKey } from "../../_utils/suggestionSection";
 import { SKILL_ADDED_EVENT, type SkillAddedDetail } from "../../_utils/skillAddedEvent";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
@@ -413,6 +413,10 @@ interface Props {
   pendingOpenSection?: string | null;
   pendingEditEntryIndex?: number | null;
   onClearPendingSection?: () => void;
+  /** Open sections as an accordion inside the list instead of a modal dialog. */
+  inline?: boolean;
+  /** Panel the AI suggestions modal is drawn over (inline mode); the whole page when omitted. */
+  overlayHost?: HTMLElement | null;
 }
 
 
@@ -435,6 +439,8 @@ const EditorTab: React.FC<Props> = ({
   pendingOpenSection,
   pendingEditEntryIndex,
   onClearPendingSection,
+  inline = false,
+  overlayHost = null,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -509,6 +515,8 @@ const EditorTab: React.FC<Props> = ({
   }, [pendingOpenSection, pendingEditEntryIndex, onClearPendingSection]);
 
   const [isAddingCustomSection, setIsAddingCustomSection] = useState(false);
+  // "Add New Sections" card: open by default, collapsible
+  const [addSectionsOpen, setAddSectionsOpen] = useState(true);
   const [newCustomSectionName, setNewCustomSectionName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -631,24 +639,9 @@ const EditorTab: React.FC<Props> = ({
   }, [isEnhancedResume]);
 
 
+  // handleDragEnd (ResumeSide) reorders the list, updates sectionOrder and saves it to localStorage.
   const onDragEnd = (result: DropResult) => {
     handleDragEnd(result);
-    if (!result.destination) return;
-    const reordered = Array.from(sections);
-    const [removed] = reordered.splice(result.source.index, 1);
-    reordered.splice(result.destination.index, 0, removed);
-    const newOrder = reordered.map((s) => s.name);
-    setSectionOrder(newOrder);
-
-    // ✅ Persist manually reordered sections to localStorage
-    try {
-      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
-      const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
-      localStorage.setItem(sectionOrderKey, JSON.stringify(newOrder));
-      logger.info('Saved manually reordered sections to localStorage:', newOrder);
-    } catch (err) {
-      logger.warn('Error saving section order to localStorage:', err);
-    }
   };
 
 
@@ -656,6 +649,13 @@ const EditorTab: React.FC<Props> = ({
     activeSection !== null
       ? sections.filter((_, idx) => idx === activeSection)
       : sections;
+
+  // Inline (builder page) editor: while a section is open, the other sections are tucked away so the
+  // open one has the whole panel. Saving or cancelling brings the full list back.
+  const focusOpenSection = inline && openModalSection !== null && sections.some((section) => section.name === openModalSection);
+  const listedSections = focusOpenSection
+    ? sections.filter((section) => section.name === openModalSection)
+    : visibleSections;
 
 
   // Deliberately does NOT cancel a pending autosave: X / Cancel only close the
@@ -885,6 +885,9 @@ const EditorTab: React.FC<Props> = ({
       pendingManualSuggestionRef.current,
     );
     for (const { suggestion, value, explicitlyTargeted } of confirmable) {
+      // An earlier confirmation in this loop returns a fresh scan whose ids can be renumbered.
+      // Only confirm a card that is still pending and still says the same thing.
+      if (!isSameCardStillPending(enhancedSuggestionsRef.current, suggestion)) continue;
       // "autosave" origin: this runs right after this section's own save, while its
       // editor modal may still be open. Skip the resumeData replacement
       // applyManualFix would otherwise do -- it would overwrite anything typed in
@@ -1647,14 +1650,12 @@ const EditorTab: React.FC<Props> = ({
       });
     }
 
-    // The Save call above (bulk_update_enhanced) asks the server to rescore, which
-    // refreshes the cards. That rescore is best-effort -- if the AI scorer is
-    // unavailable the server keeps the previous score, and a card the Save just
-    // satisfied (e.g. Contact "Missing location") stayed on screen for good. So also
-    // confirm the objectively satisfied Manual Fix cards through /enhance/apply, as
-    // the autosave already does. An already-applied card answers "already_applied",
-    // so this is safe when the server rescore did work; any failure is non-fatal
-    // because the data itself is already saved.
+    // The Save call above (bulk_update_enhanced) only saves the data: it does NOT re-score, and
+    // neither does the autosave. The score and the cards move through /enhance/apply, so confirm the
+    // Manual Fix cards this Save objectively satisfied (e.g. Contact "Missing location") here, as the
+    // autosave does. The server notices the resume changed since the scan, scans it once, and
+    // answers with the refreshed score and cards. An already-applied card answers
+    // "already_applied". Any failure is non-fatal because the data itself is already saved.
     if (isEnhancedResume && openModalSection) {
       void confirmSavedManualFixes(openModalSection, resumeDataRef.current).catch(() => undefined);
     }
@@ -1839,6 +1840,98 @@ const EditorTab: React.FC<Props> = ({
     setIsAddingCustomSection(false);
   };
 
+  // Last button clicked inside an inline section form (anchor for the AI suggestions popover).
+  const inlineAnchorRef = useRef<HTMLElement | null>(null);
+  const inlineEditorContext = useMemo(() => ({ anchorRef: inlineAnchorRef, overlayHost }), [overlayHost]);
+
+  // Section form shared by the modal and the inline (accordion) editor.
+  const renderSectionBody = () => (
+    <>
+      {(() => {
+                if (!openModalSection) return null;
+                // Render CustomSectionEditor only if it's a custom section (never for a
+                // reserved standard name).
+                //
+                // resumeDataRef.current, not resumeData: a section created
+                // moments before this modal opened can still be missing from
+                // this render's resumeData snapshot (same stale-closure class
+                // as the save/delete paths above). A false miss here doesn't
+                // error -- it silently falls through past `if (!Component)
+                // return null`, since a custom section name was never
+                // registered in sectionComponents either, rendering a
+                // completely blank modal body (no fields, no "+ Add Field"
+                // row, just Save/Cancel) instead of the actual editor.
+                const customSection = !SECTION_KEY_MAP[openModalSection ?? ""]
+                  ? findCustomSectionByName(
+                      resumeDataRef.current.customSections,
+                      openModalSection,
+                    )
+                  : undefined;
+                if (customSection) {
+                  return <CustomSectionEditor section={customSection} />;
+                }
+                const Component = sectionComponents[openModalSection];
+                if (!Component) return null;
+                return (
+                  <Component
+                    key={`${openModalSection}-${modalMountVersion}`}
+                    formData={formData}
+                    errors={errors}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                  />
+                );
+              })()}
+    </>
+  );
+
+  // Autosave status + Cancel / Save, shared by the modal and the inline editor.
+  const renderSectionFooter = (compact: boolean) => (
+    <div className={`flex items-center justify-between gap-3 ${compact ? "mt-4" : "border-t border-gray-200 mt-4 pt-4"}`}>
+      <div className="flex items-center gap-1.5 text-xs min-w-0">
+        {isAutoSaving && (
+          <>
+            <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span className="text-blue-500 truncate">Auto-saving…</span>
+          </>
+        )}
+        {!isAutoSaving && lastSaved && (
+          <span className="text-green-600 truncate">
+            ✓ Saved {lastSaved.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-3 shrink-0">
+        <button
+          onClick={closeModal}
+          disabled={isSaving}
+          className={compact
+            ? "h-9 min-w-[96px] rounded-md border border-[#1d4fa8] bg-white text-sm font-semibold text-[#1d4fa8] hover:bg-[#eef3fa] transition disabled:opacity-50 disabled:cursor-not-allowed"
+            : "text-[16px] bg-gray-100 text-gray-700 font-semibold rounded-lg min-h-[48px] min-w-[112px] hover:bg-gray-200 transition disabled:opacity-50 disabled:cursor-not-allowed"}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSaveForm}
+          disabled={isSaving}
+          className={compact
+            ? "h-9 min-w-[96px] rounded-md bg-[#1d4fa8] text-sm font-semibold text-white hover:bg-[#184488] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            : "text-[16px] bg-[#2557a7] font-semibold text-white min-h-[48px] min-w-[112px] rounded-lg hover:bg-[#184284] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"}
+        >
+          {isSaving ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Saving...</span>
+            </>
+          ) : (
+            "Save"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+
   // sections[] is the live main list — count grows when user adds a section, shrinks when they delete one
   const totalSections = sections.length;
   // A section counts as complete when it was Saved OR its saved data is filled in, so the
@@ -1857,32 +1950,53 @@ const EditorTab: React.FC<Props> = ({
     // painted at their intrinsic height, putting later controls on top of
     // cards such as Ports Experience and Sea Service Record.
     <div className="flex shrink-0 min-w-0 flex-col pb-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-[#2557a7] mb-2">
-            Resume Sections
-          </h3>
-          <p className="text-xs text-gray-800">
-            Complete each section to build a perfect resume
-          </p>
+      {inline ? (
+        <div className="mb-3 rounded-xl border border-[#e3e9f2] bg-white p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900">Resume Progress</h3>
+            <span className="text-sm font-bold text-gray-900">{completedCount}/{totalSections}</span>
+          </div>
+          <div
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={completionPercentage}
+            className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-[#E5E7EB]"
+          >
+            <div className="h-full rounded-full bg-[#1d4fa8] transition-[width] duration-300" style={{ width: `${completionPercentage}%` }} />
+          </div>
+          <p className="mt-1.5 text-xs text-gray-600">{completionPercentage}% completed</p>
         </div>
-        <div className="relative">
-          <CircularProgress percentage={completionPercentage} totalSections={totalSections} completedCount={completedCount} size={54} strokeWidth={4} />
+      ) : (
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-[#2557a7] mb-2">
+              Resume Sections
+            </h3>
+            <p className="text-xs text-gray-800">
+              Complete each section to build a perfect resume
+            </p>
+          </div>
+          <div className="relative">
+            <CircularProgress percentage={completionPercentage} totalSections={totalSections} completedCount={completedCount} size={54} strokeWidth={4} />
+          </div>
         </div>
-      </div>
+      )}
 
 
+      <div className={inline && !focusOpenSection ? "rounded-xl border border-[#e3e9f2] bg-white p-3" : undefined}>
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="sections">
           {(provided: DroppableProvided) => (
             <div
               ref={provided.innerRef}
               {...provided.droppableProps}
-              className="flex flex-col gap-2 p-1 rounded-xl"
+              className={inline ? "flex flex-col gap-1.5 rounded-xl" : "flex flex-col gap-2 p-1 rounded-xl"}
             >
-              {visibleSections.map((s, idx) => {
-                const originalIndex =
-                  activeSection !== null ? activeSection : idx;
+              {listedSections.map((s, idx) => {
+                const originalIndex = focusOpenSection
+                  ? sections.findIndex((section) => section.name === s.name)
+                  : activeSection !== null ? activeSection : idx;
                 const Icon = sectionIcons[s.name] || LayoutGrid;
                 const id = `${s.name}-${originalIndex}`;
                 // Saved content only: an unsaved draft never reached the server preview.
@@ -1894,7 +2008,7 @@ const EditorTab: React.FC<Props> = ({
                     key={id}
                     draggableId={id}
                     index={originalIndex}
-                    isDragDisabled={activeSection !== null}
+                    isDragDisabled={activeSection !== null || focusOpenSection}
                   >
                     {(p: DraggableProvided, snap: DraggableStateSnapshot) => (
                       <div
@@ -2036,7 +2150,22 @@ const EditorTab: React.FC<Props> = ({
                           // drop the deleted section (no other version bumps there).
                           onDeleted={isEnhancedResume || hadContentBeforeDelete ? bumpResumeSavedVersion : undefined}
                           sectionKey={SECTION_KEY_MAP[s.name] || s.name.toLowerCase().replace(/\s+/g, "_")}
-                        />
+                        >
+                          {inline && openModalSection === s.name ? (
+                            <InlineEditorContext.Provider value={inlineEditorContext}>
+                              <div
+                                className="inline-section-editor min-w-0"
+                                onClickCapture={(e) => {
+                                  const button = (e.target as HTMLElement).closest("button");
+                                  if (button) inlineAnchorRef.current = button;
+                                }}
+                              >
+                                {renderSectionBody()}
+                                {renderSectionFooter(true)}
+                              </div>
+                            </InlineEditorContext.Provider>
+                          ) : null}
+                        </SectionItem>
                       </div>
                     )}
                   </Draggable>
@@ -2047,70 +2176,62 @@ const EditorTab: React.FC<Props> = ({
           )}
         </Droppable>
       </DragDropContext>
+      </div>
 
 
-      <section className="mt-5 shrink-0" aria-label="Additional resume sections">
-        <AddNewSection />
+      {!focusOpenSection && (
+      <section className="mt-3 shrink-0 overflow-hidden rounded-xl border border-[#e3e9f2] bg-white" aria-label="Additional resume sections">
+        <button
+          type="button"
+          aria-expanded={addSectionsOpen}
+          onClick={() => setAddSectionsOpen((open) => !open)}
+          className="flex w-full items-center gap-2.5 bg-[#eaf1fb] px-4 py-2.5 text-left"
+        >
+          <FilePlus2 size={16} className="shrink-0 text-[#1d4fa8]" aria-hidden="true" />
+          <span className="flex-1 text-[13px] font-bold text-[#1d4fa8]">Add New Sections</span>
+          {addSectionsOpen
+            ? <ChevronUp size={16} className="shrink-0 text-[#1d4fa8]" aria-hidden="true" />
+            : <ChevronDown size={16} className="shrink-0 text-[#1d4fa8]" aria-hidden="true" />}
+        </button>
 
-
-      {extraSections.length > 0 && (
-        <div className="mt-3 flex flex-col gap-2">
+        {addSectionsOpen && (
+        <div className="flex flex-col gap-1.5 p-3">
           {extraSections.map((s, i) => {
-            const Icon = sectionIcons[s.name] || (() => <span>★</span>);
+            const Icon = sectionIcons[s.name] || LayoutGrid;
             return (
               <button
                 key={i}
+                type="button"
                 onClick={() => handleAddSection(s)}
-                className="group w-full flex items-center justify-between p-3 bg-white border border-gray-300 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-gradient-to-br hover:from-white hover:to-gray-50"
+                className="flex w-full items-center gap-3 rounded-lg border border-[#e3e9f2] bg-white px-3.5 py-2 text-left transition-colors hover:border-[#c9d6ea] hover:bg-[#f4f7fc]"
               >
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg text-gray-600 group-hover:from-blue-100 group-hover:to-blue-100 group-hover:text-blue-600 transition-all duration-300">
-                    <Icon size={16} />
-                  </div>
-                  <p className="text-xs font-medium text-gray-800 group-hover:text-gray-900 transition-colors duration-200">
-                    {s.name}
-                  </p>
-                </div>
-
-
-                <div className="flex items-center gap-2">
-                  {s.ai && (
-                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-[#efedf2] text-black rounded-full">
-                      <Sparkles size={12} className="text-[#2557a7] fill-[#2557a7] mr-0.5"/>AI
-                    </span>
-                  )}
-                  <div
-                    className="flex items-center justify-center w-7 h-7 rounded-full shadow-md transition-all duration-200
-                              bg-gradient-to-br from-white-50 to-white-500 text-gray-600
-                              group-hover:from-blue-500 group-hover:to-blue-700
-                              group-hover:text-white group-hover:scale-110"
-                  >
-                    <Plus size={14} />
-                  </div>
-                </div>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center text-gray-800">
+                  <Icon size={16} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900">{s.name}</span>
+                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-[#1d4fa8]">
+                  <Plus size={14} />Add
+                </span>
               </button>
             );
           })}
-        </div>
-      )}
 
-
-      {/* ── Custom Sections Area ── */}
-      <div className="mt-6 shrink-0 border-t border-gray-200 pt-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <LayoutGrid size={15} className="text-gray-500" />
-            <span className="text-sm font-semibold text-gray-700">Custom Sections</span>
-          </div>
-          {!isAddingCustomSection && (
-            <button
-              onClick={() => setIsAddingCustomSection(true)}
-              className="flex items-center gap-1 text-xs text-[#2557a7] hover:underline"
-            >
-              <Plus size={12} /> Add
-            </button>
-          )}
-        </div>
+      {/* ── Custom Section ── */}
+      <div className="flex w-full items-center gap-3 rounded-lg border border-[#e3e9f2] bg-white px-3.5 py-1.5">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center text-gray-800">
+          <CodeXml size={16} aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900">Custom Section</span>
+        {!isAddingCustomSection && (
+          <button
+            type="button"
+            onClick={() => setIsAddingCustomSection(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#bcd0ee] bg-white px-3 py-1 text-[12px] font-semibold text-[#1d4fa8] transition-colors hover:bg-[#eef3fa]"
+          >
+            <Plus size={13} />Create
+          </button>
+        )}
+      </div>
 
 
         {/* Inline input to add a new custom section */}
@@ -2153,10 +2274,12 @@ const EditorTab: React.FC<Props> = ({
             </button>
           </div>
         )}
-      </div>
+        </div>
+        )}
       </section>
+      )}
 
-      {openModalSection && (
+      {!inline && openModalSection && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-lg p-6 w-[930px] h-[88vh] relative flex flex-col">
             <button
@@ -2174,83 +2297,11 @@ const EditorTab: React.FC<Props> = ({
 
 
             <div className="flex-1 min-h-[75px] px-1 overflow-y-auto">
-              {(() => {
-                // Render CustomSectionEditor only if it's a custom section (never for a
-                // reserved standard name).
-                //
-                // resumeDataRef.current, not resumeData: a section created
-                // moments before this modal opened can still be missing from
-                // this render's resumeData snapshot (same stale-closure class
-                // as the save/delete paths above). A false miss here doesn't
-                // error -- it silently falls through past `if (!Component)
-                // return null`, since a custom section name was never
-                // registered in sectionComponents either, rendering a
-                // completely blank modal body (no fields, no "+ Add Field"
-                // row, just Save/Cancel) instead of the actual editor.
-                const customSection = !SECTION_KEY_MAP[openModalSection ?? ""]
-                  ? findCustomSectionByName(
-                      resumeDataRef.current.customSections,
-                      openModalSection,
-                    )
-                  : undefined;
-                if (customSection) {
-                  return <CustomSectionEditor section={customSection} />;
-                }
-                const Component = sectionComponents[openModalSection];
-                if (!Component) return null;
-                return (
-                  <Component
-                    key={`${openModalSection}-${modalMountVersion}`}
-                    formData={formData}
-                    errors={errors}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                  />
-                );
-              })()}
+              {renderSectionBody()}
             </div>
 
 
-            <div className="border-t border-gray-200 mt-4 pt-4 flex items-center justify-between gap-3">
-              {/* Auto-save status — inline, left-aligned */}
-              <div className="flex items-center gap-1.5 text-xs min-w-0">
-                {isAutoSaving && (
-                  <>
-                    <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                    <span className="text-blue-500 truncate">Auto-saving…</span>
-                  </>
-                )}
-                {!isAutoSaving && lastSaved && (
-                  <span className="text-green-600 truncate">
-                    ✓ Saved {lastSaved.toLocaleTimeString()}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex gap-3 shrink-0">
-                <button
-                  onClick={closeModal}
-                  disabled={isSaving}
-                  className="text-[16px] bg-gray-100 text-gray-700 font-semibold rounded-lg min-h-[48px] min-w-[112px] hover:bg-gray-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveForm}
-                  disabled={isSaving}
-                  className="text-[16px] bg-[#2557a7] font-semibold text-white min-h-[48px] min-w-[112px] rounded-lg hover:bg-[#184284] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    "Save"
-                  )}
-                </button>
-              </div>
-            </div>
+            {renderSectionFooter(false)}
           </div>
         </div>
       )}

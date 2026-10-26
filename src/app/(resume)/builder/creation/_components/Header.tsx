@@ -1,13 +1,16 @@
 "use client"
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { RiArrowLeftLine, RiCheckLine } from 'react-icons/ri';
+import { ArrowLeft, FileText } from 'lucide-react';
+import { toast } from "sonner";
 import { toSameOriginPath } from "@/lib/internalPath";
+import { getEnhancedResume } from "@/api/enhancerApi";
 
 const BUILDER_RETURN_TO_STORAGE_KEY = "careerbot:builder:return_to";
 const COVER_LETTER_FALLBACK_PATH = "/cover-letter/new";
 
-const Header: React.FC = () => {
+/** "Use for Cover Letter": hands this resume to the cover letter feature (and remembers where to come back to). */
+export function useCoverLetterHandoff() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -20,7 +23,6 @@ const Header: React.FC = () => {
   const [isUsingForCoverLetter, setIsUsingForCoverLetter] = useState(false);
   const resumeId = typeof params?.resumeId === "string" ? params.resumeId : null;
   const effectiveReturnTo = returnTo ?? storedReturnTo;
-  const canUseForCoverLetter = !isEnhanced;
 
   useEffect(() => {
     if (returnTo) {
@@ -39,18 +41,12 @@ const Header: React.FC = () => {
     }
   }, [returnTo]);
 
-  const handleBackClick = () => {
-    localStorage.removeItem('resumeData');
-    localStorage.removeItem(BUILDER_RETURN_TO_STORAGE_KEY);
-    router.push('/builder/start/list');
-  };
-
-  const buildCoverLetterResumeUrl = () => {
+  const buildCoverLetterResumeUrl = (targetResumeId: string | null, source: "builder" | "parser") => {
     const target = effectiveReturnTo ?? COVER_LETTER_FALLBACK_PATH;
     const url = new URL(target, window.location.origin);
-    if (resumeId) {
-      url.searchParams.set("resume_id", resumeId);
-      url.searchParams.set("resume_source", "builder");
+    if (targetResumeId) {
+      url.searchParams.set("resume_id", targetResumeId);
+      url.searchParams.set("resume_source", source);
     }
     // This is the only place a return_to value is actually navigated to, so
     // the final string gets the check as well — whatever the provenance of
@@ -58,38 +54,85 @@ const Header: React.FC = () => {
     return toSameOriginPath(`${url.pathname}${url.search}`) ?? COVER_LETTER_FALLBACK_PATH;
   };
 
-  const handleUseForCoverLetter = () => {
+  const handleUseForCoverLetter = async () => {
     if (!resumeId) return;
     setIsUsingForCoverLetter(true);
-    window.localStorage.removeItem(BUILDER_RETURN_TO_STORAGE_KEY);
-    router.push(buildCoverLetterResumeUrl());
+
+    if (!isEnhanced) {
+      window.localStorage.removeItem(BUILDER_RETURN_TO_STORAGE_KEY);
+      router.push(buildCoverLetterResumeUrl(resumeId, "builder"));
+      return;
+    }
+
+    // The cover letter feature knows builder resumes and uploaded (parsed) resumes. An enhanced
+    // resume comes from an upload, so hand over the upload it was made from.
+    try {
+      const record = (await getEnhancedResume(resumeId)) as unknown as { original_resume_id?: string };
+      if (!record?.original_resume_id) throw new Error("missing original resume");
+      window.localStorage.removeItem(BUILDER_RETURN_TO_STORAGE_KEY);
+      router.push(buildCoverLetterResumeUrl(record.original_resume_id, "parser"));
+    } catch {
+      toast.error("Couldn't find the original upload for this resume, so it can't be used for a cover letter yet.");
+      setIsUsingForCoverLetter(false);
+    }
+  };
+
+  return { handleUseForCoverLetter, isUsingForCoverLetter };
+}
+
+/** The "Use for Cover Letter" button. `compact` is the toolbar version: shorter, same action. */
+export const UseForCoverLetterButton: React.FC = () => {
+  const { handleUseForCoverLetter, isUsingForCoverLetter } = useCoverLetterHandoff();
+  return (
+    <button
+      type="button"
+      onClick={handleUseForCoverLetter}
+      disabled={isUsingForCoverLetter}
+      className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#c3d3ec] bg-white px-3 text-[13px] font-semibold text-[#1d4fa8] transition hover:bg-[#f4f7fc] disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <FileText size={15} />
+      {isUsingForCoverLetter ? "Selecting..." : "Use for Cover Letter"}
+    </button>
+  );
+};
+
+const Header: React.FC<{ actions?: React.ReactNode; showCoverLetter?: boolean }> = ({ actions, showCoverLetter = true }) => {
+  const router = useRouter();
+
+  const handleBackClick = () => {
+    localStorage.removeItem('resumeData');
+    localStorage.removeItem(BUILDER_RETURN_TO_STORAGE_KEY);
+    router.push('/builder/start/list');
   };
 
   return (
-    <header className="bg-gray-100">
-      {/* Floating bar below navigation with rounded top-left corner and increased padding */}
-      <div className="bg-white px-5 py-2 flex items-center gap-4 overflow-hidden">
-        <button
-          onClick={handleBackClick}
-          className="cursor-pointer hover:opacity-70 transition"
-          aria-label="Go back to resume page"
-        >
-          <RiArrowLeftLine className="text-gray-600" size={24} />
-        </button>
-        <span className="font-bold text-lg text-[#2557a7]">
-          {isEnhanced ? "Resume Enhancer" : "Resume Builder"}
-        </span>
-        {canUseForCoverLetter && (
+    <header className="mb-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          {/* Back to Resume Management: icon only */}
           <button
             type="button"
-            onClick={handleUseForCoverLetter}
-            disabled={isUsingForCoverLetter}
-            className="ml-auto inline-flex items-center gap-2 rounded-lg bg-[#2557a7] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#1f4e98] disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={handleBackClick}
+            className="mt-0.5 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#d5deec] bg-white text-[#1d4fa8] transition hover:bg-[#f4f7fc]"
+            aria-label="Back to Resume Management"
+            title="Back to Resume Management"
           >
-            <RiCheckLine size={18} />
-            {isUsingForCoverLetter ? "Selecting..." : "Use for cover letter"}
+            <ArrowLeft size={18} strokeWidth={2} />
           </button>
-        )}
+        <div>
+          <h1 className="text-[24px] font-bold leading-tight tracking-tight text-gray-900">
+            Resume Builder
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Create, edit and customize your resume. Your changes will be updated in real time.
+          </p>
+        </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {actions}
+          {showCoverLetter && <UseForCoverLetterButton />}
+        </div>
       </div>
     </header>
   );

@@ -1167,6 +1167,26 @@ section.docx {
 .mi-exit{width:100%;border-radius:8px;text-align:left;transition:background-color .15s ease,color .15s ease}.mi-exit:hover{background:var(--mi-tint);color:var(--mi-brand)}
 .mi-back-link.mi-step-back-link svg{transform:none}
 
+/* Builder page: the section forms were written for a wide modal (form + Tips column).
+   Inside the narrow inline accordion, drop the Tips column, the modal-sized margins and
+   the heavy field styling. Error states (border-red) keep their own styling. */
+.inline-section-editor .w-80 { display: none; }
+.inline-section-editor .ml-6 { margin-left: 0; }
+.inline-section-editor .mt-10 { margin-top: 0; }
+.inline-section-editor [class*="gap-10"] { gap: 1rem; }
+.inline-section-editor input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([class*="border-red"]):not([class*="bg-transparent"]),
+.inline-section-editor select:not([class*="border-red"]),
+.inline-section-editor textarea:not([class*="border-red"]) {
+  background-color: #fff;
+  border: 1px solid #d5deec;
+  border-radius: 6px;
+  color: #1f2937;
+}
+.inline-section-editor input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([class*="bg-transparent"]) {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
 /* AI "Generating" dots: they bounce one after another. People who ask their system to reduce
    motion still get a progress cue (a soft fade, no movement) instead of frozen dots. */
 @keyframes ai-generating-dot {

@@ -1,5 +1,6 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
+import { appendLayoutParams, type LayoutOptions } from './layoutOptions';
 import { getProfile } from './userApi';
 import type { CustomSection, CustomField } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 
@@ -227,10 +228,16 @@ export interface BuilderScoreResponse {
   resume_id: string;
   score: number;
   calculated_at: string;
-  /** "completed" once the AI score is finished; absent on older responses (then score > 0 means done). */
+  /** "completed" once the AI score for the current content is stored; "stale" while it is out of date. */
   status?: string;
-  /** Per-section points of the AI score, by the scorer's section key. */
+  /** Each AI section's score (0-100), keyed by the AI's section name (personalInfo, skills, ...). */
   section_breakdown?: Record<string, { score: number; max_pts?: number }> | null;
+}
+
+/** What POST /resumes/{id}/calculate-score answers (the fields the score panel reads). */
+export interface TriggerScoreResponse {
+  status?: string;
+  reused?: boolean;
 }
 
 
@@ -847,14 +854,15 @@ export const renameSkillCategory = async (
 };
 
 // ==================== TRIGGER SCORE CALCULATION ====================
-export const triggerScoreCalculation = async (resumeId: string): Promise<void> => {
+export const triggerScoreCalculation = async (resumeId: string): Promise<TriggerScoreResponse> => {
 
   try {
     logger.debug("🚀 Triggering score calculation for resume:", resumeId);
 
-    const response = await httpClient.post(`/resumes/${resumeId}/calculate-score`);
+    const response = await httpClient.post<TriggerScoreResponse>(`/resumes/${resumeId}/calculate-score`);
 
     logger.info("✅ Score calculation triggered:", response.data);
+    return response.data ?? {};
 
   } catch (error) {
     logger.error("❌ Error triggering score calculation:", error);
@@ -1059,7 +1067,8 @@ export const downloadResume = async (
   sectionOrder?: string[],
   fontFamily?: string,
   lineSpacing?: string,
-  careerLevel?: string
+  careerLevel?: string,
+  layout?: LayoutOptions
 ): Promise<Blob> => {
 
   try {
@@ -1075,6 +1084,7 @@ export const downloadResume = async (
     if (fontFamily) params.append('font_family', fontFamily);
     if (lineSpacing) params.append('line_height', lineSpacing);
     if (careerLevel) params.append('career_level', careerLevel);
+    appendLayoutParams(params, layout);
 
     logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?${params.toString()}`);
 

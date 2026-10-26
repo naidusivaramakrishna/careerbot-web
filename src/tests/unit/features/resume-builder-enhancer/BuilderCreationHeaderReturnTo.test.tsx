@@ -96,7 +96,7 @@ describe("builder/creation Header — return_to navigation sink", () => {
     localStorage.setItem("resumeData", "{}");
     renderHeader("/cover-letter/new");
 
-    fireEvent.click(screen.getByRole("button", { name: /Go back to resume page/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Back to Resume Management/i }));
 
     expect(localStorage.getItem("careerbot:builder:return_to")).toBeNull();
     expect(localStorage.getItem("resumeData")).toBeNull();

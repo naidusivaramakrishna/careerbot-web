@@ -82,7 +82,7 @@ const renderPanel = (onFixNow?: () => void) =>
 beforeEach(() => {
   vi.clearAllMocks();
   resumeState.data = {};
-  mockTrigger.mockResolvedValue(undefined);
+  mockTrigger.mockResolvedValue({ status: "processing" });
   mockGetScore.mockRejectedValue({ response: { status: 404 } });
 });
 

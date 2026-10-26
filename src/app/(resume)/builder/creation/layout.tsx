@@ -1,7 +1,6 @@
 "use client";
 import { ResumeProvider } from "./_context/ResumeContext";
 import { ScoreProvider } from "./_context/ScoreContext";
-import Sidebar from "../../../../components/layout/Sidebar";
 import Header from "../../../../components/layout/Header";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
@@ -29,12 +28,9 @@ function BuilderLayoutInner({ children }: { children: React.ReactNode }) {
       <ResumeProvider resumeId={resumeId} source={source}>
         <ScoreProvider>
           <Header />
-          <div className="flex pt-14 bg-blue-100">
-            <Sidebar />
-            <div
-              className="flex-1 overflow-auto"
-              style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}
-            >
+          {/* The builder is a focused workspace: no app sidebar here (the resume list keeps it). */}
+          <div className="flex pt-14 bg-[#f1f6fc]">
+            <div className="flex-1 overflow-auto">
               {children}
             </div>
           </div>

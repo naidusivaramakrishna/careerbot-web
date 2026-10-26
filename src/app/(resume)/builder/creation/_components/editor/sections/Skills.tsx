@@ -336,6 +336,19 @@ const Skills: React.FC = () => {
           className="flex-1 mt-6 pr-2"
         >
           <div className="flex flex-col gap-6">
+            {/* Job titles the resume listed under Skills — shown as target roles, not skills */}
+            {(resumeData.targetRoles?.length ?? 0) > 0 && (
+              <div className="flex flex-col gap-2" data-testid="target-roles">
+                <span className="text-sm font-semibold text-[#3b3b3b]">Target roles</span>
+                <div className="flex flex-wrap gap-2">
+                  {resumeData.targetRoles!.map((role) => (
+                    <span key={role} className="rounded-full border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-700">
+                      {role}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Standard categories — hidden for enhanced resumes */}
             {!isEnhancedResume && (() => {
               const visibleCategories = EDITOR_CATEGORIES.filter((cat) => !hiddenPredefined.includes(cat.key));

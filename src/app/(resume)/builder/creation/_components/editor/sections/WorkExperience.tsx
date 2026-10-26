@@ -31,10 +31,12 @@ import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
 import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
+import GeneratingLabel from "../GeneratingLabel";
 
 interface WorkEntry {
   company: string;
   role: string;
+  projectTitle?: string;
   startDate: string;
   endDate: string;
   currentlyWorking: boolean;
@@ -47,6 +49,7 @@ interface WorkEntry {
 const emptyWork = (): WorkEntry => ({
   company: "",
   role: "",
+  projectTitle: "",
   startDate: "",
   endDate: "",
   currentlyWorking: false,
@@ -496,6 +499,10 @@ Spearheaded migration of legacy monolithic application to microservices architec
                     {work.company || "No company"}
                   </div>
 
+                  {work.projectTitle && (
+                    <div className="text-xs text-gray-600">Project: {work.projectTitle}</div>
+                  )}
+
                   <div className="text-xs text-gray-600">
                     {work.startDate ? startToLabel(work.startDate) : ""}
                     {work.startDate && " - "}
@@ -620,6 +627,16 @@ Spearheaded migration of legacy monolithic application to microservices architec
                       />
                     </div>
 
+                    {/* Project the role was about (e.g. "Project: Billing System"); optional */}
+                    <AutocompleteInput
+                      label="Project name (optional)"
+                      value={work.projectTitle ?? ""}
+                      onChange={(val) => handleChange(editIndex, "projectTitle", val)}
+                      placeholder="Project you worked on in this role"
+                      suggestions={[]}
+                      maxLength={200}
+                    />
+
                     {/* Dates and Location */}
                     <div className="flex gap-4">
                       <div className="flex flex-col gap-1 flex-1">
@@ -710,7 +727,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
                           className="flex items-center gap-1.5 px-6 py-2 text-sm font-medium border bg-gradient-to-br from-[#194386] to-[#3b6ecb] text-white hover:bg-blue-700 rounded-full disabled:bg-gray-400"
                         >
                           <NibPenSparkleIcon className="w-4 h-4" />
-                          {loadingIndex === editIndex ? "Generating..." : "AI Writer"}
+                          {loadingIndex === editIndex ? <GeneratingLabel /> : "AI Writer"}
                         </button>
                       </div>
 

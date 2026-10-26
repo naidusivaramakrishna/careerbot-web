@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   ArrowDownToLine,
   ZoomIn,
@@ -13,6 +13,9 @@ import { useScore } from "../_context/ScoreContext";
 import type { CanonicalScoreStatus } from "./score/FullAtsScoreCard";
 import { useResumeScorePreview } from "../_hooks/useResumeScorePreview";
 import { useFixedTextHighlights } from "../_hooks/useFixedTextHighlights";
+import { useBuilderFixHighlightUnits } from "../_lib/builderFixHighlights";
+import { usePreviewLayout } from "../_hooks/usePreviewLayout";
+import { withFilledCoreSections } from "../_utils/sectionOrderFill";
 import { findHighlightRanges } from "../_utils/fixedTextHighlight";
 import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
@@ -24,6 +27,7 @@ import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
 import { downloadResume } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
+import type { LayoutOptions } from "../../../../../api/layoutOptions";
 import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
@@ -44,7 +48,17 @@ interface PreviewPanelProps {
   expandPreview?: boolean;
   /** Use the browser page scrollbar instead of an inner resume scrollbar. */
   pageScrollPreview?: boolean;
+  /** Render only the resume (no toolbar); the parent supplies its own controls. */
+  hideToolbar?: boolean;
+  /** Receives the export action so a parent toolbar can start a PDF/DOCX download. */
+  exportApiRef?: React.MutableRefObject<PreviewExportApi | null>;
+  /** Reports when an export starts and finishes. */
+  onDownloadingChange?: (isDownloading: boolean) => void;
+  /** Zoom factor (1 = 100%) driven by a parent control; the built-in toolbar zoom is used when omitted. */
+  zoom?: number;
 }
+
+export type PreviewExportApi = { exportAs: (type: string) => Promise<void> };
 
 const tabs = [
   { label: "Templates", icon: LayoutGrid },
@@ -66,6 +80,17 @@ const isFormattingSuggestion = (suggestion: { section: string; id: string }): bo
 // Painted by the `::highlight(ats-fixed-text)` rule in src/app/globals.css.
 export const FIXED_TEXT_HIGHLIGHT = "ats-fixed-text";
 
+/**
+ * Highlight ranges by the preview that found them. There is one CSS highlight name for the page, and a second
+ * preview (the full-preview window) can be open next to the main one: each paints its own ranges into the shared
+ * highlight, and closing one removes only its own.
+ */
+const highlightRangesByOwner = new Map<symbol, Range[]>();
+function paintSharedHighlight(registry: NonNullable<typeof CSS.highlights>): void {
+  if (highlightRangesByOwner.size === 0) registry.delete(FIXED_TEXT_HIGHLIGHT);
+  else registry.set(FIXED_TEXT_HIGHLIGHT, new Highlight(...Array.from(highlightRangesByOwner.values()).flat()));
+}
+
 export const selectPreviewScore = (
   previewScore: number,
   canonicalScore: number | null,
@@ -78,6 +103,14 @@ export const selectPreviewScore = (
 );
 
 
+/** The Style & Layout tab's settings, as the download / preview request takes them. */
+const layoutFromStyle = (style: { fontSize?: string; pageMargin?: string; sectionSpacing?: string; alignment?: string }): LayoutOptions => ({
+  fontSize: style.fontSize || undefined,
+  pageMargin: style.pageMargin || undefined,
+  sectionSpacing: style.sectionSpacing || undefined,
+  alignment: style.alignment || undefined,
+});
+
 const PreviewPanel: React.FC<PreviewPanelProps> = ({
   isTemplateSidebarOpen,
   onTabClick,
@@ -88,8 +121,14 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   atsMinimalToolbar = false,
   expandPreview = false,
   pageScrollPreview = false,
+  hideToolbar = false,
+  exportApiRef,
+  onDownloadingChange,
+  zoom,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, enhancedDataVersion, sectionOrder, previewCatalogueKey, isLoadingResume } = useResume();
+  const { selectedTemplate, resumeData, resumeStyle, enhancedAtsScore, enhancedSuggestions, sectionOrder: contextSectionOrder, previewCatalogueKey, isLoadingResume } = useResume();
+  // A section with content is always in the order the preview and the export are given (see sectionOrderFill)
+  const sectionOrder = useMemo(() => withFilledCoreSections(contextSectionOrder, resumeData), [contextSectionOrder, resumeData]);
   const { canonicalScore, canonicalStatus, setCanonicalScore, markScoreStale } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
   const { getCataloguesMap } = useCatalogues();
@@ -132,6 +171,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     isFormattingSuggestion,
     isLoadingResume !== true,
   );
+  // A resume built from scratch has no applied-fix cards: the score tab publishes the text its fixes added.
+  const builderFixUnits = useBuilderFixHighlightUnits();
+  const highlightUnits = isEnhancedResume ? fixedTextUnits : builderFixUnits;
   const hasFixedFormatting = enhancedSuggestions.some(suggestion =>
     suggestion.status === "fixed" && isFormattingFix(suggestion.section, suggestion.id),
   );
@@ -145,14 +187,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const root = contentRef.current;
     const registry = typeof CSS !== "undefined" ? CSS.highlights : undefined;
     if (!registry || typeof Highlight === "undefined") return;
-    if (!isEnhancedResume || !root || fixedTextUnits.length === 0) {
-      registry.delete(FIXED_TEXT_HIGHLIGHT);
+    const owner = Symbol("preview-highlights");
+    if (!root || highlightUnits.length === 0) {
+      paintSharedHighlight(registry);
       return;
     }
     let frame = 0;
     const apply = () => {
       frame = 0;
-      registry.set(FIXED_TEXT_HIGHLIGHT, new Highlight(...findHighlightRanges(root, fixedTextUnits)));
+      highlightRangesByOwner.set(owner, findHighlightRanges(root, highlightUnits));
+      paintSharedHighlight(registry);
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(apply);
@@ -163,9 +207,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     return () => {
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
-      registry.delete(FIXED_TEXT_HIGHLIGHT);
+      highlightRangesByOwner.delete(owner);
+      paintSharedHighlight(registry);
     };
-  }, [fixedTextUnits, isEnhancedResume, selectedTemplate]);
+  }, [highlightUnits, selectedTemplate]);
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
@@ -177,6 +222,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Style & Layout settings on the screen preview (the export gets the same four from the server side)
+  usePreviewLayout(
+    contentRef,
+    { fontSize: resumeStyle.fontSize, pageMargin: resumeStyle.pageMargin, sectionSpacing: resumeStyle.sectionSpacing, alignment: resumeStyle.alignment },
+    [resumeData, sectionOrder, selectedTemplate],
+  );
   const [userEmail, setUserEmail] = useState<string>('');
   const [isEmailReady, setIsEmailReady] = useState(false);
 
@@ -282,10 +333,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       const fontFamily = resumeStyle.fontFamily || undefined;
       const lineSpacing = resumeStyle.lineSpacing || undefined;
       const careerLevel = getCareerLevel();
+      const layout = layoutFromStyle(resumeStyle);
 
       const blob = isEnhancedResume
-        ? await downloadEnhancedResume(resumeId, format, getEnhancedTemplateId(resumeId) ?? catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel)
-        : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel);
+        ? await downloadEnhancedResume(resumeId, format, getEnhancedTemplateId(resumeId) ?? catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel, layout)
+        : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel, layout);
 
       // ✅ Generate filename from person's name
       const fullname = resumeData.personalInfo?.fullname || "";
@@ -428,10 +480,20 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     return getTemplateByDomain('software_engineering');
   };
 
+  useEffect(() => {
+    if (exportApiRef) exportApiRef.current = { exportAs: handleExport };
+    return () => {
+      if (exportApiRef) exportApiRef.current = null;
+    };
+  });
+  useEffect(() => {
+    onDownloadingChange?.(isDownloading);
+  }, [isDownloading, onDownloadingChange]);
+
   return (
-    <section className={`flex flex-col flex-1 bg-[#f8fafd] px-2 items-center relative ${pageScrollPreview ? "min-h-full" : "h-[95vh]"}`}>
+    <section className={`flex flex-col flex-1 items-center relative ${hideToolbar ? "" : "bg-[#f8fafd] px-2"} ${pageScrollPreview ? "min-h-full" : "h-[95vh]"}`}>
       {/* Toolbar - When Sidebar is Open */}
-      {isTemplateSidebarOpen && (
+      {!hideToolbar && isTemplateSidebarOpen && (
         <div
           className="flex items-center justify-between border border-gray-300 rounded px-6 py-1.5 mb-0 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out"
           style={{ width: expandPreview ? '100%' : (isTemplateSidebarOpen ? '99%' : '90%') }}
@@ -475,7 +537,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       )}
 
       {/* Toolbar - When Sidebar is Closed */}
-      {!isTemplateSidebarOpen && (
+      {!hideToolbar && !isTemplateSidebarOpen && (
         <div
           className="flex items-center justify-between rounded border border-gray-300 px-2 py-1.5 gap-2 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out mx-auto"
           style={{ width: expandPreview ? '100%' : (isTemplateSidebarOpen ? '99%' : '90%') }}
@@ -628,9 +690,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
         <div
           ref={contentRef}
-          className="resume-content ats-enhancer-preview px-2 py-6"
+          className={`resume-content ats-enhancer-preview ${
+            // In the builder the page fills its card: no centred 900px column with wide side padding
+            expandPreview ? "px-0 py-3 [&>div]:!max-w-none" : "px-2 py-6"
+          }`}
           style={{
-            transform: `scale(${zoomLevel})`,
+            transform: `scale(${zoom ?? zoomLevel})`,
             transformOrigin: "top center",
             transition: "transform 0.3s ease-in-out",
             width: "100%",

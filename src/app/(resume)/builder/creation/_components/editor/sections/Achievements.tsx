@@ -24,6 +24,7 @@ import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
 import { waitForSectionAutosaveBeforeDelete } from "../../../_utils/sectionDeleteGuard";
 import { useSearchParams } from "next/navigation";
 import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
+import GeneratingLabel from "../GeneratingLabel";
 
 interface AchievementEntry {
   title: string;
@@ -559,7 +560,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
                           className="flex items-center gap-1.5 px-6 py-2 text-sm font-medium border bg-gradient-to-br from-[#194386] to-[#3b6ecb] text-white hover:bg-blue-700 rounded-full disabled:bg-gray-400"
                         >
                           <NibPenSparkleIcon className="w-4 h-4" />
-                          {loadingIndex === editIndex ? "Generating..." : "AI Writer"}
+                          {loadingIndex === editIndex ? <GeneratingLabel /> : "AI Writer"}
                         </button>
                       </div>
 

@@ -1,12 +1,11 @@
-import { IconType } from "react-icons";
+import type { ComponentType } from "react";
 import {
-  FaUserCircle, FaFileAlt, FaUserGraduate, FaBriefcase,
-  FaFolderOpen, FaStar, FaAward, FaMedal, FaUsers,
-  FaBuilding, FaTrophy, FaHandHoldingHeart, FaFileSignature
-} from "react-icons/fa";
-import { MdLanguage } from 'react-icons/md';
-import { LuFileBadge, LuFileSearch, LuBadgeCheck } from 'react-icons/lu';
-import { RiAlignRight } from 'react-icons/ri';
+  Anchor, Award, BadgeCheck, BookOpen, Briefcase, CodeXml, FileSearch, FileSignature, FileText,
+  FlaskConical, Folder, GraduationCap, Globe, Heart, Medal, Presentation, Settings, Trophy, User, Users,
+} from "lucide-react";
+
+/** What a section icon accepts (lucide icons and the older react-icons both fit). */
+export type SectionIcon = ComponentType<{ size?: number | string; className?: string }>;
 
 export interface Section {
   name: string;
@@ -35,37 +34,43 @@ export const initialSections: Section[] = [
   { name: "Internships", ai:true},
 ];
 
-export const sectionIcons: Record<string, IconType> = {
-  "Personal Info": FaUserCircle,
-  "Professional Summary": FaFileAlt,
-  "Service Record": FaFileSignature,
-  "Education": FaUserGraduate,
-  "Work Experience": FaBriefcase,
-  "Vessels Operated": FaBuilding,
-  "Ports Experience": FaBuilding,
-  "Sea Service Record": FaFileSignature,
-  "Maritime Certifications": FaAward,
-  "Research Grants": FaTrophy,
-  "Editorial Activities": FaFileAlt,
-  "Conference Presentations": FaTrophy,
-  "Projects": FaFolderOpen,
-  "Skills": FaStar,
-  "Certifications": FaAward,
-  "Licenses and Credentials": LuBadgeCheck,
-  "Certificates and Clearances": LuBadgeCheck,
-  "Bar Admissions and Licenses": LuBadgeCheck,
-  "Achievements": FaMedal,
-  "Volunteering": FaHandHoldingHeart,
-  "References": FaUsers,
-  "Internships": FaBuilding,
-  "Awards": FaTrophy,
-  "Languages": MdLanguage,
-  "Publications": LuFileBadge,
-  "Patents": LuFileSearch,
-  "Hobbies": RiAlignRight,
-  "Interests": RiAlignRight,
-  "Declaration": FaFileSignature,
+export const sectionIcons: Record<string, SectionIcon> = {
+  "Personal Info": User,
+  "Professional Summary": FileText,
+  "Service Record": FileSignature,
+  "Education": GraduationCap,
+  "Work Experience": Briefcase,
+  "Vessels Operated": Anchor,
+  "Ports Experience": Anchor,
+  "Sea Service Record": FileSignature,
+  "Maritime Certifications": Award,
+  "Research Grants": FlaskConical,
+  "Editorial Activities": FileText,
+  "Conference Presentations": Presentation,
+  "Projects": Folder,
+  "Skills": Settings,
+  "Certifications": Award,
+  "Licenses and Credentials": BadgeCheck,
+  "Certificates and Clearances": BadgeCheck,
+  "Bar Admissions and Licenses": BadgeCheck,
+  "Achievements": Trophy,
+  "Volunteering": Users,
+  "Volunteer Experience": Users,
+  "References": User,
+  "Internships": FileText,
+  "Awards": Trophy,
+  "Awards & Scholarships": Trophy,
+  "Languages": Globe,
+  "Publications": BookOpen,
+  "Patents": FileSearch,
+  "Hobbies": Heart,
+  "Interests": Heart,
+  "Interests & Hobbies": Heart,
+  "Additional Information": FileText,
+  "Custom Section": CodeXml,
+  "Declaration": FileSignature,
 };
+void Medal;
 
 // ✅ Required fields for completion check
 export const sectionRequiredFields: Record<string, string[]> = {

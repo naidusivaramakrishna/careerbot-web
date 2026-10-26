@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import logger from "@/lib/logger";
 import { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueTab from "./CatalogueTab";
+import type { DropResult } from "@hello-pangea/dnd";
 import { getProfile } from "@/api/userApi";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSectionOrderByDomainAndCareer, getSectionOrderFromTemplate, addCareerLevelSections, SECTION_KEY_TO_DISPLAY_NAME, getDomainSectionOrder } from "@/app/(resume)/templates/_utils/domainSectionOrder";
@@ -78,6 +79,10 @@ interface TemplatesTabProps {
   resumeId?: string;
   /** ATS Scan uses an enhanced-resume ID; its export receives the chosen template directly. */
   isEnhancedResume?: boolean;
+  /** Sections in their current order; with onReorderSections this enables the "Section Order" tab
+   *  (the tab itself is added in the next PR of the series; until then these props are accepted and unused). */
+  sections?: { name: string }[];
+  onReorderSections?: (result: DropResult) => void;
 }
 
 /**

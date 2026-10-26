@@ -1,9 +1,14 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import BuilderPage from '@/app/(resume)/builder/creation/[resumeId]/page';
 import { useResume } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 import { useSearchParams } from 'next/navigation';
+
+const { mockExportAs } = vi.hoisted(() => ({
+  mockExportAs: vi.fn(),
+}));
 
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react');
@@ -21,8 +26,19 @@ vi.mock('@/app/(resume)/builder/creation/_context/ResumeContext', () => ({
   useResume: vi.fn(),
 }));
 
+vi.mock('@/app/(resume)/builder/creation/_hooks/useBuilderDisplayScore', () => ({
+  useBuilderDisplayScore: () => 25,
+}));
+
 vi.mock('@/app/(resume)/builder/creation/_components/Header', () => ({
-  default: () => <header data-testid="builder-header">Header</header>,
+  default: ({ actions }: { actions?: React.ReactNode }) => (
+    <header data-testid="builder-header">
+      Header
+      {actions}
+    </header>
+  ),
+  UseForCoverLetterButton: () => <button type="button">Use for Cover Letter</button>,
+  useCoverLetterHandoff: () => ({ handleUseForCoverLetter: vi.fn(), isUsingForCoverLetter: false }),
 }));
 
 vi.mock('@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide', () => ({
@@ -30,22 +46,21 @@ vi.mock('@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide', 
     resumeId,
     initialTab,
     defaultOpen,
-    isTemplateSidebarOpen,
-    onToggleTemplateSidebar,
+    builderLayout,
+    tabRequest,
   }: {
     resumeId: string;
     initialTab?: string;
     defaultOpen: boolean;
-    isTemplateSidebarOpen: boolean;
-    onToggleTemplateSidebar: (isOpen: boolean) => void;
+    builderLayout?: boolean;
+    tabRequest?: { tab: string; id: number } | null;
   }) => (
     <aside data-testid="resume-side">
       <p>Resume ID: {resumeId}</p>
       <p>Initial tab: {initialTab ?? 'none'}</p>
       <p>Default open: {String(defaultOpen)}</p>
-      <p>Template open in side: {String(isTemplateSidebarOpen)}</p>
-      <button onClick={() => onToggleTemplateSidebar(false)}>Close templates from side</button>
-      <button onClick={() => onToggleTemplateSidebar(true)}>Open templates from side</button>
+      <p>Builder layout: {String(!!builderLayout)}</p>
+      <p>Tab request: {tabRequest ? `${tabRequest.tab}#${tabRequest.id}` : 'none'}</p>
     </aside>
   ),
 }));
@@ -54,47 +69,26 @@ vi.mock('@/app/(resume)/builder/creation/_components/PreviewPanel', () => ({
   default: ({
     resumeId,
     isEnhancedResume,
-    isTemplateSidebarOpen,
-    onTabClick,
+    hideToolbar,
+    exportApiRef,
+    zoom,
   }: {
     resumeId: string;
     isEnhancedResume: boolean;
-    isTemplateSidebarOpen: boolean;
-    onTabClick: (tab: string) => void;
-  }) => (
-    <section data-testid="preview-panel">
-      <p>Preview resume ID: {resumeId}</p>
-      <p>Enhanced: {String(isEnhancedResume)}</p>
-      <p>Template open in preview: {String(isTemplateSidebarOpen)}</p>
-      <button onClick={() => onTabClick('Score')}>Open score tab</button>
-      <button onClick={() => onTabClick('Templates')}>Open templates tab</button>
-    </section>
-  ),
-}));
-
-vi.mock('@/app/(resume)/builder/creation/_components/templateSidebar/TemplatesSidebar', () => ({
-  default: ({
-    resumeId,
-    isOpen,
-    activeTab,
-    onToggle,
-    setActiveTab,
-  }: {
-    resumeId: string;
-    isOpen: boolean;
-    activeTab: string;
-    onToggle: (isOpen: boolean) => void;
-    setActiveTab: (tab: string) => void;
-  }) => (
-    <aside data-testid="templates-sidebar">
-      <p>Sidebar resume ID: {resumeId}</p>
-      <p>Sidebar open: {String(isOpen)}</p>
-      <p>Active tab: {activeTab}</p>
-      <button onClick={() => onToggle(false)}>Close templates</button>
-      <button onClick={() => onToggle(true)}>Open templates</button>
-      <button onClick={() => setActiveTab('Editor')}>Set editor tab</button>
-    </aside>
-  ),
+    hideToolbar?: boolean;
+    zoom?: number;
+    exportApiRef?: { current: { exportAs: (type: string) => Promise<void> } | null };
+  }) => {
+    if (exportApiRef) exportApiRef.current = { exportAs: mockExportAs };
+    return (
+      <section data-testid="preview-panel">
+        <p>Preview resume ID: {resumeId}</p>
+        <p>Enhanced: {String(isEnhancedResume)}</p>
+        <p>Toolbar hidden: {String(!!hideToolbar)}</p>
+        <p>Zoom: {String(zoom ?? 'none')}</p>
+      </section>
+    );
+  },
 }));
 
 const mockUseResume = vi.mocked(useResume);
@@ -120,41 +114,30 @@ describe('ResumeBuilderPage', () => {
     expect(screen.getByText('Please wait while we fetch your resume')).toBeInTheDocument();
     expect(screen.queryByTestId('resume-side')).not.toBeInTheDocument();
     expect(screen.queryByTestId('preview-panel')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('templates-sidebar')).not.toBeInTheDocument();
   });
 
-  it('renders production child contracts for a normal builder resume', async () => {
+  it('lays out the editor panel and the live preview side by side for a normal builder resume', () => {
     renderBuilderPage('builder-resume-1');
 
     expect(screen.getByTestId('builder-header')).toBeInTheDocument();
     expect(screen.getByText('Resume ID: builder-resume-1')).toBeInTheDocument();
-    expect(screen.getByText('Preview resume ID: builder-resume-1')).toBeInTheDocument();
-    expect(screen.getByText('Sidebar resume ID: builder-resume-1')).toBeInTheDocument();
+    expect(screen.getByText('Builder layout: true')).toBeInTheDocument();
     expect(screen.getByText('Initial tab: none')).toBeInTheDocument();
     expect(screen.getByText('Default open: true')).toBeInTheDocument();
-    expect(screen.getByText('Enhanced: false')).toBeInTheDocument();
-    expect(screen.getByText('Sidebar open: false')).toBeInTheDocument();
-    expect(screen.getByText('Active tab: Templates')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(window.localStorage.setItem).toHaveBeenCalledWith('template_sidebar_open', 'false');
-    });
+    expect(screen.queryByRole('heading', { name: 'Resume Preview' })).not.toBeInTheDocument();
+    expect(screen.getByText('Preview resume ID: builder-resume-1')).toBeInTheDocument();
+    expect(screen.getByText('Enhanced: false')).toBeInTheDocument();
+    expect(screen.getByText('Toolbar hidden: true')).toBeInTheDocument();
   });
 
-  it('keeps the template sidebar collapsed and opens the Score tab in ResumeSide for enhanced resumes', async () => {
+  it('opens the Score tab for enhanced resumes', () => {
     mockUseSearchParams.mockReturnValue(new URLSearchParams('source=enhanced') as never);
 
     renderBuilderPage('enhanced-resume-1');
 
-    // Score now lives in ResumeSide, so the template drawer stays collapsed.
     expect(screen.getByText('Enhanced: true')).toBeInTheDocument();
     expect(screen.getByText('Initial tab: Score')).toBeInTheDocument();
-    expect(screen.getByText('Default open: true')).toBeInTheDocument();
-    expect(screen.getByText('Sidebar open: false')).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(window.localStorage.setItem).toHaveBeenCalledWith('template_sidebar_open', 'false');
-    });
   });
 
   it('passes Editor initial tab when opened from ATS', () => {
@@ -177,46 +160,101 @@ describe('ResumeBuilderPage', () => {
     expect(screen.getByText('Initial tab: Score')).toBeInTheDocument();
   });
 
-  it('persists template sidebar state when toggled from sidebar controls', async () => {
+  it('opens a full view with only the resume from the eye (Preview) button and closes it again', () => {
     renderBuilderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open templates from side' }));
+    expect(screen.queryByRole('dialog', { name: 'Resume full preview' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
-    expect(screen.getByText('Sidebar open: true')).toBeInTheDocument();
-    expect(screen.getByText('Template open in preview: true')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(window.localStorage.setItem).toHaveBeenLastCalledWith('template_sidebar_open', 'true');
-    });
+    const dialog = screen.getByRole('dialog', { name: 'Resume full preview' });
+    expect(within(dialog).getByTestId('preview-panel')).toBeInTheDocument();
+    // nothing but the resume (and the close control) in the full view
+    expect(within(dialog).queryByTestId('resume-side')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Resume Preview')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close templates from side' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+    expect(screen.queryByRole('dialog', { name: 'Resume full preview' })).not.toBeInTheDocument();
 
-    expect(screen.getByText('Sidebar open: false')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(window.localStorage.setItem).toHaveBeenLastCalledWith('template_sidebar_open', 'false');
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Resume full preview' })).not.toBeInTheDocument();
   });
 
-  it('opens the template sidebar and changes active tab from preview toolbar clicks', async () => {
+  it('downloads PDF or DOCX from the Export menu through the preview export', () => {
     renderBuilderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open score tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'PDF' }));
+    expect(mockExportAs).toHaveBeenCalledWith('PDF');
 
-    expect(screen.getByText('Sidebar open: true')).toBeInTheDocument();
-    expect(screen.getByText('Active tab: Score')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(window.localStorage.setItem).toHaveBeenLastCalledWith('template_sidebar_open', 'true');
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open templates tab' }));
-
-    expect(screen.getByText('Active tab: Templates')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'DOCX' }));
+    expect(mockExportAs).toHaveBeenCalledWith('DOCX');
   });
 
-  it('allows TemplatesSidebar to set active tab directly', () => {
+  it('scrolls the page first on the wheel, then leaves the event to the panels at the page end', () => {
+    renderBuilderPage();
+    const root = screen.getByTestId('builder-scroll-root');
+    Object.defineProperty(root, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(root, 'clientHeight', { configurable: true, value: 600 });
+
+    // page can still move down: the page takes the wheel
+    root.scrollTop = 0;
+    expect(fireEvent.wheel(root, { deltaY: 120 })).toBe(false);
+    expect(root.scrollTop).toBe(120);
+
+    // page is at its end: the wheel is left to the panel under the pointer
+    root.scrollTop = 400;
+    expect(fireEvent.wheel(root, { deltaY: 120 })).toBe(true);
+    expect(root.scrollTop).toBe(400);
+
+    // wheel up with the page scrolled: page first again
+    expect(fireEvent.wheel(root, { deltaY: -100 })).toBe(false);
+    expect(root.scrollTop).toBe(300);
+
+    // wheel up at the very top: nothing to move, panels handle it
+    root.scrollTop = 0;
+    expect(fireEvent.wheel(root, { deltaY: -100 })).toBe(true);
+  });
+
+  it('leaves the wheel to the full-preview window instead of scrolling the page behind it', () => {
+    renderBuilderPage();
+    const root = screen.getByTestId('builder-scroll-root');
+    Object.defineProperty(root, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(root, 'clientHeight', { configurable: true, value: 600 });
+    root.scrollTop = 0;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    const dialog = screen.getByRole('dialog', { name: 'Resume full preview' });
+
+    // the page could still move, but the pointer is over the window: the window scrolls itself
+    expect(fireEvent.wheel(within(dialog).getByTestId('preview-panel'), { deltaY: 120 })).toBe(true);
+    expect(root.scrollTop).toBe(0);
+
+    // outside the window the page still takes the wheel
+    expect(fireEvent.wheel(root, { deltaY: 120 })).toBe(false);
+    expect(root.scrollTop).toBe(120);
+  });
+
+  it('shows the score button in the preview header and brings the Score tab forward when clicked', () => {
     renderBuilderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Set editor tab' }));
+    expect(screen.getByText('Tab request: none')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Score 25%' }));
+    expect(screen.getByText('Tab request: Score#1')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Score 25%' }));
+    expect(screen.getByText('Tab request: Score#2')).toBeInTheDocument();
+  });
 
-    expect(screen.getByText('Active tab: Editor')).toBeInTheDocument();
+  it('zooms the preview from the − 100% + control', () => {
+    renderBuilderPage();
+
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByText('110%')).toBeInTheDocument();
+    expect(screen.getAllByText('Zoom: 1.1').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(screen.getByText('90%')).toBeInTheDocument();
   });
 });

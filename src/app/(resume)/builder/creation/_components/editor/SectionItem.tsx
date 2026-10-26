@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, ChevronUp, Trash2 } from "lucide-react";
 import { FaCheckCircle } from 'react-icons/fa';
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
-import { RiSparkling2Fill } from 'react-icons/ri';
 import { toast } from "sonner";
 import { deleteResumeSection } from "@/api/resumeApi"; // ✅ Import the delete API
 
@@ -23,6 +22,8 @@ interface Props {
   sectionKey?: string;
   /** Called once the delete has been persisted (after the success toast). */
   onDeleted?: () => void;
+  /** Inline editor shown inside the card while the section is open. */
+  children?: React.ReactNode;
 }
 
 const SectionItem: React.FC<Props> = ({
@@ -40,6 +41,7 @@ const SectionItem: React.FC<Props> = ({
   resumeId,
   sectionKey,
   onDeleted,
+  children,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [deleteHovered, setDeleteHovered] = useState(false);
@@ -110,42 +112,39 @@ const SectionItem: React.FC<Props> = ({
 
   return (
     <div
-      className={`group relative transition-transform duration-200 ${
-        hovered ? "scale-[1.01]" : "scale-100"
-      }`}
+      className="group relative"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div className="flex items-stretch gap-2">
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-w-0">
           <div
-            className={`relative py-1.5 overflow-hidden rounded-lg transition-all duration-300 shadow-sm ${
-              isActive
-                ? "bg-[#ffffff] border border-blue-200"
-                : "bg-[#ffffff] border border-gray-300"
+            className={`overflow-hidden rounded-lg border bg-white transition-colors ${
+              isActive ? "border-[#bcd0ee]" : "border-[#e3e9f2] hover:border-[#c9d6ea]"
             }`}
           >
             {/* Header */}
+            {/* The whole header is the drag handle: press anywhere on it and drag; a plain click still opens the section */}
             <div
-              className="flex items-center justify-between px-3 py-2 cursor-pointer relative"
+              {...(dragHandleProps || {})}
+              className={`flex items-center justify-between px-3.5 py-2 cursor-pointer relative ${
+                isActive ? "bg-[#eaf1fb]" : ""
+              }`}
               onClick={handleHeaderClick}
             >
               {/* Left Section: Icon + Title */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  {...(dragHandleProps || {})}
-                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ${
-                    isActive
-                      ? "bg-[#2557a7] text-white shadow"
-                      : "bg-gradient-to-br from-gray-100 to-gray-200 group-hover:from-blue-100 group-hover:to-blue-100 text-[#2d2d2d] group-hover:text-[#2557a7]"
+                  className={`flex items-center justify-center w-5 h-5 shrink-0 ${
+                    isActive ? "text-[#1d4fa8]" : "text-gray-800"
                   }`}
                 >
                   {icon}
                 </div>
 
                 <span
-                  className={`text-[15px] font-semibold transition-colors duration-200 ${
-                    isActive ? "text-[#2557a7]" : "text-gray-800"
+                  className={`text-[13px] font-semibold truncate transition-colors duration-200 ${
+                    isActive ? "text-[#1d4fa8]" : "text-gray-900"
                   }`}
                 >
                   {title}
@@ -153,40 +152,29 @@ const SectionItem: React.FC<Props> = ({
               </div>
 
               {/* Right Section: AI Icon + Check + Chevron */}
-              <div className="flex items-center gap-2">
-                {ai && (
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs bg-[#efedf2] font-semibold text-black rounded-full">
-                    <RiSparkling2Fill size={14} className="text-[#2557a7] fill-[#2557a7] mr-0.5"/>AI  
-                  </span>
-                )}
-
+              <div className="flex items-center gap-2 shrink-0">
                 {isComplete && (
-                  <div className="w-6 h-6 flex items-center justify-center rounded-full bg-[#d9f7be] text-white">
-                    <FaCheckCircle size={14} className="text-green-600 rounded-full" />
+                  <div className="w-5 h-5 flex items-center justify-center rounded-full bg-[#d9f7be]">
+                    <FaCheckCircle size={13} className="text-green-600 rounded-full" />
                   </div>
                 )}
 
-                <div
-                  className={`transition-all duration-300 p-1 rounded-md ${
-                    isActive
-                      ? "text-[#2557a7] bg-blue-100"
-                      : "text-gray-400 group-hover:text-[#2557a7] group-hover:bg-blue-100"
-                  }`}
-                >
-                  {isActive ? (
-                    <ChevronDown size={16} />
-                  ) : (
-                    <ChevronRight size={16} />
-                  )}
+                <div className={isActive ? "text-[#1d4fa8]" : "text-gray-800"}>
+                  {isActive ? <ChevronUp size={16} /> : <ChevronRight size={16} />}
                 </div>
               </div>
             </div>
+
+            {/* Inline editor */}
+            {isActive && children && (
+              <div className="border-t border-[#d7e3f6] bg-white px-4 py-4">{children}</div>
+            )}
           </div>
         </div>
 
         {/* Delete Button */}
         {showDelete && (
-          <div className="mt-4">
+          <div className="mt-2.5">
             <button
               ref={deleteButtonRef}
               onClick={handleDelete}

@@ -4,6 +4,9 @@ import { SidebarOpen } from "lucide-react";
 import { DropResult } from "@hello-pangea/dnd";
 import { useResume } from "../../_context/ResumeContext";
 import Tabs from "./Tabs";
+import BuilderTabs from "./BuilderTabs";
+import TemplatesTab from "../templates/TemplatesTab";
+import JobMatchTab from "../job/JobMatchTab";
 import EditorTab from "../editor/EditorTab";
 import ResumeGPTTab from "../resumeGPT/ResumeGPTTab";
 import AIReviewTab from "../aiReview/AIReviewTab";
@@ -35,6 +38,7 @@ import Internships from "../editor/sections/Internships";
 import Awards from "../editor/sections/Awards";
 
 import { initialSections } from "../../_utils/sectionsConfig";
+import { isSectionKnownEmpty, sectionsForOrderList } from "../../_utils/sectionPayloadKeys";
 import Publications from "../editor/sections/Publications";
 import Patents from "../editor/sections/Patents";
 import Interests from "../editor/sections/Interests";
@@ -119,8 +123,12 @@ interface ResumeSideProps {
   tabRequest?: { tab: string; id: number } | null;
   /** Changes whenever an ATS recommendation is selected, including the same section twice. */
   openSectionRequestId?: number;
+  /** Called with the tab that is open (the builder page swaps the preview for a Job Match card). */
+  onActiveTabChange?: (tab: string) => void;
   /** Use the entire parent panel instead of the builder page's percentage width. */
   embedded?: boolean;
+  /** Builder page layout: Editor / Score / Customize / Job Match tabs, sections open inline. */
+  builderLayout?: boolean;
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -138,8 +146,11 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   defaultOpen = true,
   openSection,
   tabRequest,
+  onActiveTabChange,
   openSectionRequestId = 0,
   embedded = false,
+  builderLayout = false,
+  resumeId,
 }) => {
   // ✅ Get context first
   const {
@@ -246,6 +257,13 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
   const [pendingOpenSection, setPendingOpenSection] = useState<string | null>(null);
   const [pendingEditEntryIndex, setPendingEditEntryIndex] = useState<number | null>(null);
+  // Builder layout: the panel the AI suggestions modal covers (just this editor card, not the whole page)
+  const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    onActiveTabChange?.(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     if (!tabRequest) return;
@@ -396,9 +414,21 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     setSections(prev => {
       const prevMap = new Map(prev.map(s => [s.name, s]));
       const initialNames = new Set(initialSections.map(s => s.name));
+      // Custom sections the resume carries are listed too, even when this list has not seen them yet.
+      const customByName = new Map(
+        (resumeData.customSections ?? []).map(cs => [cs.sectionName, { name: cs.sectionName, ai: false }] as const),
+      );
+      // A section the resume actually has (data saved in it) is listed even if this list had not
+      // seen it yet: a populated extra section (Achievements, Awards, ...) restored after load used
+      // to be dropped, leaving it in the preview but missing from the Editor and Section Order lists.
+      // Empty sections that are not already listed (and not added by the user) stay out.
       const newSections = sectionOrder
-        .map(name => sectionMap.get(name) || prevMap.get(name))
-        .filter((s): s is { name: string; ai: boolean } => !!s && (initialNames.has(s.name) || prevMap.has(s.name)));
+        .map(name => sectionMap.get(name) || prevMap.get(name) || customByName.get(name))
+        .filter((s): s is { name: string; ai: boolean } => !!s && (
+          initialNames.has(s.name) ||
+          prevMap.has(s.name) ||
+          ((sectionMap.has(s.name) || customByName.has(s.name)) && !isSectionKnownEmpty(resumeData as never, s.name))
+        ));
 
       const prevNames = prev.map(s => s.name).join(',');
       const newNames = newSections.map(s => s.name).join(',');
@@ -435,7 +465,10 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     items.splice(result.destination.index, 0, moved);
     setSections(items);
     // Persist drag order so polling doesn't revert it
-    const newOrder = items.map(s => s.name);
+    // Names in the current order that this list does not show stay in the order (after the listed
+    // ones), so reordering never removes a section from the preview or the download.
+    const listed = new Set(items.map(s => s.name));
+    const newOrder = [...items.map(s => s.name), ...(sectionOrder || []).filter(n => !listed.has(n))];
     setSectionOrder(newOrder);
     try {
       const email = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
@@ -465,6 +498,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const handleDeleteSection = (index: number) => {
     const removed = sections[index];
     setSections((prev) => prev.filter((_, i) => i !== index));
+    setAddedSectionNames((prev) => prev.filter((n) => n !== removed.name));
     // Only return standard sections to the "Add section" list — custom sections are deleted permanently
     if (standardSectionNames.has(removed.name)) {
       setExtraSections((prev) => [...prev, removed]);
@@ -490,7 +524,24 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     } catch { /* ignore */ }
   };
 
+  // Section Order lists only sections the resume has content in, plus any the user added here
+  // (a just-added section is still empty, but it belongs in the list).
+  const [addedSectionNames, setAddedSectionNames] = useState<string[]>([]);
+  const orderListSections = sectionsForOrderList(sections, resumeData as never, addedSectionNames);
+  // The list above is a subset of `sections`: translate a move in it into the full list.
+  const handleOrderListDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const moved = orderListSections[result.source.index];
+    const target = orderListSections[result.destination.index];
+    if (!moved || !target || moved.name === target.name) return;
+    const from = sections.findIndex((s) => s.name === moved.name);
+    const to = sections.findIndex((s) => s.name === target.name);
+    if (from < 0 || to < 0) return;
+    handleDragEnd({ ...result, source: { ...result.source, index: from }, destination: { ...result.destination, index: to } });
+  };
+
   const handleAddSection = (section: { name: string; ai: boolean }) => {
+    setAddedSectionNames((prev) => (prev.includes(section.name) ? prev : [...prev, section.name]));
     setSections((prev) => [...prev, section]);
     setExtraSections((prev) => prev.filter((s) => s.name !== section.name));
 
@@ -606,6 +657,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     if (!builderName) return;
     setPendingEditEntryIndex(entryIndex ?? null);
     setPendingOpenSection(builderName);
+    // Sections open inline in the Editor tab, so bring that tab forward.
+    if (builderLayout) setActiveTab("Editor");
   };
 
   const handleSidebarToggle = (isOpen: boolean) => {
@@ -675,6 +728,56 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   // workspace already owns its grid column, so applying 32% there leaves an
   // empty panel and misaligns the preview.
   const dynamicWidth = embedded ? "w-full" : (isTemplateSidebarOpen ? "w-[30%]" : "w-[32%]");
+
+  if (builderLayout) {
+    return (
+      <div className="flex w-full flex-col gap-2 lg:h-full">
+        <BuilderTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <div ref={setOverlayHost} className="relative flex flex-col lg:min-h-0 lg:flex-1">
+          {/* The Editor and Score tabs are stacks of separate cards, so they have no shared white panel */}
+          <div className={`flex flex-col lg:min-h-0 lg:flex-1 lg:overflow-y-auto scrollbar-hide ${activeTab === "Editor" || activeTab === "Score" || activeTab === "Customize" || activeTab === "Job Match" ? "" : "rounded-xl border border-[#e3e9f2] bg-white p-4"}`}>
+            {/* Always mounted so form state survives switching tabs */}
+            <div className={activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
+              <EditorTab
+                inline
+                overlayHost={overlayHost}
+                sections={sections}
+                extraSections={extraSections}
+                activeSection={activeSection}
+                formData={formData}
+                errors={errors}
+                sectionComponents={sectionComponents}
+                handleDeleteSection={handleDeleteSection}
+                handleAddSection={handleAddSection}
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                setActiveSection={setActiveSection}
+                handleDragEnd={handleDragEnd}
+                completionStatus={completionStatus}
+                onSidebarToggle={handleSidebarToggle}
+                clearErrors={clearErrors}
+                setErrors={setErrors}
+                pendingOpenSection={pendingOpenSection}
+                pendingEditEntryIndex={pendingEditEntryIndex}
+                onClearPendingSection={() => { setPendingOpenSection(null); setPendingEditEntryIndex(null); }}
+              />
+            </div>
+            {activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} compact />}
+            {activeTab === "Customize" && (
+              <TemplatesTab
+                onTemplateSelect={() => undefined}
+                resumeId={resumeId}
+                sections={orderListSections}
+                onReorderSections={handleOrderListDragEnd}
+              />
+            )}
+            {activeTab === "Job Match" && <JobMatchTab sections={sections} />}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
