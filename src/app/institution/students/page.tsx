@@ -12,6 +12,7 @@ import { useStructureNames } from '@/hooks/useStructureNames';
 import { READ_ONLY_CONTROL_HINT, studentStatusLabel } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from '../_components/DataTable';
+import { DownloadRosterButton } from '../_components/DownloadRosterButton';
 import { EmptyState } from '../_components/EmptyState';
 import { ErrorNotice } from '../_components/ErrorNotice';
 import { RoleGuard } from '../_components/RoleGuard';
@@ -101,15 +102,22 @@ function StudentsRoster() {
             : 'Everyone you can see, newest first.'
         }
         actions={
-          allows('onboard_student') ? (
-            readOnlyReason ? (
-              <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
-                {addButton}
-              </WriteGuard>
-            ) : (
-              addButton
-            )
-          ) : null
+          // EXPORT IS A READ. It is not behind WriteGuard: a paused college
+          // keeps read access, and the officer still needs the file. The CSV
+          // route has the same scope as this page (READ_STUDENTS), so it never
+          // exports more than the table shows.
+          <div className="flex flex-wrap items-start gap-2">
+            <DownloadRosterButton />
+            {allows('onboard_student') ? (
+              readOnlyReason ? (
+                <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
+                  {addButton}
+                </WriteGuard>
+              ) : (
+                addButton
+              )
+            ) : null}
+          </div>
         }
       />
 
