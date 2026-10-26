@@ -80,7 +80,7 @@ export function useCoverLetterHandoff() {
   return { handleUseForCoverLetter, isUsingForCoverLetter };
 }
 
-/** The "Use for Cover Letter" button. `compact` is the toolbar version: shorter, same action. */
+/** The "Use for Cover Letter" button (the same action the Export menu offers). */
 export const UseForCoverLetterButton: React.FC = () => {
   const { handleUseForCoverLetter, isUsingForCoverLetter } = useCoverLetterHandoff();
   return (

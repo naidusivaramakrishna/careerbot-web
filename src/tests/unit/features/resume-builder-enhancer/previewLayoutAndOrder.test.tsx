@@ -104,6 +104,31 @@ describe("Style & Layout settings on the preview", () => {
     for (const state of [normal, narrow, wide, backToDefault]) expect(state.priority).toBe("important");
   });
 
+  it("font size is measured from the active template's own body size, so the preview shows the size the export prints", () => {
+    // compact_professional / clean_simple render body text at 9px, classic_professional at 11px (templateStyles.ts)
+    for (const body of ["9px", "11px"]) {
+      const view = render(<Template2 data={data as never} style={{ ...(style as object), bodyFontSize: body } as never} careerLevel="Mid-Level" domainFamily="software_engineering" sectionOrder={["Personal Info", "Professional Summary", "Work Experience"]} />);
+      const root = view.container;
+      const before = sizes(root);
+      expect(before).toContain(body);
+      applyPreviewLayout(root, { fontSize: "10", baseFontSize: body });
+      // the template's body text is now exactly the 10pt the export receives (font_size=10)
+      expect(sizes(root)).toContain("10px");
+      expect(sizes(root)).not.toContain(body);
+      applyPreviewLayout(root, { baseFontSize: body });
+      expect(sizes(root)).toEqual(before);
+      view.unmount();
+    }
+  });
+
+  it("without a usable template body size the 10px design size is the base (control)", () => {
+    for (const base of [undefined, "", "abc"]) {
+      const root = renderPreview();
+      applyPreviewLayout(root, { fontSize: "12", baseFontSize: base });
+      expect(sizes(root)).toContain("12px");
+    }
+  });
+
   it("alignment aligns the name and the section headings", () => {
     const root = renderPreview();
     applyPreviewLayout(root, { alignment: "right" });
@@ -129,6 +154,32 @@ describe("a section with content is never dropped from the order", () => {
   it("appends other filled core sections at the end", () => {
     const withEducation = { ...data, education: [{ school: "MIT", degree: "BS" }] };
     expect(withFilledCoreSections(["Personal Info", "Professional Summary", "Work Experience"], withEducation)).toEqual(["Personal Info", "Professional Summary", "Work Experience", "Education"]);
+  });
+
+  it("adds a filled Skills section the stored order lacks (flat list, domain category, custom category)", () => {
+    const order = ["Personal Info", "Professional Summary", "Work Experience"];
+    expect(withFilledCoreSections(order, { ...data, skills: ["React"] })).toEqual([...order, "Skills"]);
+    expect(withFilledCoreSections(order, { ...data, skills: [], categorizedSkills: { programming_languages: [], clinical_skills: ["Triage"] } })).toEqual([...order, "Skills"]);
+    expect(withFilledCoreSections(order, { ...data, skills: [], categorizedSkills: { programming_languages: [], custom_categories: [{ id: "c1", name: "Tools", skills: ["Figma"] }] } })).toEqual([...order, "Skills"]);
+  });
+
+  it("leaves Skills out when it holds only category metadata, and never adds it twice", () => {
+    const order = ["Personal Info", "Professional Summary", "Work Experience"];
+    const metadataOnly = {
+      ...data, skills: [],
+      categorizedSkills: { programming_languages: [], frameworks: [], hidden_predefined_categories: ["frameworks"], skill_id_map: { "frameworks:React": "s1" }, custom_categories: [{ id: "c1", name: "Tools", skills: [] }] },
+    };
+    expect(withFilledCoreSections(order, metadataOnly)).toBe(order);
+    const listed = ["Personal Info", "skills", "Work Experience"];
+    expect(withFilledCoreSections(listed, { ...data, professionalSummary: "", skills: ["React"] })).toBe(listed);
+  });
+
+  it("the preview shows the skills once the order is filled, and not before", () => {
+    const withSkills = { ...data, skills: ["Kubernetes"] };
+    const text = (order: string[]) => render(<Template2 data={withSkills as never} style={style} careerLevel="Mid-Level" domainFamily="software_engineering" sectionOrder={order} />).container.textContent || "";
+    const stored = ["Personal Info", "Professional Summary", "Work Experience"];
+    expect(text(stored)).not.toMatch(/Kubernetes/);
+    expect(text(withFilledCoreSections(stored, withSkills))).toMatch(/Kubernetes/);
   });
 
   it("the preview shows the summary once the order is filled, and not before", () => {

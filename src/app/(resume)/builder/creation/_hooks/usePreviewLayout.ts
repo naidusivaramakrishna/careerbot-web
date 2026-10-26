@@ -15,10 +15,18 @@ export interface PreviewLayoutSettings {
   pageMargin?: string;
   sectionSpacing?: string;
   alignment?: string;
+  /** The active template's body size (resumeStyle.bodyFontSize, e.g. "9px"): the size the font setting replaces. */
+  baseFontSize?: string;
 }
 
 /** Body size the preview templates are designed for (the "Template default" font size). */
 export const BASE_BODY_SIZE_PX = 10;
+
+/** The body size the template rendered with; the design size when it is missing or not a size. */
+const baseBodySize = (value?: string): number => {
+  const size = value ? parseFloat(value) : NaN;
+  return Number.isFinite(size) && size > 0 ? size : BASE_BODY_SIZE_PX;
+};
 const MARGIN_PADDING_PX: Record<string, number> = { narrow: 18, wide: 56 };
 const SPACING_FACTOR: Record<string, number> = { compact: 0.6, relaxed: 1.5 };
 const ALIGNMENTS = new Set(["left", "center", "right"]);
@@ -84,7 +92,8 @@ function alignElement(el: HTMLElement, alignment: string | null): void {
 /** Applies the settings to everything rendered under `root` (exported for tests). */
 export function applyPreviewLayout(root: HTMLElement, settings: PreviewLayoutSettings): void {
   const size = validFontSize(settings.fontSize);
-  const fontFactor = size !== null ? size / BASE_BODY_SIZE_PX : 1;
+  // The export sets the body text to exactly `size` pt, whatever the template's own body size (9px, 10px, 11px)
+  const fontFactor = size !== null ? size / baseBodySize(settings.baseFontSize) : 1;
   const spacingFactor = SPACING_FACTOR[settings.sectionSpacing ?? ""] ?? 1;
   const padding = MARGIN_PADDING_PX[settings.pageMargin ?? ""] ?? null;
   const alignment = ALIGNMENTS.has(settings.alignment ?? "") ? (settings.alignment as string) : null;
@@ -114,14 +123,14 @@ export function usePreviewLayout(
   settings: PreviewLayoutSettings,
   dependencies: ReadonlyArray<unknown> = [],
 ): void {
-  const { fontSize, pageMargin, sectionSpacing, alignment } = settings;
+  const { fontSize, pageMargin, sectionSpacing, alignment, baseFontSize } = settings;
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
     let frame = 0;
     const apply = () => {
       frame = 0;
-      applyPreviewLayout(root, { fontSize, pageMargin, sectionSpacing, alignment });
+      applyPreviewLayout(root, { fontSize, pageMargin, sectionSpacing, alignment, baseFontSize });
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(apply);
@@ -135,5 +144,5 @@ export function usePreviewLayout(
       if (frame) cancelAnimationFrame(frame);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootRef, fontSize, pageMargin, sectionSpacing, alignment, ...dependencies]);
+  }, [rootRef, fontSize, pageMargin, sectionSpacing, alignment, baseFontSize, ...dependencies]);
 }

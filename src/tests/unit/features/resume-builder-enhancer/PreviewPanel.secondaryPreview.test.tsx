@@ -3,7 +3,7 @@
  * main preview's green fix highlights with it (neither the CSS highlight nor the from-scratch store).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import PreviewPanel from "@/app/(resume)/builder/creation/_components/PreviewPanel";
 import { useResume } from "@/app/(resume)/builder/creation/_context/ResumeContext";
@@ -27,7 +27,10 @@ vi.mock("@/app/(resume)/builder/creation/_components/templates/TemplateTwo", () 
 vi.mock("@/app/(resume)/builder/creation/_components/templates/TemplateThree", () => ({ default: () => null }));
 vi.mock("@/app/(resume)/builder/creation/_components/templates/TemplateFour", () => ({ default: () => null }));
 vi.mock("@/app/(resume)/builder/creation/_components/templates/TemplateFive", () => ({ default: () => null }));
-vi.mock("@/app/(resume)/templates/Template2", () => ({ default: () => null }));
+// A template whose body text is rendered at the active template's body size, like the real ones
+vi.mock("@/app/(resume)/templates/Template2", () => ({
+  default: ({ style }: { style?: { bodyFontSize?: string } }) => <div><p data-testid="body-text" style={{ fontSize: style?.bodyFontSize }}>Body</p></div>,
+}));
 vi.mock("@/app/(resume)/templates/Template3", () => ({ default: () => null }));
 vi.mock("@/app/(resume)/templates/Template4", () => ({ default: () => null }));
 
@@ -80,6 +83,53 @@ describe("a second preview (the full-preview window)", () => {
     await settle();
     expect(registry.has("ats-fixed-text")).toBe(true);
     again.unmount();
+  });
+
+  it("scales the preview font from the active template's body size, so Font Size 10 shows 10px like the export", async () => {
+    vi.mocked(useResume).mockReturnValue({
+      selectedTemplate: "clean_simple", resumeData: { skills: ["React"] }, resumeStyle: { bodyFontSize: "9px", fontSize: "10" }, enhancedAtsScore: null,
+      enhancedSuggestions: [], enhancedDataVersion: 0, resumeSavedVersion: 0, sectionOrder: ["Personal Info"], previewCatalogueKey: null,
+    } as never);
+    const view = render(panel());
+    await settle();
+    // the layout is re-applied on the next animation frame after the template mounts
+    await waitFor(() => expect((view.getByTestId("body-text") as HTMLElement).style.fontSize).toBe("10px"));
+    view.unmount();
+  });
+
+  // Codex review of the follow-up (#297): the hook remembers each element's original size in data-layout-fs and
+  // takes a value React wrote as "ours" when it equals the last applied one. With Font Size 10 on a 9px template the
+  // body is shown at 10px; a catalogue / template switch to a 10px body makes React write 10px, which looked like the
+  // hook's own value, so the stale 9px original came back (factor 1 restores it) and the body showed 9px.
+  const withBody = (bodyFontSize: string) => vi.mocked(useResume).mockReturnValue({
+    selectedTemplate: "clean_simple", resumeData: { skills: ["React"] }, resumeStyle: { bodyFontSize, fontSize: "10" }, enhancedAtsScore: null,
+    enhancedSuggestions: [], enhancedDataVersion: 0, resumeSavedVersion: 0, sectionOrder: ["Personal Info"], previewCatalogueKey: null,
+  } as never);
+  const bodySize = (view: ReturnType<typeof render>) => (view.getByTestId("body-text") as HTMLElement).style.fontSize;
+
+  it("keeps Font Size 10 at 10px when the template's body size changes to 10px", async () => {
+    withBody("9px");
+    const view = render(panel());
+    await settle();
+    await waitFor(() => expect(bodySize(view)).toBe("10px"));
+    withBody("10px");
+    view.rerender(panel());
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 50)); // a scheduled re-apply runs on the next frame
+    expect(bodySize(view)).toBe("10px");
+    view.unmount();
+  });
+
+  it("keeps Font Size 10 at 10px when the template's body size changes to 11px (control)", async () => {
+    withBody("9px");
+    const view = render(panel());
+    await settle();
+    await waitFor(() => expect(bodySize(view)).toBe("10px"));
+    withBody("11px");
+    view.rerender(panel());
+    await settle();
+    await waitFor(() => expect(bodySize(view)).toBe("10px"));
+    view.unmount();
   });
 
   it("does not force the page padding with a wrapper class (the margin is the hook's alone)", async () => {

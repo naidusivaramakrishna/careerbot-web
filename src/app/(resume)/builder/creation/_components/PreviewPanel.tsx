@@ -225,7 +225,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   // Style & Layout settings on the screen preview (the export gets the same four from the server side)
   usePreviewLayout(
     contentRef,
-    { fontSize: resumeStyle.fontSize, pageMargin: resumeStyle.pageMargin, sectionSpacing: resumeStyle.sectionSpacing, alignment: resumeStyle.alignment },
+    { fontSize: resumeStyle.fontSize, pageMargin: resumeStyle.pageMargin, sectionSpacing: resumeStyle.sectionSpacing, alignment: resumeStyle.alignment, baseFontSize: resumeStyle.bodyFontSize },
     [resumeData, sectionOrder, selectedTemplate],
   );
   const [userEmail, setUserEmail] = useState<string>('');
@@ -691,7 +691,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         <div
           ref={contentRef}
           className={`resume-content ats-enhancer-preview ${
-            // In the builder the page fills its card: no centred 900px column with wide side padding
+            // In the builder the page fills its card: no centred 900px column; the page margin is usePreviewLayout's alone
             expandPreview ? "px-0 py-3 [&>div]:!max-w-none" : "px-2 py-6"
           }`}
           style={{
@@ -706,7 +706,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
-            renderTemplate()
+            // Keyed by the template's body size: usePreviewLayout remembers each element's original font size, and a
+            // new body size (template / catalogue switch) must give it fresh elements to measure, not stale originals
+            <React.Fragment key={resumeStyle.bodyFontSize ?? ""}>{renderTemplate()}</React.Fragment>
           )}
         </div>
       </div>

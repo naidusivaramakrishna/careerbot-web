@@ -1,3 +1,5 @@
+import { sectionHasSavedData } from "./sectionPayloadKeys";
+
 /**
  * A section that has content must be in the order the preview and the export are given. A resume whose stored
  * order lacks one (an uploaded resume, an older record) would otherwise lose that section's text, most visibly
@@ -6,6 +8,8 @@
  */
 const CORE_SECTIONS: ReadonlyArray<{ name: string; hasContent: (data: Record<string, unknown>) => boolean }> = [
   { name: "Professional Summary", hasContent: (d) => textOf(d.professionalSummary).length > 0 },
+  // Skills (a flat list or categories, domain and custom ones included; category metadata alone is not content)
+  { name: "Skills", hasContent: (d) => sectionHasSavedData(d, "Skills") },
   { name: "Work Experience", hasContent: (d) => listHas(d.workExperience) },
   { name: "Education", hasContent: (d) => listHas(d.education) },
   { name: "Projects", hasContent: (d) => listHas(d.projects) },

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import {
   Anchor, Award, BadgeCheck, BookOpen, Briefcase, CodeXml, FileSearch, FileSignature, FileText,
-  FlaskConical, Folder, GraduationCap, Globe, Heart, Medal, Presentation, Settings, Trophy, User, Users,
+  FlaskConical, Folder, GraduationCap, Globe, Heart, Presentation, Settings, Trophy, User, Users,
 } from "lucide-react";
 
 /** What a section icon accepts (lucide icons and the older react-icons both fit). */
@@ -70,7 +70,6 @@ export const sectionIcons: Record<string, SectionIcon> = {
   "Custom Section": CodeXml,
   "Declaration": FileSignature,
 };
-void Medal;
 
 // ✅ Required fields for completion check
 export const sectionRequiredFields: Record<string, string[]> = {
