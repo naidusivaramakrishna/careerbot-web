@@ -8,6 +8,7 @@ import { getLeaderboard, getProgressAnalytics, Leaderboard, ProgressAnalytics } 
 import { getProfile, UserProfile } from '@/api/userApi';
 import LoadingScreen from '../_components/LoadingScreen';
 import HighlightBox from '../_components/HighlightBox';
+import MockTestLeaderboardConsentToggle from '../_components/MockTestLeaderboardConsentToggle';
 
 export default function LeaderboardPage() {
   const router = useRouter();
@@ -27,6 +28,12 @@ export default function LeaderboardPage() {
       setProfile(me);
     }).finally(() => setLoading(false));
   }, []);
+
+  // Read the board again after a consent change, so the caller's row and the
+  // toggle both show what the server now holds (the board is never cached).
+  const reloadLeaderboard = () => {
+    getLeaderboard().then(setLeaderboard).catch(() => {});
+  };
 
   const entries = leaderboard?.entries ?? [];
 
@@ -81,6 +88,13 @@ export default function LeaderboardPage() {
             )}
           </div>
 
+          {leaderboard && (
+            <MockTestLeaderboardConsentToggle
+              optIn={leaderboard.my_opt_in}
+              onChanged={reloadLeaderboard}
+            />
+          )}
+
           {entries.length === 0 ? (
             <div className="rounded-xl px-5 py-10 text-center" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
               <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#dbeafe' }}>
@@ -99,9 +113,10 @@ export default function LeaderboardPage() {
                   const rank = entry.rank ?? i + 1;
                   const isYou = entry.is_current_user ?? (rank === leaderboard?.your_rank);
                   const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
-                  // Prefer the name the backend sent. For the caller's own row an older
-                  // backend sends no name, so fall back to their profile username; the
-                  // "You" badge beside it already marks the row as theirs.
+                  // Prefer the name the backend sent: a real name only for the caller
+                  // or a user who opted in, "Anonymous learner" for everyone else.
+                  // For the caller's own row an older backend sends no name, so fall
+                  // back to their profile username; the "You" badge marks the row.
                   const displayName =
                     entry.name ?? (isYou ? profile?.username : undefined) ?? `User #${rank}`;
 

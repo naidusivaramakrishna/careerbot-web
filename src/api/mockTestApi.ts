@@ -1272,13 +1272,17 @@ export interface Leaderboard {
   your_rank?: number;
   your_score?: number;
   entries: LeaderboardEntry[];
+  /**
+   * The caller's OWN choice to be named on this (platform-wide) leaderboard.
+   * null = the server could not read it (or an older backend did not send it):
+   * never treat that as "off", which would tell a listed user they are hidden.
+   */
+  my_opt_in: boolean | null;
 }
 
 export const getLeaderboard = async (): Promise<Leaderboard> => {
   try {
     const response = await httpClient.get<any>('/mock-test/analytics/leaderboard');
-    console.log('[getLeaderboard] raw:', JSON.stringify(response.data, null, 2));
-
 
     let leaderboardData: Leaderboard | null = null;
 
@@ -1325,6 +1329,7 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
           ? Math.round((raw.your_score ?? raw.your_avg_score ?? raw.avg_score) * 10) / 10
           : undefined,
         entries,
+        my_opt_in: typeof raw.my_leaderboard_opt_in === 'boolean' ? raw.my_leaderboard_opt_in : null,
       };
     }
 
@@ -1337,6 +1342,25 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
   } catch (err: any) {
     throw err;
   }
+};
+
+export interface MockTestLeaderboardConsent {
+  opt_in: boolean;
+  changed: boolean;
+}
+
+/**
+ * Turn the caller's OWN name on the mock-test leaderboard on or off.
+ * The body carries no user id: the server changes only the signed-in user.
+ * Separate from the college leaderboard choice (institutionApi).
+ */
+export const setMyMockTestLeaderboardConsent = async (
+  optIn: boolean,
+): Promise<MockTestLeaderboardConsent> => {
+  const response = await httpClient.put<MockTestLeaderboardConsent>(
+    '/mock-test/analytics/leaderboard/consent', { opt_in: optIn },
+  );
+  return response.data;
 };
 
 export interface QuestionExplanationRequest {

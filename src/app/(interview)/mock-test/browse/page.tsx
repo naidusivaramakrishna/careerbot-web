@@ -679,7 +679,7 @@ export default function MockTestPage() {
               ) : (
                 <div className="space-y-3">
                   {topEntries.map((entry, i) => {
-                    const isYou = entry.name === 'You';
+                    const isYou = !!entry.is_current_user;
                     const medalBg = i === 0
                       ? 'linear-gradient(135deg, #F59E0B, #D97706)'
                       : i === 1
