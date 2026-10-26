@@ -7,15 +7,19 @@ import { Button } from '@/components/ui/Button';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import {
   useBatches,
+  useCohortComparison,
   useDepartments,
+  useLeaderboard,
   useSections,
   useStudentsPaged,
 } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
-import type { Department, Student } from '@/types/institution';
+import type { CohortComparisonGroup, Department, Student } from '@/types/institution';
 import { DataTable, StackedCell, OptionalCell } from './DataTable';
 import { EmptyState } from './EmptyState';
 import { ErrorNotice } from './ErrorNotice';
+import { LeaderboardCard } from './LeaderboardCard';
+import { rankDepartments } from './StaffReadiness';
 import { PageHeader, SectionTitle } from './Typography';
 import { StatCard } from './StatCard';
 import { StatGridSkeleton, TableSkeleton, LoadingAnnouncement } from './Skeletons';
@@ -35,12 +39,13 @@ import { WriteGuard } from './WriteGuard';
  * They diverge from here, and a shared component would have had to grow a
  * second `scope ===` branch for every one of those.
  *
- * WHAT IS DELIBERATELY ABSENT: readiness and rank. 3.2 locks both, and the
- * formula that produces them is marked OPEN in the same document -- "do not
- * guess in code". A placeholder number on a placement officer's dashboard is
- * worse than an absent column, because it will be read, quoted and acted on.
- * The comparison table below ships the columns that are real today and states
- * plainly that the ranking is not one of them.
+ * READINESS AND RANK. 3.2 locks both. They were withheld until the owner
+ * approved the 25/25/20/20/10 readiness weights (2026-10-26); they now come
+ * from GET /reports/comparison (department average and median, aggregates
+ * only) and GET /leaderboard (top students, opt-in names only). Rank is the
+ * department's position by average among departments that HAVE an average --
+ * a department below the ten-scored-student floor shows its count and no
+ * rank, because the server withholds its average for privacy.
  */
 const RECENT_LIMIT = 8;
 
@@ -76,15 +81,35 @@ export function CpoOverview() {
   // stay true at a thousand students.
   const unplaced = useStudentsPaged({ limit: 1, without_section: true });
 
+  // Readiness, aggregate only -- one request for every department.
+  const comparison = useCohortComparison(true);
+  // The college's top students. Names only students who opted in.
+  const board = useLeaderboard(10, true);
+
   const rows = students.data?.items;
   const studentTotal = students.data?.total ?? 0;
   const withoutSection = unplaced.data?.total ?? 0;
-  const departmentRows = departments.data ?? [];
+  const departmentRows = useMemo(() => departments.data ?? [], [departments.data]);
 
   // Counted from the list already loaded for the stat card above, NOT with a
   // request per department: GET /sections returns the college's sections whole
   // (Section[], not a page), and every row carries its department_id. One
   // request answers the whole column.
+  const comparisonByDepartment = useMemo(() => {
+    const map = new Map<string, CohortComparisonGroup>();
+    (comparison.data?.groups ?? []).forEach((g) => map.set(g.group, g));
+    return map;
+  }, [comparison.data]);
+
+  // Ranked only among the departments this table shows, so "unassigned" or a
+  // department deleted since cannot take a place.
+  const departmentRanks = useMemo(() => {
+    const shown = new Set(departmentRows.map((d) => d.id));
+    return rankDepartments(
+      (comparison.data?.groups ?? []).filter((g) => shown.has(g.group)),
+    );
+  }, [comparison.data, departmentRows]);
+
   const sectionsByDepartment = useMemo(() => {
     const counts = new Map<string, number>();
     (sections.data ?? []).forEach((row) => {
@@ -215,14 +240,75 @@ export function CpoOverview() {
                   </span>
                 ),
               },
+              {
+                key: 'readiness',
+                header: 'Avg readiness',
+                align: 'right',
+                width: 'w-[150px]',
+                render: (d) => {
+                  if (comparison.isLoading && !comparison.data) {
+                    return <span className="text-[#94a3b8]">—</span>;
+                  }
+                  const g = comparisonByDepartment.get(d.id);
+                  if (!g || g.scored === 0) {
+                    return <span className="text-[12px] text-[#94a3b8]">No scores yet</span>;
+                  }
+                  if (!g.available) {
+                    return (
+                      <span className="text-[12px] text-[#94a3b8]">
+                        {g.scored} scored, too few to show
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="tabular-nums">
+                      <span className="font-medium text-[#0f172a]">{g.average}</span>
+                      <span className="ml-1 text-[11px] text-[#94a3b8]">
+                        median {g.median}
+                      </span>
+                    </span>
+                  );
+                },
+              },
+              {
+                key: 'rank',
+                header: 'Rank',
+                align: 'right',
+                width: 'w-[80px]',
+                render: (d) => {
+                  const rank = departmentRanks.get(d.id);
+                  return rank ? (
+                    <span className="tabular-nums">
+                      {rank}
+                      <span className="text-[11px] text-[#94a3b8]"> of {departmentRanks.size}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[#94a3b8]">—</span>
+                  );
+                },
+              },
             ]}
           />
-          <p className="mt-2 text-[12px] leading-relaxed text-[#64748b]">
-            Readiness and rank are not shown. The score they are calculated from
-            has not been defined yet, and a placeholder here would be read as a
-            real figure.
-          </p>
+          {comparison.error ? (
+            <ErrorNotice error={comparison.error} onRetry={comparison.refetch} className="mt-2" />
+          ) : (
+            <p className="mt-2 text-[12px] leading-relaxed text-[#64748b]">
+              Readiness is out of 100 (mock test 25, coding test 25, mock
+              interview 20, English 20, resume ATS 10). The average and median
+              are over students with at least one score. A department with
+              fewer than ten scored students shows its count only, and is not
+              ranked.
+            </p>
+          )}
         </section>
+      ) : null}
+
+      {board.error ? (
+        <ErrorNotice error={board.error} onRetry={board.refetch} className="mt-6" />
+      ) : board.data ? (
+        <div className="mt-6">
+          <LeaderboardCard board={board.data} audience="staff" />
+        </div>
       ) : null}
 
       <section className="mt-6">

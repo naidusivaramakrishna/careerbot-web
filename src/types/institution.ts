@@ -237,11 +237,36 @@ export interface RosterReportRow {
   readiness: number;
   activities_scored: number;
   activities_total: number;
+  /** ISO time the newest in_progress/completed progress row was RECORDED, or
+   *  null when nothing has been. A recording time, never a login time.
+   *  Optional so an older server that does not send it reads as "unknown". */
+  last_activity_at?: string | null;
   [activityColumn: string]: unknown;
 }
 
 export interface RosterReport {
   items: RosterReportRow[];
+  total: number;
+}
+
+/** One faculty member on GET /reports/faculty (CPO and HOD only).
+ *
+ *  `avg_readiness` is over SCORED students only -- the same rule as
+ *  /reports/comparison -- so `scored` travels beside it, and it is null when
+ *  none of their students has a score. Counts only students the caller can
+ *  already read. */
+export interface FacultyReportRow {
+  membership_id: string;
+  account_id: string;
+  display_name: string | null;
+  department_id: string | null;
+  assigned: number;
+  scored: number;
+  avg_readiness: number | null;
+}
+
+export interface FacultyReport {
+  items: FacultyReportRow[];
   total: number;
 }
 

@@ -15,6 +15,7 @@ import { ErrorNotice } from './ErrorNotice';
 import { PageHeader } from './Typography';
 import { LoadingAnnouncement, TableSkeleton } from './Skeletons';
 import { StudentStatusPill } from './StatusPill';
+import { LastActivityCell, ReadinessCell, useRosterIndex } from './StaffReadiness';
 import { WriteGuard } from './WriteGuard';
 
 /**
@@ -29,6 +30,10 @@ import { WriteGuard } from './WriteGuard';
  * `GET /students` already returns only their assigned students (the server
  * resolves the assignment set per request), so there is no client-side filter
  * to get wrong.
+ *
+ * READINESS AND LAST ACTIVITY come from ONE GET /reports/roster, scoped the
+ * same way (their assigned students only), joined by id -- not a request per
+ * row. The score is the owner-approved 25/25/20/20/10 readiness (2026-10-26).
  */
 const ROSTER_LIMIT = 200;
 
@@ -43,6 +48,7 @@ export function FacultyOverview() {
   const rows = students.data?.items;
   const total = students.data?.total ?? 0;
   const truncated = total > (rows?.length ?? 0);
+  const { report: roster, index: rosterIndex } = useRosterIndex(true);
 
   const recordButton = (
     <Link href="/institution/progress" tabIndex={readOnlyReason ? -1 : undefined}>
@@ -73,6 +79,9 @@ export function FacultyOverview() {
 
       {students.error ? (
         <ErrorNotice error={students.error} onRetry={students.refetch} className="mb-4" />
+      ) : null}
+      {roster.error ? (
+        <ErrorNotice error={roster.error} onRetry={roster.refetch} className="mb-4" />
       ) : null}
 
       {truncated ? (
@@ -125,9 +134,27 @@ export function FacultyOverview() {
                 ),
             },
             {
+              key: 'readiness',
+              header: 'Readiness',
+              align: 'right',
+              width: 'w-[120px]',
+              render: (s) => (
+                <ReadinessCell row={rosterIndex.get(s.id)} loading={roster.isLoading} />
+              ),
+            },
+            {
+              key: 'last',
+              header: 'Last activity',
+              width: 'w-[130px]',
+              render: (s) => (
+                <LastActivityCell row={rosterIndex.get(s.id)} loading={roster.isLoading} />
+              ),
+            },
+            {
               key: 'status',
               header: 'Status',
               width: 'w-[130px]',
+              secondary: true,
               render: (s) => <StudentStatusPill status={s.status} />,
             },
             {

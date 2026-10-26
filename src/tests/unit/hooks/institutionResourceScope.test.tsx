@@ -119,4 +119,47 @@ describe('useInstitutionResource is keyed by the active college', () => {
     expect(result.current.data).toBeNull();
   });
 
+  it('clears the previous student when the resource key changes', async () => {
+    setInstitutionSession(session('college-a'));
+    const fetcher = vi
+      .fn<[], Promise<string[]>>()
+      .mockResolvedValueOnce(['student-a-row'])
+      .mockImplementationOnce(() => new Promise<string[]>(() => {}));
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useInstitutionResource(fetcher, true, id),
+      { initialProps: { id: 'stu-a' } },
+    );
+    await waitFor(() => expect(result.current.data).toEqual(['student-a-row']));
+
+    rerender({ id: 'stu-b' });
+
+    // Student B never answers: A's rows must already be gone.
+    expect(result.current.data).toBeNull();
+    expect(result.current.isLoading).toBe(true);
+  });
+
+  it('a refetch handle kept from the previous student cannot write into the new one', async () => {
+    setInstitutionSession(session('college-a'));
+    const fetcher = vi
+      .fn<[], Promise<string[]>>()
+      .mockResolvedValueOnce(['student-a-row'])
+      .mockResolvedValueOnce(['student-b-row'])
+      .mockResolvedValue(['student-a-again']);
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useInstitutionResource(fetcher, true, id),
+      { initialProps: { id: 'stu-a' } },
+    );
+    await waitFor(() => expect(result.current.data).toEqual(['student-a-row']));
+    const staleRefetch = result.current.refetch;
+
+    rerender({ id: 'stu-b' });
+    await waitFor(() => expect(result.current.data).toEqual(['student-b-row']));
+
+    await act(async () => {
+      await staleRefetch();
+    });
+    expect(result.current.data).toEqual(['student-b-row']);
+  });
 });

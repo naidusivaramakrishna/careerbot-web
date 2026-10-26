@@ -19,18 +19,32 @@ import { CARD, INK, TABULAR } from './tokens';
  * There is no total either. "Ten in the year, nine names" identifies the
  * tenth.
  */
-export function LeaderboardCard({ board }: { board: Leaderboard }) {
+export function LeaderboardCard({
+  board,
+  audience = 'student',
+}: {
+  board: Leaderboard;
+  /** `staff` for a placement officer: the board is their college, not "your
+   *  year", and the copy says so. Same data, same opt-in rule. */
+  audience?: 'student' | 'staff';
+}) {
+  const staff = audience === 'staff';
+  const title = staff ? 'Top students' : 'Top of your year';
   if (!board.available || board.entries.length === 0) {
     return (
       <section className={`${CARD} p-5`} aria-labelledby="board-heading">
-        <SectionTitle id="board-heading">Top of your year</SectionTitle>
+        <SectionTitle id="board-heading">{title}</SectionTitle>
         <Caption>
           {/* Not "nobody has a score yet": listing is OPT-IN, so an empty
               board usually means nobody has chosen to be shown, and saying
               otherwise would be untrue. */}
           {board.available
-            ? 'Nobody in your year is listed yet. Students appear here once they choose to show their name.'
-            : 'Not enough of your year group have taken anything yet.'}
+            ? staff
+              ? 'No student is listed yet. Students appear here once they choose to show their name.'
+              : 'Nobody in your year is listed yet. Students appear here once they choose to show their name.'
+            : staff
+              ? 'Not enough students have a score yet to show a list.'
+              : 'Not enough of your year group have taken anything yet.'}
         </Caption>
       </section>
     );
@@ -38,7 +52,7 @@ export function LeaderboardCard({ board }: { board: Leaderboard }) {
 
   return (
     <section className={`${CARD} p-5`} aria-labelledby="board-heading">
-      <SectionTitle id="board-heading">Top of your year</SectionTitle>
+      <SectionTitle id="board-heading">{title}</SectionTitle>
       <Caption>Students who chose to be listed.</Caption>
 
       <ol className="mt-4 divide-y divide-[#f0f0f0]">

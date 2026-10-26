@@ -61,6 +61,7 @@ import type {
   LeaderboardConsent,
   CohortComparison,
   RosterReport,
+  FacultyReport,
   MyPeople,
   StudentTask,
   StudentTaskList,
@@ -881,6 +882,19 @@ export async function getRosterReport(): Promise<RosterReport> {
   try {
     const response = await httpClient.get<RosterReport>(
       `${BASE}/reports/roster`, withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Each faculty member's assigned-student count and the average readiness of
+ *  those students. CPO and HOD only, scoped like the roster: one request for
+ *  the whole staff list, never one per faculty member. */
+export async function getFacultyReport(): Promise<FacultyReport> {
+  try {
+    const response = await httpClient.get<FacultyReport>(
+      `${BASE}/reports/faculty`, withInstitutionAuth());
     return response.data;
   } catch (err) {
     return fail(err);

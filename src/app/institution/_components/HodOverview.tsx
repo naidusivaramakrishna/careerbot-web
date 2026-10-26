@@ -6,12 +6,14 @@ import { GraduationCap, UserPlus, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import {
+  useCohortComparison,
+  useFacultyReport,
   useMembers,
   useSections,
   useStudentsPaged,
 } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
-import type { MemberRecord, Student } from '@/types/institution';
+import type { FacultyReportRow, MemberRecord, Student } from '@/types/institution';
 import { DataTable, StackedCell } from './DataTable';
 import { EmptyState } from './EmptyState';
 import { ErrorNotice } from './ErrorNotice';
@@ -19,6 +21,12 @@ import { PageHeader, SectionTitle } from './Typography';
 import { StatCard } from './StatCard';
 import { StatGridSkeleton, TableSkeleton, LoadingAnnouncement } from './Skeletons';
 import { StudentStatusPill } from './StatusPill';
+import {
+  LastActivityCell,
+  ReadinessCell,
+  rankDepartments,
+  useRosterIndex,
+} from './StaffReadiness';
 import { WriteGuard } from './WriteGuard';
 
 /**
@@ -34,24 +42,30 @@ import { WriteGuard } from './WriteGuard';
  * department and nothing else. Offering a department control on this screen
  * would imply an authority they do not have.
  *
- * TWO THINGS THE SPEC LOCKS THAT ARE NOT HERE, and why:
- *   - Faculty "Assigned" and "Avg readiness" columns. No endpoint reports
- *     either. Assignment counts are not returned by GET /members, and the
- *     readiness formula is marked OPEN. The faculty list ships without them
- *     rather than with invented numbers.
- *   - Student readiness and last-active. Same reason.
- * The list itself is the part that is real, and it was previously reachable
- * only as a picker inside the assignments screen.
+ * READINESS (owner-approved 25/25/20/20/10 weights, 2026-10-26), all from
+ * one request per list -- never one per row:
+ *   - Faculty "Assigned" and "Avg readiness": GET /reports/faculty. The average
+ *     is over the faculty member's SCORED students, the same rule as the
+ *     department comparison, with the scored count beside it.
+ *   - Student readiness and last activity: GET /reports/roster, which is
+ *     scoped to this HOD's department exactly like GET /students.
+ *   - Department readiness and its rank among departments: GET
+ *     /reports/comparison (aggregates only; withheld below ten scored).
  */
 const RECENT_LIMIT = 12;
 
 export function HodOverview() {
-  const { readOnlyReason, allows } = useInstitution();
+  const { readOnlyReason, allows, activeMembership } = useInstitution();
   const students = useStudentsPaged({ limit: RECENT_LIMIT });
   const sections = useSections(undefined, true);
   const faculty = useMembers('faculty', true);
 
   const unplaced = useStudentsPaged({ limit: 1, without_section: true });
+
+  const facultyReport = useFacultyReport(true);
+  const comparison = useCohortComparison(true);
+  const { report: roster, index: rosterIndex } = useRosterIndex(true);
+  const myDepartment = activeMembership?.department_id ?? null;
 
   const rows = students.data?.items;
   const studentTotal = students.data?.total ?? 0;
@@ -64,6 +78,26 @@ export function HodOverview() {
     () => (faculty.data ?? []).filter((m) => m.active !== false),
     [faculty.data],
   );
+
+  const facultyStats = useMemo(() => {
+    const map = new Map<string, FacultyReportRow>();
+    (facultyReport.data?.items ?? []).forEach((row) => map.set(row.membership_id, row));
+    return map;
+  }, [facultyReport.data]);
+
+  const myGroup = useMemo(
+    () => (comparison.data?.groups ?? []).find((g) => g.group === myDepartment) ?? null,
+    [comparison.data, myDepartment],
+  );
+  // "unassigned" is the server's bucket for students with no department, not
+  // a department, so it cannot take a place in the ranking.
+  const ranks = useMemo(
+    () => rankDepartments(
+      (comparison.data?.groups ?? []).filter((g) => g.group !== 'unassigned'),
+    ),
+    [comparison.data],
+  );
+  const myRank = myDepartment ? ranks.get(myDepartment) : undefined;
 
   const recent = useMemo(() => {
     if (!rows) return [];
@@ -128,6 +162,23 @@ export function HodOverview() {
             caption="Class groups"
             href="/institution/sections"
           />
+          {myGroup && myGroup.available ? (
+            <StatCard
+              label="Avg readiness"
+              value={myGroup.average}
+              caption={
+                myRank
+                  ? `Rank ${myRank} of ${ranks.size} departments · ${myGroup.scored} scored`
+                  : `${myGroup.scored} scored`
+              }
+            />
+          ) : myGroup ? (
+            <StatCard
+              label="Avg readiness"
+              value="—"
+              caption={`${myGroup.scored} scored, ten needed to show`}
+            />
+          ) : null}
           {withoutSection > 0 ? (
             <StatCard
               label="No section yet"
@@ -151,6 +202,9 @@ export function HodOverview() {
           </Link>
         </div>
 
+        {facultyReport.error ? (
+          <ErrorNotice error={facultyReport.error} onRetry={facultyReport.refetch} className="mb-3" />
+        ) : null}
         {faculty.error ? (
           <ErrorNotice error={faculty.error} onRetry={faculty.refetch} className="mb-3" />
         ) : faculty.isLoading && !faculty.data ? (
@@ -180,6 +234,45 @@ export function HodOverview() {
                     secondary={m.display_name?.trim() ? m.account_id : undefined}
                   />
                 ),
+              },
+              {
+                key: 'assigned',
+                header: 'Assigned',
+                align: 'right',
+                width: 'w-[100px]',
+                render: (m) => {
+                  const stats = facultyStats.get(m.membership_id);
+                  return stats ? (
+                    <span className="tabular-nums">{stats.assigned}</span>
+                  ) : (
+                    <span className="text-[#94a3b8]">—</span>
+                  );
+                },
+              },
+              {
+                key: 'readiness',
+                header: 'Avg readiness',
+                align: 'right',
+                width: 'w-[150px]',
+                render: (m) => {
+                  const stats = facultyStats.get(m.membership_id);
+                  if (!stats) return <span className="text-[#94a3b8]">—</span>;
+                  if (stats.avg_readiness === null) {
+                    return (
+                      <span className="text-[12px] text-[#94a3b8]">
+                        {stats.assigned === 0 ? 'No students' : 'Not scored yet'}
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="tabular-nums">
+                      <span className="font-medium text-[#0f172a]">{stats.avg_readiness}</span>
+                      <span className="ml-1 text-[11px] text-[#94a3b8]">
+                        {stats.scored} of {stats.assigned} scored
+                      </span>
+                    </span>
+                  );
+                },
               },
             ]}
           />
@@ -235,6 +328,24 @@ export function HodOverview() {
                   ),
               },
               {
+                key: 'readiness',
+                header: 'Readiness',
+                align: 'right',
+                width: 'w-[120px]',
+                render: (s) => (
+                  <ReadinessCell row={rosterIndex.get(s.id)} loading={roster.isLoading} />
+                ),
+              },
+              {
+                key: 'last',
+                header: 'Last activity',
+                width: 'w-[130px]',
+                secondary: true,
+                render: (s) => (
+                  <LastActivityCell row={rosterIndex.get(s.id)} loading={roster.isLoading} />
+                ),
+              },
+              {
                 key: 'status',
                 header: 'Status',
                 width: 'w-[130px]',
@@ -243,6 +354,9 @@ export function HodOverview() {
             ]}
           />
         )}
+        {roster.error ? (
+          <ErrorNotice error={roster.error} onRetry={roster.refetch} className="mt-2" />
+        ) : null}
       </section>
     </>
   );

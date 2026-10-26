@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { ClipboardPen, Users } from 'lucide-react';
 import {
   useStudentProgress,
+  useStudentReadiness,
   useStudentsPaged,
 } from '@/hooks/useInstitutionResource';
 import { activityLabel } from '@/lib/institutionMessages';
@@ -16,6 +17,7 @@ import { RecordProgressForm } from '../_components/RecordProgressForm';
 import { RoleGuard } from '../_components/RoleGuard';
 import { CardListSkeleton, TableSkeleton } from '../_components/Skeletons';
 import { ProgressStatusPill, ScoreCell } from '../_components/StatusPill';
+import { CurrentReadiness } from '../_components/StaffReadiness';
 import { PageHeader, SectionTitle } from '../_components/Typography';
 
 /**
@@ -47,10 +49,15 @@ function RecordProgress() {
     if (fromRoster) setSelectedId(fromRoster);
   }, [fromRoster]);
   const progress = useStudentProgress(selectedId, Boolean(selectedId));
+  // The selected student's readiness, refreshed after each entry so the
+  // faculty member sees the entry move the number (or not, if it was not their
+  // best attempt).
+  const readiness = useStudentReadiness(selectedId, Boolean(selectedId));
 
   const refetchProgress = useCallback(() => {
     void progress.refetch();
-  }, [progress]);
+    void readiness.refetch();
+  }, [progress, readiness]);
 
   const rows = students.data?.items;
   const total = students.data?.total ?? 0;
@@ -94,6 +101,11 @@ function RecordProgress() {
           </div>
 
           <section className="min-w-0">
+            {selectedId && readiness.data && readiness.data.student_id === selectedId ? (
+              <div className="mb-4">
+                <CurrentReadiness readiness={readiness.data} />
+              </div>
+            ) : null}
             <SectionTitle className="mb-2.5">Already recorded</SectionTitle>
 
             {!selectedId ? (

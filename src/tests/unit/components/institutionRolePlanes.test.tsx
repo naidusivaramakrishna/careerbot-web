@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   useBatches: vi.fn(),
   useSections: vi.fn(),
   useMembers: vi.fn(),
+  useCohortComparison: vi.fn(),
+  useLeaderboard: vi.fn(),
+  useFacultyReport: vi.fn(),
+  useRosterReport: vi.fn(),
 }));
 
 vi.mock('@/contexts/InstitutionContext', () => ({
@@ -29,6 +33,10 @@ vi.mock('@/hooks/useInstitutionResource', () => ({
   useBatches: mocks.useBatches,
   useSections: mocks.useSections,
   useMembers: mocks.useMembers,
+  useCohortComparison: mocks.useCohortComparison,
+  useLeaderboard: mocks.useLeaderboard,
+  useFacultyReport: mocks.useFacultyReport,
+  useRosterReport: mocks.useRosterReport,
 }));
 
 import { CpoOverview } from '@/app/institution/_components/CpoOverview';
@@ -44,7 +52,47 @@ function setup({ role }: { role: 'cpo' | 'hod' }) {
     readOnlyReason: null,
     canWrite: () => true,
     allows: () => true,
+    activeMembership: role === 'hod'
+      ? { membership_id: 'hm', institution_id: 'i1', institution_name: 'VIT',
+          role: 'hod', department_id: 'CSE' }
+      : { membership_id: 'cm', institution_id: 'i1', institution_name: 'VIT',
+          role: 'cpo', department_id: null },
   });
+  mocks.useCohortComparison.mockReturnValue(
+    state({
+      groups: [
+        { group: 'CSE', scored: 12, available: true, average: 54.2, median: 51 },
+        { group: 'ECE', scored: 3, available: false, reason: 'cohort_too_small' },
+        { group: 'MECH', scored: 20, available: true, average: 61.5, median: 60 },
+      ],
+    }),
+  );
+  mocks.useLeaderboard.mockReturnValue(
+    state({ available: true, entries: [{ student_id: 's9', name: 'Opted In', readiness: 88 }] }),
+  );
+  mocks.useFacultyReport.mockReturnValue(
+    state({
+      items: [
+        { membership_id: 'm1', account_id: 'acc-1', display_name: 'A Rao',
+          department_id: 'CSE', assigned: 4, scored: 3, avg_readiness: 47.5 },
+        { membership_id: 'm2', account_id: 'acc-2', display_name: 'S Khan',
+          department_id: 'CSE', assigned: 0, scored: 0, avg_readiness: null },
+      ],
+      total: 2,
+    }),
+  );
+  mocks.useRosterReport.mockReturnValue(
+    state({
+      items: [
+        { student_id: 's1', full_name: 'R Nair', admission_number: 'A2201',
+          college_email: null, department_id: 'CSE', section_id: null,
+          batch_year: 2026, status: 'active', claim_status: 'unclaimed',
+          readiness: 46.2, activities_scored: 3, activities_total: 5,
+          last_activity_at: '2026-10-20T10:00:00+00:00' },
+      ],
+      total: 1,
+    }),
+  );
   mocks.useStudentsPaged.mockImplementation((params: { limit?: number }) =>
     // limit:1 calls are COUNT probes (total only); the limit:8/12 call is the list
     params?.limit === 1
@@ -153,11 +201,65 @@ describe('the CPO and HOD have separate screens', () => {
     });
   });
 
-  it('the CPO screen states that readiness is absent rather than showing a placeholder', async () => {
+  it('the CPO screen no longer withholds readiness (weights approved 2026-10-26)', async () => {
     setup({ role: 'cpo' });
     render(<CpoOverview />);
-    expect(
-      await screen.findByText(/Readiness and rank are not shown/i),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText('Department comparison').length).toBeGreaterThan(0),
+    );
+    expect(screen.queryByText(/Readiness and rank are not shown/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('readiness, rank and last activity on staff screens', () => {
+  it('the CPO comparison shows each department average and its rank', async () => {
+    setup({ role: 'cpo' });
+    render(<CpoOverview />);
+    expect(await screen.findByText('54.2')).toBeInTheDocument();
+    // CSE 54.2 is behind MECH 61.5 -- but MECH is not a department in this
+    // college's list, so it cannot take a place: CSE is 1 of 1.
+    const cseRow = screen.getByText('Computer Science').closest('tr');
+    expect(cseRow).toHaveTextContent('1 of 1');
+    // ECE is below the floor: count only, no average, no rank.
+    const eceRow = screen.getByText('Electronics').closest('tr');
+    expect(eceRow).toHaveTextContent('3 scored, too few to show');
+    expect(eceRow).not.toHaveTextContent('of 1');
+  });
+
+  it('the CPO sees the top students who opted in', async () => {
+    setup({ role: 'cpo' });
+    render(<CpoOverview />);
+    expect(await screen.findByText('Top students')).toBeInTheDocument();
+    expect(screen.getByText('Opted In')).toBeInTheDocument();
+  });
+
+  it('the HOD faculty list shows Assigned and Avg readiness from one report', async () => {
+    setup({ role: 'hod' });
+    render(<HodOverview />);
+    const rao = (await screen.findByText('A Rao')).closest('tr');
+    expect(rao).toHaveTextContent('4');
+    expect(rao).toHaveTextContent('47.5');
+    expect(rao).toHaveTextContent('3 of 4 scored');
+    const khan = screen.getByText('S Khan').closest('tr');
+    expect(khan).toHaveTextContent('No students');
+    expect(mocks.useFacultyReport).toHaveBeenCalled();
+  });
+
+  it('the HOD sees their own department average and rank among departments', async () => {
+    setup({ role: 'hod' });
+    render(<HodOverview />);
+    expect(await screen.findByText('54.2')).toBeInTheDocument();
+    // Ranked against every department with an average: MECH 61.5 is ahead.
+    expect(screen.getByText(/Rank 2 of 2 departments/)).toBeInTheDocument();
+  });
+
+  it('the HOD student list shows readiness and last activity per student', async () => {
+    setup({ role: 'hod' });
+    render(<HodOverview />);
+    const row = (await screen.findByText('R Nair')).closest('tr');
+    expect(row).toHaveTextContent('46.2');
+    expect(row).toHaveTextContent('3/5');
+    expect(row?.querySelector('time')?.getAttribute('datetime'))
+      .toBe('2026-10-20T10:00:00+00:00');
   });
 });

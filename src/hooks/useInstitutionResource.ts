@@ -26,6 +26,7 @@ import {
   getLeaderboard,
   getMyStanding,
   getRosterReport,
+  getFacultyReport,
   getMyPeople,
   listMyTasks,
   listStudentTasks,
@@ -49,6 +50,7 @@ import type {
   Leaderboard,
   CohortComparison,
   RosterReport,
+  FacultyReport,
   MyPeople,
   StudentTask,
   Section,
@@ -87,6 +89,11 @@ export function useActiveInstitutionId(): string | null {
 export function useInstitutionResource<T>(
   fetcher: () => Promise<T>,
   enabled: boolean = true,
+  /** WHICH THING this resource is about, when it is about one thing (a
+   *  student id). Changing it clears the previous answer during render, the
+   *  same way a college switch does, so student A's rows are never shown
+   *  under student B while B's request is in flight. */
+  resourceKey: string | null = null,
 ): ResourceState<T> {
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(enabled);
@@ -109,9 +116,15 @@ export function useInstitutionResource<T>(
   // the new college's name. Adjusting state during render makes React discard
   // this render and start again with `data` already null, so that frame never
   // reaches the screen.
-  const [renderedFor, setRenderedFor] = useState(institutionId);
-  if (institutionId !== renderedFor) {
-    setRenderedFor(institutionId);
+  //
+  // The resource key (e.g. the selected student) is part of the same scope:
+  // switching from one student to another is the same hazard on one screen.
+  const scopeKey = `${institutionId ?? ''}\u0000${resourceKey ?? ''}`;
+  const scopeRef = useRef(scopeKey);
+  scopeRef.current = scopeKey;
+  const [renderedFor, setRenderedFor] = useState(scopeKey);
+  if (scopeKey !== renderedFor) {
+    setRenderedFor(scopeKey);
     setData(null);
     setError(null);
     setIsLoading(enabled);
@@ -124,24 +137,28 @@ export function useInstitutionResource<T>(
       setIsLoading(false);
       return;
     }
+    // A run created for an EARLIER scope (an old refetch handle kept by a
+    // form callback after the student changed) must not write its answer
+    // into the current one.
+    if (scopeRef.current !== scopeKey) return;
     const mySeq = ++seqRef.current;
     setIsLoading(true);
     setError(null);
     try {
       const result = await fetcher();
-      if (mySeq !== seqRef.current) return; // superseded
+      if (mySeq !== seqRef.current || scopeRef.current !== scopeKey) return; // superseded
       setData(result);
     } catch (err) {
-      if (mySeq !== seqRef.current) return;
+      if (mySeq !== seqRef.current || scopeRef.current !== scopeKey) return;
       setError(toApiError(err));
     } finally {
-      if (mySeq === seqRef.current) setIsLoading(false);
+      if (mySeq === seqRef.current && scopeRef.current === scopeKey) setIsLoading(false);
     }
     // institutionId is not read in the body -- the token is attached by the
     // api client -- but it MUST stay in the dependency list: it is what makes
     // a college switch re-run the fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetcher, enabled, institutionId]);
+  }, [fetcher, enabled, institutionId, scopeKey]);
 
   useEffect(() => {
     void run();
@@ -227,6 +244,7 @@ export function useStudentReadiness(
   return useInstitutionResource(
     useCallback(() => getStudentReadiness(studentId as string), [studentId]),
     enabled && Boolean(studentId),
+    studentId ?? null,
   );
 }
 
@@ -251,6 +269,12 @@ export function useCohortComparison(enabled = true): ResourceState<CohortCompari
 export function useRosterReport(enabled = true): ResourceState<RosterReport> {
   return useInstitutionResource(
     useCallback(() => getRosterReport(), []), enabled);
+}
+
+/** Each faculty member's assigned count and average readiness (CPO/HOD). */
+export function useFacultyReport(enabled = true): ResourceState<FacultyReport> {
+  return useInstitutionResource(
+    useCallback(() => getFacultyReport(), []), enabled);
 }
 
 /** The caller's faculty, HOD and placement officers. */
@@ -280,5 +304,6 @@ export function useStudentProgress(
   return useInstitutionResource(
     useCallback(() => listStudentProgress(studentId as string), [studentId]),
     enabled && Boolean(studentId),
+    studentId ?? null,
   );
 }
