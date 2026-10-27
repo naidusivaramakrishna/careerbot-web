@@ -24,15 +24,29 @@ export default function ClientLayout({
   // Determine if user is authenticated based on current route
   // Must match the protectedRoutes array in middleware.ts
   const isPublicBuilderRoute = pathname === '/builder' || pathname?.startsWith('/builder/start');
+  // jobmatch/jobs/communication are public ONLY at their exact root path --
+  // same "exact path public, sub-paths protected" rule as middleware.ts's
+  // publicLandingPages (e.g. /jobs is a public landing page, but
+  // /jobs/tracking requires a session). Without the trailing slash here,
+  // startsWith('/jobs') also matched the public /jobs root itself, so a
+  // guest landing there got isAuthenticatedRoute=true, which made
+  // useTokenRefresh stamp a token-refresh timestamp for someone with no
+  // token -- and chatbotAuth.isUserAuthenticated() (which only checks that
+  // timestamp, not a real session) then reported the guest as logged in.
+  // /ats/ already used this trailing-slash form; jobmatch/jobs/communication
+  // did not.
+  // /jobslogin is a separate protected page (not a sub-path of /jobs), so it
+  // is listed on its own, like /atslogin next to /ats/.
   const isAuthenticatedRoute = pathname?.startsWith('/dashboard') ||
     pathname?.startsWith('/profile') ||
     (pathname?.startsWith('/builder') && !isPublicBuilderRoute) ||
     pathname?.startsWith('/ats/') ||
     pathname?.startsWith('/atslogin') ||
     pathname?.startsWith('/enhancer') ||
-    pathname?.startsWith('/jobmatch') ||
-    pathname?.startsWith('/jobs') ||
-    pathname?.startsWith('/communication') ||
+    pathname?.startsWith('/jobmatch/') ||
+    pathname?.startsWith('/jobs/') ||
+    pathname?.startsWith('/jobslogin') ||
+    pathname?.startsWith('/communication/') ||
     pathname?.startsWith('/settings') ||
     pathname?.startsWith('/admin');
 

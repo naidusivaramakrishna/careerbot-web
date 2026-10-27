@@ -2,7 +2,7 @@
 import { adminLogout, getCurrentAdmin } from '@/api/adminAuthApi';
 import { getAdminRoleCache, setAdminRoleCache } from '../_hooks/adminRoleCache';
 import type { AdminRole } from '../_utils/permissions';
-import { Activity, BarChart3, Building2, DollarSign, Gauge, LayoutDashboard, LogOut, Settings, UserPlus, UserRoundPlus, Users } from 'lucide-react';
+import { Activity, BarChart3, Building2, DollarSign, Gauge, LayoutDashboard, LogOut, Settings, UserPlus, UserRoundPlus, Users, TicketCheck } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react'
@@ -24,6 +24,7 @@ import React, { useEffect, useState } from 'react'
 const menu = [
     { label: "College overview", href: "/admin/dashboard/colleges/overview", icon: LayoutDashboard, hideFor: [] as string[] },
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard, hideFor: ["PLATFORM_ADMIN"] },
+    { label: "Ticket Management", href: "/admin/dashboard/tickets", icon: TicketCheck, hideFor: ["PLATFORM_ADMIN"] },
     { label: "User Management", href: "/admin/dashboard/user-management", icon: Users, hideFor: ["PLATFORM_ADMIN"] },
     { label: "Admin Management", href: "/admin/dashboard/admin-management", icon: UserPlus, hideFor: ["PLATFORM_ADMIN"] },
     { label: "System Monitoring", href: "/admin/dashboard/system-monitoring", icon: Activity, hideFor: [] as string[] },

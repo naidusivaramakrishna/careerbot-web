@@ -20,7 +20,8 @@ export type AdminPageKey =
   | 'colleges'
   | 'ai-spend'
   | 'ai-usage'
-  | 'settings';
+  | 'settings'
+  | 'ticket-management';
 
 /**
  * Page permissions mapping
@@ -55,6 +56,7 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // reflected here.
   'ai-usage': ['SUPER_ADMIN', 'ADMIN', 'PLATFORM_ADMIN'],
   'settings': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'PLATFORM_ADMIN'],
+  'ticket-management': ['SUPER_ADMIN', 'ADMIN', 'SUPPORT'],
 };
 
 /**

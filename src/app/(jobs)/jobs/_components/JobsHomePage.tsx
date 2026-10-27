@@ -517,7 +517,18 @@ export default function JobsHomePage() {
               <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[44px] bg-[radial-gradient(circle_at_55%_44%,rgba(76,145,255,0.26),transparent_66%)] blur-2xl" />
               <motion.div
                 className="relative aspect-[4/3] overflow-hidden rounded-[30px] border-[8px] border-white/90 bg-[#0c3e9b] shadow-[0_30px_78px_rgba(31,92,180,0.22)]"
-                initial={reduceMotion ? false : { scale: 0.985 }}
+                // Framer Motion's useReducedMotion() reads matchMedia eagerly
+                // in useState's initializer, with no SSR fallback -- it's
+                // `null`/false during server rendering regardless of the
+                // visitor's real OS setting, but reflects the real value on
+                // the client's very first render. Branching `initial` on it
+                // (as this used to) baked a different `transform` into the
+                // SSR'd HTML than the client immediately wanted, which is a
+                // hydration-attribute-mismatch React "won't patch up". Always
+                // render the same `initial` on both sides; `duration: 0`
+                // below still gives reduced-motion users the instant (no
+                // visible animation) result they asked for.
+                initial={{ scale: 0.985 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: reduceMotion ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] }}
               >
