@@ -52,6 +52,10 @@ export function resolveTopicTarget(topic: string): { category: string; subcatego
     { kws: ['data interpretation', 'bar graph', 'line graph', 'bar chart',
             'pie chart'],             category: 'aptitude',  sub: 'data_interpretation' },
     { kws: ['height'],                category: 'aptitude',  sub: 'trigonometry' },
+    // Ahead of the generic 'analyt' -> aptitude rule below, or "Critical and
+    // Analytical Reasoning" wrongly lands in aptitude via that substring.
+    { kws: ['critical', 'critical and analytical', 'analytical reasoning'],
+                                      category: 'reasoning', sub: 'critical_and_analytical_reasoning' },
 
     { kws: ['complexity', 'big-o', 'big o'],      category: 'technical', sub: 'dsa' },
     { kws: ['abstract class', 'abstract method'], category: 'technical', sub: 'oops' },
@@ -80,6 +84,9 @@ export function resolveTopicTarget(topic: string): { category: string; subcatego
     { kws: ['simplif'],               category: 'arithmetic', sub: 'simplification' },
     { kws: ['average'],               category: 'arithmetic', sub: 'average' },
     { kws: ['mixture', 'alligation'], category: 'arithmetic', sub: 'mixture_and_alligation' },
+    { kws: ['age'],                   category: 'arithmetic', sub: 'problems_on_ages' },
+    { kws: ['train'],                 category: 'arithmetic', sub: 'problems_on_trains' },
+    { kws: ['boat', 'stream'],        category: 'arithmetic', sub: 'boats_and_streams' },
     // Verbal/English labels: before these, "Paragraph Completion" and
     // "Reading Comprehension" fell through every rule to the arithmetic
     // default, handing an English weak area an arithmetic test.
@@ -94,7 +101,11 @@ export function resolveTopicTarget(topic: string): { category: string; subcatego
     { kws: ['trigon'],                category: 'aptitude',   sub: 'trigonometry' },
     { kws: ['permutation', 'combination'], category: 'aptitude', sub: 'permutation_and_combination' },
     { kws: ['probability'],           category: 'aptitude',   sub: 'probability' },
-    { kws: ['progression'],           category: 'aptitude',   sub: 'progressions' },
+    { kws: ['arithmetic progression'], category: 'aptitude',  sub: 'arithmetic_progression' },
+    { kws: ['geometric progression'],  category: 'aptitude',  sub: 'geometric_progression' },
+    // Bare "progression" with no AP/GP qualifier — no single valid slug to
+    // force, so leave sub unset and let the runner pick randomly between them.
+    { kws: ['progression'],           category: 'aptitude' },
     { kws: ['direction'],             category: 'reasoning',  sub: 'direction_sense' },
     // Not bare 'coding' — that also matches general-programming labels like
     // "Coding Basics" (a real, if inherent, ambiguity: "coding" means two

@@ -8,6 +8,21 @@ import { getWeakAreasAnalytics, getProgressAnalytics, WeakAreasAnalytics, Progre
 import { resolveTopicTarget } from '@/lib/resolveTopicTarget';
 import LoadingScreen from '../_components/LoadingScreen';
 import HighlightBox from '../_components/HighlightBox';
+import PageBreadcrumb from '../_components/PageBreadcrumb';
+
+// Severity bands, from critical to strong — drives the badge, the accuracy
+// number, and the progress-bar color so all three always agree.
+const TIERS = [
+  { max: 30, label: 'Critical gap',            color: '#b91c1c', bg: '#FEF2F2', border: '#FECACA', text: '#991B1B' },
+  { max: 45, label: 'Major weakness',          color: '#ef4444', bg: '#FEF2F2', border: '#FECACA', text: '#B91C1C' },
+  { max: 55, label: 'Needs focused practice',  color: '#f97316', bg: '#FFF7ED', border: '#FED7AA', text: '#C2410C' },
+  { max: 65, label: 'Below cutoff',            color: '#f59e0b', bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' },
+  { max: 75, label: 'Close to passing',        color: '#eab308', bg: '#FEFCE8', border: '#FEF08A', text: '#A16207' },
+  { max: 85, label: 'Almost there',            color: '#84cc16', bg: '#F7FEE7', border: '#D9F99D', text: '#4D7C0F' },
+  { max: Infinity, label: 'Strong — keep going', color: '#22c55e', bg: '#F0FDF4', border: '#BBF7D0', text: '#15803D' },
+] as const;
+
+const tierFor = (acc: number) => TIERS.find(t => acc < t.max) ?? TIERS[TIERS.length - 1];
 
 export default function WeakAreasPage() {
   const router = useRouter();
@@ -33,25 +48,6 @@ export default function WeakAreasPage() {
 
   const areas = weakAreas?.weak_areas ?? [];
 
-  const barColor = (acc: number) =>
-    acc < 30 ? '#b91c1c'
-    : acc < 45 ? '#ef4444'
-    : acc < 55 ? '#f97316'
-    : acc < 65 ? '#f59e0b'
-    : acc < 75 ? '#eab308'
-    : acc < 85 ? '#84cc16' : '#22c55e';
-
-  // Short tiered label shown next to the topic — matches the 7 bands used
-  // by suggestionFor() in the API so the headline also varies by score.
-  const verdict = (acc: number) =>
-    acc < 30 ? 'Critical gap'
-    : acc < 45 ? 'Major weakness'
-    : acc < 55 ? 'Needs focused practice'
-    : acc < 65 ? 'Below cutoff'
-    : acc < 75 ? 'Close to passing'
-    : acc < 85 ? 'Almost there'
-    : 'Strong — keep going';
-
   if (loading) return <LoadingScreen label="Loading weak areas" />;
 
   const practiceTopic = (topic: string) => {
@@ -59,7 +55,6 @@ export default function WeakAreasPage() {
     const params = new URLSearchParams({
       parentSessionId: crypto.randomUUID(),
       categories: category,
-      difficulty: 'medium',
       // No `count`: nothing reads it (`grep -rn "get('count')" src` is empty)
       // and the custom builder sizes sections from SECTION_CONFIG, so sending
       // count: '10' advertised a 10-question practice that was never honoured.
@@ -72,12 +67,7 @@ export default function WeakAreasPage() {
     <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
       <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
 
-        {/* Breadcrumb — same shape as section intro */}
-        <div className="mb-6 text-sm flex items-center gap-2">
-          <button onClick={() => router.push('/mock-test/browse')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
-          <span style={{ color: '#CBD5E1' }}>›</span>
-          <span className="font-semibold" style={{ color: '#0F172A' }}>Weak Areas</span>
-        </div>
+        <PageBreadcrumb items={[{ label: 'Mock Tests', href: '/mock-test/browse' }, { label: 'Weak Areas' }]} />
 
         {/* Main card — section-intro DNA */}
         <div
@@ -88,19 +78,38 @@ export default function WeakAreasPage() {
           }}
         >
           {/* Header */}
-          <div className="flex items-start gap-4 mb-7">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border"
-              style={{ borderColor: '#E5E7EB', background: '#F8FAFC' }}>
-              <Target size={22} style={{ color: '#1e3a8a' }} />
+          <div className="flex items-start justify-between gap-4 mb-7 flex-wrap">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border"
+                style={{ borderColor: '#E5E7EB', background: '#F8FAFC' }}>
+                <Target size={22} style={{ color: '#1e3a8a' }} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight mb-1.5" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+                  Weak Areas
+                </h2>
+                <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
+                  Topics that need more practice based on your performance across recent tests.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight mb-1.5" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
-                Weak Areas
-              </h2>
-              <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
-                Topics that need more practice based on your performance across recent tests.
-              </p>
-            </div>
+
+            {!fetchError && areas.length > 0 && (
+              <div className="flex items-center gap-5 shrink-0">
+                <div className="text-right">
+                  <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Tests</p>
+                  <p className="text-xl font-bold tabular-nums" style={{ color: '#0F172A' }}>{analytics?.total_tests ?? 0}</p>
+                </div>
+                <div className="w-px h-8" style={{ background: '#E5E7EB' }} />
+                <div className="text-right">
+                  <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Avg accuracy</p>
+                  <p className="text-xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
+                    {analytics?.average_accuracy != null ? Math.round(analytics.average_accuracy) : '—'}
+                    <span className="text-sm font-bold" style={{ color: '#60a5fa' }}>%</span>
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* States */}
@@ -130,62 +139,77 @@ export default function WeakAreasPage() {
             </div>
           ) : (
             <>
-              <p className="text-base font-bold mb-3" style={{ color: '#0F172A' }}>Topics to improve:</p>
+              <p className="text-base font-bold mb-4" style={{ color: '#0F172A' }}>Topics to improve</p>
 
-              {/* Numbered <ol> — mirrors section intro instructions list */}
-              <ol className="space-y-5 mb-7">
+              {/* Card grid — one card per topic, top-accent + hover lift to match the company cards on Browse */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-7">
                 {areas.map((area, i) => {
                   const acc = area.accuracy ?? 0;
-                  const color = barColor(acc);
+                  const tier = tierFor(acc);
                   return (
-                    <motion.li
+                    <motion.div
                       key={i}
-                      initial={{ opacity: 0, y: 4 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.04 }}
-                      className="flex gap-3 text-[15px] leading-relaxed"
+                      transition={{ delay: i * 0.05, duration: 0.35 }}
+                      whileHover={{ y: -3, boxShadow: '0 16px 36px -16px rgba(15,23,42,0.18), 0 4px 14px -4px rgba(15,23,42,0.08)' }}
+                      className="relative bg-white rounded-2xl overflow-hidden flex flex-col"
+                      style={{ border: '1px solid #E5E7EB', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
                     >
-                      <span className="font-semibold tabular-nums shrink-0 w-5 pt-0.5" style={{ color: '#475569' }}>{i + 1}.</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-                          <div>
-                            <span className="font-bold" style={{ color: '#000' }}>{area.topic}:</span>{' '}
-                            <span style={{ color: '#2d2d2d' }}>{verdict(acc)}</span>
+                      <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: tier.color }} />
+
+                      <div className="p-5 flex flex-col flex-1">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 tabular-nums"
+                              style={{ background: '#F1F5F9', color: '#475569' }}
+                            >
+                              {i + 1}
+                            </span>
+                            <h3 className="font-bold text-[15px] truncate" style={{ color: '#0F172A' }}>{area.topic}</h3>
                           </div>
-                          <div className="flex items-baseline gap-1.5 shrink-0">
-                            <span className="text-xl font-bold tabular-nums" style={{ color }}>{acc}%</span>
-                            <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>accuracy</span>
-                          </div>
+                          <span
+                            className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide whitespace-nowrap"
+                            style={{ background: tier.bg, color: tier.text, border: `1px solid ${tier.border}` }}
+                          >
+                            {tier.label}
+                          </span>
                         </div>
 
-                        {/* Bar */}
-                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                        <div className="flex items-baseline gap-1.5 mb-2">
+                          <span className="text-2xl font-bold tabular-nums" style={{ color: tier.color }}>{acc}%</span>
+                          <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>accuracy</span>
+                        </div>
+
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
                           <motion.div
                             className="h-full rounded-full"
                             initial={{ width: 0 }}
                             animate={{ width: `${acc}%` }}
-                            transition={{ delay: i * 0.04 + 0.15, duration: 0.6 }}
-                            style={{ background: color }}
+                            transition={{ delay: i * 0.05 + 0.15, duration: 0.6 }}
+                            style={{ background: tier.color }}
                           />
                         </div>
 
                         {area.suggestion && (
-                          <p className="text-xs leading-relaxed mt-1.5" style={{ color: '#64748B' }}>
+                          <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: '#64748B' }}>
                             {area.suggestion}
                           </p>
                         )}
 
                         <button
                           onClick={() => practiceTopic(area.topic)}
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold transition hover:opacity-80"
-                          style={{ color: '#1e3a8a' }}>
+                          className="mt-auto self-start inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition hover:opacity-80"
+                          style={{ color: '#1e3a8a', background: '#EFF6FF', border: '1px solid #BFDBFE' }}
+                        >
                           <RefreshCcw size={11} /> Practice this topic
                         </button>
                       </div>
-                    </motion.li>
+                    </motion.div>
                   );
                 })}
-              </ol>
+              </div>
 
               <HighlightBox>
                 <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
@@ -194,19 +218,6 @@ export default function WeakAreasPage() {
                   {(analytics?.total_tests ?? 0) === 1 ? 'test' : 'tests'} · Overall grade{' '}
                   <span className="font-bold" style={{ color: '#1e3a8a' }}>{analytics?.overall_grade ?? '—'}</span>
                 </p>
-                <div className="flex items-center gap-4 shrink-0">
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Tests</p>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: '#0F172A' }}>{analytics?.total_tests ?? 0}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Avg accuracy</p>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
-                      {analytics?.average_accuracy != null ? Math.round(analytics.average_accuracy) : '—'}
-                      <span className="text-base font-bold" style={{ color: '#60a5fa' }}>%</span>
-                    </p>
-                  </div>
-                </div>
               </HighlightBox>
             </>
           )}
@@ -222,7 +233,12 @@ export default function WeakAreasPage() {
             <ol className="space-y-3">
               {weakAreas.recommendations.map((rec, i) => (
                 <li key={i} className="flex gap-3 text-sm leading-relaxed">
-                  <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 tabular-nums mt-0.5"
+                    style={{ background: '#F1F5F9', color: '#475569' }}
+                  >
+                    {i + 1}
+                  </span>
                   <span style={{ color: '#2d2d2d' }}>{rec}</span>
                 </li>
               ))}

@@ -1,5 +1,5 @@
 import { httpClient } from '@/lib/http';
-import { CATEGORY_SUBCATEGORIES, SECTION_CONFIG, sectionConfigFor } from '@/lib/mockTestConstants';
+import { CATEGORY_SUBCATEGORIES, SECTION_CONFIG, sectionConfigFor, SUBCATEGORY_TO_DB_TOPIC } from '@/lib/mockTestConstants';
 import { getExcludeQuestionIds } from '@/utils/seenQuestionIds';
 
 export interface MockTestCompany {
@@ -190,13 +190,15 @@ export const MOCK_TEST_DIFFICULTIES: MockTestDifficulty[] = ['easy', 'medium', '
 export const isMockTestDifficulty = (v: unknown): v is MockTestDifficulty =>
   typeof v === 'string' && (MOCK_TEST_DIFFICULTIES as string[]).includes(v);
 
+// `/mock-test/generate` has answered both with the session object directly and
+// with it wrapped in `{ data }`; the unwrap at the end of this function handles
+// both, so the type admits both instead of falling back to `any`.
+type GenerateMockTestResponse = MockTestSession & { data?: MockTestSession };
+
 export const generateMockTest = async (
   companyId: string,
   categories: string[] = ['arithmetic'],
   subcategories: string[] = [],
-  // Required: the backend rejects a missing/blank difficulty. It used to be
-  // hardcoded to 'medium' here, which silently discarded the user's choice.
-  difficulty: MockTestDifficulty,
   parentSessionId?: string,
   timeoutMs: number = 60000,
   // Defaults derived from SECTION_CONFIG instead of a stale hardcoded 10/20 —
@@ -214,7 +216,12 @@ export const generateMockTest = async (
   // `categories`) would have sent exactly that whenever a caller omitted
   // subcategories. Every current caller always provides one, so this was
   // dead in practice, but the fallback itself was unsafe.
-  const subcategory = subcategories[0] || CATEGORY_SUBCATEGORIES[category]?.[0] || 'time_and_work';
+  const rawSubcategory = subcategories[0] || CATEGORY_SUBCATEGORIES[category]?.[0] || 'time_and_work';
+  // Send the exact DB topic string when we have one mapped (see
+  // SUBCATEGORY_TO_DB_TOPIC) — the backend query matches on that literal
+  // string, not the slug. Falls back to the raw slug for anything unmapped
+  // (e.g. `technical`'s subcategories), unchanged from prior behaviour.
+  const subcategory = SUBCATEGORY_TO_DB_TOPIC[rawSubcategory] || rawSubcategory;
   // Exclude questions the user has already seen so the backend doesn't re-serve
   // them. Merges the global bucket with this companyId's own scope (see
   // utils/seenQuestionIds) — every company now draws from one unified pool
@@ -232,7 +239,6 @@ export const generateMockTest = async (
     type: 'mcq',
     category,
     subcategory,
-    difficulty,
     cross_verify: false,
     exclude_question_ids: excludeIds,
   };
@@ -244,7 +250,18 @@ export const generateMockTest = async (
   console.log('[generateMockTest] sending payload:', JSON.stringify({ ...payload, exclude_question_ids: `<${excludeIds.length} ids>` }, null, 2));
 
   try {
-    const response = await httpClient.post<any>('/mock-test/generate', payload, { timeout: timeoutMs });
+    // _skipAiRetry: exactly ONE retry layer may own an AI_SERVICE_UNAVAILABLE
+    // failure here. The HTTP interceptor in lib/http.ts retries 3x (2s/4s/6s)
+    // silently; this endpoint's only caller — mock-test/[id]/page.tsx
+    // handleStartSection — retries 3x (2s/4s/6s) WITH a toast and a Skip
+    // affordance. Left to both, they multiply: 4 x 4 = 16 POSTs over ~60s, and
+    // every POST can create a session and spend credits. The page-level loop
+    // wins because it is the one the candidate can see and cancel.
+    // Typed rather than `any`: the endpoint has returned the session both bare
+    // and wrapped in `{ data }`, and the unwrap below relies on that. An `any`
+    // here hid which shape was expected, and the lint gate counts it as a new
+    // error the moment this line is touched.
+    const response = await httpClient.post<GenerateMockTestResponse>('/mock-test/generate', payload, { timeout: timeoutMs, _skipAiRetry: true });
     console.log('[generateMockTest] response:', JSON.stringify(response.data, null, 2));
     const session = response.data?.data ?? response.data;
     return session;

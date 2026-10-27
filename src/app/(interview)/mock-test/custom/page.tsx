@@ -6,32 +6,16 @@ import { ChevronRight, Play, AlertCircle, Wand2 } from 'lucide-react';
 import { checkCredits } from '@/api/creditsApi';
 import { CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
 
-// Only the levels the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES).
-// "Mixed" was offered here but the backend rejects it, so it could never start a test.
-type Difficulty = 'Easy' | 'Medium' | 'Hard';
-
 const categoryOptions = ['Aptitude', 'Arithmetic', 'Reasoning', 'Technical'] as const;
 type Category = typeof categoryOptions[number];
 
 const formatSlug = (slug: string): string =>
   slug.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-const difficultyOptions: Difficulty[] = ['Easy', 'Medium', 'Hard'];
-
-
-const diffMeta: Record<Difficulty, { color: string; bg: string; border: string }> = {
-  Easy:   { color: '#065f46', bg: '#d1fae5', border: '#6ee7b7' },
-  Medium: { color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
-  Hard:   { color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
-};
-
 export default function CustomTestPage() {
   const router = useRouter();
 
   const [categories, setCategories] = useState<Category[]>(['Aptitude']);
-  // No default: the user must pick explicitly. Pre-selecting 'Medium' let tests
-  // start with a level the user never actually chose.
-  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [validationError, setValidationError] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -61,10 +45,6 @@ export default function CustomTestPage() {
   const handleStartTest = async () => {
     if (categories.length === 0) {
       setValidationError('Please select at least one category to continue.');
-      return;
-    }
-    if (!difficulty) {
-      setValidationError('Please select a difficulty level to continue.');
       return;
     }
     setStarting(true);
@@ -98,7 +78,6 @@ export default function CustomTestPage() {
     const params = new URLSearchParams({
       parentSessionId,
       categories: categories.map(c => c.toLowerCase()).join(','),
-      difficulty: difficulty.toLowerCase(),
     });
 
     // Positional, one '+'-joined segment per category (same order as `categories`);
@@ -144,7 +123,7 @@ export default function CustomTestPage() {
                 Build your custom test
               </h2>
               <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
-                Pick your topics, set the difficulty and question count, then start instantly.
+                Pick your topics, then start instantly.
               </p>
             </div>
           </div>
@@ -246,40 +225,6 @@ export default function CustomTestPage() {
                     })}
                   </div>
                 )}
-              </div>
-            </li>
-
-            {/* 2. Difficulty */}
-            <li className="flex gap-3">
-              <span className="font-semibold tabular-nums shrink-0 w-5 pt-1.5" style={{ color: '#475569' }}>2.</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] mb-3">
-                  <span className="font-bold" style={{ color: '#000' }}>Difficulty level:</span>{' '}
-                  <span style={{ color: '#2d2d2d' }}>controls time per question</span>
-                </p>
-                <div className="grid grid-cols-4 gap-2.5">
-                  {difficultyOptions.map(level => {
-                    const meta = diffMeta[level];
-                    const isSelected = difficulty === level;
-                    return (
-                      <label
-                        key={level}
-                        className="flex flex-col items-center gap-1 py-3 rounded-xl border-2 cursor-pointer transition"
-                        style={isSelected
-                          ? { borderColor: meta.border, background: meta.bg }
-                          : { borderColor: '#E5E7EB', background: '#ffffff' }
-                        }
-                      >
-                        <input type="radio" name="difficulty" value={level} checked={isSelected}
-                          onChange={() => { setDifficulty(level); setValidationError(''); }} className="sr-only" />
-                        <span className="text-sm font-bold"
-                          style={{ color: isSelected ? meta.color : '#0F172A' }}>
-                          {level}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
               </div>
             </li>
 

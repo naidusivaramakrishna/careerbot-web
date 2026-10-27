@@ -1,27 +1,20 @@
 // Valid subcategories accepted by the backend /mock-test/generate endpoint.
-// See careerbot-api's schemas.py (CATEGORY_SUBCATEGORIES) for the full set —
-// this is a curated subset, not a mirror, so don't duplicate the list here.
+// arithmetic/aptitude/reasoning are restricted to the slugs confirmed to have
+// real rows in the `questions` collection (verified directly against the DB —
+// these 10 topics are the collection's ENTIRE contents) — anything else
+// returns "no questions available" with no fallback. Do NOT add a slug back
+// here without first confirming it has DB rows.
+// `technical` is unverified/untouched — out of scope for this pass.
 export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
-  // Last 5 are new — drawn from CATEGORY_SUBCATEGORIES['arithmetic'] in
-  // careerbot-api's schemas.py, picked to not conceptually overlap the
-  // original 6 (e.g. skipped 'percentage'/'profit_and_loss'/'ratio_and_proportion'
-  // since 'percentages'/'profit_loss'/'ratios' above already cover that ground).
   arithmetic: [
-    'percentages', 'profit_loss', 'ratios', 'simple_interest', 'time_and_work', 'algebra',
-    'number_system', 'simplification', 'average', 'time_speed_and_distance', 'mixture_and_alligation',
+    'number_system', 'time_and_work', 'mixture_and_alligation', 'problems_on_ages',
+    'time_speed_and_distance', 'problems_on_trains', 'boats_and_streams',
   ],
-  // Last 5 are new, from schemas.py's aptitude set — skipped 'algebra' (already
-  // under arithmetic above; adding it here too would just duplicate the chip
-  // across two category sections) and 'geometry'/'statistics' (already covered).
   aptitude: [
-    'verbal', 'abstract', 'analytical', 'statistics', 'geometry', 'trigonometry',
-    'mensuration', 'permutation_and_combination', 'probability', 'data_interpretation', 'progressions',
+    'arithmetic_progression', 'geometric_progression',
   ],
-  // Text-friendly subset of the backend's reasoning set — skips ones needing
-  // diagrams/images, which a text MCQ generator handles poorly.
   reasoning: [
-    'series', 'analogy', 'classification', 'coding_decoding', 'blood_relations',
-    'direction_sense', 'ranking', 'puzzles', 'statement_and_assumption', 'cause_and_effect',
+    'critical_and_analytical_reasoning',
   ],
   // Last 5 are new, from schemas.py's technical set (python/java/dsa/sql/oops/web
   // already matched exactly, so no overlap to avoid here).
@@ -29,6 +22,27 @@ export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
     'python', 'java', 'dsa', 'sql', 'oops', 'web',
     'javascript', 'database', 'system_design', 'html', 'css',
   ],
+};
+
+// Exact DB `topic` string for each slug above (case differs in spots — e.g.
+// DB's "and" stays lowercase — and "Time, Speed and Distance" keeps its
+// comma). The backend derives the query topic from the raw subcategory it's
+// sent by splitting on whitespace and title-casing each word; sending an
+// underscore slug straight through produces "Number_system" and matches
+// nothing even though "Number System" has hundreds of rows. Sending the exact
+// DB string here sidesteps that entirely — there's no underscore left for the
+// backend to mis-split.
+export const SUBCATEGORY_TO_DB_TOPIC: Record<string, string> = {
+  number_system: 'Number System',
+  time_and_work: 'Time and Work',
+  mixture_and_alligation: 'Mixtures and Alligation',
+  problems_on_ages: 'Problems on Ages',
+  time_speed_and_distance: 'Time, Speed and Distance',
+  problems_on_trains: 'Problems on Trains',
+  boats_and_streams: 'Boats and Streams',
+  arithmetic_progression: 'Arithmetic Progression',
+  geometric_progression: 'Geometric Progression',
+  critical_and_analytical_reasoning: 'Critical and Analytical Reasoning',
 };
 
 // Questions/time per section. This is the AUTHORITATIVE source for the size of

@@ -13,6 +13,23 @@ import { sanitizeAuthRedirect } from './authRedirect';
 import { collegeFeatureFromError, notifyCollegeFeatureRefused } from './collegeFeatures';
 import { coordinatedUserRefreshPost } from './userRefreshCoordinator';
 
+/**
+ * Opt-out flag for the AI_SERVICE_UNAVAILABLE retry in the response
+ * interceptor below. Declared on AxiosRequestConfig so a caller can set it in
+ * typed request config (`httpClient.post(url, body, { _skipAiRetry: true })`)
+ * instead of casting to `any`.
+ *
+ * It exists because a caller that runs its OWN retry loop otherwise MULTIPLIES
+ * with this one: 4 caller attempts x 4 interceptor attempts = 16 requests. See
+ * the interceptor comment and app/(interview)/mock-test/[id]/page.tsx
+ * handleStartSection.
+ */
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    _skipAiRetry?: boolean;
+  }
+}
+
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
   console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to proxy. Set this in production.');
 }
@@ -50,6 +67,19 @@ const bodyContains = (data: unknown, str: string): boolean => {
     try { return JSON.stringify(data).includes(str); } catch { /* ignore */ }
   }
   return false;
+};
+
+/**
+ * True for a 500/503 whose body mentions AI_SERVICE_UNAVAILABLE anywhere —
+ * error.error_code, or error.details.error behind a generic HTTP_5xx code.
+ * The single definition of "the AI service is temporarily down": the response
+ * interceptor below and any caller that runs its own retry (with
+ * `_skipAiRetry`) must agree, or opting out of one layer silently drops retries.
+ */
+export const isAiServiceUnavailable = (error: unknown): boolean => {
+  const response = (error as { response?: { status?: number; data?: unknown } })?.response;
+  return (response?.status === 500 || response?.status === 503) &&
+    bodyContains(response?.data, 'AI_SERVICE_UNAVAILABLE');
 };
 
 // True if the user logged in (or last refreshed successfully) within the past 35 minutes,
@@ -328,8 +358,12 @@ client.interceptors.response.use(
     // so it does not interfere with the 401 token-refresh _retry flag.
     const AI_MAX_RETRIES = 3;
     const isAiServiceError =
-      (error.response?.status === 500 || error.response?.status === 503) &&
-      bodyContains(error.response?.data, 'AI_SERVICE_UNAVAILABLE') &&
+      isAiServiceUnavailable(error) &&
+      // A caller that runs its own visible retry opts out here, or the two
+      // layers multiply: 4 caller attempts x 4 HTTP attempts = 16 POSTs to
+      // /mock-test/generate over ~60s, each able to create a session and spend
+      // credits. See mock-test/[id]/page.tsx handleStartSection.
+      originalRequest._skipAiRetry !== true &&
       (originalRequest._aiRetryCount ?? 0) < AI_MAX_RETRIES &&
       !originalRequest.url?.includes('/auth/') &&
       !originalRequest.url?.includes('/admin/auth/');

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, ChevronDown, ChevronRight, Eye, RotateCcw, MoreVertical, TrendingUp, TrendingDown, Minus, History as HistoryIcon, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getMockTestHistory, getProgressAnalytics, HistoryRecord, ProgressAnalytics } from '@/api/mockTestApi';
+import { toTestRouteSlug } from '@/lib/mockTestConstants';
 import LoadingScreen from '../_components/LoadingScreen';
 import HighlightBox from '../_components/HighlightBox';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
@@ -448,13 +449,13 @@ export default function MockTestHistoryPage() {
                                 <Eye size={14} style={{ color: '#94A3B8' }} />
                                 View result
                               </button>
-                              {/* The runner's review mode (reviewParentSession) lands in a
-                                  separate stacked PR — this still routes to the results page
-                                  until that merges, so it isn't a dead link in the meantime. */}
+                              {/* Straight into the test-taking page, one question at a
+                                  time, so the candidate reviews their completed attempt
+                                  in the same layout they took it in. */}
                               <button
                                 onClick={() => {
                                   router.push(test.sessionId
-                                    ? `/mock-test/results/${test.id}?parentSession=${test.sessionId}&tab=review`
+                                    ? `/mock-test/${toTestRouteSlug(test.id)}?reviewParentSession=${test.sessionId}`
                                     : `/mock-test/results/${test.id}`);
                                   setOpenMenu(null);
                                 }}

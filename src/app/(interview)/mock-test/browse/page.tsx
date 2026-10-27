@@ -512,8 +512,14 @@ export default function MockTestPage() {
                           </button>
                           <div className="group relative cursor-help" title="See the full section breakdown and your past attempts">
                             <Info size={13} style={{ color: '#CBD5E1' }} />
+                            {/* Centered on the icon + width-capped + wrapping (not
+                                whitespace-nowrap) so it fits inside even the
+                                narrowest card (280px) instead of being anchored
+                                from one edge and clipped by the card's own
+                                overflow-hidden (needed for the top accent bar's
+                                rounded corners, so not removable here). */}
                             <div
-                              className="absolute hidden group-hover:block bottom-full mb-2 left-0 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap z-10"
+                              className="absolute hidden group-hover:block bottom-full mb-2 left-1/2 -translate-x-1/2 w-44 text-center bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg z-10"
                               style={{ fontSize: '11px' }}
                             >
                               See the full section breakdown and your past attempts

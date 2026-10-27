@@ -1,11 +1,16 @@
 'use client';
 
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { Brain, BookOpen, Calculator, BarChart3, ChevronRight, RotateCcw, CheckCircle, LogOut } from 'lucide-react';
+import { Brain, BookOpen, Calculator, BarChart3, ChevronRight, RotateCcw, CheckCircle, LogOut, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { toPng } from 'html-to-image';
+import jsPDF from 'jspdf';
+import { toast } from 'sonner';
 import { getParentSessionResult, getSessionById, getSessionVideoEvaluation, TestResult, SessionMetadata, MockTestResultError, ResultErrorDiagnostics, VideoEvaluation } from '@/api/mockTestApi';
-import { resolveCompanyInfo, resolveCompanyId } from '@/lib/mockTestConstants';
+import { resolveCompanyInfo, resolveCompanyId, toTestRouteSlug } from '@/lib/mockTestConstants';
+import { paginateImage } from '@/lib/reportPagination';
+import { getProfile } from '@/api/userApi';
 
 const sectionIconMap: Record<string, React.ElementType> = {
   'Logical Reasoning': Brain,
@@ -14,6 +19,18 @@ const sectionIconMap: Record<string, React.ElementType> = {
 };
 
 type TabId = 'analysis' | 'review' | 'proctoring';
+
+// Shared by all three off-screen report-page groups (see reportRefP1/P2/P3).
+const reportPageStyle: CSSProperties = {
+  // Positioned so each child's offsetTop is measured from its own group (the
+  // PDF break points), not from the shared off-screen wrapper.
+  position: 'relative',
+  width: '780px',
+  padding: '40px',
+  background: '#ffffff',
+  fontFamily: 'Arial, Helvetica, sans-serif',
+  color: '#1f2937',
+};
 
 /**
  * Resolve a stored answer to the full option text.
@@ -81,6 +98,32 @@ export default function MockTestResultsPage() {
   const [videoEvaluation, setVideoEvaluation] = useState<VideoEvaluation | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sessionMetadata, setSessionMetadata] = useState<SessionMetadata | null>(null);
+  const [candidate, setCandidate] = useState<{ name: string; email: string }>({ name: '', email: '' });
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  // Rendered off-screen (not display:none — toPng needs real layout) and only
+  // captured on demand, so the on-screen page never carries this extra markup.
+  // Split into one ref per PDF page rather than one giant div sliced by pixel
+  // height — the slice approach could cut a page mid-section (a header left
+  // dangling at the bottom of page 1, its table starting page 2). Capturing
+  // each group separately guarantees a section only ever starts at a page top.
+  const reportRefP1 = useRef<HTMLDivElement>(null);
+  const reportRefP2 = useRef<HTMLDivElement>(null);
+  const reportRefP3 = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const profile = await getProfile({ skipAuthRedirect: true });
+        setCandidate({
+          name: profile.full_name || profile.username || 'Candidate',
+          email: profile.email || '—',
+        });
+      } catch {
+        setCandidate({ name: 'Candidate', email: '—' });
+      }
+    };
+    fetchProfile();
+  }, []);
 
   useEffect(() => {
     const fetchTestResult = async () => {
@@ -161,6 +204,134 @@ export default function MockTestResultsPage() {
   const resultDate = sessionMetadata?.created_at
     ? new Date(sessionMetadata.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()
     : new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+
+  // ── Downloadable report — a structured PDF (candidate details, score tables,
+  // section breakdown, strengths/improvements, action plan, final score card)
+  // modelled on the English Assessment report format, rebuilt from mock-test's
+  // own MCQ data. Fallback to the locally-computed `accuracy` when the backend
+  // hasn't set average_accuracy (older reports / edge cases).
+  const averageAccuracy = result?.average_accuracy ?? accuracy;
+  const gradeLabel = result?.grade || '—';
+  const performanceLevel =
+    averageAccuracy >= 90 ? 'Excellent' :
+    averageAccuracy >= 75 ? 'Good' :
+    averageAccuracy >= 60 ? 'Satisfactory' :
+    'Needs Improvement';
+  const timeTakenLabel = result?.time_taken
+    ? `${Math.floor(result.time_taken / 60)} min ${Math.round(result.time_taken % 60)} sec`
+    : '—';
+
+  const skillBreakdown = sections.map(s => {
+    const rating = Math.round((s.accuracy ?? 0) / 10 * 10) / 10;
+    const remark =
+      rating >= 8 ? 'Strong grasp of this section.' :
+      rating >= 6 ? 'Solid, with some gaps to close.' :
+      'Needs focused practice.';
+    return { name: s.name, rating, remark };
+  });
+
+  const strengths = result?.strengths ?? [];
+  const improvements = result?.improvements ?? [];
+  const actionPlan = improvements.length > 0
+    ? improvements.map(i => `Practice ${i.split(':')[0]} — revisit core concepts and attempt timed drills.`)
+    : ['Keep practicing across all sections to maintain this level.'];
+
+  const topStrengthSection = sections.filter(s => (s.accuracy ?? 0) >= 70).sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0))[0]?.name;
+  const topWeakSection = sections.filter(s => (s.accuracy ?? 0) < 60).sort((a, b) => (a.accuracy ?? 0) - (b.accuracy ?? 0))[0]?.name;
+  const conclusion = [
+    topStrengthSection ? `The candidate shows strong potential in ${topStrengthSection}.` : 'The candidate completed the assessment across all sections.',
+    topWeakSection ? `Focused practice in ${topWeakSection} will meaningfully raise the overall score.` : 'Continued consistent practice will help maintain this performance.',
+    'With dedicated preparation, further improvement is well within reach.',
+  ].join(' ');
+
+  // Captures one report-page group and adds it to the PDF, slicing further only
+  // if that single group is itself taller than one A4 page. Each page ends at the
+  // last direct child's top edge that fits (never mid-table/mid-header) and the
+  // next page starts there (see paginateImage); only a single child taller than
+  // a full page falls back to a hard cut.
+  const captureGroupIntoPdf = async (pdf: jsPDF, el: HTMLDivElement, isFirstPage: boolean) => {
+    const dataUrl = await toPng(el, {
+      pixelRatio: 2,
+      backgroundColor: '#ffffff',
+      skipFonts: true,
+    });
+
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load rendered report image'));
+    });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = pageW;
+    // A zero/unknown natural width would make imgH Infinity or NaN. Fail here
+    // rather than hand a non-finite height to paginateImage (which then yields
+    // no slices) and silently emit a report with pages missing.
+    if (!img.naturalWidth || !Number.isFinite(img.naturalHeight / img.naturalWidth)) {
+      throw new Error('Rendered report image has no usable dimensions');
+    }
+    const imgH = (img.naturalHeight * imgW) / img.naturalWidth;
+    const scale = el.offsetHeight > 0 ? imgH / el.offsetHeight : 0;
+    const breakPoints = Array.from(el.children)
+      .map(child => (child as HTMLElement).offsetTop * scale)
+      .filter(y => y > 0);
+
+    paginateImage(imgH, pageH, breakPoints).forEach(({ offset, height }, i) => {
+      if (i > 0 || !isFirstPage) pdf.addPage();
+      pdf.addImage(dataUrl, 'PNG', 0, -offset, imgW, imgH);
+      // The whole image is drawn shifted up; blank out whatever follows this
+      // page's cut, since the next page starts with it.
+      if (offset + height < imgH) {
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, height, pageW, pageH - height, 'F');
+      }
+    });
+  };
+
+  const handleDownloadReport = async () => {
+    if (downloadingReport) return;
+    if (!reportRefP1.current || !reportRefP2.current || !reportRefP3.current) return;
+    setDownloadingReport(true);
+    try {
+      // The recording uploads and gets AI-evaluated in the background and can
+      // still be pending when this page first loads (the poll above runs for
+      // up to ~3 minutes) — a candidate downloading right away would otherwise
+      // silently get a report missing that section. One fresh check here, and
+      // a beat for the DOM to pick up the new state, so it isn't left out just
+      // because the background poll hadn't caught up yet.
+      let evalForReport = videoEvaluation;
+      if (!evalForReport && parentSessionId) {
+        try {
+          const fresh = await getSessionVideoEvaluation(parentSessionId);
+          if (fresh) {
+            evalForReport = fresh;
+            setVideoEvaluation(fresh);
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          }
+        } catch { /* still not ready — report proceeds without it */ }
+      }
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      await captureGroupIntoPdf(pdf, reportRefP1.current, true);
+      // Page 2 is Skill-wise Breakdown + Video Evaluation only — skip it entirely
+      // (rather than adding a near-blank page) when neither has anything to show.
+      if (sections.length > 0 || evalForReport) {
+        await captureGroupIntoPdf(pdf, reportRefP2.current, false);
+      }
+      await captureGroupIntoPdf(pdf, reportRefP3.current, false);
+
+      const strippedName = candidate.name.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50);
+      const sanitizedName = strippedName || 'candidate';
+      pdf.save(`${sanitizedName}_MockTest_Report.pdf`);
+    } catch (err) {
+      console.error('[results] failed to generate report PDF:', err);
+      toast.error('Could not generate the report PDF. Please try again.');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
@@ -412,10 +583,15 @@ export default function MockTestResultsPage() {
                             </ul>
                           </div>
 
-                          {/* Review mistakes link */}
+                          {/* Review mistakes: opens the runner's review mode
+                              (?reviewParentSession=), added by the runner PR (#150). */}
                           <div className="mt-6 pt-4 border-t flex justify-end" style={{ borderColor: '#E5E7EB' }}>
                             <button
-                              onClick={() => a.isCurrent ? setActiveTab('review') : router.push(`/mock-test/results/${testId}?parentSession=${a.key}`)}
+                              // Step through the completed attempt inside the runner's review
+                              // mode, the same destination as history's "Review answers".
+                              // parentSessionId is always set here: without it the page
+                              // renders the error state, not this card.
+                              onClick={() => router.push(`/mock-test/${toTestRouteSlug(testId)}?reviewParentSession=${parentSessionId}`)}
                               className="text-xs font-bold tracking-widest uppercase flex items-center gap-1.5 hover:opacity-70 transition"
                               style={{ color: a.wrong > 0 ? '#1e3a8a' : '#94A3B8', cursor: a.wrong > 0 ? 'pointer' : 'default' }}
                               disabled={a.wrong === 0}
@@ -763,17 +939,14 @@ export default function MockTestResultsPage() {
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => {
-                const prevTitle = document.title;
-                document.title = `CareerBot Result - ${testInfo.name} - ${resultDate}`;
-                const restore = () => { document.title = prevTitle; window.removeEventListener('afterprint', restore); };
-                window.addEventListener('afterprint', restore);
-                window.print();
-              }}
-              className="px-4 py-2.5 text-sm font-semibold rounded-xl transition hover:bg-white"
+              onClick={handleDownloadReport}
+              disabled={downloadingReport || !result}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-xl transition hover:bg-white disabled:opacity-50"
               style={{ border: '1px solid #E5E7EB', color: '#475569', background: 'transparent' }}
+              title="Download a detailed report — candidate details, section breakdown, strengths, and an action plan"
             >
-              Export PDF
+              <Download size={14} />
+              {downloadingReport ? 'Generating…' : 'Download Report'}
             </button>
             <button
               onClick={() => router.push('/mock-test/history')}
@@ -799,6 +972,216 @@ export default function MockTestResultsPage() {
           </div>
         </div>
       </div>
+
+      {/* Off-screen report template captured by handleDownloadReport, split across
+          three groups (one per starting PDF page — see reportRefP1/P2/P3 above).
+          Not display:none — toPng needs the node actually laid out to rasterize it. */}
+      {result && (
+        <div style={{ position: 'fixed', top: 0, left: '-99999px' }}>
+          {/* Page 1 — header, candidate details, overall assessment, detailed
+              breakdown, section breakdown. */}
+          <div ref={reportRefP1} style={reportPageStyle}>
+            <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1e3a8a', marginBottom: '24px' }}>
+              Mock Test Assessment Report
+            </h1>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
+              <tbody>
+                {[
+                  ['Test ID', parentSessionId || '—'],
+                  ['Candidate', candidate.name],
+                  ['Email', candidate.email],
+                  ['Test Type', `${testInfo.name} Mock Test`],
+                  ['Generated', new Date().toLocaleString()],
+                ].map(([label, value]) => (
+                  <tr key={label}>
+                    <td style={{ width: '160px', padding: '8px 12px', background: '#eef2ff', border: '1px solid #cbd5e1', fontWeight: 700 }}>{label}</td>
+                    <td style={{ padding: '8px 12px', border: '1px solid #cbd5e1' }}>{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 10px' }}>Overall Assessment</h2>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+              <tbody>
+                {[
+                  ['Total Score', `${totalScore} / ${totalQuestions}`],
+                  ['Grade', gradeLabel],
+                  ['Accuracy', `${averageAccuracy}%`],
+                  ['Time Taken', timeTakenLabel],
+                ].map(([label, value]) => (
+                  <tr key={label}>
+                    <td style={{ width: '160px', padding: '8px 12px', background: '#ecfdf5', border: '1px solid #bbf7d0', fontWeight: 700 }}>{label}</td>
+                    <td style={{ padding: '8px 12px', border: '1px solid #bbf7d0' }}>{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 10px' }}>Detailed Breakdown</h2>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+              <tbody>
+                {[
+                  ['Total Questions', totalQuestions],
+                  ['Correct Answers', totalScore],
+                  ['Incorrect', result.incorrect ?? Math.max(0, totalQuestions - totalScore - (result.not_attempted ?? 0))],
+                  ['Not Attempted', result.not_attempted ?? 0],
+                  ['Accuracy', `${accuracy}%`],
+                ].map(([label, value]) => (
+                  <tr key={label}>
+                    <td style={{ width: '160px', padding: '8px 12px', background: '#fefce8', border: '1px solid #fde68a', fontWeight: 700 }}>{label}</td>
+                    <td style={{ padding: '8px 12px', border: '1px solid #fde68a' }}>{String(value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {sections.length > 0 && (
+              <>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 10px' }}>Section Breakdown</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ background: '#16a34a', color: '#ffffff' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', border: '1px solid #16a34a' }}>Section</th>
+                      <th style={{ padding: '8px 12px', border: '1px solid #16a34a' }}>Total</th>
+                      <th style={{ padding: '8px 12px', border: '1px solid #16a34a' }}>Correct</th>
+                      <th style={{ padding: '8px 12px', border: '1px solid #16a34a' }}>Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sections.map((s, i) => (
+                      <tr key={s.name} style={{ background: i % 2 ? '#f0fdf4' : '#ffffff' }}>
+                        <td style={{ padding: '8px 12px', border: '1px solid #bbf7d0' }}>{s.name}</td>
+                        <td style={{ padding: '8px 12px', border: '1px solid #bbf7d0', textAlign: 'center' }}>{s.total}</td>
+                        <td style={{ padding: '8px 12px', border: '1px solid #bbf7d0', textAlign: 'center' }}>{s.correct}</td>
+                        <td style={{ padding: '8px 12px', border: '1px solid #bbf7d0', textAlign: 'center' }}>{s.accuracy}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+
+          {/* Page 2 — skill-wise breakdown and video evaluation. Its own group so
+              a header never lands at the bottom of page 1 with its table pushed
+              onto page 2 — this group always starts at the top of a fresh page. */}
+          <div ref={reportRefP2} style={reportPageStyle}>
+            {sections.length > 0 && (
+              <>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a', margin: '0 0 10px' }}>Skill-wise Breakdown</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ background: '#3730a3', color: '#ffffff' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', border: '1px solid #3730a3' }}>Skill Area</th>
+                      <th style={{ padding: '8px 12px', border: '1px solid #3730a3' }}>Rating (/10)</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', border: '1px solid #3730a3' }}>Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {skillBreakdown.map((s, i) => (
+                      <tr key={s.name} style={{ background: i % 2 ? '#eef2ff' : '#ffffff' }}>
+                        <td style={{ padding: '8px 12px', border: '1px solid #c7d2fe' }}>{s.name}</td>
+                        <td style={{ padding: '8px 12px', border: '1px solid #c7d2fe', textAlign: 'center' }}>{s.rating}</td>
+                        <td style={{ padding: '8px 12px', border: '1px solid #c7d2fe' }}>{s.remark}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {videoEvaluation && (() => {
+              // Same filter as the on-screen Proctoring tab — `result` is an unshaped
+              // AI passthrough, so only render scalar findings it actually returned
+              // rather than assuming fixed fields exist. Metadata the AI echoes back
+              // (evaluation_id, test_id, filename, duration_seconds, timestamp) is
+              // excluded here since Duration/Recorded above already cover that ground.
+              const findingRows = Object.entries(videoEvaluation.result ?? {})
+                .filter(([k, v]) =>
+                  !['evaluation_id', 'test_id', 'filename', 'duration_seconds', 'timestamp'].includes(k) &&
+                  (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'))
+                .map(([k, v]) => [k.replace(/[_-]+/g, ' '), String(v)] as [string, string]);
+
+              return (
+                <>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 10px' }}>Video Evaluation — Proctoring Review</h2>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: findingRows.length ? '20px' : '10px', fontSize: '13px' }}>
+                    <tbody>
+                      {[
+                        ['Duration', videoEvaluation.duration_seconds
+                          ? `${Math.floor(videoEvaluation.duration_seconds / 60)}m ${Math.round(videoEvaluation.duration_seconds % 60)}s`
+                          : '—'],
+                        ['Recorded', videoEvaluation.created_at ? new Date(videoEvaluation.created_at).toLocaleString() : '—'],
+                        ...findingRows,
+                      ].map(([label, value]) => (
+                        <tr key={label}>
+                          <td style={{ width: '200px', padding: '8px 12px', background: '#fdf2f8', border: '1px solid #fbcfe8', fontWeight: 700, textTransform: 'capitalize' }}>{label}</td>
+                          <td style={{ padding: '8px 12px', border: '1px solid #fbcfe8' }}>{value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {findingRows.length === 0 && (
+                    <p style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', marginBottom: '20px' }}>
+                      The recording was uploaded and accepted. No detailed findings were returned for this attempt.
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Page 3 — strengths, improvements, action plan, final score card, conclusion. */}
+          <div ref={reportRefP3} style={reportPageStyle}>
+            {strengths.length > 0 && (
+              <>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#15803d', margin: '0 0 8px' }}>Strengths</h2>
+                <ul style={{ margin: '0 0 20px', paddingLeft: '20px', fontSize: '13px', lineHeight: 1.7 }}>
+                  {strengths.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </>
+            )}
+
+            {improvements.length > 0 && (
+              <>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#b91c1c', margin: '20px 0 8px' }}>Areas to Improve</h2>
+                <ul style={{ margin: '0 0 20px', paddingLeft: '20px', fontSize: '13px', lineHeight: 1.7 }}>
+                  {improvements.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </>
+            )}
+
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 8px' }}>Action Plan for Improvement</h2>
+            <ul style={{ margin: '0 0 20px', paddingLeft: '20px', fontSize: '13px', lineHeight: 1.7 }}>
+              {actionPlan.map((s, i) => <li key={i}>{s}</li>)}
+            </ul>
+
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 10px' }}>Final Score Card</h2>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '13px' }}>
+              <tbody>
+                {[
+                  ['Total Score', `${totalScore} / ${totalQuestions}`],
+                  ['Grade', gradeLabel],
+                  ['Average Accuracy', `${averageAccuracy}%`],
+                  ['Performance Level', performanceLevel],
+                ].map(([label, value], i) => (
+                  <tr key={label} style={{ background: i % 2 ? '#eef2ff' : '#ffffff' }}>
+                    <td style={{ width: '200px', padding: '8px 12px', border: '1px solid #c7d2fe', fontWeight: 700 }}>{label}</td>
+                    <td style={{ padding: '8px 12px', border: '1px solid #c7d2fe' }}>{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1e3a8a', margin: '20px 0 8px' }}>Conclusion</h2>
+            <p style={{ fontSize: '13px', lineHeight: 1.7, marginBottom: '20px' }}>{conclusion}</p>
+
+            <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '30px' }}>Generated by CareerBot Mock Test</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

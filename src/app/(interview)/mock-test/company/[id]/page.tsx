@@ -8,8 +8,6 @@ import {
   getMockTestCompanyById,
   getProgressAnalytics,
   ProgressAnalytics,
-  MockTestDifficulty,
-  MOCK_TEST_DIFFICULTIES,
 } from '@/api/mockTestApi';
 import { checkCredits } from '@/api/creditsApi';
 import LoadingScreen from '../../_components/LoadingScreen';
@@ -102,12 +100,6 @@ function transformCompanyData(data: any): any {
   };
 }
 
-const DIFFICULTY_META: Record<MockTestDifficulty, { color: string; bg: string; border: string }> = {
-  easy:   { color: '#065f46', bg: '#d1fae5', border: '#6ee7b7' },
-  medium: { color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
-  hard:   { color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
-};
-
 function getGrade(score: number): { label: string; bg: string; color: string } {
   if (score >= 80) return { label: 'GRADE A', bg: '#d1fae5', color: '#065f46' };
   if (score >= 70) return { label: 'GRADE B', bg: '#dbeafe', color: '#1e3a8a' };
@@ -131,9 +123,6 @@ export default function CompanyDetailPage() {
   const [analytics, setAnalytics]     = useState<ProgressAnalytics | null>(null);
   const [rulesOpen, setRulesOpen]     = useState(false);
   const [tipsOpen, setTipsOpen]       = useState(false);
-  // No default: the user must pick a level explicitly. The backend requires one,
-  // and pre-selecting 'medium' is what let tests start with no real choice made.
-  const [difficulty, setDifficulty]   = useState<MockTestDifficulty | null>(null);
 
   useEffect(() => {
     getMockTestCompanyById(companyId)
@@ -177,10 +166,6 @@ export default function CompanyDetailPage() {
   const handleBeginExam = async () => {
     setStartError(null);
     setOutOfCredits(false);
-    if (!difficulty) {
-      setStartError('Please select a difficulty level to begin.');
-      return;
-    }
     setStarting(true);
     try {
       // A lightweight credits check, not a real generate — the runner already
@@ -203,8 +188,7 @@ export default function CompanyDetailPage() {
       // Advisory only — if the pre-check itself fails, continue and let the
       // runner's own error handling report whatever the real problem is.
     }
-    // Forward the level so the runner generates every section at it.
-    router.push(`/mock-test/${companyId}?difficulty=${difficulty}`);
+    router.push(`/mock-test/${companyId}`);
   };
 
   return (
@@ -398,48 +382,6 @@ export default function CompanyDetailPage() {
               )}
             </AnimatePresence>
           </div>
-        </div>
-
-        {/* Difficulty — required. Every section of the test generates at this level. */}
-        <div
-          className="mt-6 bg-white rounded-2xl border p-6"
-          style={{ borderColor: '#E5E7EB' }}
-        >
-          <fieldset>
-            <legend className="text-[15px] font-bold mb-1" style={{ color: '#0F172A' }}>
-              Difficulty <span style={{ color: '#ef4444' }}>*</span>
-            </legend>
-            <p className="text-sm mb-4" style={{ color: '#64748B' }}>
-              Choose the level for every section of this test.
-            </p>
-            <div className="flex gap-3 flex-wrap">
-              {MOCK_TEST_DIFFICULTIES.map(level => {
-                const meta = DIFFICULTY_META[level];
-                const isSelected = difficulty === level;
-                return (
-                  <label
-                    key={level}
-                    className="flex items-center gap-2 px-5 py-3 rounded-xl border cursor-pointer transition select-none"
-                    style={{
-                      background: isSelected ? meta.bg : '#fff',
-                      borderColor: isSelected ? meta.border : '#E5E7EB',
-                      color: isSelected ? meta.color : '#475569',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="difficulty"
-                      value={level}
-                      checked={isSelected}
-                      onChange={() => { setDifficulty(level); setStartError(null); }}
-                      className="sr-only"
-                    />
-                    <span className="text-sm font-bold capitalize">{level}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
         </div>
 
         {/* Bottom action row — section-intro DNA */}
