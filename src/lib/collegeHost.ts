@@ -16,7 +16,7 @@ const COLLEGE_CODE_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 const RESERVED_COLLEGE_CODES = new Set([
   'www', 'api', 'app', 'admin', 'staging', 'localhost',
-  'careerbot', 'mail', 'cdn', 'static', 'assets', 'acme',
+  'careerbot', 'mail', 'cdn', 'static', 'assets', 'acme', 'nightly',
   'webmail', 'cpanel', 'whm', 'webdisk', 'ftp', 'autodiscover',
   'autoconfig', 'cpcalendars', 'cpcontacts',
 ]);

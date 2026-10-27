@@ -21,6 +21,7 @@ describe('collegeFromHost', () => {
     'app.intelicoreai.com',
     'cpanel.intelicoreai.com',
     'mail.intelicoreai.com',
+    'nightly.intelicoreai.com',
     'a.b.intelicoreai.com',
     '-vit.intelicoreai.com',
     'vit-.intelicoreai.com',
