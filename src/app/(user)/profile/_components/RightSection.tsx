@@ -33,6 +33,7 @@ import { useProfileContext } from '../context/ProfileContext'
 import { ResumeExtractResponse, extractResume } from "@/api/resumeParsingApi";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { Crown, MessageSquare, Upload, User, CheckCircle } from "lucide-react";
+import { notifyOcrOutOfTime } from "@/utils/parseWarnings";
 
 interface RightSectionProps {
     completeness: number;
@@ -156,6 +157,7 @@ const RightSection = ({ completeness, missingFields, weightedForStudent = false 
 
             // 1️⃣ Extract resume first — some backends auto-save parsed data to profile
             const result: ResumeExtractResponse = await extractResume(file);
+            notifyOcrOutOfTime(result.parsed_data);
 
             // 2️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);

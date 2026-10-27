@@ -14,6 +14,7 @@ import {
   updateEmploymentInfo,
   getEmploymentInfo,
 } from "@/api/userApi";
+import { notifyOcrOutOfTime } from "@/utils/parseWarnings";
 
 export type FillStep = "idle" | "parsing" | "saving" | "done" | "error";
 
@@ -69,6 +70,8 @@ export function useResumeProfileFill(userId?: string) {
         extractResume(file),
         uploadResume(file).catch(() => { /* non-fatal — profile tab will be missing but parse continues */ }),
       ]);
+
+      notifyOcrOutOfTime(parsed.parsed_data);
 
       // Persist resume_id for the ATS scan step (scoped or unscoped key)
       if (parsed.resume_id) {

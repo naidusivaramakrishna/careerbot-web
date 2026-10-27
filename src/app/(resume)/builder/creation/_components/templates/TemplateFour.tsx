@@ -16,6 +16,9 @@ interface Props {
 
 const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
   const { resumeStyle, sectionOrder } = useResume();
+  // The colour of the name and the section headings: the Color Theme (accentColor) when one is set, else the
+  // style's own heading colour. The export is sent the same pair (accentColor || headingColor), so both match.
+  const headingColor = resumeStyle.accentColor || resumeStyle.headingColor;
 
   const {
     personalInfo,
@@ -67,7 +70,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
   };
 
   const headingStyle: React.CSSProperties = {
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontSize: resumeStyle.headingFontSize,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -78,7 +81,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
   const nameStyle: React.CSSProperties = {
     fontSize: resumeStyle.nameFontSize,
     fontWeight: "bold",
-    color: resumeStyle.headingColor,
+    color: headingColor,
     textTransform: "uppercase",
   };
 
@@ -91,12 +94,12 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
     display: "inline-block",
     marginLeft: "6px",
     verticalAlign: "middle",
-    color: resumeStyle.headingColor,
+    color: headingColor,
   };
 
   const titleStyle: React.CSSProperties = {
     ...baseTextStyle,
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontWeight: "bold",
   };
 
@@ -233,6 +236,9 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                       {exp.company}
                     </div>
                   </div>
+                  {exp.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {exp.projectTitle}</div>
+                  )}
                   {/* ✅ Changed to support HTML formatting */}
                   {exp.description && (
                     <SafeHTML content={exp.description} className="resume-description" />
@@ -426,6 +432,9 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                       {intern.company}
                     </div>
                   </div>
+                  {intern.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {intern.projectTitle}</div>
+                  )}
                   {/* ✅ Changed to support HTML formatting */}
                   {intern.description && (
                     <SafeHTML content={intern.description} className="resume-description" />

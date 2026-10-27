@@ -19,6 +19,9 @@ interface Props {
 
 const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
   const { resumeStyle, sectionOrder } = useResume();
+  // The colour of the name and the section headings: the Color Theme (accentColor) when one is set, else the
+  // style's own heading colour. The export is sent the same pair (accentColor || headingColor), so both match.
+  const headingColor = resumeStyle.accentColor || resumeStyle.headingColor;
 
   const {
     personalInfo,
@@ -63,12 +66,12 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
   // Section headings: uppercase, full-width bottom border
   const headingStyle: React.CSSProperties = {
     fontFamily: resumeStyle.fontFamily,
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontSize: resumeStyle.headingFontSize,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
-    borderBottom: `2px solid ${resumeStyle.headingColor}`,
+    borderBottom: `2px solid ${headingColor}`,
     paddingBottom: "3px",
     marginBottom: "6px",
   };
@@ -78,7 +81,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
     fontFamily: resumeStyle.fontFamily,
     fontSize: resumeStyle.nameFontSize,
     fontWeight: "700",
-    color: resumeStyle.headingColor,
+    color: headingColor,
     letterSpacing: "1px",
     textTransform: "uppercase",
   };
@@ -92,12 +95,12 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
     display: "inline-block",
     marginLeft: "6px",
     verticalAlign: "middle",
-    color: resumeStyle.headingColor,
+    color: headingColor,
   };
 
   const titleStyle: React.CSSProperties = {
     ...baseTextStyle,
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontWeight: "bold",
   };
 
@@ -135,7 +138,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                 </a>
               )}
             </div>
-            <hr style={{ borderColor: resumeStyle.headingColor, borderTopWidth: "2px", marginTop: "6px" }} />
+            <hr style={{ borderColor: headingColor, borderTopWidth: "2px", marginTop: "6px" }} />
           </header>
         );
 
@@ -207,6 +210,9 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                     </span>
                   </div>
                   <div className="font-semibold mb-1" style={baseTextStyle}>{exp.company}</div>
+                  {exp.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {exp.projectTitle}</div>
+                  )}
                   {exp.description && (
                     <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: exp.description }} />
                   )}
@@ -293,6 +299,9 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                     </span>
                   </div>
                   <div className="font-semibold mb-1" style={baseTextStyle}>{intern.company}</div>
+                  {intern.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {intern.projectTitle}</div>
+                  )}
                   {intern.description && (
                     <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: intern.description }} />
                   )}

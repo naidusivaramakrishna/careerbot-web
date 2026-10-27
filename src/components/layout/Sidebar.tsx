@@ -10,39 +10,34 @@ import { useHasCollegeMembership, useStudentCollege } from "@/hooks/useCollegeMe
 import { useCollegeDisabledFeatures } from "@/hooks/useCollegeFeatureAccess";
 import { withoutDisabledFeatures } from "@/lib/collegeFeatures";
 import {
-  EnterpriseApplicationTrackerIcon as IcoTracker,
-  EnterpriseAtsScanIcon as IcoAtsScan,
   EnterpriseChevronRightIcon as IcoChevronRight,
-  EnterpriseCommunicationIcon as IcoCommunication,
-  EnterpriseCoverLetterIcon as IcoCoverLetter,
   EnterpriseDashboardIcon as IcoDashboard,
-  EnterpriseInterviewPrepIcon as IcoInterview,
-  EnterpriseJobMatchIcon as IcoJobMatch,
-  EnterpriseJobsIcon as IcoJobs,
-  EnterpriseNotesIcon as IcoNotes,
   EnterpriseProfileIcon as IcoProfile,
-  EnterpriseResumeIcon as IcoResume,
   type EnterpriseNavIcon,
 } from "@/components/icons/EnterpriseNavIcons";
+import {
+  SidebarTrackerIcon as IcoTracker,
+  SidebarAtsScanIcon as IcoAtsScan,
+  SidebarCodingIcon as IcoCodingTest,
+  SidebarCommunicationIcon as IcoCommunication,
+  SidebarCoverLetterIcon as IcoCoverLetter,
+  SidebarMockInterviewIcon as IcoInterview,
+  SidebarJobMatchIcon as IcoJobMatch,
+  SidebarJobsIcon as IcoJobs,
+  SidebarMockTestIcon as IcoMockTest,
+  SidebarNotesIcon as IcoNotes,
+  SidebarResumeIcon as IcoResume,
+  SidebarTemplatesIcon as IcoTemplates,
+} from "@/components/icons/SidebarIcons";
 /* NAV CONFIG */
 type NavIcon = EnterpriseNavIcon | ((props: IP) => React.ReactElement);
 
 type SubNavItem = { id: string; label: string; path: string };
 
 /* ══════════════════════════════════════════════════════════════
-   CUSTOM ICON (Coding Practice — not in EnterpriseNavIcons set)
+   CUSTOM ICON (My College — not in the icon sets)
 ══════════════════════════════════════════════════════════════ */
 type IP = { size?: number; className?: string; sw?: number };
-
-/** Mock Test — clipboard checklist */
-const IcoMockTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
-    strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="4" y="3" width="12" height="15" rx="1.5" stroke="currentColor" strokeWidth={sw} />
-    <path d="M7.5 3.5V2.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1" stroke="currentColor" strokeWidth={sw} />
-    <path d="M7 8h6M7 11.5h6M7 15h3.5" stroke="currentColor" strokeWidth={sw * 0.85} />
-  </svg>
-);
 
 /** My College — a building with a flag, distinct from the job-search icons */
 const IcoCollege = ({ size = 18, className = "", sw = 1.6 }: IP) => (
@@ -73,43 +68,6 @@ const IcoPeople = ({ size = 18, className = "", sw = 1.6 }: IP) => (
     <path d="M2.5 16.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4" stroke="currentColor" strokeWidth={sw} />
     <circle cx="13.75" cy="7.75" r="2.25" stroke="currentColor" strokeWidth={sw * 0.9} />
     <path d="M14 12.5c1.7.2 3 1.4 3.5 3.25" stroke="currentColor" strokeWidth={sw * 0.9} />
-  </svg>
-);
-
-/** Coding Practice — terminal bracket + prompt cursor */
-const IcoCodingTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
-    strokeLinecap="round" strokeLinejoin="round" className={className}>
-    {/* Screen body */}
-    <rect x="1.5" y="3" width="17" height="12.5" rx="1.5"
-      stroke="currentColor" strokeWidth={sw} />
-    {/* Chevron left — </ bracket */}
-    <path d="M6 8.5L4 10L6 11.5" stroke="currentColor" strokeWidth={sw * 0.9} />
-    {/* Chevron right — /> bracket */}
-    <path d="M9 8.5L11 10L9 11.5" stroke="currentColor" strokeWidth={sw * 0.9} />
-    {/* Cursor blink underscore */}
-    <path d="M12.5 11.5H14.5" stroke="currentColor" strokeWidth={sw * 0.9} />
-    {/* Stand stem */}
-    <path d="M10 15.5V17.5" stroke="currentColor" strokeWidth={sw} />
-    {/* Base */}
-    <path d="M7 17.5H13" stroke="currentColor" strokeWidth={sw} />
-  </svg>
-);
-
-/** Templates — layout grid with customizable blocks */
-const IcoTemplates = ({ size = 18, className = "", sw = 1.6 }: IP) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
-    strokeLinecap="round" strokeLinejoin="round" className={className}>
-    {/* Main frame */}
-    <rect x="2" y="2" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth={sw} />
-    {/* Header area */}
-    <path d="M2 6h16" stroke="currentColor" strokeWidth={sw} />
-    {/* Left sidebar */}
-    <path d="M6 6v12" stroke="currentColor" strokeWidth={sw} />
-    {/* Content blocks - stacked sections */}
-    <rect x="7" y="7" width="10" height="2" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
-    <rect x="7" y="10" width="10" height="2" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
-    <rect x="7" y="13" width="7" height="2" rx="0.5" stroke="currentColor" strokeWidth={sw * 0.8} />
   </svg>
 );
 
@@ -298,9 +256,9 @@ function CollapsedSubItem({
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
             isActive ? "" : "group-hover/icon:bg-gray-100"
           }`}
-          style={isActive ? { background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
+          style={isActive ? { background: "#eaf1fb", boxShadow: "inset 0 0 0 1px #9db9e6" } : {}}
         >
-          <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover/icon:text-[#2557a7]"}`} />
+          <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-[#1d4fa8]" : "text-gray-600 group-hover/icon:text-[#2557a7]"}`} />
         </div>
       </button>
 
@@ -498,9 +456,9 @@ export default function Sidebar() {
                         className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
                           isActive ? "" : "group-hover:bg-gray-100"
                         }`}
-                        style={isActive ? { background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
+                        style={isActive ? { background: "#eaf1fb", boxShadow: "inset 0 0 0 1px #9db9e6" } : {}}
                       >
-                        <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover:text-[#2557a7]"}`} />
+                                      <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-[#1d4fa8]" : "text-gray-600 group-hover:text-[#2557a7]"}`} />
                       </div>
                     </button>
                   );
@@ -548,15 +506,15 @@ export default function Sidebar() {
         }`}
         style={
           isActive
-            ? { background: "#2557a7", boxShadow: "0 4px 16px rgba(37,87,167,0.28), inset 0 1px 0 rgba(255,255,255,0.12)" }
+            ? { background: "#eaf1fb", boxShadow: "inset 0 0 0 1px #9db9e6" }
             : {}
         }
       >
         {!isActive && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.75 rounded-r-full bg-[#2557a7] transition-all duration-200 h-0 group-hover/btn:h-5 opacity-0 group-hover/btn:opacity-100" />
         )}
-        <Icon size={17} sw={isActive ? 1.75 : 1.55} className={`shrink-0 transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover/btn:text-[#2557a7]"}`} />
-        <span className={`flex-1 text-left truncate text-[12px] font-medium transition-colors ${isActive ? "text-white font-semibold" : "text-gray-600 group-hover/btn:text-[#2557a7]"}`}>
+        <Icon size={17} sw={isActive ? 1.75 : 1.55} className={`shrink-0 transition-colors ${isActive ? "text-[#1d4fa8]" : "text-gray-600 group-hover/btn:text-[#2557a7]"}`} />
+        <span className={`flex-1 text-left truncate text-[12px] font-medium transition-colors ${isActive ? "text-[#1d4fa8] font-semibold" : "text-gray-600 group-hover/btn:text-[#2557a7]"}`}>
           {item.label}
         </span>
         {showBadge && !isActive && (
@@ -565,8 +523,8 @@ export default function Sidebar() {
           </span>
         )}
         {hasSub && !isActive && <IcoChevronRight size={10} className="text-gray-400 group-hover/btn:text-[#2557a7] shrink-0 transition-colors" sw={2} />}
-        {isActive && !hasSub && <IcoChevronRight size={11} className="text-white/65 shrink-0" sw={2.5} />}
-        {isActive && hasSub && <IcoChevronRight size={10} className="text-white/65 shrink-0" sw={2} />}
+        {isActive && !hasSub && <IcoChevronRight size={11} className="text-[#1d4fa8]/70 shrink-0" sw={2.5} />}
+        {isActive && hasSub && <IcoChevronRight size={10} className="text-[#1d4fa8]/70 shrink-0" sw={2} />}
       </button>
     );
 

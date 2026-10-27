@@ -15,6 +15,9 @@ interface Props {
 
 const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
   const { resumeStyle, sectionOrder } = useResume();
+  // The colour of the name and the section headings: the Color Theme (accentColor) when one is set, else the
+  // style's own heading colour. The export is sent the same pair (accentColor || headingColor), so both match.
+  const headingColor = resumeStyle.accentColor || resumeStyle.headingColor;
   const {
     personalInfo,
     professionalSummary,
@@ -65,7 +68,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
   };
 
   const headingStyle: React.CSSProperties = {
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontSize: resumeStyle.headingFontSize,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -76,7 +79,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
   const nameStyle: React.CSSProperties = {
     fontSize: resumeStyle.nameFontSize,
     fontWeight: "bold",
-    color: resumeStyle.headingColor,
+    color: headingColor,
   };
 
   const linkStyle: React.CSSProperties = {
@@ -88,12 +91,12 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
     display: "inline-block",
     marginLeft: "6px",
     verticalAlign: "middle",
-    color: resumeStyle.headingColor,
+    color: headingColor,
   };
 
   const titleStyle: React.CSSProperties = {
     ...baseTextStyle,
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontWeight: "bold",
   };
 
@@ -281,7 +284,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
                     return (
                       <div key={key} className="flex items-start gap-1">
-                        <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                        <span style={{ color: headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
                         <span><span className="font-semibold">{label}: </span>{categorySkills.join(", ")}</span>
                       </div>
                     );
@@ -290,7 +293,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     if (!custom.skills || custom.skills.length === 0) return null;
                     return (
                       <div key={custom.id} className="flex items-start gap-1">
-                        <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                        <span style={{ color: headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
                         <span><span className="font-semibold">{custom.name || "Other"}: </span>{custom.skills.join(", ")}</span>
                       </div>
                     );
@@ -300,7 +303,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                 <div className="grid grid-cols-2 gap-x-6 gap-y-0.5" style={baseTextStyle}>
                   {skills.map((skill, idx) => (
                     <div key={idx} className="flex items-start gap-1">
-                      <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                      <span style={{ color: headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
                       <span>{skill}</span>
                     </div>
                   ))}
@@ -330,6 +333,9 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     <span className="font-medium">{exp.company}</span>
                     {exp.location && <span className="text-sm"> • {exp.location}</span>}
                   </div>
+                  {exp.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {exp.projectTitle}</div>
+                  )}
                   {exp.description && (
                     <SafeHTML content={exp.description} className="resume-description" />
                   )}
@@ -359,6 +365,9 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     <span className="font-medium">{intern.company}</span>
                     {intern.location && <span className="text-sm"> • {intern.location}</span>}
                   </div>
+                  {intern.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {intern.projectTitle}</div>
+                  )}
                   {intern.description && (
                     <SafeHTML content={intern.description} className="resume-description" />
                   )}

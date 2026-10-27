@@ -13,6 +13,8 @@ interface TemplatePreviewRendererProps {
   scale?: number; // Custom scale for thumbnail view (e.g., 0.2 for small cards)
   hideScroll?: boolean; // Hide scrollbars for thumbnail previews
   fillContainer?: boolean; // Fill container without centering/padding (like image)
+  /** The page fills the width with only a thin edge, instead of a narrow page centred on grey. */
+  flush?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export default function TemplatePreviewRenderer({
   scale = 0.95,
   hideScroll = false,
   fillContainer = false,
+  flush = false,
 }: TemplatePreviewRendererProps) {
   // fallbackImage that failed to load; reset automatically when the prop changes.
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -41,7 +44,13 @@ export default function TemplatePreviewRenderer({
   const srcDoc = useMemo(() => {
     if (!previewHtml || !previewCss) return null;
 
-    const htmlStyle = fillContainer
+    const htmlStyle = flush && !fillContainer
+      ? `display: block !important;
+      background: #fff !important;
+      overflow: ${hideScroll ? 'hidden' : 'auto'} !important;
+      margin: 0 !important;
+      padding: 0 !important;`
+      : fillContainer
       ? `display: block !important;
       background: #fff !important;
       overflow: ${hideScroll ? 'hidden' : 'auto'} !important;
@@ -56,7 +65,15 @@ export default function TemplatePreviewRenderer({
       overflow: ${hideScroll ? 'hidden' : 'auto'} !important;
       padding: 20px 0 !important;`;
 
-    const bodyStyle = fillContainer
+    const bodyStyle = flush && !fillContainer
+      ? `transform: scale(${scale}) !important;
+      transform-origin: top left !important;
+      margin: 0 !important;
+      width: ${100 / scale}% !important;
+      max-width: none !important;
+      box-sizing: border-box !important;
+      padding: 6px 10px !important;`
+      : fillContainer
       ? `transform: scale(${scale}) !important;
       transform-origin: top left !important;
       margin: 0 !important;
@@ -69,7 +86,7 @@ export default function TemplatePreviewRenderer({
 
     const fillContainerCss = fillContainer
       ? `html { display: block !important; margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
-      body { margin: 0 !important; padding: 12px 12px 12px 12px !important; box-sizing: border-box !important; max-width: none !important; display: block !important; overflow-x: hidden !important; overflow-y: hidden !important; }
+      body { margin: 0 !important; padding: ${flush ? '4px 6px' : '12px'} !important; box-sizing: border-box !important; max-width: none !important; display: block !important; overflow-x: hidden !important; overflow-y: hidden !important; }
       body *, body *:before, body *:after { width: auto !important; max-width: 100% !important; }
       div { width: 100% !important; max-width: 100% !important; }
       table { width: 100% !important; }
@@ -97,7 +114,7 @@ export default function TemplatePreviewRenderer({
   ${previewHtml}
 </body>
 </html>`;
-  }, [previewHtml, previewCss, title, scale, hideScroll, fillContainer]);
+  }, [previewHtml, previewCss, title, scale, hideScroll, fillContainer, flush]);
 
   // If we have HTML/CSS, render in iframe
   if (srcDoc) {

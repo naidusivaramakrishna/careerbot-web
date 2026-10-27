@@ -55,6 +55,8 @@ export interface ExperienceItem {
     achievements?: AchievementItem[];
     responsibilities?: AchievementItem[];
     tech_stack?: string[];
+    // Name of the project the job was about ("Project: Billing System"). Missing when none is named.
+    project_title?: string | null;
 }
 
 // ========== INTERNSHIPS ==========
@@ -73,6 +75,7 @@ export interface InternshipItem {
     achievements?: AchievementItem[];
     responsibilities?: AchievementItem[];
     tech_stack?: string[];
+    project_title?: string | null;
 }
 
 // ========== PROJECTS ==========
@@ -84,6 +87,10 @@ export interface ProjectItem {
     responsibilities?: AchievementItem[];
     tech_stack?: string[];
     duration?: string | null;
+    // Only set when the resume prints a date for the project. A single date goes in end_date.
+    // Same format as education dates ("Jan 2023", "21 May 2025", "2023"); end_date can be "Present".
+    start_date?: string | null;
+    end_date?: string | null;
     domain?: string | null;
     source?: string;
 }
@@ -121,9 +128,13 @@ export interface LLMData {
 export type TechnicalSkillItem = string | {
     skill: string;
     normalized_name?: string;
+    // Fixed internal group name used for grouping and scoring (e.g. "devops_tools").
     category?: string;
+    // Group heading the candidate wrote ("Cloud & DevOps"). Show this; fall back to category.
+    // Missing when the resume has no group heading for the skill.
+    category_display?: string[];
     source_heading?: string;
-    category_source?: string;
+    category_source?: "name_lookup" | (string & {});
     count?: number;
     usage_count?: number;
     strength?: string;
@@ -162,7 +173,17 @@ export interface SocialLinks {
     leetcode?: SocialLinkField;
 }
 
+// ========== ROLE BASED SKILLS (schema 2.5 only) ==========
+// Job titles listed inside the Skills section. Show as "Target roles", not as skills.
+export interface RoleBasedSkill {
+    role: string;
+    exact_source: string;
+    confidence: number;
+    source_heading?: string;
+}
+
 // ========== PARSE WARNING ==========
+// Includes W_OCR_PAGES_OUT_OF_TIME (see @/utils/parseWarnings).
 export interface ParseWarning {
     code: string;
     severity: string;
@@ -334,6 +355,8 @@ export interface ResumeExtractResponse {
         internships?: InternshipItem[];
         projects?: ProjectItem[];
         technical_skills?: TechnicalSkillItem[];
+        // Sent on schema 2.5 only (empty list when none). On 2.0/2.1/3.0 roles stay in technical_skills.
+        role_based_skills?: RoleBasedSkill[];
         certifications?: CertificationItem[];
         overall_experience?: OverallExperience;
         domain_experience?: Array<{

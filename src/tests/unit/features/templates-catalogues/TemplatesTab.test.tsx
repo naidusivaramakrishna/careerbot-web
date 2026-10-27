@@ -10,8 +10,13 @@
  *   - Clicking a career-level card clears user_chose_style_{email}
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, configure } from '@testing-library/react';
 import React from 'react';
+
+// TemplatesTab is a heavy page to render: a case takes well under a second alone, but on a busy CI runner (many
+// affected test files at once) the default 5 s test limit and 1 s waitFor limit are too short.
+configure({ asyncUtilTimeout: 10_000 });
+vi.setConfig({ testTimeout: 30_000 });
 
 // ─── API mocks ─────────────────────────────────────────────────────────────────
 const mockGetProfile = vi.fn();
@@ -88,7 +93,7 @@ vi.mock('@/lib/imageUtils', () => ({
 // ─── templateStyles mock ──────────────────────────────────────────────────────
 vi.mock('@/app/(resume)/builder/creation/_utils/templateStyles', () => ({
   TEMPLATE_DEFAULT_STYLES: {
-    compact_professional: { fontFamily: 'arial' },
+    compact_professional: { fontFamily: 'arial', headingColor: '#00695c' },
     clean_simple: { fontFamily: 'helvetica' },
   },
   STYLE_CATALOGUES: {},
@@ -119,6 +124,10 @@ vi.mock('@/app/(resume)/templates/_utils/cataloguePersister', () => ({
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import TemplatesTab from '@/app/(resume)/builder/creation/_components/templates/TemplatesTab';
+
+/** The Preview button of the template card with this name. */
+const previewButtonOf = (cardName: string): HTMLElement =>
+  within(screen.getByText(cardName).closest('.rounded-xl') as HTMLElement).getByRole('button', { name: 'Preview' });
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 const USER_EMAIL = 'test@example.com';
@@ -275,11 +284,16 @@ describe('TemplatesTab — user_chose_style flag lifecycle', () => {
       expect(screen.getByText('Software Engineering Early Career Template')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Software Engineering Early Career Template'));
+    // Choosing the card is applying it (its Preview only opens the preview; see "Preview does not apply")
+    // (the early-career card is the applied one; choose another)
+    fireEvent.click(within(screen.getByText('Software Engineering Fresher Template').closest('.rounded-xl') as HTMLElement)
+      .getByRole('button', { name: 'Apply Template' }));
 
-    expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-      `user_chose_style_${USER_EMAIL}`,
-    );
+    await waitFor(() => {
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
+        `user_chose_style_${USER_EMAIL}`,
+      );
+    });
   });
 
   it('clears user_chose_style_{email} when a career-level template is applied via the modal', async () => {
@@ -297,17 +311,65 @@ describe('TemplatesTab — user_chose_style flag lifecycle', () => {
     await waitFor(() => {
       expect(screen.getByText('Software Engineering Early Career Template')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Software Engineering Early Career Template'));
+    fireEvent.click(previewButtonOf('Software Engineering Early Career Template'));
 
     // Apply the career-level template
-    await waitFor(() => expect(screen.getByText('Apply This Template')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Apply This Template'));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    // the card has its own Apply Template button; this one is the preview window's
+    fireEvent.click(within(screen.getByRole('dialog')).getByText('Apply Template'));
 
     await waitFor(() => {
       expect(window.localStorage.removeItem).toHaveBeenCalledWith(
         `user_chose_style_${USER_EMAIL}`,
       );
     });
+  });
+});
+
+describe('TemplatesTab — applying a template means the look of that template', () => {
+  it('drops a style (catalogue) picked earlier, so preview and export show the template, not the old style', async () => {
+    (window.localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
+      if (key === 'userEmail') return USER_EMAIL;
+      if (key === `careerLevelTemplates_${USER_EMAIL}`) return JSON.stringify(CAREER_LEVEL_DATA);
+      if (key === 'selected_catalogue') return 'classic';
+      return null;
+    });
+    mockSetResumeStyle.mockClear();
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText('Software Engineering Early Career Template')).toBeInTheDocument());
+
+    const card = screen.getByText('Software Engineering Early Career Template').closest('.rounded-xl') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Apply Template' }));
+
+    await waitFor(() => expect(window.localStorage.removeItem).toHaveBeenCalledWith('selected_catalogue'));
+    // the old style's colours and heading colour are cleared; the base look comes back
+    const updaters = mockSetResumeStyle.mock.calls.map((call) => call[0]).filter((arg) => typeof arg === 'function');
+    const results = updaters.map((update) => (update as (p: object) => Record<string, unknown>)({ accentColor: '#0369a1', sectionHeaderBg: '#ececec', fontFamily: 'times new roman' }));
+    expect(results.some((r) => r.accentColor === undefined && r.sectionHeaderBg === undefined && r.fontFamily === 'arial')).toBe(true);
+  });
+});
+
+describe('TemplatesTab — a career-level template brings back the builder font sizes', () => {
+  it('drops the font sizes a style template set, so the domain preview does not keep them', async () => {
+    (window.localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
+      if (key === 'userEmail') return USER_EMAIL;
+      if (key === `careerLevelTemplates_${USER_EMAIL}`) return JSON.stringify(CAREER_LEVEL_DATA);
+      return null;
+    });
+    mockApplyTemplateToResume.mockResolvedValue({});
+    mockSetResumeStyle.mockClear();
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText('Software Engineering Early Career Template')).toBeInTheDocument());
+
+    const card = screen.getByText('Software Engineering Early Career Template').closest('.rounded-xl') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Apply Template' }));
+
+    await waitFor(() => expect(mockSetResumeStyle).toHaveBeenCalled());
+    const updaters = mockSetResumeStyle.mock.calls.map((call) => call[0]).filter((arg) => typeof arg === 'function');
+    // sizes as set by a style template (TEMPLATE_DEFAULT_STYLES)
+    const styleTemplateLook = { nameFontSize: '15px', headingFontSize: '10px', bodyFontSize: '9px' };
+    const results = updaters.map((update) => (update as (p: object) => Record<string, unknown>)(styleTemplateLook));
+    expect(results.some((r) => r.nameFontSize === '20px' && r.headingFontSize === '14px' && r.bodyFontSize === '10px')).toBe(true);
   });
 });
 
@@ -385,10 +447,11 @@ describe('TemplatesTab — section order preservation', () => {
     await waitFor(() => {
       expect(screen.getByText('Software Engineering Early Career Template')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Software Engineering Early Career Template'));
+    fireEvent.click(previewButtonOf('Software Engineering Early Career Template'));
 
-    await waitFor(() => expect(screen.getByText('Apply This Template')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Apply This Template'));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    // the card has its own Apply Template button; this one is the preview window's
+    fireEvent.click(within(screen.getByRole('dialog')).getByText('Apply Template'));
 
     // Verify the section order was updated
     await waitFor(() => {
@@ -400,5 +463,210 @@ describe('TemplatesTab — section order preservation', () => {
       // Should NOT have old Marine sections
       expect(lastCall).not.toContain('Maritime Certifications');
     });
+  });
+});
+
+// ─── Preview vs Apply ─────────────────────────────────────────────────────────
+// Preview only opens the preview window; nothing is selected, saved or marked "Applied ✓" until a
+// template is applied, and only once applying it has worked.
+
+/** The card with this name (the open preview window repeats the name in its title). */
+const cardOf = (cardName: string): HTMLElement =>
+  screen.getAllByText(cardName).find((el) => el.tagName === 'P')!.closest('.rounded-xl') as HTMLElement;
+const EARLY = 'Software Engineering Early Career Template';
+const FRESHER = 'Software Engineering Fresher Template';
+const sectionOrderWrites = () =>
+  (window.localStorage.setItem as ReturnType<typeof vi.fn>).mock.calls.filter(([key]) => key === `sectionOrder_${USER_EMAIL}`);
+
+describe('TemplatesTab — career-level card: Preview does not apply', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetProfile.mockResolvedValue({ email: USER_EMAIL });
+    mockGetTemplatesByCategory.mockResolvedValue(SE_TEMPLATES);
+    mockGetTemplateCategories.mockResolvedValue(['All']);
+    mockGetTemplateById.mockImplementation(async (id: string) => ({ ...SE_TEMPLATES.find((t) => t.id === id) }));
+    (window.localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
+      if (key === 'userEmail') return USER_EMAIL;
+      if (key === `careerLevelTemplates_${USER_EMAIL}`) return JSON.stringify(CAREER_LEVEL_DATA);
+      if (key === `selectedTemplateId_${USER_EMAIL}`) return 'se-ec';
+      if (key === `domainFamily_${USER_EMAIL}`) return 'marine';
+      if (key === `user_chose_style_${USER_EMAIL}`) return 'true';
+      return null;
+    });
+  });
+
+  it('Preview then Close leaves the applied template, section order and style flags unchanged', async () => {
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText(FRESHER)).toBeInTheDocument());
+    expect(within(cardOf(EARLY)).getByText('Applied ✓')).toBeInTheDocument();
+
+    fireEvent.click(previewButtonOf(FRESHER));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    // still the early-career template that is applied, not the previewed one
+    expect(within(cardOf(FRESHER)).getByRole('button', { name: 'Apply Template' })).toBeInTheDocument();
+    expect(within(cardOf(EARLY)).getByText('Applied ✓')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(within(cardOf(EARLY)).getByText('Applied ✓')).toBeInTheDocument();
+    expect(mockSetSectionOrder).not.toHaveBeenCalled();
+    expect(sectionOrderWrites()).toHaveLength(0);
+    expect(window.localStorage.removeItem).not.toHaveBeenCalledWith(`user_chose_style_${USER_EMAIL}`);
+    expect(window.localStorage.setItem).not.toHaveBeenCalledWith(`domainFamily_${USER_EMAIL}`, expect.anything());
+    expect(mockApplyTemplateToResume).not.toHaveBeenCalled();
+  });
+
+  it('Apply in the preview window applies the previewed template and selects its domain', async () => {
+    mockApplyTemplateToResume.mockResolvedValue({});
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText(FRESHER)).toBeInTheDocument());
+
+    fireEvent.click(previewButtonOf(FRESHER));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    fireEvent.click(within(screen.getByRole('dialog')).getByText('Apply Template'));
+
+    await waitFor(() => expect(within(cardOf(FRESHER)).getByText('Applied ✓')).toBeInTheDocument());
+    expect(mockApplyTemplateToResume).toHaveBeenCalledWith('resume-1', 'se-fr');
+    expect(window.localStorage.setItem).toHaveBeenCalledWith(`domainFamily_${USER_EMAIL}`, 'software_engineering');
+    expect(window.localStorage.removeItem).toHaveBeenCalledWith(`user_chose_style_${USER_EMAIL}`);
+    expect(mockSetSectionOrder).toHaveBeenCalled();
+  });
+
+  it('a second click on Apply Template while the first is running does not apply twice', async () => {
+    let finishFirst: (v: unknown) => void = () => {};
+    mockApplyTemplateToResume.mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }));
+    mockApplyTemplateToResume.mockResolvedValue({});
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText(FRESHER)).toBeInTheDocument());
+
+    const apply = within(cardOf(FRESHER)).getByRole('button', { name: 'Apply Template' });
+    fireEvent.click(apply);
+    fireEvent.click(apply);
+    await waitFor(() => expect(mockApplyTemplateToResume).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockApplyTemplateToResume).toHaveBeenCalledTimes(1);
+
+    finishFirst({});
+    await waitFor(() => expect(within(cardOf(FRESHER)).getByText('Applied ✓')).toBeInTheDocument());
+    // released afterwards: another template can be applied
+    fireEvent.click(within(cardOf(EARLY)).getByRole('button', { name: 'Apply Template' }));
+    await waitFor(() => expect(mockApplyTemplateToResume).toHaveBeenCalledTimes(2));
+  });
+
+  it('a failed Apply Template leaves the card un-applied and changes nothing', async () => {
+    mockApplyTemplateToResume.mockRejectedValue(new Error('boom'));
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText(FRESHER)).toBeInTheDocument());
+
+    fireEvent.click(within(cardOf(FRESHER)).getByRole('button', { name: 'Apply Template' }));
+    await waitFor(() => expect(mockApplyTemplateToResume).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(within(cardOf(FRESHER)).getByRole('button', { name: 'Apply Template' })).toBeInTheDocument();
+    expect(within(cardOf(EARLY)).getByText('Applied ✓')).toBeInTheDocument();
+    expect(mockSetSectionOrder).not.toHaveBeenCalled();
+    expect(sectionOrderWrites()).toHaveLength(0);
+    expect(window.localStorage.removeItem).not.toHaveBeenCalledWith(`user_chose_style_${USER_EMAIL}`);
+  });
+
+  it('control: a successful Apply Template marks the card applied and keeps user-added sections', async () => {
+    mockApplyTemplateToResume.mockResolvedValue({});
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText(FRESHER)).toBeInTheDocument());
+
+    fireEvent.click(within(cardOf(FRESHER)).getByRole('button', { name: 'Apply Template' }));
+
+    await waitFor(() => expect(within(cardOf(FRESHER)).getByText('Applied ✓')).toBeInTheDocument());
+    expect(within(cardOf(EARLY)).getByRole('button', { name: 'Apply Template' })).toBeInTheDocument();
+    expect(window.localStorage.setItem).toHaveBeenCalledWith(`selectedTemplateId_${USER_EMAIL}`, 'se-fr');
+    expect(window.localStorage.setItem).toHaveBeenCalledWith(`domainFamily_${USER_EMAIL}`, 'software_engineering');
+    const lastOrder = mockSetSectionOrder.mock.calls.at(-1)![0] as string[];
+    expect(lastOrder).toEqual(['Personal Info', 'Professional Summary', 'Skills', 'Work Experience', 'Education']);
+  });
+});
+
+describe('TemplatesTab — style template card: Preview does not apply', () => {
+  const STYLE_TEMPLATES = [
+    { id: 'm1', template_id: 'compact_professional', name: 'Compact', category: 'modern' },
+    { id: 'm2', template_id: 'clean_simple', name: 'Clean', category: 'classic' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetProfile.mockResolvedValue({ email: USER_EMAIL });
+    mockGetTemplatesByCategory.mockResolvedValue(STYLE_TEMPLATES);
+    mockGetTemplateCategories.mockResolvedValue(['All']);
+    (window.localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
+      if (key === 'userEmail') return USER_EMAIL;
+      if (key === `user_chose_style_${USER_EMAIL}`) return 'true';
+      return null;
+    });
+  });
+
+  it('Preview opens the preview without selecting the template', async () => {
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText('Modern')).toBeInTheDocument());
+    mockSetSelectedTemplate.mockClear();
+
+    fireEvent.click(previewButtonOf('Modern'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+
+    expect(mockSetSelectedTemplate).not.toHaveBeenCalled();
+    expect(mockApplyTemplateToResume).not.toHaveBeenCalled();
+  });
+
+  it('a failed Apply Template does not select the template', async () => {
+    mockApplyTemplateToResume.mockRejectedValue(new Error('boom'));
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText('Modern')).toBeInTheDocument());
+    mockSetSelectedTemplate.mockClear();
+
+    fireEvent.click(within(cardOf('Modern')).getByRole('button', { name: 'Apply Template' }));
+    await waitFor(() => expect(mockApplyTemplateToResume).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockSetSelectedTemplate).not.toHaveBeenCalled();
+  });
+
+  it('Apply Template with no resume does not select the template', async () => {
+    render(<TemplatesTab />);
+    await waitFor(() => expect(screen.getByText('Modern')).toBeInTheDocument());
+    mockSetSelectedTemplate.mockClear();
+
+    fireEvent.click(within(cardOf('Modern')).getByRole('button', { name: 'Apply Template' }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockSetSelectedTemplate).not.toHaveBeenCalled();
+    expect(mockApplyTemplateToResume).not.toHaveBeenCalled();
+  });
+
+  it('control: a successful Apply Template selects the template', async () => {
+    mockApplyTemplateToResume.mockResolvedValue({});
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText('Modern')).toBeInTheDocument());
+
+    fireEvent.click(within(cardOf('Modern')).getByRole('button', { name: 'Apply Template' }));
+
+    await waitFor(() => expect(mockSetSelectedTemplate).toHaveBeenCalledWith('compact_professional'));
+    expect(mockApplyTemplateToResume).toHaveBeenCalledWith('resume-1', 'm1');
+  });
+
+  it('applying a regular template drops the previous accent colour, so the template shows its own heading colour', async () => {
+    // A style card (or a Color Theme pick) left an accent colour on the style; the plain templates colour their
+    // headings with `accentColor || headingColor`, so a stale accent would hide the template's own colour.
+    mockApplyTemplateToResume.mockResolvedValue({});
+    render(<TemplatesTab resumeId="resume-1" />);
+    await waitFor(() => expect(screen.getByText('Modern')).toBeInTheDocument());
+    mockSetResumeStyle.mockClear();
+
+    fireEvent.click(within(cardOf('Modern')).getByRole('button', { name: 'Apply Template' }));
+    await waitFor(() => expect(mockSetSelectedTemplate).toHaveBeenCalledWith('compact_professional'));
+
+    const updaters = mockSetResumeStyle.mock.calls.map((call) => call[0]).filter((arg) => typeof arg === 'function');
+    const stale = { accentColor: '#1d4fa8', sectionHeaderBg: '#ececec', headingColor: '#111111' };
+    const results = updaters.map((update) => (update as (p: object) => Record<string, unknown>)(stale));
+    // the template's own colour (compact_professional: #00695c), with no accent left over
+    expect(results.some((r) => r.accentColor === undefined && r.sectionHeaderBg === undefined && r.headingColor === '#00695c')).toBe(true);
   });
 });

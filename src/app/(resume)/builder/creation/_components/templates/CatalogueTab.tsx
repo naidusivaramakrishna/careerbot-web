@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
+import { Check, ChevronDown } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
 import { STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from "@/app/browse-templates/_components/CatalogueThumbnail";
@@ -10,10 +11,59 @@ import logger from "@/lib/logger";
 const NATURAL_W = 300;
 const NATURAL_H = 400;
 
-const DENSITY_OPTIONS = [
-  { label: "Compact", value: "1.2" },
-  { label: "Normal", value: "1.45" },
-  { label: "Spacious", value: "1.7" },
+// Line spacing choices (the value is sent to the preview and the export as the line height)
+const LINE_SPACING_OPTIONS = ["1.0", "1.15", "1.2", "1.3", "1.45", "1.6", "1.7", "1.8", "2.0"];
+
+// Layout settings. Both the live preview and the PDF/DOCX export apply them (backend: font_size, page_margin,
+// section_spacing, alignment). An empty value leaves the template's own setting.
+const FONT_SIZE_OPTIONS = [
+  { label: "Template default", value: "" },
+  { label: "8", value: "8" },
+  { label: "9", value: "9" },
+  { label: "10", value: "10" },
+  { label: "10.5", value: "10.5" },
+  { label: "11", value: "11" },
+  { label: "12", value: "12" },
+];
+const PAGE_MARGIN_OPTIONS = [
+  { label: "Narrow", value: "narrow" },
+  { label: "Normal", value: "normal" },
+  { label: "Wide", value: "wide" },
+];
+const SECTION_SPACING_OPTIONS = [
+  { label: "Compact", value: "compact" },
+  { label: "Medium", value: "medium" },
+  { label: "Relaxed", value: "relaxed" },
+];
+const ALIGNMENT_OPTIONS = [
+  { label: "Template default", value: "" },
+  { label: "Left", value: "left" },
+  { label: "Center", value: "center" },
+  { label: "Right", value: "right" },
+];
+
+type LayoutSettingKey = "fontSize" | "pageMargin" | "sectionSpacing" | "alignment";
+const LAYOUT_STORAGE_KEYS: Record<LayoutSettingKey, string> = {
+  fontSize: "selected_font_size",
+  pageMargin: "selected_page_margin",
+  sectionSpacing: "selected_section_spacing",
+  alignment: "selected_alignment",
+};
+// Kept per user, like the resumeStyle_<email> they feed (another account on this browser must not get them)
+const layoutStorageKey = (key: LayoutSettingKey): string => {
+  const userEmail = localStorage.getItem("userEmail");
+  return userEmail ? `${LAYOUT_STORAGE_KEYS[key]}_${userEmail}` : LAYOUT_STORAGE_KEYS[key];
+};
+const readLayoutSetting = (key: LayoutSettingKey): string =>
+  (typeof window !== "undefined" ? localStorage.getItem(layoutStorageKey(key)) : null) || "";
+
+// Colour themes: one accent colour for headings and highlights
+const COLOR_THEMES = [
+  { label: "Blue", value: "#1d4fa8" },
+  { label: "Green", value: "#1f9d55" },
+  { label: "Red", value: "#dc2f3a" },
+  { label: "Gray", value: "#4b5563" },
+  { label: "Black", value: "#111827" },
 ];
 
 const FONT_OPTIONS = [
@@ -30,6 +80,28 @@ const ATS_BADGE: Record<string, { label: string; classes: string }> = {
   friendly: { label: "ATS Friendly", classes: "bg-blue-100 text-blue-700" },
   creative: { label: "Creative",     classes: "bg-amber-100 text-amber-700" },
 };
+
+function SelectField({
+  label, value, onChange, children,
+}: { label: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <span className="relative block">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-full appearance-none rounded-md border border-[#d5deec] bg-white pl-3 pr-8 text-[13px] text-gray-900 outline-none focus:border-[#1d4fa8]"
+        >
+          {children}
+        </select>
+        <ChevronDown size={14} aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600" />
+      </span>
+    </label>
+  );
+}
+
+const sectionCard = "rounded-xl border border-[#e3e9f2] bg-white p-4";
 
 function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; customColor?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,12 +136,25 @@ function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; 
 }
 
 export default function CatalogueTab() {
-  const { setResumeStyle, sectionOrder, setSectionOrder, setPreviewCatalogueKey, resumeId, resumeSource } = useResume();
+  const { setResumeStyle, setPreviewCatalogueKey, resumeId, resumeSource, resumeStyle } = useResume();
   const { catalogues, getCataloguesMap } = useCatalogues();
 
   const [selectedKey, setSelectedKey] = useState<string>(
     () => (typeof window !== "undefined" ? localStorage.getItem("selected_catalogue") || "galaxy" : "galaxy")
   );
+  // Whether a style was really chosen. With none saved (e.g. after a template was applied, which removes
+  // selected_catalogue), "galaxy" above is only the card shown by default and must not be applied or saved.
+  const [styleChosen, setStyleChosen] = useState<boolean>(
+    () => typeof window !== "undefined" && !!localStorage.getItem("selected_catalogue")
+  );
+  // The look before a style card was hovered while no style is chosen; leaving the card restores it.
+  // styleOutsideHoverRef follows resumeStyle except while a card is hovered, so moving straight from one card
+  // to the next (before a re-render) still restores the look from before any hover.
+  const hoveringRef = useRef(false);
+  const styleOutsideHoverRef = useRef(resumeStyle);
+  useEffect(() => {
+    if (!hoveringRef.current) styleOutsideHoverRef.current = resumeStyle;
+  }, [resumeStyle]);
   const [hoverBg, setHoverBg] = useState<Record<string, string | undefined>>({});
   const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>(() => {
     if (typeof window === "undefined") return {};
@@ -89,38 +174,18 @@ export default function CatalogueTab() {
   const [selectedFont, setSelectedFont] = useState<string>(
     () => (typeof window !== "undefined" ? localStorage.getItem("selected_font") || "" : "")
   );
-
-  const isSkillsFirst = (() => {
-    if (!sectionOrder || sectionOrder.length === 0) return false;
-    const si = sectionOrder.indexOf("Skills");
-    const wi = sectionOrder.indexOf("Work Experience");
-    return si !== -1 && wi !== -1 && si < wi;
-  })();
-
-  const handleSkillsFirstToggle = () => {
-    const order = sectionOrder && sectionOrder.length > 0 ? [...sectionOrder] : [];
-    if (order.length === 0) return;
-    const si = order.indexOf("Skills");
-    const wi = order.indexOf("Work Experience");
-    if (si === -1 || wi === -1) return;
-
-    if (si < wi) {
-      // Move Work Experience before Skills
-      order.splice(si, 0, order.splice(wi, 1)[0]);
-    } else {
-      // Move Skills before Work Experience
-      order.splice(wi, 0, order.splice(si, 1)[0]);
-    }
-    setSectionOrder(order);
-    const userEmail = typeof window !== "undefined" ? localStorage.getItem("userEmail") : null;
-    const key = userEmail ? `sectionOrder_${userEmail}` : "sectionOrder";
-    localStorage.setItem(key, JSON.stringify(order));
-  };
+  const [layoutSettings, setLayoutSettings] = useState<Record<LayoutSettingKey, string>>(() => ({
+    fontSize: readLayoutSetting("fontSize"),
+    pageMargin: readLayoutSetting("pageMargin"),
+    sectionSpacing: readLayoutSetting("sectionSpacing"),
+    alignment: readLayoutSetting("alignment"),
+  }));
 
   const _applyStyleForKey = (key: string, color?: string, persist = false) => {
     const cat = cataloguesMap[key];
     if (!cat) return;
     if (persist) {
+      setStyleChosen(true);
       setSelectedKey(key);
       localStorage.setItem("selected_catalogue", key);
     }
@@ -133,6 +198,10 @@ export default function CatalogueTab() {
     if (density) styleOverride.lineSpacing = density;
     const font = localStorage.getItem("selected_font");
     if (font) styleOverride.fontFamily = font;
+    for (const key of Object.keys(LAYOUT_STORAGE_KEYS) as LayoutSettingKey[]) {
+      const saved = localStorage.getItem(layoutStorageKey(key));
+      if (saved) styleOverride[key] = saved;
+    }
 
     if (key === "eclipse") {
       const bg = color ?? selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
@@ -174,6 +243,26 @@ export default function CatalogueTab() {
 
   const previewCatalogue = (key: string) => _applyStyleForKey(key, undefined, false);
 
+  const previewStyleCard = (key: string) => {
+    hoveringRef.current = true;
+    previewCatalogue(key);
+  };
+
+  const endStylePreview = () => {
+    hoveringRef.current = false;
+    if (styleChosen) previewCatalogue(selectedKey);
+    else setResumeStyle(styleOutsideHoverRef.current);
+  };
+
+  // Color Theme: with a style chosen, re-apply it in the new colour; with none, change only the accent colour.
+  const handleThemePick = (color: string) => {
+    if (styleChosen) {
+      handleColorPick(selectedKey, color);
+      return;
+    }
+    setResumeStyle(prev => ({ ...prev, accentColor: color }));
+  };
+
   const handleColorPick = (key: string, color: string) => {
     setSelectedBg(prev => ({ ...prev, [key]: color }));
     localStorage.setItem(`selected_color_${key}`, color);
@@ -187,78 +276,103 @@ export default function CatalogueTab() {
     setResumeStyle(prev => ({ ...prev, lineSpacing: value }));
   };
 
+  const handleLayoutChange = (key: LayoutSettingKey, value: string) => {
+    setLayoutSettings(prev => ({ ...prev, [key]: value }));
+    if (value) localStorage.setItem(layoutStorageKey(key), value);
+    else localStorage.removeItem(layoutStorageKey(key));
+    setResumeStyle(prev => ({ ...prev, [key]: value || undefined }));
+  };
+
   const handleFontChange = (value: string) => {
     setSelectedFont(value);
     localStorage.setItem("selected_font", value);
     setResumeStyle(prev => ({ ...prev, fontFamily: value }));
   };
 
+  // The colour theme in use: the accent (or, for Eclipse, the section header colour) of the current style
+  const activeAccent = (resumeStyle?.sectionHeaderBg || resumeStyle?.accentColor || "").toLowerCase();
+  const activeTheme = COLOR_THEMES.find((theme) => theme.value.toLowerCase() === activeAccent)?.value;
+  const fontValue = selectedFont || resumeStyle?.fontFamily || FONT_OPTIONS[0].value;
+  const lineSpacingValue = selectedDensity || resumeStyle?.lineSpacing || "1.3";
+  const lineSpacingChoices = LINE_SPACING_OPTIONS.includes(lineSpacingValue)
+    ? LINE_SPACING_OPTIONS
+    : [...LINE_SPACING_OPTIONS, lineSpacingValue].sort((x, y) => Number(x) - Number(y));
+
   return (
-    <div className="flex flex-col gap-4 px-1 py-2">
-
-      {/* ── Customize ── */}
-      <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-bold text-gray-800">Customize</h3>
-
-        {/* Density */}
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Spacing</p>
-          <div className="flex gap-1.5">
-            {DENSITY_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => handleDensityChange(opt.value)}
-                className={`flex-1 text-xs py-1.5 rounded-lg border font-medium transition ${
-                  selectedDensity === opt.value
-                    ? "bg-[#2257a7] text-white border-[#2257a7]"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Font */}
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Font</p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {FONT_OPTIONS.map(font => (
-              <button
-                key={font.value}
-                onClick={() => handleFontChange(font.value)}
-                style={{ fontFamily: font.value }}
-                className={`text-[11px] py-1.5 px-2 rounded-lg border font-medium transition truncate ${
-                  selectedFont === font.value
-                    ? "bg-[#EEF3FB] text-[#2257a7] border-[#2257a7]"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                {font.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Section order */}
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Section Order</p>
-          <button
-            onClick={handleSkillsFirstToggle}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition ${
-              isSkillsFirst
-                ? "bg-[#EEF3FB] text-[#2257a7] border-[#2257a7]"
-                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-            }`}
-          >
-            <span>Skills before Experience</span>
-            <span className={`w-8 h-4 rounded-full transition-colors relative ${isSkillsFirst ? "bg-[#2257a7]" : "bg-gray-200"}`}>
-              <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${isSkillsFirst ? "left-4.5" : "left-0.5"}`} />
-            </span>
-          </button>
-        </div>
+    <div className="flex flex-col gap-3 rounded-xl border border-[#e3e9f2] bg-white p-4">
+      <div>
+        <h3 className="text-[15px] font-bold text-gray-900">Customize the look and feel</h3>
+        <p className="mt-0.5 text-xs text-gray-600">Adjust fonts, colors and layout to match your style. Changes will be reflected in the preview.</p>
       </div>
+
+      {/* ── Typography ── */}
+      <section className={sectionCard} aria-label="Typography">
+        <h4 className="text-sm font-bold text-gray-900">Typography</h4>
+        <p className="mt-0.5 text-xs text-gray-600">Set the font family, size and line spacing for your resume.</p>
+        <div className="mt-3 flex gap-3">
+          <SelectField label="Font Family" value={fontValue} onChange={handleFontChange}>
+            {!FONT_OPTIONS.some((font) => font.value === fontValue) && <option value={fontValue}>{fontValue}</option>}
+            {FONT_OPTIONS.map((font) => (
+              <option key={font.value} value={font.value} style={{ fontFamily: font.value }}>{font.label}</option>
+            ))}
+          </SelectField>
+          <SelectField label="Font Size" value={layoutSettings.fontSize} onChange={(value) => handleLayoutChange("fontSize", value)}>
+            {FONT_SIZE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectField>
+          <SelectField label="Line Spacing" value={lineSpacingValue} onChange={handleDensityChange}>
+            {lineSpacingChoices.map((value) => <option key={value} value={value}>{value}</option>)}
+          </SelectField>
+        </div>
+      </section>
+
+      {/* ── Color Theme ── */}
+      <section className={sectionCard} aria-label="Color Theme">
+        <h4 className="text-sm font-bold text-gray-900">Color Theme</h4>
+        <p className="mt-0.5 text-xs text-gray-600">Choose a color to highlight headings and accents.</p>
+        <div role="radiogroup" aria-label="Color theme" className="mt-3 flex gap-5">
+          {COLOR_THEMES.map((theme) => {
+            const isActive = activeTheme === theme.value;
+            return (
+              <button
+                key={theme.value}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                aria-label={theme.label}
+                onClick={() => handleThemePick(theme.value)}
+                className="flex flex-col items-center gap-1.5"
+              >
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-full text-white transition ${
+                    isActive ? "ring-2 ring-offset-2" : "ring-1 ring-transparent hover:ring-gray-300 hover:ring-offset-2"
+                  }`}
+                  style={{ backgroundColor: theme.value, ...(isActive ? { ["--tw-ring-color" as string]: theme.value } : {}) }}
+                >
+                  {isActive && <Check size={16} strokeWidth={3} />}
+                </span>
+                <span className={`text-xs ${isActive ? "font-semibold text-gray-900" : "text-gray-700"}`}>{theme.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Layout ── */}
+      <section className={sectionCard} aria-label="Layout">
+        <h4 className="text-sm font-bold text-gray-900">Layout</h4>
+        <p className="mt-0.5 text-xs text-gray-600">Adjust page layout and spacing for a clean and professional look.</p>
+        <div className="mt-3 flex gap-3">
+          <SelectField label="Page Margin" value={layoutSettings.pageMargin || "normal"} onChange={(value) => handleLayoutChange("pageMargin", value)}>
+            {PAGE_MARGIN_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectField>
+          <SelectField label="Section Spacing" value={layoutSettings.sectionSpacing || "medium"} onChange={(value) => handleLayoutChange("sectionSpacing", value)}>
+            {SECTION_SPACING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectField>
+          <SelectField label="Content Alignment" value={layoutSettings.alignment} onChange={(value) => handleLayoutChange("alignment", value)}>
+            {ALIGNMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectField>
+        </div>
+      </section>
 
       <div className="border-t border-gray-100" />
 
@@ -292,8 +406,8 @@ export default function CatalogueTab() {
                   transform: isSelected ? "translateY(-2px)" : undefined,
                 }}
                 onClick={() => applyCatalogue(key)}
-                onMouseEnter={() => { setPreviewCatalogueKey(key); previewCatalogue(key); }}
-                onMouseLeave={() => { setPreviewCatalogueKey(null); previewCatalogue(selectedKey); }}
+                onMouseEnter={() => { setPreviewCatalogueKey(key); previewStyleCard(key); }}
+                onMouseLeave={() => { setPreviewCatalogueKey(null); endStylePreview(); }}
               >
                 <div className="relative">
                   <ScaledThumbnail catalogueKey={key} customColor={colorForThumbnail} />

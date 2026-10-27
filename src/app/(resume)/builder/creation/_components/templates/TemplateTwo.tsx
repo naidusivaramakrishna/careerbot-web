@@ -16,6 +16,9 @@ interface Props {
 
 const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
   const { resumeStyle, sectionOrder } = useResume();
+  // The colour of the name and the section headings: the Color Theme (accentColor) when one is set, else the
+  // style's own heading colour. The export is sent the same pair (accentColor || headingColor), so both match.
+  const headingColor = resumeStyle.accentColor || resumeStyle.headingColor;
 
   const {
     personalInfo,
@@ -67,7 +70,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
   };
 
   const headingStyle: React.CSSProperties = {
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontSize: resumeStyle.headingFontSize,
     fontWeight: "bold",
     textTransform: "uppercase",
@@ -78,7 +81,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
   const nameStyle: React.CSSProperties = {
     fontSize: resumeStyle.nameFontSize,
     fontWeight: "bold",
-    color: resumeStyle.headingColor,
+    color: headingColor,
     letterSpacing: "1.5px",
   };
 
@@ -92,12 +95,12 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
     marginLeft: "4px",
     verticalAlign: "middle",
     fontSize: "3px",
-    color: resumeStyle.headingColor,
+    color: headingColor,
   };
 
   const titleStyle: React.CSSProperties = {
     ...baseTextStyle,
-    color: resumeStyle.headingColor,
+    color: headingColor,
     fontWeight: "bold",
   };
 
@@ -195,6 +198,9 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                       {formatDate(exp.startDate)} – {exp.currentlyWorking ? "Present" : formatDate(exp.endDate)}
                     </div>
                   </div>
+                  {exp.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {exp.projectTitle}</div>
+                  )}
                   {/* ✅ Changed to support HTML formatting */}
                   {exp.description && (
                     <SafeHTML content={exp.description} className="mt-2 resume-description" />
@@ -363,6 +369,9 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                       {formatDate(intern.startDate)} – {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
                     </div>
                   </div>
+                  {intern.projectTitle && (
+                    <div className="text-sm mb-1" style={baseTextStyle}>Project: {intern.projectTitle}</div>
+                  )}
                   {/* ✅ Changed to support HTML formatting */}
                   {intern.description && (
                     <SafeHTML content={intern.description} className="mt-2 resume-description" />
