@@ -841,14 +841,16 @@ export default function MockTestPage() {
   // `answerFeedback` / `answerSubmitting` unchanged — but now they reflect ONLY
   // the question on screen, never another question's in-flight submit.
   const currentQId = currentQuestion ? String(currentQuestion.id) : '';
-  // Gated to results_summary — the backend returns is_correct/correct_answer
-  // on every per-question submit, but revealing that while section_testing is
-  // still active turns the exam into an answer key. Every other reveal-only
-  // field below (explanation, solution_steps, ...) already checks this phase;
-  // this is the single point that makes the CORRECT/INCORRECT banner and the
-  // per-option color/checkmark follow the same rule instead of needing their
-  // own phase check at each usage site.
-  const answerFeedback: AnswerFeedback | null = phase === 'results_summary' ? (feedbackByQ[currentQId] ?? null) : null;
+  // Gated to review mode — the backend returns is_correct/correct_answer on
+  // every per-question submit, but revealing that during a live attempt turns
+  // the exam into an answer key. Review mode runs in phase section_testing
+  // (results_summary returns before the question view), so a phase check here
+  // would hide the verdict from review too. Every other reveal-only field below
+  // (explanation, solution_steps, ...) already checks isReviewMode; this is the
+  // single point that makes the CORRECT/INCORRECT banner and the per-option
+  // color/checkmark follow the same rule. The live pick path never writes
+  // feedbackByQ, so this is a second guard, not the only one.
+  const answerFeedback: AnswerFeedback | null = isReviewMode ? (feedbackByQ[currentQId] ?? null) : null;
   const answerSubmitting = submittingIds.has(currentQId);
   const hasNegMarking = (negMarkingSections[testId] ?? []).includes(currentSection?.section_name ?? '');
 

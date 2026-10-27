@@ -19,7 +19,7 @@
 //     React state, not a rendered element. The static guard at the bottom is what
 //     actually prevents re-introduction.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -139,6 +139,24 @@ describe('mock-test runner: the verdict is a REVIEW-mode-only thing', { timeout:
     expect(await screen.findByText('REVIEW_EXPLANATION')).toBeInTheDocument();
     expect(screen.getByText('REVIEW_STEP')).toBeInTheDocument();
     expect(screen.getByText('REVIEW_MISTAKE')).toBeInTheDocument();
+  });
+
+  it('review mode shows the verdict: wrong pick marked, correct option highlighted, INCORRECT banner', async () => {
+    nav.search = 'reviewParentSession=parent-1';
+    render(<MockTestPage />);
+
+    // The attempt picked '3' (C); the correct answer is '2' (B). Wait for the
+    // review loader to put the question on screen, then check the options.
+    await screen.findByText('1 + 1 = ?', {}, { timeout: 20_000 });
+    const optionRow = (text: string) =>
+      document.querySelector(`label[aria-label="${text}"]`) as HTMLElement;
+    await waitFor(() => expect(optionRow('Option C: 3')).not.toBeNull());
+    expect(within(optionRow('Option C: 3')).getByText('✗')).toBeInTheDocument();
+    expect(optionRow('Option B: 2').querySelector('svg')).not.toBeNull();
+    expect(optionRow('Option A: 1').querySelector('svg')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^solution$/i }));
+    expect(await screen.findByText(/^INCORRECT$/)).toBeInTheDocument();
   });
 
   it('never renders the live per-pick verdict during an active scored section', async () => {
