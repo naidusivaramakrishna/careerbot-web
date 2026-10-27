@@ -1,0 +1,327 @@
+# Nightly image: build develop2, push to ACR, keep the newest few.
+#
+# Frontend twin of careerbot-api's and careerbot-ai's nightly-image.yml; the
+# registry logic is the same, only the image name and the build differ.
+# The staging VM pulls the moving tag `:nightly` every morning
+# (/srv/careerbot/nightly/deploy-nightly.sh, timer 10:15 IST) and swaps the
+# nightly test lane. Main staging never uses these tags.
+#
+# Tags pushed:
+#   careerbot-web:nightly                     moving tag the VM deploys
+#   careerbot-web:nightly-YYYYMMDD-<sha8>     immutable, for rollback/audit
+#
+# GitHub runs `schedule` only from the default branch (master), so this file
+# must also be on master; it always builds develop2 regardless of where it lives.
+#
+# Build args (see dockerfile). NEXT_PUBLIC_* is INLINED into the browser
+# bundle and BACKEND_URL into the rewrites (routes-manifest.json) at build
+# time, so this image is for the nightly lane only:
+#   NEXT_PUBLIC_BASE_URL=/api/v1     same-origin; the live-interview socket also
+#                                    goes to the page's own host (buildWsUrl)
+#   NEXT_PUBLIC_SERVER_URL / NEXT_PUBLIC_FRONTEND_URL  https://nightly.intelicoreai.com
+#   NEXT_PUBLIC_WS_HOST=nightly.intelicoreai.com   host only, no scheme
+#                                    (src/api/mockInterviewApi.ts buildWsUrl adds
+#                                    ws:// or wss://; dev fallback only)
+#   BACKEND_URL=http://careerbot-api-nightly:8000  Next rewrites, container
+#                                    alias of the nightly backend on the VM network.
+#                                    RUNTIME TOO: the dockerfile's runner stage does
+#                                    not set BACKEND_URL, and the route handlers
+#                                    (src/app/api/**/route.ts, e.g. auth/login,
+#                                    auth/refresh) read process.env.BACKEND_URL at
+#                                    runtime, falling back to localhost:8000. The VM
+#                                    deploy must start the container with
+#                                    -e BACKEND_URL=http://careerbot-api-nightly:8000.
+#   GIT_COMMIT=<sha8>                runtime-only build metadata
+# ALLOW_LOCALHOST is never passed: the dockerfile then refuses an empty arg and
+# runs Gate A (no localhost:8000 in .next/static or routes-manifest.json).
+#
+# Needs secret ACR_NIGHTLY_PASSWORD: password of the ACR repository-scoped
+# token `nightly-ci` (scope map nightly-ci-push, which must include
+# careerbot-web: read/write/delete/metadata_read). The token itself can change
+# any tag in those repositories; this workflow deletes a manifest only when
+# every tag on it is an old `nightly-YYYYMMDD-<sha8>` tag, so main staging's
+# careerbot-web tags in the same repository are never touched.
+#
+# Runs on this repo's `nightly` runner, careerbot-web-nightly-local (owner's
+# laptop, kept up by ~/nightly-runner-watchdog.sh from cron, next to
+# careerbot-api-nightly-local and careerbot-ai-nightly-local). The laptop must
+# be on (WSL running) at 09:00 IST. If it is off, the job stays queued (GitHub
+# drops it after 24 h) and runs when the laptop is back; the 10:15 IST deploy
+# that day finds no new :nightly image and keeps the one already running.
+#
+# Isolation is by label only, and only while these assumptions hold:
+#   - the runner carries ONLY `self-hosted` and `nightly` (registered with
+#     --no-default-labels): frontend-ci.yml and security-scan.yml run PR code
+#     on [self-hosted, Linux, X64], so the default Linux/X64 labels would let
+#     any pull_request job land on this runner;
+#   - no workflow in careerbot-web that a PR author can trigger
+#     (pull_request, a push to their own branch, issue_comment, workflow_run, ...)
+#     targets `nightly`; a label is a selector, not access control, and
+#   - no `ci` / `ai-review` runner runs as the same Linux user on that laptop.
+# Personal-account repos have no runner groups, so this cannot be enforced
+# by GitHub; a dedicated Linux user for the nightly runners is the next step.
+# The registry login goes to a per-job auth file under $RUNNER_TEMP (removed by
+# an always() step) and curl gets the credentials on stdin, so nothing outlives
+# the job or shows in argv.
+name: nightly-image
+
+on:
+  schedule:
+    - cron: "30 3 * * 1-6"   # 09:00 IST, Mon-Sat (staging is off on Sunday)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Build even if this develop2 commit already has an image"
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash   # bash -eo pipefail: a failed curl inside a pipeline fails the step
+
+jobs:
+  build:
+    runs-on: [self-hosted, nightly]
+    timeout-minutes: 90
+    env:
+      REGISTRY: intelicorecareerbotacr-fvb2abghdkase8a4.azurecr.io
+      IMAGE: careerbot-web
+      ACR_USER: nightly-ci
+      KEEP: "3"
+      ACCEPT: "application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json"
+      # Registry API helpers, eval'd by the steps that call ACR.
+      ACR_LIB: |
+        # ACR answers 401 to Basic auth on /v2/ for repository-scoped tokens: trade
+        # the password for a bearer token first. Call acr_auth once in the step's
+        # own shell (not in $(...)) so every later acr_curl reuses ACR_BEARER.
+        acr_auth() {
+          local pw=${ACR_PASSWORD//\\/\\\\}
+          pw=${pw//\"/\\\"}
+          ACR_BEARER=$(printf 'user = "%s:%s"\n' "$ACR_USER" "$pw" \
+            | curl -K - -fsS "https://$REGISTRY/oauth2/token?service=$REGISTRY&scope=repository:$IMAGE:pull,push,delete,metadata_read" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])') || return 1
+          [ -n "$ACR_BEARER" ] || return 1
+          echo "::add-mask::$ACR_BEARER"
+        }
+        acr_curl() {
+          [ -n "${ACR_BEARER:-}" ] || { echo "::error::acr_auth has not run in this step" >&2; return 1; }
+          printf 'header = "Authorization: Bearer %s"\n' "$ACR_BEARER" | curl -K - -fsS "$@"
+        }
+        list_tags() {   # every tag of $IMAGE, one per line, following Link pagination
+          local url="/v2/$IMAGE/tags/list" hdr pages=0
+          hdr=$(mktemp "$AUTH_DIR/hdr.XXXXXX") || return 1
+          while [ -n "$url" ]; do
+            pages=$((pages + 1)); [ "$pages" -le 100 ] || return 1
+            case "$url" in http*) ;; *) url="https://$REGISTRY$url" ;; esac
+            acr_curl -D "$hdr" "$url" \
+              | python3 -c 'import json,sys; [print(t) for t in json.load(sys.stdin).get("tags") or []]' || return 1
+            url=$(tr -d '\r' < "$hdr" | awk 'tolower($0) ~ /^link:.*rel="?next/ && match($0, /<[^>]*>/) { print substr($0, RSTART + 1, RLENGTH - 2) }') || return 1
+          done
+          rm -f "$hdr"
+        }
+        retag() {   # point tag $2 at the manifest tag $1 points to (registry side, no rebuild)
+          local m="$AUTH_DIR/manifest" ct
+          ct=$(acr_curl -H "Accept: $ACCEPT" -o "$m" -w '%{content_type}' "https://$REGISTRY/v2/$IMAGE/manifests/$1") || return 1
+          acr_curl -X PUT -H "Content-Type: $ct" --data-binary "@$m" "https://$REGISTRY/v2/$IMAGE/manifests/$2" >/dev/null || return 1
+        }
+        digest() {   # digest that tag $1 points to; fails if the registry does not say
+          local d
+          d=$(acr_curl -I -H "Accept: $ACCEPT" "https://$REGISTRY/v2/$IMAGE/manifests/$1" \
+                | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}') || return 1
+          [ -n "$d" ] || { echo "::error::no digest for $IMAGE:$1" >&2; return 1; }
+          echo "$d"
+        }
+    steps:
+      - name: Check out develop2
+        uses: actions/checkout@v4
+        with:
+          ref: develop2
+          fetch-depth: 1
+
+      - name: Pick the container engine
+        env:
+          ACR_PASSWORD: ${{ secrets.ACR_NIGHTLY_PASSWORD }}
+        run: |
+          if [ -z "$ACR_PASSWORD" ]; then
+            echo "::error::secret ACR_NIGHTLY_PASSWORD is not set; nothing can be pushed"; exit 1
+          fi
+          AUTH_DIR=$(mktemp -d "$RUNNER_TEMP/nightly-auth.XXXXXX")
+          chmod 700 "$AUTH_DIR"
+          { echo "AUTH_DIR=$AUTH_DIR"; echo "REGISTRY_AUTH_FILE=$AUTH_DIR/auth.json"; echo "DOCKER_CONFIG=$AUTH_DIR"; } >> "$GITHUB_ENV"
+          if command -v podman >/dev/null 2>&1; then
+            { echo "ENGINE=podman"; echo "FORMAT=--format docker"; echo "PULL=--pull=always"; } >> "$GITHUB_ENV"
+          elif command -v docker >/dev/null 2>&1; then
+            { echo "ENGINE=docker"; echo "FORMAT="; echo "PULL=--pull"; } >> "$GITHUB_ENV"
+          else
+            echo "::error::neither podman nor docker is installed on this runner"; exit 1
+          fi
+
+      - name: Skip if this commit already has an image
+        id: check
+        env:
+          ACR_PASSWORD: ${{ secrets.ACR_NIGHTLY_PASSWORD }}
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          eval "$ACR_LIB"
+          acr_auth || { echo "::error::could not get an ACR token for $IMAGE (check ACR_NIGHTLY_PASSWORD / token nightly-ci)"; exit 1; }
+          SHA=$(git rev-parse --short=8 HEAD)
+          DATE=$(TZ=Asia/Kolkata date +%Y%m%d)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=nightly-$DATE-$SHA" >> "$GITHUB_OUTPUT"
+          if [ "$FORCE" = "true" ]; then exit 0; fi
+          TAGS=$(list_tags) || { echo "::error::could not list the $IMAGE tags in ACR"; exit 1; }
+          # grep exit 1 = no match (fine); exit 2 = real error (fails the step).
+          BUILT=$(printf '%s\n' "$TAGS" | { grep -E "^nightly-[0-9]{8}-$SHA\$" || [ "$?" -eq 1 ]; } | sort -r)
+          if [ -z "$BUILT" ]; then exit 0; fi
+          NL=$'\n'
+          if [[ "$NL$TAGS$NL" == *"${NL}nightly${NL}"* ]]; then
+            NIGHTLY=$(digest nightly)
+            for t in $BUILT; do
+              d=$(digest "$t")
+              if [ "$d" = "$NIGHTLY" ]; then
+                echo "develop2 $SHA already has an image ($t) and :nightly points to it; nothing to build."
+                echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+              fi
+            done
+          fi
+          # A dated image of this commit exists but :nightly is elsewhere (e.g. its
+          # push failed): move :nightly to it; the dated tag stays as it is.
+          NEWEST=$(printf '%s\n' "$BUILT" | sed -n 1p)
+          retag "$NEWEST" nightly
+          echo "develop2 $SHA already has $NEWEST; moved :nightly to it, nothing to build."
+          { echo "skip=true"; echo "moved=$NEWEST"; } >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        id: build
+        if: steps.check.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+          SHA8: ${{ steps.check.outputs.sha }}
+          NEXT_PUBLIC_BASE_URL: /api/v1
+          NEXT_PUBLIC_SERVER_URL: https://nightly.intelicoreai.com
+          NEXT_PUBLIC_FRONTEND_URL: https://nightly.intelicoreai.com
+          NEXT_PUBLIC_WS_HOST: nightly.intelicoreai.com
+          BACKEND_URL: http://careerbot-api-nightly:8000
+        run: |
+          # $PULL: take the base image fresh from its registry, never a locally
+          # cached copy. $FORMAT/$PULL are unquoted on purpose.
+          # shellcheck disable=SC2086
+          $ENGINE build $FORMAT $PULL -f dockerfile \
+            --build-arg NEXT_PUBLIC_BASE_URL="$NEXT_PUBLIC_BASE_URL" \
+            --build-arg NEXT_PUBLIC_SERVER_URL="$NEXT_PUBLIC_SERVER_URL" \
+            --build-arg NEXT_PUBLIC_FRONTEND_URL="$NEXT_PUBLIC_FRONTEND_URL" \
+            --build-arg NEXT_PUBLIC_WS_HOST="$NEXT_PUBLIC_WS_HOST" \
+            --build-arg BACKEND_URL="$BACKEND_URL" \
+            --build-arg GIT_COMMIT="$SHA8" \
+            --label org.opencontainers.image.revision="$(git rev-parse HEAD)" \
+            --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" \
+            --label org.opencontainers.image.ref.name=develop2 \
+            --label org.opencontainers.image.version=nightly \
+            --label org.opencontainers.image.created="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$REGISTRY/$IMAGE:$TAG" \
+            -t "$REGISTRY/$IMAGE:nightly" .
+
+      - name: Push
+        id: push
+        if: steps.check.outputs.skip != 'true'
+        env:
+          ACR_PASSWORD: ${{ secrets.ACR_NIGHTLY_PASSWORD }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          printf '%s' "$ACR_PASSWORD" | $ENGINE login "$REGISTRY" -u "$ACR_USER" --password-stdin
+          $ENGINE push "$REGISTRY/$IMAGE:$TAG"
+          $ENGINE push "$REGISTRY/$IMAGE:nightly"
+          $ENGINE logout "$REGISTRY" || true
+
+      - name: Keep only the newest dated images in ACR
+        id: prune
+        if: steps.check.outputs.skip != 'true'
+        env:
+          ACR_PASSWORD: ${{ secrets.ACR_NIGHTLY_PASSWORD }}
+        run: |
+          eval "$ACR_LIB"
+          acr_auth || { echo "::error::could not get an ACR token for $IMAGE (check ACR_NIGHTLY_PASSWORD / token nightly-ci)"; exit 1; }
+          ALL=$(list_tags) || { echo "::error::could not list the $IMAGE tags in ACR"; exit 1; }
+          DATED=$(printf '%s\n' "$ALL" | { grep -E '^nightly-[0-9]{8}-[0-9a-f]{8}$' || [ "$?" -eq 1 ]; } | sort -r)
+          OLD=$(printf '%s\n' "$DATED" | tail -n +"$((KEEP + 1))")
+          if [ -z "$OLD" ]; then echo "nothing to prune"; exit 0; fi
+          # DELETE by digest removes every tag on that manifest, so delete a digest
+          # only when all its tags are old dated tags: :nightly, the newest $KEEP
+          # dated tags and any other tag (e.g. main staging) keep their image.
+          # Every lookup must succeed before anything is deleted.
+          declare -A TAGS_OF=()
+          while IFS= read -r t; do
+            [ -n "$t" ] || continue
+            d=$(digest "$t")
+            TAGS_OF[$d]="${TAGS_OF[$d]:-} $t"
+          done <<< "$ALL"
+          declare -A SEEN=()
+          NL=$'\n'
+          FAILED=0
+          for t in $OLD; do
+            for d in "${!TAGS_OF[@]}"; do
+              case " ${TAGS_OF[$d]} " in *" $t "*) ;; *) continue ;; esac
+              [ -z "${SEEN[$d]:-}" ] || continue
+              SEEN[$d]=1
+              keep=""
+              for other in ${TAGS_OF[$d]}; do
+                [[ "$NL$OLD$NL" == *"$NL$other$NL"* ]] || keep="$other"   # literal match
+              done
+              if [ -n "$keep" ]; then echo "keep $t (digest $d is also tagged $keep)"; continue; fi
+              echo "delete${TAGS_OF[$d]} ($d)"
+              if ! acr_curl -X DELETE "https://$REGISTRY/v2/$IMAGE/manifests/$d"; then
+                echo "::warning::could not delete${TAGS_OF[$d]}"; FAILED=$((FAILED + 1))
+              fi
+            done
+          done
+          if [ "$FAILED" -gt 0 ]; then echo "::error::$FAILED old image(s) could not be deleted"; exit 1; fi
+
+      - name: Remove registry credentials
+        if: always()
+        run: |
+          if [ -n "${AUTH_DIR:-}" ]; then
+            if [ -n "${ENGINE:-}" ]; then $ENGINE logout "$REGISTRY" >/dev/null 2>&1 || true; fi
+            rm -rf "$AUTH_DIR"
+          fi
+
+      - name: Free runner disk (keep only the :nightly tag locally)
+        if: always() && steps.check.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          if [ -z "${ENGINE:-}" ] || [ -z "$TAG" ]; then exit 0; fi
+          $ENGINE rmi "$REGISTRY/$IMAGE:$TAG" >/dev/null 2>&1 || true
+          $ENGINE image prune -f >/dev/null 2>&1 || true
+
+      - name: Summary
+        if: always()
+        env:
+          SHA8: ${{ steps.check.outputs.sha }}
+          TAG: ${{ steps.check.outputs.tag }}
+          SKIP: ${{ steps.check.outputs.skip }}
+          MOVED: ${{ steps.check.outputs.moved }}
+          BUILD: ${{ steps.build.outcome }}
+          PUSH: ${{ steps.push.outcome }}
+          PRUNE: ${{ steps.prune.outcome }}
+        run: |
+          {
+            echo "### $IMAGE nightly"
+            echo "- develop2 commit: \`${SHA8:-unknown}\`"
+            if [ -n "$MOVED" ]; then
+              echo "- moved \`:nightly\` to the existing \`$IMAGE:$MOVED\` (no rebuild)"
+            elif [ "$SKIP" = "true" ]; then
+              echo "- skipped: \`:nightly\` already points to this commit's image"
+            elif [ "$PUSH" = "success" ]; then
+              echo "- pushed: \`$IMAGE:$TAG\` and \`$IMAGE:nightly\`"
+              echo "- prune: ${PRUNE:-not run}"
+            else
+              echo "- **not pushed** (build: ${BUILD:-not run}, push: ${PUSH:-not run}); see the failed step"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
