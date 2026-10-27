@@ -45,7 +45,7 @@
 # Runs on this repo's `nightly` runner, careerbot-web-nightly-local (owner's
 # laptop, kept up by ~/nightly-runner-watchdog.sh from cron, next to
 # careerbot-api-nightly-local and careerbot-ai-nightly-local). The laptop must
-# be on (WSL running) at 09:00 IST. If it is off, the job stays queued (GitHub
+# be on (WSL running) at 07:17 IST. If it is off, the job stays queued (GitHub
 # drops it after 24 h) and runs when the laptop is back; the 10:15 IST deploy
 # that day finds no new :nightly image and keeps the one already running.
 #
@@ -67,7 +67,9 @@ name: nightly-image
 
 on:
   schedule:
-    - cron: "30 3 * * 1-6"   # 09:00 IST, Mon-Sat (staging is off on Sunday)
+    # 07:17 IST: off the :00/:30 minute, where GitHub's scheduler delays or
+    # drops runs, and ~3 h before the 10:15 IST VM deploy.
+    - cron: "47 1 * * 1-6"   # 07:17 IST, Mon-Sat (staging is off on Sunday)
   workflow_dispatch:
     inputs:
       force:
