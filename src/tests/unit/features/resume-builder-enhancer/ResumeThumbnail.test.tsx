@@ -252,13 +252,13 @@ describe('ResumeThumbnail', () => {
       mockPreviewImage.mockRejectedValueOnce(new Error('server busy')).mockResolvedValueOnce(new Blob(['png-bytes']));
       render(<ResumeThumbnail resumeId="builder-thumb-retry" source="builder" updatedAt="v1" />);
 
-      await vi.advanceTimersByTimeAsync(0);
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(mockPreviewImage).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole('img', { name: 'Resume preview' })).not.toBeInTheDocument();
 
-      await vi.advanceTimersByTimeAsync(3100);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
       expect(mockPreviewImage).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(100); // let the second render's result land
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); }); // let the second render's result land
       expect(screen.getByRole('img', { name: 'Resume preview' })).toHaveAttribute('src', 'blob:thumb-9');
     } finally {
       vi.useRealTimers();
