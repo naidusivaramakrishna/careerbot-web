@@ -251,6 +251,182 @@
   transform: scale(0.95);
 }
 
+/* Draws the eye to the launcher for guests before sign-in -- just the
+   message glyph itself swinging side to side (not a full continuous spin,
+   and not the whole button pulsing/vibrating -- authenticated users never
+   get this, same reasoning as the greeting popup below: no unsolicited
+   attention-grabbing once a user already has an account). */
+.message-icon-rotate {
+  animation: message-icon-swing 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Endless motion is opt-out for users who ask the OS for less of it
+   (WCAG 2.2.2). */
+@media (prefers-reduced-motion: reduce) {
+  .message-icon-rotate {
+    animation: none;
+  }
+}
+
+@keyframes message-icon-swing {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-18deg);
+  }
+  75% {
+    transform: rotate(18deg);
+  }
+}
+
+/* Proactive guest greeting popup (shown before sign-in), replacing the old
+   hover-only tooltip -- visible by default instead of requiring a hover,
+   dismissible via its own close button, and carrying the same 3 initial
+   options the chat itself opens with (see handleLauncherOptionSelect) so a
+   guest can jump straight into a path without an extra "open chat, then
+   pick" step. */
+.greeting-popup-card {
+  position: fixed;
+  bottom: 84px;
+  right: 20px;
+  /* Widened slightly (240 -> 260) so the 3 known option strings fit on one
+     line in the common case -- text-overflow: ellipsis below still covers
+     whatever doesn't fit (longer translations, very narrow viewports)
+     rather than this width being relied on as an exact guarantee. */
+  width: min(260px, calc(100vw - 40px));
+  background: linear-gradient(160deg, #1f5fb7 0%, #14407f 100%);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3), 0 4px 16px rgba(15, 23, 42, 0.15);
+  z-index: 998;
+  animation: slideUp 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  /* Caps overall height on tall content/short viewports; the close button
+     and header below are normal flow siblings of .greeting-popup-scroll,
+     not inside it, so they never scroll out of view -- only the
+     text/question/options area scrolls if it overflows this cap. */
+  max-height: min(420px, calc(100vh - 100px));
+}
+
+.greeting-popup-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.greeting-popup-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.greeting-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-right: 18px;
+  flex-shrink: 0;
+}
+
+/* Wraps everything except the close button and header -- the part that
+   scrolls, if it ever needs to, while the close button and header stay
+   put (see .greeting-popup-card's max-height comment above). */
+.greeting-popup-scroll {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.greeting-popup-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.greeting-popup-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+}
+
+.greeting-popup-text {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.greeting-popup-question {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+}
+
+.greeting-popup-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.greeting-popup-option-btn {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Tightened from 8px 12px -- reclaims a little more horizontal room
+     for the option text itself. */
+  padding: 8px 10px;
+  background: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: clamp(10px, 2.6vw, 11px);
+  font-weight: 600;
+  color: #14407f;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+/* .option-label (ChatApp.css, guided-menu-btn section) centers itself via
+   text-align since this button centers its label rather than
+   left-aligning it like the other two option-button classes. */
+.greeting-popup-option-btn .option-label {
+  text-align: center;
+}
+
+.greeting-popup-option-btn:hover {
+  background: #eef3ff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.greeting-popup-option-btn:active {
+  transform: translateY(0);
+}
+
 .message-icon {
   font-size: 28px;
   display: block;
@@ -631,6 +807,7 @@
   color: #64748b;
 }
 
+/* Still rendered: the History sidebar's "New Conversation" button. */
 .new-chat-btn {
   margin: 12px;
   padding: 11px 16px;
@@ -692,6 +869,7 @@
   min-width: 0;
 }
 
+/* Still rendered: the signed-in header's ☰ History toggle. */
 .sidebar-toggle {
   background: rgba(255, 255, 255, 0.12);
   border: none;
@@ -862,7 +1040,14 @@
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 18px 180px 18px;
+  /* Uniform padding, matching every responsive breakpoint below (14px/
+     12px/12px/10px, all equal on every side) -- .input-section is a normal
+     flex-shrink: 0 sibling, not an overlay, so it already reserves its own
+     space in the column; a lopsided 180px bottom pad here just ate most of
+     the real scrollable height for no layout reason, forcing a scroll to
+     see content (the welcome options, a topic's question list, etc.) that
+     would otherwise have fit. */
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -919,6 +1104,17 @@
 
 .message-content {
   max-width: 70%;
+}
+
+/* A message carrying option/question buttons isn't a conversational
+   chat bubble -- the 70% cap above (and its per-breakpoint overrides)
+   exists for readable prose line length, which doesn't apply here and
+   was the single biggest constraint on fitting a full question on one
+   line. :has() gives this higher specificity than every max-width rule
+   above regardless of viewport, so one rule covers all of them. */
+.message-content:has(.guided-menu-options),
+.message-content:has(.related-questions) {
+  max-width: 96%;
 }
 
 .message-text {
@@ -991,7 +1187,10 @@
 
 /* Related Questions */
 .related-questions {
-  margin: 12px 16px 0 16px;
+  /* No left/right margin (was 16px each side) -- reclaims horizontal room
+     for the question buttons, and matches .guided-menu-options below,
+     which never had a side margin to begin with. */
+  margin: 12px 0 0 0;
   padding-top: 12px;
   border-top: 1px solid rgba(100, 116, 139, 0.2);
 }
@@ -1012,17 +1211,33 @@
 }
 
 .related-question-btn {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   text-align: left;
-  padding: 8px 12px;
+  /* Tightened from 8px 12px -- reclaims a little more horizontal room for
+     the question text itself. */
+  padding: 8px 10px;
   background: rgba(31, 95, 183, 0.08);
   border: 1px solid rgba(31, 95, 183, 0.2);
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  /* clamp(), not a fixed 12px -- shrinks a little on narrow viewports
+     (which is what the widget's own width is already keyed to, see
+     .widget-panel's calc(100vw - ...)) as one more lever (after widening
+     the bubble and tightening padding) toward fitting the full question
+     on one line, never truncated -- see .option-label below. */
+  font-size: clamp(11px, 2.9vw, 12px);
   color: #1f5fb7;
   font-weight: 500;
   transition: all 0.2s ease;
   line-height: 1.4;
+  /* Clips rendering to the button's rounded corners -- not text
+     truncation, which .option-label below deliberately does not do. */
+  overflow: hidden;
 }
 
 .related-question-btn:hover {
@@ -1033,6 +1248,85 @@
 
 .related-question-btn:active {
   transform: translateX(1px);
+}
+
+/* Progressive guided-menu flow (initial 3 options, topic sub-menus, leaf
+   questions, post-answer follow-up) -- same left-aligned stacked-button
+   shape as .related-question-btn (fits a narrow message bubble, unlike the
+   old 2-column .feature-card grid this flow replaces), styled a bit more
+   prominent since these are primary flow choices, not secondary suggestions. */
+.guided-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.guided-menu-btn {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  /* Tightened from 10px 14px -- reclaims a little more horizontal room
+     for the question text itself. */
+  padding: 8px 10px;
+  background: white;
+  border: 1.5px solid #1f5fb7;
+  border-radius: 10px;
+  cursor: pointer;
+  /* clamp(), not a fixed 13px -- see .related-question-btn's comment on
+     the same pattern above. */
+  font-size: clamp(12px, 3.2vw, 13px);
+  font-weight: 600;
+  color: #1f5fb7;
+  line-height: 1.3;
+  transition: all 0.2s ease;
+  /* Clips rendering to the button's rounded corners -- not text
+     truncation, which .option-label below deliberately does not do.
+     Applies to every step of the guided flow through this one shared
+     class: initial options, topic choices, subtopics, leaf KB questions,
+     and follow-up actions. */
+  overflow: hidden;
+}
+
+/* Shared by every option/question button's text (guided-menu-btn,
+   related-question-btn, greeting-popup-option-btn) -- a dedicated flex
+   child, not sizing rules living on the flex container itself. Flex items
+   default to min-width: auto (shrink-to-fit their content); min-width: 0
+   here is what lets this span actually shrink to the button's available
+   width instead of forcing the button wider than its container.
+   Deliberately NOT white-space: nowrap + text-overflow: ellipsis -- full
+   question text must never be truncated. The combination of a wider
+   option-bearing bubble (.message-content:has(...) below), tightened
+   button padding, and the responsive font-size above is what fits the
+   complete text on one line for every question in the current KB set;
+   this normal/break-word wrapping is the deliberate, visible fallback for
+   a future question that still doesn't fit at any viewport width, rather
+   than silently clipping it. */
+.option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.guided-menu-btn:hover:not(:disabled) {
+  background: #1f5fb7;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(31, 95, 183, 0.2);
+}
+
+.guided-menu-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.guided-menu-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 

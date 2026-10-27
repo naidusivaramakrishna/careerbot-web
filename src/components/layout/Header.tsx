@@ -633,7 +633,7 @@ export default function Header() {
                   className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 >
                   <MessageSquareText size={15} className="text-gray-400 shrink-0" />
-                  Support History
+                  Tickets
                 </Link>
                 <Link
                   href="/settings"

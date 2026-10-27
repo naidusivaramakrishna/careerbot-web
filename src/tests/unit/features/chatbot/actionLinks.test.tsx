@@ -423,12 +423,14 @@ describe('Guest user -- action links', () => {
     // The action link is present...
     expect(await screen.findByRole('link', { name: 'click here' })).toHaveAttribute('href', '/forgot-password');
     // ...and the related-question suggestion is a BUTTON (not a link) that
-    // sends another chat message rather than navigating.
-    const relatedBtn = screen.getByText('🔑 How can I reset my password?');
-    expect(relatedBtn.tagName).toBe('BUTTON');
+    // sends another chat message rather than navigating. getByText resolves
+    // to the inner label span (the ellipsis/title-tooltip styling lives
+    // there, not the button), so climb to the real button.
+    const relatedBtn = screen.getByText('🔑 How can I reset my password?').closest('button');
+    expect(relatedBtn?.tagName).toBe('BUTTON');
 
     await act(async () => {
-      fireEvent.click(relatedBtn);
+      fireEvent.click(relatedBtn as HTMLElement);
     });
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
     expect(sendChatMessage.mock.calls[1][0]).toBe('🔑 How can I reset my password?');

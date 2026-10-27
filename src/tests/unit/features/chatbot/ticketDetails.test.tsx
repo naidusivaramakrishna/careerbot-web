@@ -43,7 +43,11 @@ vi.mock('@/api/userApi', () => ({
 
 const getSupportTickets = vi.fn().mockResolvedValue({ data: [] });
 const getTicketDetails = vi.fn();
-const openOrDownloadTicketAttachment = vi.fn();
+// Attachments without a guest view_url render as a button that fetches
+// credentialed content on click (see TicketAttachmentLink.tsx) -- not a
+// plain <a href>, so opening/downloading goes through this mock instead of
+// a navigable URL.
+const openOrDownloadTicketAttachment = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/api/chatbotApi', () => ({
   sendChatMessage: vi.fn(),
@@ -109,6 +113,7 @@ beforeEach(() => {
   // to nothing, fail the owner check in loadTickets, and get an empty list.
   vi.mocked(getProfile).mockResolvedValue({ email: 'alice@example.com', full_name: 'Alice' } as Awaited<ReturnType<typeof getProfile>>);
   getTicketDetails.mockReset();
+  openOrDownloadTicketAttachment.mockReset().mockResolvedValue(undefined);
   window.history.pushState(null, '', '/chatbot');
 });
 
@@ -130,7 +135,7 @@ describe('Ticket details -- Attachments section', () => {
     expect(screen.queryByText('Attachments')).not.toBeInTheDocument();
   });
 
-  it('authenticated: View Attachment opens through the credentialed fetch (not a raw link that 403s after token expiry)', async () => {
+  it('authenticated: shows the filename as a clickable attachment that fetches and opens it', async () => {
     getSupportTickets.mockResolvedValue({
       data: [backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] })],
     });
@@ -143,13 +148,32 @@ describe('Ticket details -- Attachments section', () => {
     });
 
     expect(screen.getByText('Attachments')).toBeInTheDocument();
-    expect(screen.getByText(/screenshot\.png/)).toBeInTheDocument();
-    openOrDownloadTicketAttachment.mockRejectedValueOnce(new Error('403'));
+    const button = screen.getByRole('button', { name: /screenshot\.png/ });
+
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'View Attachment' }));
+      fireEvent.click(button);
     });
+
     expect(openOrDownloadTicketAttachment).toHaveBeenCalledWith('CB-00023', 'att-1', 'screenshot.png');
-    expect(await screen.findByText("Couldn't open this attachment. Please try again.")).toBeInTheDocument();
+  });
+
+  it('shows an inline error if opening the attachment fails', async () => {
+    openOrDownloadTicketAttachment.mockRejectedValue(new Error('Network error'));
+    getSupportTickets.mockResolvedValue({
+      data: [backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] })],
+    });
+
+    await openWidget();
+    await openTicketsTab();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Unable to login'));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /screenshot\.png/ }));
+    });
+
+    expect(await screen.findByText('Network error')).toBeInTheDocument();
   });
 
   // There is currently no UI path for a guest to open the ticket details
@@ -160,8 +184,8 @@ describe('Ticket details -- Attachments section', () => {
   // test via the real UI). The guest-safe branch in the Attachments
   // section is still real, reachable code, though: a user who signs out
   // in another tab while this modal happens to still be open must not be
-  // left looking at a link that will now 403. That IS testable.
-  it('a link already showing in an open modal is replaced with "Sign in to view" if the user signs out while it is still open', async () => {
+  // left looking at a button that will now 403. That IS testable.
+  it('a clickable attachment is replaced with "Sign in to view" if the user signs out while the modal is still open', async () => {
     getSupportTickets.mockResolvedValue({
       data: [backendTicket({ attachments: [{ attachment_id: 'att-2', filename: 'error.png' }] })],
     });
@@ -173,7 +197,7 @@ describe('Ticket details -- Attachments section', () => {
       fireEvent.click(ticketRow);
     });
 
-    expect(screen.getByRole('button', { name: 'View Attachment' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /error\.png/ })).toBeInTheDocument();
 
     mockAuthenticated = false;
     await act(async () => {
@@ -181,7 +205,7 @@ describe('Ticket details -- Attachments section', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'View Attachment' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /error\.png/ })).not.toBeInTheDocument();
     });
     expect(screen.getByText('Sign in to view')).toBeInTheDocument();
     expect(screen.getByText(/error\.png/)).toBeInTheDocument();

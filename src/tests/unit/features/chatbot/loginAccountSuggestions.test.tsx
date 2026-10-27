@@ -54,10 +54,29 @@ const openWidget = async () => {
   });
 };
 
+// Guided-flow navigation: welcome -> "I'm a customer and need support" ->
+// support sub-menu -> "Login & Account" -> its question list. Replaces the
+// old single-click expand/collapse toggle now that the quick-menu is a
+// progressive, message-by-message flow instead of an always-visible panel.
 const expandLoginAccountMenu = async () => {
   await act(async () => {
-    fireEvent.click(screen.getByText(/Login & Account/));
+    fireEvent.click(screen.getByText("I'm a customer and need support"));
   });
+  await waitFor(() => {
+    expect(screen.getByText('Login & Account')).toBeInTheDocument();
+  }, { timeout: 3000 });
+  await act(async () => {
+    fireEvent.click(screen.getByText('Login & Account'));
+  });
+  // Every menu along the way (welcome, support sub-menu) collapses
+  // entirely once clicked -- global option-lifecycle behavior, not just
+  // leaf question lists -- so only this topic's own 5-item list remains;
+  // wait for the newest block to actually be that list.
+  await waitFor(() => {
+    const menus = document.querySelectorAll('.guided-menu-options');
+    const last = menus[menus.length - 1];
+    expect(last?.querySelectorAll('button').length).toBe(5);
+  }, { timeout: 3000 });
 };
 
 const sendMessage = async (text: string) => {
@@ -85,13 +104,14 @@ beforeEach(() => {
 });
 
 describe('Login & Account (guest) -- initial suggested questions', () => {
-  it('shows the Login & Account toggle on widget open, collapsed by default', async () => {
+  it('shows only the 3 initial options on widget open, not any topic question list', async () => {
     await openWidget();
-    expect(screen.getByText(/Login & Account/)).toBeInTheDocument();
+    expect(screen.getByText("I'm a customer and need support")).toBeInTheDocument();
     expect(screen.queryByText("⚠️ Why can't I log in to my account?")).not.toBeInTheDocument();
+    expect(screen.queryByText('Login & Account')).not.toBeInTheDocument();
   });
 
-  it('expands to show exactly the 5 guest-appropriate question cards -- access/troubleshooting, not account management', async () => {
+  it('reaches exactly the 5 guest-appropriate question cards via Customer Support -> Login & Account -- access/troubleshooting, not account management', async () => {
     await openWidget();
     await expandLoginAccountMenu();
 
@@ -106,7 +126,7 @@ describe('Login & Account (guest) -- initial suggested questions', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
 
-    const grid = screen.getByText(expected[0]).closest('.features-grid');
+    const grid = screen.getByText(expected[0]).closest('.guided-menu-options');
     expect(grid).not.toBeNull();
     expect(within(grid as HTMLElement).getAllByRole('button')).toHaveLength(5);
 
@@ -135,13 +155,14 @@ describe('Login & Account (guest) -- initial suggested questions', () => {
     expect(sendChatMessage.mock.calls[0][0]).toBe(expectedQuery);
   });
 
-  it('initial questions remain visible and reachable by scrolling, however long the conversation grows', async () => {
+  it('earlier guided-flow steps stay in the transcript (disabled, not removed) however long the conversation grows', async () => {
     // Regression test for the removed "Show Suggestions" button: suggestions
     // used to auto-hide past messages.length > 5, requiring a click to bring
-    // them back. They must now just always be there -- no count-based hide,
-    // no separate button needed to get them back.
+    // them back. The guided flow must not reproduce that -- every step's
+    // message (and its now-disabled buttons) stays in the transcript.
     sendChatMessage.mockResolvedValue(mockAnswer('Some answer.', 'account_access_general_issue'));
     await openWidget();
+    const initialOption = screen.getByText("I'm a customer and need support");
     // welcome(1) + 3x(user+answer) = 7 messages -- past the old >5 threshold.
     await sendMessage('A question');
     await screen.findByText('Some answer.');
@@ -150,7 +171,7 @@ describe('Login & Account (guest) -- initial suggested questions', () => {
     await sendMessage('A third question');
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(3));
 
-    expect(screen.getByText(/Login & Account/)).toBeInTheDocument();
+    expect(initialOption).toBeInTheDocument();
     expect(screen.queryByText(/Show Suggestions/)).not.toBeInTheDocument();
   });
 });

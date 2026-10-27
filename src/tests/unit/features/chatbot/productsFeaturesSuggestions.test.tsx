@@ -70,10 +70,30 @@ const openWidget = async () => {
   });
 };
 
+// Guided-flow navigation: welcome -> "I want to know about products and
+// features" -> that topic's question list directly (single step, unlike
+// Login & Account which is nested under the Customer Support sub-menu).
+// Replaces the old single-click expand/collapse toggle now that the
+// quick-menu is a progressive, message-by-message flow instead of an
+// always-visible panel. Each call produces a NEW question-list message --
+// use getAllByText/queryAllByText (not getByText/queryByText) wherever a
+// test navigates here more than once.
 const expandFeaturesMenu = async () => {
+  const options = screen.getAllByText('I want to know about products and features');
   await act(async () => {
-    fireEvent.click(screen.getByText(/products and features/));
+    fireEvent.click(options[options.length - 1]);
   });
+  // The menu just clicked collapses entirely now (global option-lifecycle
+  // behavior -- every option group, not just leaf question lists), so a
+  // plain "did the count go up" check no longer holds: the welcome/
+  // initial menu disappearing and the features topic's list appearing can
+  // net to zero change. Wait instead for the newest .guided-menu-options
+  // block to actually be this topic's (6 options, guest or authenticated).
+  await waitFor(() => {
+    const menus = document.querySelectorAll('.guided-menu-options');
+    const last = menus[menus.length - 1];
+    expect(last?.querySelectorAll('button').length).toBe(6);
+  }, { timeout: 3000 });
 };
 
 const sendMessageGuest = async (text: string) => {
@@ -148,7 +168,7 @@ describe('Products & Features (guest) -- 6 introductory main questions', () => {
     for (const { label } of GUEST_MAINS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    const grid = screen.getByText(GUEST_MAINS[0].label).closest('.features-grid');
+    const grid = screen.getByText(GUEST_MAINS[0].label).closest('.guided-menu-options');
     expect(grid).not.toBeNull();
     expect(within(grid as HTMLElement).getAllByRole('button')).toHaveLength(6);
 
@@ -212,6 +232,19 @@ describe('Products & Features (guest) -- sub-questions are correct, non-duplicat
     expect(within(relatedList).getByText('📝 Can CareerBot help me create a cover letter?')).toBeInTheDocument();
   });
 
+  it('a related-question button carries its full text as a title attribute, for a hover tooltip when the visible label is CSS-truncated', async () => {
+    sendChatMessage.mockResolvedValueOnce(guestAnswer('Use the Resume Builder...', 'resume_optimization'));
+    await openWidget();
+    await sendMessageGuest('What can CareerBot help me do with my resume?');
+
+    await screen.findByText('Related questions:');
+    // getByText resolves to the inner label span (the ellipsis styling
+    // lives there, not the button -- see .option-label-ellipsis in
+    // ChatApp.css), so climb to the real button to check its title.
+    const subButton = screen.getByText('💡 How can I improve my resume?').closest('button');
+    expect(subButton).toHaveAttribute('title', '💡 How can I improve my resume?');
+  });
+
   it('clicking a sub-question sends it through the chat flow and gets its own correct KB answer', async () => {
     sendChatMessage
       .mockResolvedValueOnce(guestAnswer('Use the Resume Builder...', 'resume_optimization'))
@@ -236,6 +269,39 @@ describe('Products & Features (guest) -- sub-questions are correct, non-duplicat
     // plus the link's lead-in sentence -- an exact string no longer matches.
     await screen.findByText(/Resume Enhancer gives AI suggestions/);
   });
+
+  it('picking one related question collapses the whole bucket -- global option-lifecycle behavior applies to KB suggestions too', async () => {
+    sendChatMessage
+      .mockResolvedValueOnce(guestAnswer('Use the Resume Builder...', 'resume_optimization'))
+      .mockResolvedValueOnce(guestAnswer('Resume Enhancer gives AI suggestions...', 'resume_enhancer'));
+    await openWidget();
+    await sendMessageGuest('What can CareerBot help me do with my resume?');
+
+    await screen.findByText('Related questions:');
+    expect(screen.getByText('✨ How can I create a resume?')).toBeInTheDocument();
+    expect(screen.getByText('📝 Can CareerBot help me create a cover letter?')).toBeInTheDocument();
+
+    const subButton = screen.getByText('💡 How can I improve my resume?');
+    await act(async () => {
+      fireEvent.click(subButton);
+      // Rapid second click on a sibling in the same bucket, before the
+      // first's backend call resolves -- the bucket is marked answered
+      // synchronously on the first click, so this must be rejected too.
+      fireEvent.click(screen.getByText('✨ How can I create a resume?'));
+    });
+
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(sendChatMessage).toHaveBeenCalledTimes(2);
+
+    await screen.findByText(/Resume Enhancer gives AI suggestions/);
+    // The first answer's own bucket (including its unclicked sibling) is
+    // gone. Note: resume_enhancer's answer gets its own fresh "Related
+    // questions:" bucket that legitimately includes "✨ How can I create a
+    // resume?" again (real, pre-existing KB content -- not a leftover from
+    // the first bucket), so that specific label isn't checked here.
+    expect(screen.queryByText('📝 Can CareerBot help me create a cover letter?')).not.toBeInTheDocument();
+  });
 });
 
 describe('Products & Features (authenticated) -- 6 practical main questions', () => {
@@ -247,7 +313,7 @@ describe('Products & Features (authenticated) -- 6 practical main questions', ()
     for (const { label } of AUTH_MAINS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    const grid = screen.getByText(AUTH_MAINS[0].label).closest('.features-grid');
+    const grid = screen.getByText(AUTH_MAINS[0].label).closest('.guided-menu-options');
     expect(grid).not.toBeNull();
     expect(within(grid as HTMLElement).getAllByRole('button')).toHaveLength(6);
 
@@ -325,8 +391,36 @@ describe('Products & Features (authenticated) -- sub-questions are correct, non-
 });
 
 describe('Products & Features -- live switching between guest and authenticated (no remount)', () => {
-  it('signing in swaps the 6-item menu from introductory to practical questions', async () => {
+  // Each topic's question list is built once, when that guided-flow message
+  // is created (buildTopicQuestionOptions(topic, isLocallyAuthenticated) at
+  // click time) -- not retroactively recomputed if auth state changes while
+  // it's already on screen (same established behavior as
+  // getRelatedQuestions). So "live switching" means a FRESH navigation
+  // after the auth change reflects the new state -- not that an
+  // already-rendered list mutates in place underneath the user.
+  const answerAQuestionAndReturnToMenu = async () => {
+    // Strictly more than before -- clicking the main options button earlier
+    // left behind a user-echo message with that same text too, so a
+    // weaker "any exist" check would already be satisfied before this
+    // fresh one has actually landed.
+    const countBefore = screen.getAllByText('I want to know about products and features').length;
+    await act(async () => {
+      fireEvent.click(screen.getByText('I have more questions'));
+    });
+    // "I have more questions" now asks continue-topic vs explore-different
+    // first -- "Explore a different topic" is what reaches the initial menu.
+    const exploreDifferentTopic = await screen.findByText('Explore a different topic', {}, { timeout: 3000 });
+    await act(async () => {
+      fireEvent.click(exploreDifferentTopic);
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText('I want to know about products and features').length).toBeGreaterThan(countBefore);
+    }, { timeout: 3000 });
+  };
+
+  it('signing in: a fresh navigation after sign-in shows the practical menu, not the stale introductory one', async () => {
     mockAuthenticated = false;
+    sendChatMessage.mockResolvedValueOnce(guestAnswer('Some answer.', GUEST_MAINS[0].category));
     await openWidget();
     await expandFeaturesMenu();
 
@@ -334,24 +428,31 @@ describe('Products & Features -- live switching between guest and authenticated 
       expect(screen.getByText(label)).toBeInTheDocument();
     }
 
+    // Reach the "I have more questions" follow-up so there's a fresh entry
+    // point to re-navigate from after signing in.
+    await act(async () => {
+      fireEvent.click(screen.getByText(GUEST_MAINS[0].label));
+    });
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    await screen.findByText('Is there anything else I can help with?', {}, { timeout: 3000 });
+
     mockAuthenticated = true;
     await act(async () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'access_token' }));
     });
+    expect(await screen.findByText(/👤 Alice/)).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText(AUTH_MAINS[0].label)).toBeInTheDocument();
-    });
+    await answerAQuestionAndReturnToMenu();
+    await expandFeaturesMenu();
+
     for (const { label } of AUTH_MAINS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    for (const { label } of GUEST_MAINS) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
-    }
-  });
+  }, 30_000); // two full navigations, each with a real ~1.2s guided-message delay
 
-  it('signing out swaps the menu back to introductory questions', async () => {
+  it('signing out: a fresh navigation after sign-out shows the introductory menu, not the stale practical one', async () => {
     mockAuthenticated = true;
+    sendSessionMessage.mockResolvedValueOnce(authAnswer('Some answer.', AUTH_MAINS[0].category));
     await openWidget();
     await expandFeaturesMenu();
 
@@ -359,19 +460,31 @@ describe('Products & Features -- live switching between guest and authenticated 
       expect(screen.getByText(label)).toBeInTheDocument();
     }
 
+    await act(async () => {
+      fireEvent.click(screen.getByText(AUTH_MAINS[0].label));
+    });
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    await screen.findByText('Is there anything else I can help with?', {}, { timeout: 3000 });
+
+    // A real sign-out resets the whole transcript back to the bare welcome
+    // screen (see ChatApp.tsx's "Logout detected" branch, startNewAccountGeneration
+    // + initializeChat) -- unlike signing IN mid-conversation, which keeps it.
+    // Never leave a signed-out visitor's conversation on screen for whoever
+    // uses the device next. So there's no "I have more questions" follow-up
+    // to click through afterward -- the next navigation starts fresh.
     mockAuthenticated = false;
     await act(async () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'access_token' }));
     });
-
     await waitFor(() => {
-      expect(screen.getByText(GUEST_MAINS[0].label)).toBeInTheDocument();
+      expect(screen.queryByText(/👤 Alice/)).not.toBeInTheDocument();
     });
+    await screen.findByText(/Hi! I'm CareerBot/i, {}, { timeout: 3000 });
+
+    await expandFeaturesMenu();
+
     for (const { label } of GUEST_MAINS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    for (const { label } of AUTH_MAINS) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
-    }
-  });
+  }, 30_000); // two full navigations, each with a real ~1.2s guided-message delay
 });

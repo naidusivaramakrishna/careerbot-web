@@ -980,6 +980,68 @@ describe('Raise a Ticket -- redirected here from the chatbot', () => {
     expect(submitted.issue_details.chatbot_answer).toBe(answer);
   });
 
+  // The chatbot hands a signed-in user's Q&A over in sessionStorage
+  // (?ctx=<id>, see stashTicketContext), as it does for the guest portal --
+  // not in the URL (ai-review P2 at #327 5a6b2e73).
+  it('?ctx= reads the question and answer from sessionStorage, prefills the subject and sends both', async () => {
+    const question = 'Why am I unable to reset my password?';
+    const answer = 'Go to the login page and click Forgot Password.';
+    sessionStorage.setItem('ticket_ctx:abc123', JSON.stringify({ question, answer }));
+    mockSearchParams = new URLSearchParams({ tab: 'tickets', raise: '1', ctx: 'abc123' });
+    mockEscalateToSupport.mockResolvedValue({ success: true, ticket_id: 'CB-00051', status: 'open', message: 'Created' });
+    render(<SupportHistoryPage />);
+
+    const subjectInput = (await screen.findByPlaceholderText('Brief summary of your issue')) as HTMLInputElement;
+    expect(subjectInput.value).toContain('Why am I unable to reset my password');
+    // One-time hand-off: gone from sessionStorage once read.
+    await waitFor(() => expect(sessionStorage.getItem('ticket_ctx:abc123')).toBeNull());
+
+    await fillMinimalForm();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Submit ticket'));
+    });
+    await waitFor(() => expect(mockEscalateToSupport).toHaveBeenCalledTimes(1));
+    const submitted = mockEscalateToSupport.mock.calls[0][0];
+    expect(submitted.issue_details.original_question).toBe(question);
+    expect(submitted.issue_details.chatbot_answer).toBe(answer);
+  });
+
+  // ai-review P2 at #327 7603e4a8: the page is server-rendered, and reading
+  // sessionStorage during render gave the server an empty subject and the
+  // client the stored question -- a hydration mismatch. The hand-off is
+  // read only after mount, so the server markup never depends on it.
+  it('?ctx= never touches sessionStorage during render (SSR-safe), and the form is not server-rendered with a guessed prefill', async () => {
+    const { renderToString } = await import('react-dom/server');
+    sessionStorage.setItem('ticket_ctx:abc123', JSON.stringify({ question: 'Why am I unable to reset my password?', answer: 'A.' }));
+    mockSearchParams = new URLSearchParams({ tab: 'tickets', raise: '1', ctx: 'abc123' });
+    const realGetItem = Storage.prototype.getItem;
+    let sessionReads = 0;
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key: string) {
+      if (this === window.sessionStorage) sessionReads += 1;
+      return realGetItem.call(this, key);
+    });
+    try {
+      const html = renderToString(<SupportHistoryPage />);
+      expect(sessionReads).toBe(0);
+      expect(html).not.toContain('Brief summary of your issue');
+    } finally {
+      getItem.mockRestore();
+    }
+    // Still there for the client's post-mount read.
+    expect(sessionStorage.getItem('ticket_ctx:abc123')).not.toBeNull();
+  });
+
+  it('closing the form strips ?ctx= from the URL along with raise, keeping tab', async () => {
+    sessionStorage.setItem('ticket_ctx:abc123', JSON.stringify({ question: 'Q?', answer: 'A.' }));
+    mockSearchParams = new URLSearchParams({ tab: 'tickets', raise: '1', ctx: 'abc123' });
+    render(<SupportHistoryPage />);
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(mockRouterReplace).toHaveBeenCalledWith('/dashboard/support-history?tab=tickets');
+  });
+
   it('raises a ticket with no attachment -- uploadTicketAttachment is never called', async () => {
     mockSearchParams = new URLSearchParams('tab=tickets&raise=1');
     mockEscalateToSupport.mockResolvedValue({ success: true, ticket_id: 'CB-00042', status: 'open', message: 'Created' });

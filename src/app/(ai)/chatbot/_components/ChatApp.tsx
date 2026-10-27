@@ -7,7 +7,6 @@ import {
   sendChatMessage,
   escalateToSupport,
   uploadTicketAttachment,
-  openOrDownloadTicketAttachment,
   getSupportTickets,
   getTicketDetails,
   cancelTicket,
@@ -22,6 +21,9 @@ import {
 import type { SupportTicket, ChatSessionSummary, TicketAttachmentSummary } from '@/api/chatbotApi';
 import { isUserAuthenticated, classifyQuery, canGuestAnswer, getAuthRequiredMessage } from '@/api/chatbotAuth';
 import { getProfile } from '@/api/userApi';
+import { onAccountChanged } from '@/lib/accountChange';
+import { FEATURE_ISSUE_TYPES, TICKET_STATUS_META, CANCELLABLE_TICKET_STATUSES } from '@/lib/ticketCategories';
+import TicketAttachmentLink from '@/components/common/TicketAttachmentLink';
 import {
   LoginIcon,
   ResumeBuilderIcon,
@@ -55,6 +57,11 @@ interface Message {
   relatedQuestions?: string[];
   ticket?: TicketInfo;
   actionLink?: ActionLink;
+  // Progressive guided-menu options attached to this message (see
+  // GuidedMenuAction below) -- e.g. the welcome message's initial 3
+  // choices, a topic's question list, or the post-answer follow-up.
+  // Undefined for ordinary typed messages and KB answers.
+  menuOptions?: GuidedMenuOption[];
 }
 
 interface ChatSession {
@@ -212,6 +219,165 @@ const renderMarkdownText = (text: string): React.ReactNode => {
 
   return parts.length > 0 ? parts : text;
 };
+
+// Progressive guided-menu flow: each navigation step is one of these
+// actions, attached to a message's `menuOptions` and resolved by
+// handleGuidedMenuSelect. 'question' is the only leaf action -- it's the
+// only one that reaches the real backend, via the exact same
+// handleSendMessage() every typed message already goes through.
+type GuidedTopicKey = 'features' | 'pricing' | 'help-login-account' | 'help-payment';
+
+type GuidedMenuAction =
+  | { kind: 'topic'; topic: GuidedTopicKey }
+  | { kind: 'support-menu' }
+  | { kind: 'initial-menu' }
+  | { kind: 'question'; question: string; topic: GuidedTopicKey }
+  // "I have more questions" lands here first now, instead of jumping
+  // straight back to the 3 initial topics -- see buildContinueOrExploreOptions.
+  | { kind: 'continue-or-explore'; topic: GuidedTopicKey }
+  // Re-shows the same topic's remaining (not-yet-asked) questions.
+  | { kind: 'continue-topic'; topic: GuidedTopicKey }
+  | { kind: 'contact-support' }
+  | { kind: 'all-set' };
+
+// 'follow-up': the "Is there anything else" prompt after a KB answer.
+// 'navigation': the next step of a choice already made (its menu is
+// already collapsed), so it must never be silently dropped.
+type GuidedStepKind = 'follow-up' | 'navigation';
+
+interface GuidedMenuOption {
+  label: string;
+  action: GuidedMenuAction;
+}
+
+// Leaf question lists for each topic, extracted verbatim (same wording,
+// same emoji, same auth-aware split) from the always-visible quick-menu
+// this guided flow replaces -- label is the button text shown, question is
+// the exact string handed to handleSendMessage (unchanged from before; the
+// two differ for several pricing questions where the label was shortened
+// for button width, e.g. "How much does Premium cost?" vs the real
+// question "How much does the Premium Plan cost?").
+const GUIDED_TOPIC_QUESTIONS: Record<
+  GuidedTopicKey,
+  { authenticated: Array<{ label: string; question: string }>; guest: Array<{ label: string; question: string }> }
+> = {
+  features: {
+    authenticated: [
+      { label: '📄 How can I create or update my resume?', question: 'How can I create or update my resume?' },
+      { label: '🎯 How can I check my resume match for a specific job?', question: 'How can I check my resume match for a specific job?' },
+      { label: '🎤 How can I start a Mock Interview and review my feedback?', question: 'How can I start a Mock Interview and review my feedback?' },
+      { label: '📊 Where can I take a Mock Test and see my results?', question: 'Where can I take a Mock Test and see my results?' },
+      { label: '💻 Where can I practice coding problems and review my performance?', question: 'Where can I practice coding problems and review my performance?' },
+      { label: '🗣️ How can I take an English Assessment and review my performance?', question: 'How can I take an English Assessment and review my performance?' },
+    ],
+    guest: [
+      { label: '📄 What can CareerBot help me do with my resume?', question: 'What can CareerBot help me do with my resume?' },
+      { label: '🎯 How does Job Match help me find suitable jobs?', question: 'How does Job Match help me find suitable jobs?' },
+      { label: '🎤 What is a Mock Interview, and how does it work?', question: 'What is a Mock Interview, and how does it work?' },
+      { label: '📊 What is a Mock Test, and what can I practice?', question: 'What is a Mock Test, and what can I practice?' },
+      { label: '💻 How can CareerBot help me assess my coding skills?', question: 'How can CareerBot help me assess my coding skills?' },
+      { label: '🗣️ What is the English Assessment and how does it work?', question: 'What is the English Assessment and how does it work?' },
+    ],
+  },
+  pricing: {
+    // Same questions regardless of auth state -- both branches point at
+    // the same list rather than special-casing "all" elsewhere.
+    authenticated: [
+      { label: '✅ What is included in the Free Plan?', question: 'What is included in the Free Plan?' },
+      { label: '💎 What features are in the Premium Plan?', question: 'What features are available in the Premium Plan?' },
+      { label: '🏢 What does the Enterprise Plan include?', question: 'What does the Enterprise Plan include?' },
+      { label: '📊 What are the differences between plans?', question: 'What are the differences between the plans?' },
+      { label: '⬆️ How can I upgrade my plan?', question: 'How can I upgrade my plan?' },
+      { label: '💯 What is the refund policy?', question: 'What is the refund policy?' },
+      { label: '💰 How much does Premium cost?', question: 'How much does the Premium Plan cost?' },
+      { label: '❌ Can I cancel my subscription?', question: 'Can I cancel my subscription?' },
+      { label: '🔄 Can I change my plan?', question: 'Can I change my subscription plan?' },
+    ],
+    guest: [
+      { label: '✅ What is included in the Free Plan?', question: 'What is included in the Free Plan?' },
+      { label: '💎 What features are in the Premium Plan?', question: 'What features are available in the Premium Plan?' },
+      { label: '🏢 What does the Enterprise Plan include?', question: 'What does the Enterprise Plan include?' },
+      { label: '📊 What are the differences between plans?', question: 'What are the differences between the plans?' },
+      { label: '⬆️ How can I upgrade my plan?', question: 'How can I upgrade my plan?' },
+      { label: '💯 What is the refund policy?', question: 'What is the refund policy?' },
+      { label: '💰 How much does Premium cost?', question: 'How much does the Premium Plan cost?' },
+      { label: '❌ Can I cancel my subscription?', question: 'Can I cancel my subscription?' },
+      { label: '🔄 Can I change my plan?', question: 'Can I change my subscription plan?' },
+    ],
+  },
+  'help-login-account': {
+    authenticated: [
+      { label: '👤 How can I update my profile information?', question: 'How can I update my profile information?' },
+      { label: '🔐 How can I change my password?', question: 'How can I change my password?' },
+      { label: '📧 How can I update my registered email address?', question: 'How can I update my registered email address?' },
+      { label: '🚪 How do I sign out of my account?', question: 'How do I sign out of my account?' },
+      { label: '🔄 Why do I keep getting signed out unexpectedly?', question: 'Why do I keep getting signed out unexpectedly?' },
+    ],
+    guest: [
+      { label: "⚠️ Why can't I log in to my account?", question: "Why can't I log in to my account?" },
+      { label: '🔑 I forgot my password. How can I reset it?', question: 'I forgot my password. How can I reset it?' },
+      { label: '📧 Why am I not receiving the OTP?', question: 'Why am I not receiving the OTP?' },
+      { label: '🔒 My account is locked. How can I unlock it?', question: 'My account is locked. How can I unlock it?' },
+      { label: '🆔 Why are my login credentials not being accepted?', question: 'Why are my login credentials not being accepted?' },
+    ],
+  },
+  'help-payment': {
+    authenticated: [
+      { label: '📊 How can I check my payment status?', question: 'How can I check my payment status?' },
+      { label: '⚠️ Why was money deducted but payment not confirmed?', question: 'Why was money deducted but my payment is not confirmed?' },
+      { label: '💰 Why were my credits not added after payment?', question: 'Why were my credits not added after payment?' },
+      { label: '🚨 How can I report an unauthorized payment?', question: 'How can I report an unauthorized payment?' },
+      { label: '🆘 How can I get help with a payment issue?', question: 'How can I get help with a payment issue?' },
+    ],
+    guest: [
+      { label: '📊 How can I check my payment status?', question: 'How can I check my payment status?' },
+      { label: '⚠️ Why was money deducted but payment not confirmed?', question: 'Why was money deducted but my payment is not confirmed?' },
+      { label: '💰 Why were my credits not added after payment?', question: 'Why were my credits not added after payment?' },
+      { label: '🚨 How can I report an unauthorized payment?', question: 'How can I report an unauthorized payment?' },
+      { label: '🆘 How can I get help with a payment issue?', question: 'How can I get help with a payment issue?' },
+    ],
+  },
+};
+
+const GUIDED_TOPIC_PROMPTS: Record<GuidedTopicKey, string> = {
+  features: 'Great! Here are some things I can help with:',
+  pricing: 'Here are some common subscription & pricing questions:',
+  'help-login-account': 'Here are some common login & account questions:',
+  'help-payment': 'Here are some common payment support questions:',
+};
+
+const buildInitialMenuOptions = (): GuidedMenuOption[] => [
+  { label: 'I want to know about products and features', action: { kind: 'topic', topic: 'features' } },
+  { label: 'I need help with subscription or payment', action: { kind: 'topic', topic: 'pricing' } },
+  { label: "I'm a customer and need support", action: { kind: 'support-menu' } },
+];
+
+const buildSupportMenuOptions = (): GuidedMenuOption[] => [
+  { label: 'Login & Account', action: { kind: 'topic', topic: 'help-login-account' } },
+  { label: 'Subscription & Pricing', action: { kind: 'topic', topic: 'pricing' } },
+  { label: 'Payment Support', action: { kind: 'topic', topic: 'help-payment' } },
+  { label: 'Contact Support', action: { kind: 'contact-support' } },
+];
+
+const buildTopicQuestionOptions = (topic: GuidedTopicKey, isAuthenticated: boolean): GuidedMenuOption[] => {
+  const entries = isAuthenticated ? GUIDED_TOPIC_QUESTIONS[topic].authenticated : GUIDED_TOPIC_QUESTIONS[topic].guest;
+  return entries.map(({ label, question }) => ({ label, action: { kind: 'question', question, topic } }));
+};
+
+// Shown after "I have more questions" instead of jumping straight back to
+// the 3 initial topics -- lets the user stay on the topic they were just
+// in (continue-topic, reusing the exact same buildTopicQuestionOptions
+// data minus whatever's already been asked) or back out to the top level
+// (initial-menu -- the same action/handler the old direct jump used).
+const buildContinueOrExploreOptions = (topic: GuidedTopicKey): GuidedMenuOption[] => [
+  { label: 'Ask another question', action: { kind: 'continue-topic', topic } },
+  { label: 'Explore a different topic', action: { kind: 'initial-menu' } },
+];
+
+const buildFollowUpOptions = (topic: GuidedTopicKey): GuidedMenuOption[] => [
+  { label: 'I have more questions', action: { kind: 'continue-or-explore', topic } },
+  { label: "I'm all set", action: { kind: 'all-set' } },
+];
 
 // A navigation affordance appended inline inside a KB answer's own text,
 // when (and only when) a real page exists for it -- see getActionLink.
@@ -371,189 +537,14 @@ const firstSentence = (text: string): string => {
   return text.trim();
 };
 
-const FEATURE_ISSUE_TYPES: Record<string, { value: string; label: string }[]> = {
-  'login-issues': [
-    { value: 'forgot_password', label: 'Forgot Password' },
-    { value: 'unable_to_login', label: 'Unable to Login' },
-    { value: 'password_reset_issue', label: 'Password Reset Issue' },
-    { value: 'email_verification_issue', label: 'Email Verification Issue' },
-    { value: 'two_fa_issue', label: '2FA / Authentication Issue' },
-    { value: 'account_locked', label: 'Account Locked / Suspended' },
-    { value: 'other_login_issue', label: 'Other Login/Access Issue' },
-  ],
-  'ai-resume-builder': [
-    { value: 'resume_creation_failed', label: 'Resume creation failed' },
-    { value: 'template_not_loading', label: 'Template not loading' },
-    { value: 'generation_error', label: 'Resume generation error' },
-    { value: 'ats_formatting', label: 'ATS formatting issue' },
-    { value: 'content_generation', label: 'Content generation issue' },
-    { value: 'download_export', label: 'Resume download/export issue' },
-    { value: 'formatting_layout', label: 'Formatting/layout issue' },
-    { value: 'slow_response', label: 'Slow response' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'resume-parser': [
-    { value: 'upload_failed', label: 'Resume upload failed' },
-    { value: 'parsing_failed', label: 'Resume parsing failed' },
-    { value: 'incorrect_extraction', label: 'Incorrect information extracted' },
-    { value: 'missing_info', label: 'Missing information' },
-    { value: 'section_mapping', label: 'Incorrect section mapping' },
-    { value: 'parsing_slow', label: 'Parsing taking too long' },
-    { value: 'unsupported_format', label: 'Unsupported resume format' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'resume-enhancer': [
-    { value: 'enhancement_failed', label: 'Enhancement failed' },
-    { value: 'incorrect_suggestions', label: 'Incorrect suggestions' },
-    { value: 'missing_suggestions', label: 'Missing suggestions' },
-    { value: 'poor_recommendations', label: 'Poor/irrelevant recommendations' },
-    { value: 'enhancement_slow', label: 'Enhancement taking too long' },
-    { value: 'content_changed', label: 'Resume content changed incorrectly' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'ai-cover-letter': [
-    { value: 'generation_failed', label: 'Cover letter generation failed' },
-    { value: 'incorrect_job_info', label: 'Incorrect job information' },
-    { value: 'incorrect_personalization', label: 'Incorrect personalization' },
-    { value: 'content_generation', label: 'Content generation issue' },
-    { value: 'formatting_issue', label: 'Formatting issue' },
-    { value: 'download_export', label: 'Download/export issue' },
-    { value: 'slow_response', label: 'Slow response' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'job-search': [
-    { value: 'jobs_not_loading', label: 'Jobs not loading' },
-    { value: 'no_results', label: 'Search not returning results' },
-    { value: 'incorrect_results', label: 'Incorrect job results' },
-    { value: 'filters_not_working', label: 'Filters not working' },
-    { value: 'job_details_incorrect', label: 'Job details incorrect' },
-    { value: 'job_link_broken', label: 'Job link not working' },
-    { value: 'duplicate_jobs', label: 'Duplicate jobs' },
-    { value: 'location_filter', label: 'Location filter issue' },
-    { value: 'performance_issue', label: 'Search performance issue' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'job-match': [
-    { value: 'matching_failed', label: 'Job matching failed' },
-    { value: 'incorrect_matches', label: 'Incorrect job matches' },
-    { value: 'poor_results', label: 'Poor match results' },
-    { value: 'skills_not_matched', label: 'Skills not matched correctly' },
-    { value: 'experience_matching', label: 'Experience matching issue' },
-    { value: 'match_score_issue', label: 'Match score issue' },
-    { value: 'missing_matches', label: 'Missing job matches' },
-    { value: 'slow_response', label: 'Slow response' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'mock-interview': [
-    { value: 'interview_not_starting', label: 'Interview not starting' },
-    { value: 'question_generation', label: 'Question generation issue' },
-    { value: 'incorrect_questions', label: 'Incorrect questions' },
-    { value: 'voice_audio_issue', label: 'Voice/audio issue' },
-    { value: 'answer_evaluation', label: 'Answer evaluation issue' },
-    { value: 'feedback_issue', label: 'Feedback issue' },
-    { value: 'session_interrupted', label: 'Interview session interrupted' },
-    { value: 'results_not_generated', label: 'Results not generated' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'mock-test': [
-    { value: 'test_not_starting', label: 'Test not starting' },
-    { value: 'questions_not_loading', label: 'Questions not loading' },
-    { value: 'incorrect_questions', label: 'Incorrect questions' },
-    { value: 'answer_submission', label: 'Answer submission issue' },
-    { value: 'timer_issue', label: 'Timer issue' },
-    { value: 'test_interrupted', label: 'Test interrupted' },
-    { value: 'results_not_generated', label: 'Results not generated' },
-    { value: 'score_issue', label: 'Score issue' },
-    { value: 'not_accessible', label: 'Feature not accessible' },
-    { value: 'other', label: 'Other' },
-  ],
-  'browser-extension': [
-    { value: 'installation_issue', label: 'Extension installation issue' },
-    { value: 'extension_not_working', label: 'Extension not working' },
-    { value: 'job_not_detected', label: 'Job description not detected' },
-    { value: 'extraction_failed', label: 'Job description extraction failed' },
-    { value: 'incorrect_extraction', label: 'Incorrect extracted content' },
-    { value: 'resume_integration', label: 'Resume integration issue' },
-    { value: 'cover_letter_integration', label: 'Cover letter integration issue' },
-    { value: 'job_match_integration', label: 'Job Match integration issue' },
-    { value: 'browser_compatibility', label: 'Browser compatibility issue' },
-    { value: 'other', label: 'Other' },
-  ],
-  'chatbot': [
-    { value: 'not_responding', label: 'Chatbot not responding' },
-    { value: 'incorrect_answer', label: 'Incorrect answer' },
-    { value: 'irrelevant_answer', label: 'Irrelevant answer' },
-    { value: 'slow_response', label: 'Slow response' },
-    { value: 'voice_assistant', label: 'Voice assistant issue' },
-    { value: 'document_upload', label: 'Document upload issue' },
-    { value: 'document_processing', label: 'Document processing issue' },
-    { value: 'document_qa', label: 'Document question-answering issue' },
-    { value: 'suggested_questions', label: 'Suggested questions issue' },
-    { value: 'history_issue', label: 'Conversation history issue' },
-    { value: 'other', label: 'Other' },
-  ],
-  'payment-billing': [
-    { value: 'payment_failed', label: 'Payment failed' },
-    { value: 'payment_declined', label: 'Payment declined' },
-    { value: 'payment_deducted_not_activated', label: 'Payment deducted but subscription not activated' },
-    { value: 'payment_status_not_updated', label: 'Payment status not updated' },
-    { value: 'duplicate_payment', label: 'Duplicate payment' },
-    { value: 'refund_request', label: 'Refund request' },
-    { value: 'refund_not_received', label: 'Refund not received' },
-    { value: 'invoice_not_generated', label: 'Invoice not generated' },
-    { value: 'invoice_incorrect', label: 'Invoice incorrect' },
-    { value: 'invoice_download', label: 'Invoice download issue' },
-    { value: 'billing_amount_incorrect', label: 'Billing amount incorrect' },
-    { value: 'subscription_plan', label: 'Subscription plan issue' },
-    { value: 'subscription_renewal', label: 'Subscription renewal issue' },
-    { value: 'subscription_cancellation', label: 'Subscription cancellation issue' },
-    { value: 'upgrade_plan', label: 'Upgrade plan issue' },
-    { value: 'downgrade_plan', label: 'Downgrade plan issue' },
-    { value: 'tax_info', label: 'Tax/GST information issue' },
-    { value: 'payment_method', label: 'Payment method issue' },
-    { value: 'billing_history', label: 'Billing history issue' },
-    { value: 'usage_balance', label: 'Usage/credit balance issue' },
-    { value: 'other', label: 'Other' },
-  ],
-  'account-organization': [
-    { value: 'login_issue', label: 'Login issue' },
-    { value: 'account_access', label: 'Account access issue' },
-    { value: 'organization_access', label: 'Organization access issue' },
-    { value: 'user_invitation', label: 'User invitation issue' },
-    { value: 'user_removal', label: 'User removal issue' },
-    { value: 'role_permission', label: 'Role/permission issue' },
-    { value: 'org_profile', label: 'Organization profile issue' },
-    { value: 'password_reset', label: 'Password/reset issue' },
-    { value: 'email_verification', label: 'Email verification issue' },
-    { value: 'account_suspension', label: 'Account suspension issue' },
-    { value: 'feature_access', label: 'Feature access/permission issue' },
-    { value: 'other', label: 'Other' },
-  ],
-  'other': [
-    { value: 'other_issue', label: 'Other issue' },
-  ],
-};
+// FEATURE_ISSUE_TYPES moved to src/lib/ticketCategories.ts -- shared with
+// the dedicated guest support portal (/support/tickets/new) so the two
+// forms' issue-type options never drift apart.
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  open: { label: 'Open', color: 'status-open' },
-  in_progress: { label: 'In Progress', color: 'status-progress' },
-  waiting_user: { label: 'Waiting on You', color: 'status-progress' },
-  resolved: { label: 'Resolved', color: 'status-resolved' },
-  closed: { label: 'Closed', color: 'status-closed' },
-  cancelled: { label: 'Cancelled', color: 'status-closed' },
-};
-
-// Mirrors the backend's CANCELLABLE_STATUSES (support_tickets_public.py) --
-// only shows the Cancel action for tickets that endpoint will actually
-// accept. Resolved/closed/cancelled are terminal.
-const CANCELLABLE_TICKET_STATUSES = new Set(['open', 'in_progress', 'waiting_user']);
+// Status label/color map and the cancellable-status set now live in
+// src/lib/ticketCategories.ts -- shared with the dashboard's Support &
+// History page so both surfaces render ticket status identically.
+const STATUS_META = TICKET_STATUS_META;
 
 interface UserSettings {
   // Chat Preferences
@@ -596,8 +587,9 @@ interface UserSettings {
   showSuggestedQuestions: boolean;
 }
 
-const MessageIcon = () => (
+const MessageIcon = ({ className }: { className?: string }) => (
   <svg
+    className={className}
     width="32"
     height="32"
     viewBox="0 0 32 32"
@@ -607,9 +599,19 @@ const MessageIcon = () => (
     strokeLinecap="round"
     strokeLinejoin="round"
   >
-    <path d="M6 8C6 6.89543 6.89543 6 8 6H24C25.1046 6 26 6.89543 26 8V18C26 19.1046 25.1046 20 24 20H10L6 24V8Z" />
-    <line x1="10" y1="12" x2="18" y2="12" />
-    <line x1="10" y1="16" x2="14" y2="16" />
+    {/* The original single-bubble icon, duplicated (not a new shape) --
+        one copy offset up-left and dimmed to read as "behind", the other
+        at its normal position in front. */}
+    <g opacity="0.55" transform="translate(-3, -3)">
+      <path d="M6 8C6 6.89543 6.89543 6 8 6H24C25.1046 6 26 6.89543 26 8V18C26 19.1046 25.1046 20 24 20H10L6 24V8Z" />
+      <line x1="10" y1="12" x2="18" y2="12" />
+      <line x1="10" y1="16" x2="14" y2="16" />
+    </g>
+    <g transform="translate(2, 2)">
+      <path d="M6 8C6 6.89543 6.89543 6 8 6H24C25.1046 6 26 6.89543 26 8V18C26 19.1046 25.1046 20 24 20H10L6 24V8Z" />
+      <line x1="10" y1="12" x2="18" y2="12" />
+      <line x1="10" y1="16" x2="14" y2="16" />
+    </g>
   </svg>
 );
 
@@ -620,9 +622,46 @@ const ChatApp: React.FC = () => {
   const [isClosed, setIsClosed] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('history');
-  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
+  // Generic "this message's interactive option group has been resolved"
+  // tracker -- shared by every kind of chatbot choice (guided-flow
+  // menuOptions: welcome/topic/subtopic/leaf-question/follow-up, AND a KB
+  // answer's relatedQuestions). One click from a group marks its owning
+  // message id here; the render layer below hides that whole group the
+  // moment its id is in this set, and the click handlers use it to reject
+  // a second click on an already-resolved group (old step re-clicked, or a
+  // rapid double-click), so nothing can fire its action twice.
+  const [answeredOptionGroupIds, setAnsweredOptionGroupIds] = useState<Set<string>>(new Set());
+  // The single in-flight "next bot message" delay (see
+  // scheduleGuidedMessage) -- cleared before scheduling a new one and on
+  // unmount, so a rapid-fire second click can't double-schedule and a
+  // closed/unmounted widget can't append a message after the fact.
+  const guidedMenuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // What that pending timer will run, and whether it is the post-answer
+  // follow-up prompt (droppable) or a navigation step the user already
+  // chose (a menu, the Contact Support redirect) -- see handleSendMessage.
+  const pendingGuidedStepRef = useRef<{ run: () => void; kind: GuidedStepKind } | null>(null);
+  // Date.now() alone can collide between two guided messages created within
+  // the same millisecond (e.g. a scheduled bot message landing right as the
+  // next user click echoes) -- a real bug, not just a timing fluke: an ID
+  // collision with an already-answered message would make the new one look
+  // pre-answered too (answeredOptionGroupIds is keyed by message id), so a
+  // freshly-revealed menu could silently render as permanently disabled.
+  // This counter guarantees uniqueness regardless of timing.
+  const guidedMessageSeqRef = useRef(0);
+  // Bumped by initializeChat (New Chat, Close, account switch): a guided
+  // leaf question whose KB request was still in flight across that reset
+  // must not schedule its follow-up into the fresh conversation.
+  const guidedConversationEpochRef = useRef(0);
+  // Dismissible proactive greeting popup shown to guests on the launcher
+  // before they open the widget (see the isMinimized render branch) --
+  // local UI state, not persisted, so it reappears on the next full visit.
+  const [guestGreetingDismissed, setGuestGreetingDismissed] = useState(false);
+  // Set when a popup option is clicked (before the widget/session is even
+  // initialized) -- consumed by the effect below once the welcome
+  // message's options actually exist, to carry that selection into the
+  // guided flow instead of just opening to the bare welcome screen.
+  const [pendingLauncherSelection, setPendingLauncherSelection] = useState<GuidedMenuOption | null>(null);
 
-  const [activeNavTab, setActiveNavTab] = useState<'chat' | 'history'>('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -665,7 +704,6 @@ const ChatApp: React.FC = () => {
   // drops the other's message.
   const [hasInitialized, setHasInitialized] = useState(false);
   const [isCancellingTicket, setIsCancellingTicket] = useState(false);
-  const [attachmentOpenError, setAttachmentOpenError] = useState<{ ticketId: string; message: string } | null>(null);
   const [messageFeedback, setMessageFeedback] = useState<Map<string, 'yes' | 'no'>>(new Map());
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -699,15 +737,17 @@ const ChatApp: React.FC = () => {
   const [ticketIssueType, setTicketIssueType] = useState<string>('');
   const [ticketStepsToReproduce, setTicketStepsToReproduce] = useState('');
   const [ticketAttachments, setTicketAttachments] = useState<File[]>([]);
-  // Picker message (files over the count/size limit) and, after submit, the
-  // names of files whose upload failed (shown in the success modal).
+  // Picker message, for files over the count/size limit.
   const [attachmentNotice, setAttachmentNotice] = useState('');
-  const [failedAttachmentNames, setFailedAttachmentNames] = useState<string[]>([]);
   const [ticketId, setTicketId] = useState('');
   // Drives the "View Attachment" link(s) in the just-submitted success
   // modal only -- populated with guest view_urls when present (see
   // submitTicket), separate from `tickets`/`selectedTicket` state.
   const [successTicketAttachments, setSuccessTicketAttachments] = useState<TicketAttachmentSummary[]>([]);
+  // Filenames that failed to upload and so were never attached -- shown in
+  // the success modal so a failed attachment is never silently missing with
+  // no explanation (the ticket itself still goes out without it).
+  const [failedTicketAttachmentNames, setFailedTicketAttachmentNames] = useState<string[]>([]);
   const [ticketPriority, setTicketPriority] = useState<1 | 2>(1);
   const [ticketTransactionId, setTicketTransactionId] = useState('');
   const [ticketInvoiceNumber, setTicketInvoiceNumber] = useState('');
@@ -781,6 +821,7 @@ const ChatApp: React.FC = () => {
   });
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
 
   // Backend API is now called via chatbotApi service
   // No need to manually construct URLs - httpClient handles baseURL and authentication
@@ -1004,6 +1045,41 @@ const ChatApp: React.FC = () => {
     loadSettings();
   }, []);
 
+  // Carries a launcher-popup option click (see the isMinimized render
+  // branch) into the guided flow once the widget has actually opened and
+  // initializeChat has set the welcome message's options -- the click
+  // itself only opens the widget; this is what makes that click also land
+  // the user directly on the chosen path instead of just the bare welcome
+  // screen.
+  //
+  // Waits for the conversation to exist (initializeChat's welcome message,
+  // or the one kept across a minimize) and for any in-flight send or
+  // pending guided step to land first -- this re-runs when they do
+  // (messages / isLoading change) -- so a popup pick is never dropped:
+  // not when 'welcome' was already answered before a minimize, and not
+  // when showSuggestedQuestions is off (the welcome has no menuOptions).
+  useEffect(() => {
+    if (!pendingLauncherSelection) return;
+    if (messages.length === 0) return;
+    if (isProcessingRef.current || guidedMenuTimeoutRef.current) return;
+    const selection = pendingLauncherSelection;
+    setPendingLauncherSelection(null);
+    handleGuidedMenuSelect('welcome', selection, { fromLauncher: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, pendingLauncherSelection, isLoading]);
+
+  // Guards against the guided-flow's delayed "next message" firing after
+  // the widget (or the whole component) has gone away -- e.g. closed mid-delay.
+  useEffect(() => {
+    return () => {
+      pendingGuidedStepRef.current = null;
+      if (guidedMenuTimeoutRef.current) {
+        clearTimeout(guidedMenuTimeoutRef.current);
+        guidedMenuTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   // Runs once, immediately after hydration, to correct isLocallyAuthenticated
   // from its forced SSR-safe `false` to the real client-side value -- see
   // the comment on that state. Deliberately NOT gated on hasOpenedRef (unlike
@@ -1199,6 +1275,25 @@ const ChatApp: React.FC = () => {
       }
     };
 
+    // Same-tab credential sign-in / sign-out announces
+    // 'careerbot-account-changed' (src/lib/accountChange.ts), not a storage
+    // event. Deferred one task: signIn() announces before SignUpModal
+    // stamps token_last_refreshed_at, which isUserAuthenticated() reads.
+    // A never-opened widget has nothing to reconcile but its launcher
+    // (guest popup vs bare button), so it only re-reads the auth state.
+    let accountChangedTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribeAccountChanged = onAccountChanged(() => {
+      if (accountChangedTimer) clearTimeout(accountChangedTimer);
+      accountChangedTimer = setTimeout(() => {
+        accountChangedTimer = null;
+        if (!hasOpenedRef.current) {
+          setIsLocallyAuthenticated(isUserAuthenticated());
+          return;
+        }
+        checkAuthStatus();
+      }, 0);
+    });
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('storage', handleStorageChange);
 
@@ -1211,10 +1306,17 @@ const ChatApp: React.FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('storage', handleStorageChange);
+      unsubscribeAccountChanged();
+      if (accountChangedTimer) clearTimeout(accountChangedTimer);
       clearInterval(interval);
     };
   }, [isLocallyAuthenticated]);
 
+  // Fired by renderMarkdownText's action:login buttons (e.g. the "[click
+  // here](action:login)" link getAuthRequiredMessage now appends to
+  // guest auth-prompt text) -- a plain DOM CustomEvent rather than a prop
+  // callback since renderMarkdownText is a module-level function with no
+  // access to this component's handlers.
   useEffect(() => {
     const handleChatbotAction = (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -1308,6 +1410,12 @@ const ChatApp: React.FC = () => {
     };
   }, [deepLinkTicketId, isLocallyAuthenticated, hasInitialized, accountGeneration]);
 
+  // Mirrors the ?ticket= deep link above, for "Continue conversation" on
+  // the dashboard's Support & History page. Fetches the session directly
+  // via getChatSession rather than looking it up in `chatSessions` state --
+  // that state is only populated once the widget's own History tab has been
+  // opened, so depending on it here would race (or simply miss) a session
+  // opened via this link before that ever happens.
   useEffect(() => {
     if (!deepLinkSessionId) return;
     setIsMinimized(false);
@@ -1455,9 +1563,28 @@ const ChatApp: React.FC = () => {
 
   const scrollToBottom = () => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    if (!container) return;
+
+    // Scroll so the TOP of the newest message lands at the top of the
+    // scrollable area, rather than always jumping to scrollHeight. A long
+    // suggested-question list (or any message taller than the visible
+    // area) would otherwise have its top -- and the just-echoed selection
+    // right above it -- scrolled past and out of view, with only its
+    // bottommost edge visible. Falls back to the old bottom-jump when
+    // there's no last-message element yet (e.g. the isLoading typing dots,
+    // which aren't part of `messages`).
+    const lastMessageEl = lastMessageRef.current;
+    if (lastMessageEl) {
+      // getBoundingClientRect (not offsetTop) so this is correct regardless
+      // of which ancestor ends up as the positioned offsetParent.
+      const containerRect = container.getBoundingClientRect();
+      const messageRect = lastMessageEl.getBoundingClientRect();
+      const target = container.scrollTop + (messageRect.top - containerRect.top);
+      container.scrollTo({ top: target, behavior: 'smooth' });
+      return;
     }
+
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   };
 
   // Keyed off the backend's own topic classification (`category`), not the
@@ -1829,8 +1956,18 @@ const ChatApp: React.FC = () => {
       type: 'assistant',
       text: `Hi! I'm CareerBot. 🤖 How can I help you today?`,
       timestamp: new Date(),
+      // Same setting that used to gate the old always-visible quick-menu --
+      // off means a plain welcome message with no guided options, as before.
+      menuOptions: settings.showSuggestedQuestions ? buildInitialMenuOptions() : undefined,
     };
     setMessages([welcomeMessage]);
+    setAnsweredOptionGroupIds(new Set());
+    guidedConversationEpochRef.current += 1;
+    pendingGuidedStepRef.current = null;
+    if (guidedMenuTimeoutRef.current) {
+      clearTimeout(guidedMenuTimeoutRef.current);
+      guidedMenuTimeoutRef.current = null;
+    }
   };
 
   // Legacy localStorage reader. MongoDB is the source of truth for history
@@ -2200,6 +2337,18 @@ const ChatApp: React.FC = () => {
     const messageText = text || inputValue;
     if (!messageText.trim() || !sessionId) return;
 
+    // A guided step still waiting on its delay would otherwise land between
+    // this question and its answer. The post-answer follow-up prompt is
+    // dropped (this send replaces it); a navigation step the user already
+    // chose (its menu is collapsed) runs now, ahead of this question.
+    if (guidedMenuTimeoutRef.current) {
+      clearTimeout(guidedMenuTimeoutRef.current);
+      guidedMenuTimeoutRef.current = null;
+      const pending = pendingGuidedStepRef.current;
+      pendingGuidedStepRef.current = null;
+      if (pending?.kind === 'navigation') pending.run();
+    }
+
     // Mark that we're processing a request
     isProcessingRef.current = true;
     // A sign-out / account switch while this is in flight: drop the result
@@ -2379,6 +2528,176 @@ const ChatApp: React.FC = () => {
     }
   };
 
+  // A KB answer's relatedQuestions are their own interactive option group
+  // (same lifecycle as a guided-flow menu): marking the owning message
+  // answered here, synchronously before handleSendMessage's own
+  // isProcessingRef guard would even run, is what makes the render layer
+  // hide the rest of that group immediately -- and rejects a second click
+  // on the same group (rapid double-click, or clicking a different
+  // sibling after the first already answered).
+  const handleRelatedQuestionSelect = (messageId: string, question: string) => {
+    if (answeredOptionGroupIds.has(messageId) || isProcessingRef.current) {
+      return;
+    }
+    setAnsweredOptionGroupIds((prev) => new Set(prev).add(messageId));
+    handleSendMessage(question);
+  };
+
+  const appendGuidedMessage = (text: string, menuOptions?: GuidedMenuOption[]) => {
+    const message: Message = {
+      id: `guided-bot-${Date.now()}-${guidedMessageSeqRef.current++}`,
+      type: 'assistant',
+      text,
+      timestamp: new Date(),
+      menuOptions,
+    };
+    setMessages((prev) => [...prev, message]);
+  };
+
+  // Schedules the next guided-flow bot message after a short, natural-feeling
+  // delay instead of popping it in instantly. Clears any already-pending
+  // timer first (defensive -- handleGuidedMenuSelect's own busy guard should
+  // already prevent two ever being in flight at once) so a message can never
+  // be appended twice from an overlapping schedule.
+  const scheduleGuidedMessage = (run: () => void, delayMs: number = 1200, kind: GuidedStepKind = 'navigation') => {
+    if (guidedMenuTimeoutRef.current) {
+      clearTimeout(guidedMenuTimeoutRef.current);
+    }
+    pendingGuidedStepRef.current = { run, kind };
+    guidedMenuTimeoutRef.current = setTimeout(() => {
+      guidedMenuTimeoutRef.current = null;
+      pendingGuidedStepRef.current = null;
+      run();
+    }, delayMs);
+  };
+
+  // Resolves one click on a guided-flow menu option. 'question' is the only
+  // leaf action that reaches the backend -- it goes through the exact same
+  // handleSendMessage() every typed message already uses, unchanged, so KB
+  // answers, confidence gating, sources, and related questions all work
+  // identically to a typed question. Every other action is pure navigation:
+  // echoes the user's choice as its own message, then reveals the next
+  // step's message (and that step's options) after a short delay.
+  // fromLauncher: a launcher-popup pick (see the pendingLauncherSelection
+  // effect) is a fresh choice, not a re-click -- it may arrive after the
+  // welcome menu was already answered (picked, minimized, picked again).
+  const handleGuidedMenuSelect = async (
+    messageId: string,
+    option: GuidedMenuOption,
+    { fromLauncher = false }: { fromLauncher?: boolean } = {},
+  ) => {
+    // Blocks: (1) re-clicking a menu that already produced its next step,
+    // (2) clicking while a KB call from a typed/leaf question is already in
+    // flight, (3) clicking while an earlier guided click's delayed message
+    // hasn't landed yet -- all three would otherwise risk duplicate or
+    // out-of-order messages.
+    if ((!fromLauncher && answeredOptionGroupIds.has(messageId)) || isProcessingRef.current || guidedMenuTimeoutRef.current) {
+      return;
+    }
+    setAnsweredOptionGroupIds((prev) => new Set(prev).add(messageId));
+
+    const { action, label } = option;
+
+    if (action.kind === 'question') {
+      const { topic } = action;
+      const epoch = guidedConversationEpochRef.current;
+      const generation = accountGenerationRef.current;
+      await handleSendMessage(action.question);
+      // New Chat / Close / account switch while the answer loaded: that
+      // conversation is gone, so no follow-up for it.
+      if (epoch !== guidedConversationEpochRef.current || generation !== accountGenerationRef.current) return;
+      scheduleGuidedMessage(() => {
+        appendGuidedMessage('Is there anything else I can help with?', buildFollowUpOptions(topic));
+      }, 1200, 'follow-up');
+      return;
+    }
+
+    // Every remaining action is navigation, not a real question -- echo the
+    // user's choice as its own chat bubble (handleSendMessage does this
+    // itself for 'question'; the rest need it done explicitly here).
+    const userEcho: Message = {
+      id: `guided-user-${Date.now()}-${guidedMessageSeqRef.current++}`,
+      type: 'user',
+      text: label,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userEcho]);
+
+    switch (action.kind) {
+      case 'topic': {
+        const topic = action.topic;
+        scheduleGuidedMessage(() => {
+          appendGuidedMessage(GUIDED_TOPIC_PROMPTS[topic], buildTopicQuestionOptions(topic, isLocallyAuthenticated));
+        });
+        break;
+      }
+      case 'support-menu':
+        scheduleGuidedMessage(() => {
+          appendGuidedMessage('Sure — what do you need help with?', buildSupportMenuOptions());
+        });
+        break;
+      case 'initial-menu':
+        scheduleGuidedMessage(() => {
+          appendGuidedMessage('No problem! What would you like to know?', buildInitialMenuOptions());
+        });
+        break;
+      case 'continue-or-explore': {
+        const topic = action.topic;
+        scheduleGuidedMessage(() => {
+          appendGuidedMessage(
+            'Would you like to continue with this topic, or explore something different?',
+            buildContinueOrExploreOptions(topic),
+          );
+        });
+        break;
+      }
+      case 'continue-topic': {
+        const topic = action.topic;
+        // Reuses the exact same KB question data as the initial topic
+        // list (buildTopicQuestionOptions), just filtered against what's
+        // already been asked this conversation -- captured now, from the
+        // current messages, not re-read inside the delayed callback below,
+        // so a later message landing in between can't change this list
+        // out from under the decision the user just made.
+        const alreadyAsked = new Set(messages.filter((m) => m.type === 'user').map((m) => m.text));
+        const remaining = buildTopicQuestionOptions(topic, isLocallyAuthenticated).filter(
+          (opt) => opt.action.kind !== 'question' || !alreadyAsked.has(opt.action.question),
+        );
+        scheduleGuidedMessage(() => {
+          if (remaining.length === 0) {
+            appendGuidedMessage("You've already asked about everything in this topic! What would you like to know?", buildInitialMenuOptions());
+          } else {
+            appendGuidedMessage('Sure — here are the remaining questions on this topic:', remaining);
+          }
+        });
+        break;
+      }
+      case 'contact-support':
+        // Shorter delay -- just a beat after the echoed choice before the
+        // redirect, rather than an instant, jarring navigation.
+        scheduleGuidedMessage(() => {
+          redirectToTicketPage();
+        }, 600);
+        break;
+      case 'all-set':
+        scheduleGuidedMessage(() => {
+          appendGuidedMessage('Glad I could help! Feel free to start a new conversation anytime. 😊');
+        });
+        break;
+    }
+  };
+
+  // A guest clicked one of the 3 options directly on the launcher's
+  // proactive greeting popup, before the widget was even open. Opens the
+  // widget (same as clicking the launcher bubble itself) and remembers the
+  // choice; the effect watching pendingLauncherSelection carries it into
+  // the guided flow once initializeChat has actually set up the welcome
+  // message to click "through".
+  const handleLauncherOptionSelect = (option: GuidedMenuOption) => {
+    setPendingLauncherSelection(option);
+    setIsMinimized(false);
+  };
+
   // Handle menu option selection with response
   const handleStartVoiceRecording = async () => {
     try {
@@ -2487,32 +2806,46 @@ const ChatApp: React.FC = () => {
 
     setMessages([]);
     setInputValue('');
+    // The sidebar's "New Conversation" button calls this too: close the
+    // overlay (a no-op for the bottom-nav New Chat, where it is closed).
     setIsHistoryOpen(false);
     initializeChat();
   };
 
-  // Sends the user to the real ticketing page instead of the in-widget
-  // modal below (openTicketModal/submitTicket, left in place rather than
-  // removed in this pass). /support/tickets/new handles both guest and
-  // authenticated users (see its own getProfile() fallback), so every
-  // caller here goes to the same destination today.
-  //
-  // NOTE: /dashboard/support-history (this branch) has its OWN purpose-
-  // built reception logic for this redirect (?raise=1&question=&answer=,
-  // see that file's own comment on raiseContext) that nothing currently
-  // feeds -- an earlier version of this comment claimed no such page
-  // existed "on this branch", which this branch itself now contradicts.
-  // Whether authenticated users should land there instead of here is an
-  // open product decision, not resolved by this comment fix.
+  // Every "raise a ticket" entry point in the widget (the guided flow's
+  // Contact Support option, the "Raise a support ticket →" link under an
+  // unhelpful answer, and the input-footer link) sends the user to the real
+  // ticketing page instead of popping the in-widget modal open -- guests to
+  // the dedicated guest portal, authenticated users to the dashboard's
+  // Support Center, which carries its own full ticket list/history
+  // alongside ticket creation. The original Q&A travels along so the
+  // destination can prefill the ticket subject and send it to the backend,
+  // same as the old modal did. Both routes get it via sessionStorage (see
+  // stashTicketContext, ?ctx=) rather than the URL, which would land in
+  // browser history and access logs and, at 2 x MAX_TICKET_QA_CHARS, can
+  // exceed proxy URL limits; ?question=&answer= are only the fallback when
+  // sessionStorage fails. (The in-widget modal below, openTicketModal/
+  // submitTicket, is left in place but no longer opened.)
   const redirectToTicketPage = (context?: { originalQuestion?: string; chatbotAnswer?: string }) => {
     const { originalQuestion, chatbotAnswer } = context || {};
-    const params = new URLSearchParams();
     // Capped here, at the source, same limit the backend enforces on
     // original_question/chatbot_answer -- an uncapped KB answer could run
     // to several thousand characters and the receiving form must not have
     // to guess whether to trust what showed up in the URL.
     const question = (originalQuestion || '').slice(0, MAX_TICKET_QA_CHARS);
     const answer = (chatbotAnswer || '').slice(0, MAX_TICKET_QA_CHARS);
+
+    // The widget stays mounted globally, but both destination pages are
+    // full-screen and chatbot-excluded -- minimizing first avoids a flash
+    // of the open panel before the navigation actually lands.
+    setIsMinimized(true);
+
+    const params = new URLSearchParams();
+    const signedIn = isUserAuthenticated();
+    if (signedIn) {
+      params.set('tab', 'tickets');
+      params.set('raise', '1');
+    }
     // Out of the URL when sessionStorage works (see stashTicketContext).
     const contextId = question || answer ? stashTicketContext(question, answer) : null;
     if (contextId) params.set(TICKET_CONTEXT_PARAM, contextId);
@@ -2521,8 +2854,8 @@ const ChatApp: React.FC = () => {
       if (answer) params.set('answer', answer);
     }
     const query = params.toString();
-    setIsMinimized(true);
-    router.push(`/support/tickets/new${query ? `?${query}` : ''}`);
+    const destination = signedIn ? '/dashboard/support-history' : '/support/tickets/new';
+    router.push(`${destination}${query ? `?${query}` : ''}`);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy modal, kept (see redirectToTicketPage)
@@ -2772,12 +3105,6 @@ const ChatApp: React.FC = () => {
         alert('Please verify your email with OTP before submitting the ticket');
         return;
       }
-
-      // Require issue type for non-auth users
-      if (!ticketIssueType.trim()) {
-        alert('Please select an issue type');
-        return;
-      }
     }
 
     setIsSubmittingTicket(true);
@@ -2791,7 +3118,7 @@ const ChatApp: React.FC = () => {
       // call below rather than needing a second round-trip to attach it.
       const generation = accountGenerationRef.current;
       let uploadedAttachments: TicketAttachmentSummary[] = [];
-      let failedNames: string[] = [];
+      let failedAttachmentNames: string[] = [];
       if (ticketAttachments.length > 0) {
         const results = await Promise.allSettled(
           ticketAttachments.map((file) => uploadTicketAttachment(file))
@@ -2799,10 +3126,15 @@ const ChatApp: React.FC = () => {
         uploadedAttachments = results
           .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof uploadTicketAttachment>>> => r.status === 'fulfilled')
           .map((r) => ({ attachment_id: r.value.attachment_id, filename: r.value.filename }));
-
-        failedNames = ticketAttachments.filter((_, i) => results[i].status === 'rejected').map((f) => f.name);
-        if (failedNames.length > 0) {
-          console.error(`${failedNames.length} of ${ticketAttachments.length} attachment(s) failed to upload; continuing without them`);
+        // A failed upload must never silently vanish -- the ticket still
+        // goes out without it (resilience), but the success modal below
+        // tells the submitter which file(s) didn't make it, not just the
+        // console.
+        failedAttachmentNames = results
+          .map((r, i) => (r.status === 'rejected' ? ticketAttachments[i].name : null))
+          .filter((name): name is string => name !== null);
+        if (failedAttachmentNames.length > 0) {
+          console.error(`${failedAttachmentNames.length} of ${ticketAttachments.length} attachment(s) failed to upload; continuing without them`);
         }
       }
       // Signed out / switched account during the uploads: never create the
@@ -2825,7 +3157,9 @@ const ChatApp: React.FC = () => {
         attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
         issue_details: {
           feature: featureToSubmit,
-          issue_type: ticketIssueType,
+          // Issue Type is an authenticated-only field -- there's no UI for
+          // a guest to set it, so never send it (not even empty) for them.
+          issue_type: isUserAuthenticated() ? ticketIssueType : undefined,
           steps_to_reproduce: ticketStepsToReproduce,
           priority: ticketPriority,
           requester_name: ticketName || undefined,
@@ -2889,7 +3223,7 @@ const ChatApp: React.FC = () => {
 
       setTicketId(escalationData.ticket_id);
       setSuccessTicketAttachments(attachmentsWithViewUrls);
-      setFailedAttachmentNames(failedNames);
+      setFailedTicketAttachmentNames(failedAttachmentNames);
       setTickets((prev) => {
         const updated = [ticket, ...prev];
         // Save to localStorage for persistence
@@ -2988,35 +3322,57 @@ const ChatApp: React.FC = () => {
   if (isMinimized) {
     return (
       <div className="chatbot-root">
-        <div className="launcher-container launcher-with-gap">
-          <div className="launcher-tooltip-wrapper">
-            {/* Authenticated users only get the bare launcher button (no
-                auto-shown bubble) — the chat must never pop open on its own
-                after login, only on explicit click. Guests keep the existing
-                greeting bubble. */}
-            {!isLocallyAuthenticated && (
-              <div className="greeting-bubble-tooltip">
-                <div className="bubble-left-icon">
-                  <span className="bubble-bot-icon">🤖</span>
-                  <span className="bubble-status-dot" />
-                </div>
-                <div className="bubble-content">
-                  <h3 className="bubble-title">{selectedApp} Support</h3>
-                  <p className="bubble-subtitle">How can we help?</p>
-                </div>
-                <div className="bubble-pointer" />
-              </div>
-            )}
-
+        {/* Authenticated users only get the bare launcher button (no
+            auto-shown popup) — the chat must never pop open on its own
+            after login, only on explicit click. Guests get a proactive
+            greeting popup with the same 3 options the chat itself opens
+            with, so picking one here jumps straight into that path
+            (handleLauncherOptionSelect) instead of requiring an extra
+            "open chat, then pick an option" step. */}
+        {!isLocallyAuthenticated && !guestGreetingDismissed && (
+          <div className="greeting-popup-card">
             <button
-              className="floating-chat-button"
-              onClick={() => setIsMinimized(false)}
-              title="Chatbot Support"
-              aria-label="Chatbot Support"
+              className="greeting-popup-close"
+              onClick={() => setGuestGreetingDismissed(true)}
+              aria-label="Dismiss"
+              title="Dismiss"
             >
-              <MessageIcon />
+              ✕
             </button>
+            <div className="greeting-popup-header">
+              <span className="greeting-popup-icon">🤖</span>
+              <span className="greeting-popup-title">{selectedApp} Support</span>
+            </div>
+            <div className="greeting-popup-scroll">
+              <p className="greeting-popup-text">
+                Welcome! Whether you&apos;re exploring our features or need specific help, we&apos;re here for you.
+              </p>
+              <p className="greeting-popup-question">How can I help you today?</p>
+              <div className="greeting-popup-options">
+                {buildInitialMenuOptions().map((option, idx) => (
+                  <button
+                    key={idx}
+                    className="greeting-popup-option-btn"
+                    onClick={() => handleLauncherOptionSelect(option)}
+                    title={option.label}
+                  >
+                    <span className="option-label">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+        )}
+
+        <div className="launcher-container launcher-single">
+          <button
+            className="floating-chat-button"
+            onClick={() => setIsMinimized(false)}
+            title="Chatbot Support"
+            aria-label="Chatbot Support"
+          >
+            <MessageIcon className={!isLocallyAuthenticated ? 'message-icon-rotate' : undefined} />
+          </button>
         </div>
       </div>
     );
@@ -3181,157 +3537,13 @@ const ChatApp: React.FC = () => {
 
         {/* Messages Area */}
         <div className="messages-container" ref={messagesContainerRef}>
-          {settings.showSuggestedQuestions && (
-            <div className="top-suggestions">
-              <div className="top-suggestions-title">How can we help?</div>
-              <div className="top-suggestions-questions help-questions">
-                <button
-                  className="feature-question-btn help-question"
-                  onClick={() => setExpandedMenu(expandedMenu === 'features' ? null : 'features')}
-                  style={{position: 'relative'}}
-                >
-                  {expandedMenu === 'features' ? '▼' : '▶'} I want to know more about the products and features
-                </button>
-                {expandedMenu === 'features' && (
-                  // 6 buttons, one per topic (Resume Building, Job Match,
-                  // Mock Interview, Mock Test, Coding Assessment, English
-                  // Assessment) -- auth-aware, same pattern as Login &
-                  // Account. Guests get introductory "what is this"
-                  // questions; authenticated users get practical
-                  // "how do I use this" questions. Every phrase verified
-                  // live against the backend to resolve to its intended
-                  // topic before being added; the two English Assessment
-                  // and two Coding/Mock Test proposals that failed to
-                  // route at all were replaced (see ChatApp test file /
-                  // session notes for the rejected originals).
-                  <div className="features-grid">
-                    {isLocallyAuthenticated ? (
-                      <>
-                        <button onClick={() => handleSendMessage('How can I create or update my resume?')} className="feature-card">📄 How can I create or update my resume?</button>
-                        <button onClick={() => handleSendMessage('How can I check my resume match for a specific job?')} className="feature-card">🎯 How can I check my resume match for a specific job?</button>
-                        <button onClick={() => handleSendMessage('How can I start a Mock Interview and review my feedback?')} className="feature-card">🎤 How can I start a Mock Interview and review my feedback?</button>
-                        <button onClick={() => handleSendMessage('Where can I take a Mock Test and see my results?')} className="feature-card">📊 Where can I take a Mock Test and see my results?</button>
-                        <button onClick={() => handleSendMessage('Where can I practice coding problems and review my performance?')} className="feature-card">💻 Where can I practice coding problems and review my performance?</button>
-                        <button onClick={() => handleSendMessage('How can I take an English Assessment and review my performance?')} className="feature-card">🗣️ How can I take an English Assessment and review my performance?</button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => handleSendMessage('What can CareerBot help me do with my resume?')} className="feature-card">📄 What can CareerBot help me do with my resume?</button>
-                        <button onClick={() => handleSendMessage('How does Job Match help me find suitable jobs?')} className="feature-card">🎯 How does Job Match help me find suitable jobs?</button>
-                        <button onClick={() => handleSendMessage('What is a Mock Interview, and how does it work?')} className="feature-card">🎤 What is a Mock Interview, and how does it work?</button>
-                        <button onClick={() => handleSendMessage('What is a Mock Test, and what can I practice?')} className="feature-card">📊 What is a Mock Test, and what can I practice?</button>
-                        <button onClick={() => handleSendMessage('How can CareerBot help me assess my coding skills?')} className="feature-card">💻 How can CareerBot help me assess my coding skills?</button>
-                        <button onClick={() => handleSendMessage('What is the English Assessment and how does it work?')} className="feature-card">🗣️ What is the English Assessment and how does it work?</button>
-                      </>
-                    )}
-                  </div>
-                )}
-                <button
-                  className="feature-question-btn help-question"
-                  onClick={() => setExpandedMenu(expandedMenu === 'pricing' ? null : 'pricing')}
-                  style={{position: 'relative'}}
-                >
-                  {expandedMenu === 'pricing' ? '▼' : '▶'} Tell me about subscription plans and pricing
-                </button>
-                {expandedMenu === 'pricing' && (
-                  <div className="features-grid">
-                    <button onClick={() => handleSendMessage('What is included in the Free Plan?')} className="feature-card">✅ What is included in the Free Plan?</button>
-                    <button onClick={() => handleSendMessage('What features are available in the Premium Plan?')} className="feature-card">💎 What features are in the Premium Plan?</button>
-                    <button onClick={() => handleSendMessage('What does the Enterprise Plan include?')} className="feature-card">🏢 What does the Enterprise Plan include?</button>
-                    <button onClick={() => handleSendMessage('What are the differences between the plans?')} className="feature-card">📊 What are the differences between plans?</button>
-                    <button onClick={() => handleSendMessage('How can I upgrade my plan?')} className="feature-card">⬆️ How can I upgrade my plan?</button>
-                    <button onClick={() => handleSendMessage('What is the refund policy?')} className="feature-card">💯 What is the refund policy?</button>
-                    <button onClick={() => handleSendMessage('How much does the Premium Plan cost?')} className="feature-card">💰 How much does Premium cost?</button>
-                    <button onClick={() => handleSendMessage('Can I cancel my subscription?')} className="feature-card">❌ Can I cancel my subscription?</button>
-                    <button onClick={() => handleSendMessage('Can I change my subscription plan?')} className="feature-card">🔄 Can I change my plan?</button>
-                  </div>
-                )}
-                <button
-                  className="feature-question-btn help-question"
-                  onClick={() => setExpandedMenu(expandedMenu === 'career-help' ? null : 'career-help')}
-                  style={{position: 'relative'}}
-                >
-                  {expandedMenu === 'career-help' ? '▼' : '▶'} How can CareerBot help me improve my career?
-                </button>
-                {expandedMenu === 'career-help' && (
-                  <div className="features-grid">
-                    <button onClick={() => handleSendMessage('How can I optimize my resume?')} className="feature-card">✨ How can I optimize my resume?</button>
-                    <button onClick={() => handleSendMessage('How can I prepare for an interview?')} className="feature-card">🎤 How can I prepare for an interview?</button>
-                    <button onClick={() => handleSendMessage('How can I improve my job search strategy?')} className="feature-card">🔍 How can I improve my job search?</button>
-                    <button onClick={() => handleSendMessage('How can I improve my skills?')} className="feature-card">🧠 How can I improve my skills?</button>
-                    <button onClick={() => handleSendMessage('How can CareerBot help me plan my career?')} className="feature-card">🗺️ How can I plan my career?</button>
-                    <button onClick={() => handleSendMessage('How can I improve my professional networking?')} className="feature-card">🤝 How can I improve networking?</button>
-                    <button onClick={() => handleSendMessage('How can I prepare for my next job?')} className="feature-card">🚀 How can I prepare for my next job?</button>
-                    <button onClick={() => handleSendMessage('How can I improve my chances of getting a job?')} className="feature-card">⭐ How can I improve my job chances?</button>
-                  </div>
-                )}
-                <button
-                  className="feature-question-btn help-question"
-                  onClick={() => setExpandedMenu(expandedMenu === 'help-login-account' ? null : 'help-login-account')}
-                  style={{position: 'relative'}}
-                >
-                  {expandedMenu === 'help-login-account' ? '▼' : '▶'} Login & Account
-                </button>
-                {expandedMenu === 'help-login-account' && (
-                  <div className="features-grid">
-                    {isLocallyAuthenticated ? (
-                      // Authenticated: account-management first -- none of
-                      // these are "how do I get into my account" questions,
-                      // since the user is already in. "Why can't I save my
-                      // profile changes?" was deliberately left out: it has
-                      // no distinct KB answer (falls back to the same
-                      // generic profile_building blurb, which doesn't
-                      // actually address a save failure) -- an unsupported
-                      // question, not a real topic.
-                      <>
-                        <button onClick={() => handleSendMessage('How can I update my profile information?')} className="feature-card">👤 How can I update my profile information?</button>
-                        {/* No dedicated "change password while logged in" page
-                            exists in this app -- verified against the real
-                            router. This still routes to the one real reset
-                            flow (same KB topic as "I forgot my password"),
-                            which is the only supported mechanism. */}
-                        <button onClick={() => handleSendMessage('How can I change my password?')} className="feature-card">🔐 How can I change my password?</button>
-                        <button onClick={() => handleSendMessage('How can I update my registered email address?')} className="feature-card">📧 How can I update my registered email address?</button>
-                        <button onClick={() => handleSendMessage('How do I sign out of my account?')} className="feature-card">🚪 How do I sign out of my account?</button>
-                        <button onClick={() => handleSendMessage('Why do I keep getting signed out unexpectedly?')} className="feature-card">🔄 Why do I keep getting signed out unexpectedly?</button>
-                      </>
-                    ) : (
-                      // Guest: access/troubleshooting -- getting INTO the
-                      // account, not managing it once inside.
-                      <>
-                        <button onClick={() => handleSendMessage("Why can't I log in to my account?")} className="feature-card">⚠️ Why can&apos;t I log in to my account?</button>
-                        <button onClick={() => handleSendMessage('I forgot my password. How can I reset it?')} className="feature-card">🔑 I forgot my password. How can I reset it?</button>
-                        <button onClick={() => handleSendMessage('Why am I not receiving the OTP?')} className="feature-card">📧 Why am I not receiving the OTP?</button>
-                        <button onClick={() => handleSendMessage('My account is locked. How can I unlock it?')} className="feature-card">🔒 My account is locked. How can I unlock it?</button>
-                        <button onClick={() => handleSendMessage('Why are my login credentials not being accepted?')} className="feature-card">🆔 Why are my login credentials not being accepted?</button>
-                      </>
-                    )}
-                  </div>
-                )}
-                <button
-                  className="feature-question-btn help-question"
-                  onClick={() => setExpandedMenu(expandedMenu === 'help-payment' ? null : 'help-payment')}
-                  style={{position: 'relative'}}
-                >
-                  {expandedMenu === 'help-payment' ? '▼' : '▶'} Do you need help with a payment?
-                </button>
-                {expandedMenu === 'help-payment' && (
-                  <div className="features-grid">
-                    <button onClick={() => handleSendMessage('How can I check my payment status?')} className="feature-card">📊 How can I check my payment status?</button>
-                    <button onClick={() => handleSendMessage('Why was money deducted but my payment is not confirmed?')} className="feature-card">⚠️ Why was money deducted but payment not confirmed?</button>
-                    <button onClick={() => handleSendMessage('Why were my credits not added after payment?')} className="feature-card">💰 Why were my credits not added after payment?</button>
-                    <button onClick={() => handleSendMessage('How can I report an unauthorized payment?')} className="feature-card">🚨 How can I report an unauthorized payment?</button>
-                    <button onClick={() => handleSendMessage('How can I get help with a payment issue?')} className="feature-card">🆘 How can I get help with a payment issue?</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
           {messages.map((message, messageIndex) => {
+            const isLastMessage = messageIndex === messages.length - 1;
+
             if (message.type === 'system' && message.ticket) {
               const meta = STATUS_META[message.ticket.status] || STATUS_META.open;
               return (
-                <div key={message.id} className="ticket-confirmation">
+                <div key={message.id} className="ticket-confirmation" ref={isLastMessage ? lastMessageRef : undefined}>
                   <div className="ticket-confirmation-icon">🎉</div>
                   <div className="ticket-confirmation-body">
                     <strong style={{ display: 'block', marginBottom: '8px' }}>{message.text}</strong>
@@ -3359,7 +3571,7 @@ const ChatApp: React.FC = () => {
             }
 
             return (
-              <div key={message.id} className={`message ${message.type}`}>
+              <div key={message.id} className={`message ${message.type}`} ref={isLastMessage ? lastMessageRef : undefined}>
                 <div className="message-avatar">
                   {message.type === 'user' ? (
                     <span className="avatar-circle user-avatar">👤</span>
@@ -3379,6 +3591,13 @@ const ChatApp: React.FC = () => {
                       return <div className="message-text">{message.text}</div>;
                     }
 
+                    // renderMarkdownText handles **bold** and inline
+                    // [text](url) markdown embedded directly in the
+                    // backend's answer text (e.g. getAuthRequiredMessage's
+                    // "[click here](action:login)"). message.actionLink is
+                    // separate, structured data attached to the message
+                    // object by getActionLink -- not markdown in the text
+                    // itself -- so it's still appended independently below.
                     return (
                       <div className="message-text">
                         {renderMarkdownText(message.text)}
@@ -3410,7 +3629,17 @@ const ChatApp: React.FC = () => {
                       <small>Sources: {message.sources.join(', ')}</small>
                     </div>
                   )}
-                  {message.relatedQuestions && message.relatedQuestions.length > 0 && (
+                  {/* Every interactive option group (relatedQuestions here,
+                      menuOptions below) collapses entirely -- not just
+                      disables -- the instant its owning message is marked
+                      answered, at every conversation level (initial
+                      welcome, topic, subtopic, leaf KB question, related
+                      questions, follow-up). The message keeps its data
+                      either way (only rendering is gated), so a fresh
+                      instance of the same group reappearing later --
+                      "I have more questions", revisiting a topic -- is its
+                      own new message, unaffected by this one collapsing. */}
+                  {message.relatedQuestions && message.relatedQuestions.length > 0 && !answeredOptionGroupIds.has(message.id) && (
                     <div className="related-questions">
                       <div className="related-questions-label">Related questions:</div>
                       <div className="related-questions-list">
@@ -3418,19 +3647,44 @@ const ChatApp: React.FC = () => {
                           <button
                             key={idx}
                             className="related-question-btn"
-                            onClick={() => handleSendMessage(question)}
+                            onClick={() => handleRelatedQuestionSelect(message.id, question)}
                             disabled={isLoading}
-                            title={isLoading ? 'Please wait for the previous response' : 'Click to ask this question'}
+                            // The visible label is CSS-truncated to one line
+                            // (text-overflow: ellipsis) -- title surfaces the
+                            // full question on hover so nothing is lost; a
+                            // screen reader already gets the full text from
+                            // the button's own content regardless of the
+                            // visual clipping.
+                            title={isLoading ? 'Please wait for the previous response' : question}
                             style={{ opacity: isLoading ? 0.5 : 1, cursor: isLoading ? 'not-allowed' : 'pointer' }}
                           >
-                            {question}
+                            <span className="option-label">{question}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {message.type === 'assistant' && message.id !== 'welcome' && message.id !== 'error' && (
+                  {message.menuOptions && message.menuOptions.length > 0 && !answeredOptionGroupIds.has(message.id) && (
+                    <div className="guided-menu-options">
+                      {message.menuOptions.map((option, idx) => (
+                        <button
+                          key={idx}
+                          className="guided-menu-btn"
+                          onClick={() => handleGuidedMenuSelect(message.id, option)}
+                          disabled={isLoading}
+                          // Same reasoning as related-question-btn's title
+                          // above -- full text available on hover once the
+                          // label is CSS-truncated to a single line.
+                          title={option.label}
+                        >
+                          <span className="option-label">{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {message.type === 'assistant' && message.id !== 'welcome' && message.id !== 'error' && !message.menuOptions && (
                     <div className="message-feedback">
                       {!messageFeedback.has(message.id) ? (
                         <div className="feedback-question">
@@ -3523,22 +3777,32 @@ const ChatApp: React.FC = () => {
             </button>
           </div>
 
-          {/* Bottom Navigation Tabs */}
+          {/* Bottom Navigation Tabs -- New Chat starts a fresh conversation
+              in place; History leaves the widget entirely for the
+              dashboard's Support & History page, which now owns both
+              conversation history and ticket management (see that page's
+              own file for the listing/raise-ticket UI this replaced here). */}
           <div className="bottom-nav">
             <button
-              className={`nav-tab ${activeNavTab === 'chat' ? 'active' : ''}`}
-              onClick={() => { setActiveNavTab('chat'); setIsHistoryOpen(false); }}
-              title="Chat"
+              className="nav-tab"
+              onClick={startNewChat}
+              title="New Chat"
             >
               <svg className="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M12 5v14M5 12h14" />
               </svg>
-              <span>Chat</span>
+              <span>New Chat</span>
             </button>
             {isLocallyAuthenticated && isUserAuthenticated() && (
               <button
-                className={`nav-tab ${activeNavTab === 'history' ? 'active' : ''}`}
-                onClick={() => { setActiveNavTab('history'); openHistory(); }}
+                className="nav-tab"
+                onClick={() => {
+                  // Support & History is a full page, not a widget view --
+                  // collapse the floating panel first so it doesn't sit on
+                  // top of that page obstructing it.
+                  setIsMinimized(true);
+                  router.push('/dashboard/support-history');
+                }}
                 title="History"
               >
                 <svg className="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -3649,20 +3913,6 @@ const ChatApp: React.FC = () => {
                     <option value="professional">Professional</option>
                     <option value="organization">Organization</option>
                     <option value="other">Other</option>
-                  </select>
-
-                  <label className="field-label">Issue Type <span className="required">*</span></label>
-                  <select
-                    className="field-input"
-                    value={ticketIssueType}
-                    onChange={(e) => setTicketIssueType(e.target.value)}
-                  >
-                    <option value="">Select an issue type...</option>
-                    {(FEATURE_ISSUE_TYPES['login-issues'] || []).map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
                   </select>
                 </>
               )}
@@ -3849,7 +4099,7 @@ const ChatApp: React.FC = () => {
                 disabled={
                   !ticketSubject.trim() ||
                   !ticketDescription.trim() ||
-                  (!isUserAuthenticated() && (!ticketName.trim() || !ticketEmail.trim() || !ticketUserType.trim() || !ticketIssueType.trim() || !isOtpVerified)) ||
+                  (!isUserAuthenticated() && (!ticketName.trim() || !ticketEmail.trim() || !ticketUserType.trim() || !isOtpVerified)) ||
                   (isUserAuthenticated() && !ticketFeature) ||
                   isSubmittingTicket
                 }
@@ -3963,22 +4213,25 @@ const ChatApp: React.FC = () => {
             {successTicketAttachments.length > 0 && (
               <div className="ticket-attachments-box">
                 <label>Attachment{successTicketAttachments.length > 1 ? 's' : ''}:</label>
-                {successTicketAttachments.map((att) =>
-                  att.view_url ? (
-                    <p key={att.attachment_id}>
-                      📎 <a href={att.view_url} target="_blank" rel="noopener noreferrer">{att.filename}</a>
-                    </p>
-                  ) : (
-                    <p key={att.attachment_id}>📎 {att.filename}</p>
-                  )
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                  {successTicketAttachments.map((att) => (
+                    <TicketAttachmentLink key={att.attachment_id} ticketId={ticketId} attachment={att} />
+                  ))}
+                </div>
               </div>
             )}
 
-            {failedAttachmentNames.length > 0 && (
-              <p role="alert" style={{ fontSize: '12px', color: '#b45309', marginTop: '6px' }}>
-                These files could not be attached, so the ticket was created without them: {failedAttachmentNames.join(', ')}
-              </p>
+            {failedTicketAttachmentNames.length > 0 && (
+              <div className="ticket-attachments-box" style={{ color: '#b45309' }}>
+                <label>
+                  {failedTicketAttachmentNames.length === 1 ? "Couldn't attach this file" : "Couldn't attach these files"}:
+                </label>
+                <p style={{ marginTop: '6px' }}>
+                  {failedTicketAttachmentNames.join(', ')} -- the ticket was submitted without{' '}
+                  {failedTicketAttachmentNames.length === 1 ? 'it' : 'them'}. Reply to the confirmation email to send{' '}
+                  {failedTicketAttachmentNames.length === 1 ? 'it' : 'them'} another way.
+                </p>
+              </div>
             )}
 
             <div className="success-modal-footer">
@@ -4059,38 +4312,25 @@ const ChatApp: React.FC = () => {
                   <>
                     <label className="field-label">Attachments</label>
                     <div style={{ marginBottom: '16px' }}>
-                      {selectedTicket.attachments.map((att) => (
-                        <div key={att.attachment_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                          <span>📎 {att.filename}</span>
-                          {isLocallyAuthenticated ? (
-                            // Credentialed fetch, not a raw <a href>: that 403s
-                            // once the access cookie expires (see
-                            // openOrDownloadTicketAttachment).
-                            <button
-                              type="button"
-                              className="link-btn"
-                              onClick={() => {
-                                const ticketId = selectedTicket.id;
-                                setAttachmentOpenError(null);
-                                openOrDownloadTicketAttachment(ticketId, att.attachment_id, att.filename).catch(() =>
-                                  setAttachmentOpenError({ ticketId, message: "Couldn't open this attachment. Please try again." }));
-                              }}
-                            >
-                              View Attachment
-                            </button>
-                          ) : (
-                            // Guests can never view ticket content by ID at all
-                            // (same policy as get_ticket_details and the
-                            // confirmation-email link) -- a link here would
-                            // just 403, so show the filename without one
-                            // rather than an attachment that looks clickable
-                            // but isn't.
-                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Sign in to view</span>
-                          )}
+                      {isLocallyAuthenticated ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {selectedTicket.attachments.map((att) => (
+                            <TicketAttachmentLink key={att.attachment_id} ticketId={selectedTicket.id} attachment={att} />
+                          ))}
                         </div>
-                      ))}
-                      {attachmentOpenError?.ticketId === selectedTicket.id && (
-                        <p style={{ fontSize: '12px', color: '#dc2626' }}>{attachmentOpenError.message}</p>
+                      ) : (
+                        // Guests can never view ticket content by ID at all
+                        // (same policy as get_ticket_details and the
+                        // confirmation-email link) -- a link here would
+                        // just 403, so show the filename without one
+                        // rather than an attachment that looks clickable
+                        // but isn't.
+                        selectedTicket.attachments.map((att) => (
+                          <div key={att.attachment_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span>📎 {att.filename}</span>
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Sign in to view</span>
+                          </div>
+                        ))
                       )}
                     </div>
                   </>
@@ -4569,7 +4809,8 @@ const ChatApp: React.FC = () => {
 export const CHAT_SESSIONS_STORAGE_KEY = 'saved_chat_sessions';
 const MAX_STORED_SESSIONS = 50;
 const MAX_MESSAGES_PER_SESSION = 500;
-// Text of the "restored" system notice injected by loadSessionMessages. It is a
+// Text of the "restored" system notice injected when a session is reopened
+// via the ?session= deep link from the dashboard's Support & History page. It is a
 // UI-only marker, so saveChat filters it out before persisting a transcript —
 // otherwise each restore+save cycle bakes another copy into the stored session.
 const RESTORED_NOTICE_TEXT = 'Previous conversation loaded. Feel free to continue or start a new chat.';

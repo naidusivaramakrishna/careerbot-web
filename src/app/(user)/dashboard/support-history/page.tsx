@@ -40,7 +40,9 @@ import {
   MAX_TICKET_ATTACHMENTS,
   MAX_TICKET_ATTACHMENT_BYTES,
   MAX_TICKET_SUBJECT_CHARS,
-  MAX_TICKET_QA_CHARS,
+  TICKET_CONTEXT_PARAM,
+  readTicketContext,
+  clearTicketContext,
 } from "@/lib/ticketCategories";
 import TicketAttachmentLink from "@/components/common/TicketAttachmentLink";
 
@@ -106,11 +108,11 @@ export default function SupportHistoryPage() {
     searchParams.get("tab") === "tickets" ? "tickets" : "overview"
   );
   const [searchQuery, setSearchQuery] = useState("");
-  // Receives ?raise=1 (open the create-ticket form at once) plus
-  // question/answer (the original Q&A, for the subject prefill). Nothing
-  // links here with them yet: the chatbot's "Raise a support ticket" entry
-  // points go to /support/tickets/new (ChatApp.tsx redirectToTicketPage);
-  // sending signed-in users here instead is an open product decision.
+  // Receives ?raise=1 (open the create-ticket form at once) plus the
+  // original Q&A, for the subject prefill: the chatbot's "Raise a support
+  // ticket" entry points send signed-in users here (ChatApp.tsx
+  // redirectToTicketPage), with the Q&A in sessionStorage (?ctx=) or, when
+  // that failed, ?question=&answer= -- same hand-off as /support/tickets/new.
   //
   // This is state, not a plain one-time read, specifically so it can be
   // CLEARED (see clearRaiseContext below): without that, the question/
@@ -118,13 +120,26 @@ export default function SupportHistoryPage() {
   // page visit and get attached to every later ticket too -- including
   // ones opened via the unrelated "Create Ticket" button for a completely
   // different issue.
-  const [raiseContext, setRaiseContext] = useState<{ question: string; answer: string } | null>(() => {
-    // Capped defensively here too (ChatApp.tsx already caps before putting
-    // these in the URL) -- this page must not trust the query string alone.
-    const question = (searchParams.get("question") || "").slice(0, MAX_TICKET_QA_CHARS);
-    const answer = (searchParams.get("answer") || "").slice(0, MAX_TICKET_QA_CHARS);
-    return question || answer ? { question, answer } : null;
-  });
+  //
+  // Read after mount, not in a state initializer: this page is
+  // server-rendered and sessionStorage exists only in the browser, so an
+  // initializer gave the server an empty prefill and the client the stored
+  // one (a hydration mismatch). The create-ticket form waits for this read
+  // (raiseContextReady) because it takes its subject prefill once, at mount.
+  const [raiseContext, setRaiseContext] = useState<{ question: string; answer: string } | null>(null);
+  const [raiseContextReady, setRaiseContextReady] = useState(false);
+  useEffect(() => {
+    // Capped defensively here too (readTicketContext caps; ChatApp.tsx
+    // already caps before handing them over) -- this page must not trust
+    // the query string alone. Only a non-empty read is applied: a re-run
+    // after the hand-off was cleared (or the params stripped) must not
+    // drop the context already captured.
+    const { question, answer } = readTicketContext(searchParams);
+    if (question || answer) setRaiseContext({ question, answer });
+    // One-time hand-off: drop the stored Q&A once read.
+    clearTicketContext(searchParams);
+    setRaiseContextReady(true);
+  }, [searchParams]);
   const [autoRaise] = useState(() => searchParams.get("raise") === "1");
   // Lifted to page level so the Create Ticket action is reachable from both
   // the sidebar nav item and the main content's header button.
@@ -135,11 +150,17 @@ export default function SupportHistoryPage() {
   // form with stale prefill -- the URL otherwise keeps them forever, since
   // nothing else ever removes them.
   const stripRaiseParamsFromUrl = () => {
-    if (!searchParams.has("raise") && !searchParams.has("question") && !searchParams.has("answer")) return;
+    if (
+      !searchParams.has("raise") &&
+      !searchParams.has("question") &&
+      !searchParams.has("answer") &&
+      !searchParams.has(TICKET_CONTEXT_PARAM)
+    ) return;
     const next = new URLSearchParams(searchParams.toString());
     next.delete("raise");
     next.delete("question");
     next.delete("answer");
+    next.delete(TICKET_CONTEXT_PARAM);
     const query = next.toString();
     router.replace(`/dashboard/support-history${query ? `?${query}` : ""}`);
   };
@@ -311,7 +332,7 @@ export default function SupportHistoryPage() {
         </div>
       </main>
 
-      {showCreateForm && (
+      {showCreateForm && raiseContextReady && (
         <RaiseTicketModal
           originalQuestion={raiseContext?.question || ""}
           chatbotAnswer={raiseContext?.answer || ""}

@@ -64,10 +64,42 @@ const openWidget = async () => {
   });
 };
 
+// Guided-flow navigation: welcome -> "I'm a customer and need support" ->
+// support sub-menu -> "Login & Account" -> its question list. Replaces the
+// old single-click expand/collapse toggle now that the quick-menu is a
+// progressive, message-by-message flow instead of an always-visible panel.
+// Each call produces a NEW question-list message -- use getAllByText/
+// queryAllByText (not getByText/queryByText) wherever a test navigates here
+// more than once, since an earlier call's message text stays in the
+// transcript (only its now-answered option group's buttons disappear)
+// rather than being replaced.
 const expandLoginAccountMenu = async () => {
+  const supportOptions = screen.getAllByText("I'm a customer and need support");
   await act(async () => {
-    fireEvent.click(screen.getByText(/Login & Account/));
+    fireEvent.click(supportOptions[supportOptions.length - 1]);
   });
+  // Every menu along the way collapses entirely once clicked (global
+  // option-lifecycle behavior) -- a plain "more menus than before" count
+  // no longer holds, since the welcome/initial menu disappearing and the
+  // support sub-menu appearing can net to zero change. Wait instead for
+  // the newest block to actually be the support sub-menu (4 options).
+  await waitFor(() => {
+    const menus = document.querySelectorAll('.guided-menu-options');
+    const last = menus[menus.length - 1];
+    expect(last?.querySelectorAll('button').length).toBe(4);
+  }, { timeout: 3000 });
+
+  const loginAccountOptions = screen.getAllByText('Login & Account');
+  await act(async () => {
+    fireEvent.click(loginAccountOptions[loginAccountOptions.length - 1]);
+  });
+  // Same reasoning -- wait for the newest block to be this topic's own
+  // 5-item question list.
+  await waitFor(() => {
+    const menus = document.querySelectorAll('.guided-menu-options');
+    const last = menus[menus.length - 1];
+    expect(last?.querySelectorAll('button').length).toBe(5);
+  }, { timeout: 3000 });
 };
 
 const GUEST_LABELS = [
@@ -112,8 +144,49 @@ beforeEach(() => {
 });
 
 describe('Login & Account menu -- live switching between guest and authenticated', () => {
-  it('signing in (guest -> authenticated) swaps the 5-item menu without remounting the widget', async () => {
+  // Each topic's question list is built once, when that guided-flow message
+  // is created (buildTopicQuestionOptions(topic, isLocallyAuthenticated) at
+  // click time) -- not retroactively recomputed if auth state changes while
+  // it's already on screen. This is the same, already-established behavior
+  // as getRelatedQuestions (see this file's 3rd test below, and
+  // loginAccountAuthStateSwitch's own comment on it): a snapshot at
+  // creation time, re-evaluated on the NEXT fresh navigation/message, not
+  // the existing one in place. So "live switching" here means a fresh
+  // navigation after the auth change correctly reflects the new state --
+  // not that an already-rendered list mutates underneath the user.
+  // There's only one "I'm a customer and need support" entry point until a
+  // real question has been answered (its follow-up's "I have more
+  // questions" is what creates a second, fresh one) -- so re-navigating
+  // after the auth flip requires actually answering a leaf question first,
+  // not just calling expandLoginAccountMenu() again (its button would
+  // already be disabled from the first call, a no-op).
+  const answerAQuestionAndReturnToMenu = async () => {
+    // Strictly more than before this click -- clicking "I'm a customer and
+    // need support" earlier (inside expandLoginAccountMenu) already left
+    // behind a *user-echo* message with that exact text too, so a weaker
+    // "more than 1" check is already satisfied by button+echo from that
+    // first round alone, before this fresh one has actually landed.
+    const countBefore = screen.getAllByText("I'm a customer and need support").length;
+    await act(async () => {
+      fireEvent.click(screen.getByText('I have more questions'));
+    });
+    // "I have more questions" now asks continue-topic vs explore-different
+    // first -- "Explore a different topic" is what reaches the initial menu.
+    const exploreDifferentTopic = await screen.findByText('Explore a different topic', {}, { timeout: 3000 });
+    await act(async () => {
+      fireEvent.click(exploreDifferentTopic);
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText("I'm a customer and need support").length).toBeGreaterThan(countBefore);
+    }, { timeout: 3000 });
+  };
+
+  it('signing in (guest -> authenticated) makes a fresh navigation show the 5-item authenticated menu, not the stale guest one', async () => {
     mockAuthenticated = false;
+    sendChatMessage.mockResolvedValueOnce({
+      session_id: 'session', message: 'q', answer: 'Some answer.', category: 'account_access_general_issue',
+      authenticated: false, requires_escalation: false, confidence: 0.9, timestamp: '2026-01-01T00:00:00Z',
+    });
     await openWidget();
     await expandLoginAccountMenu();
 
@@ -124,25 +197,38 @@ describe('Login & Account menu -- live switching between guest and authenticated
       expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
 
-    await triggerAuthRecheck(true);
-
-    await waitFor(() => {
-      expect(screen.getByText(AUTHENTICATED_LABELS[0])).toBeInTheDocument();
+    // Reach the "I have more questions" follow-up so there's a fresh entry
+    // point to re-navigate from after signing in.
+    await act(async () => {
+      fireEvent.click(screen.getByText(GUEST_LABELS[0]));
     });
-    for (const label of AUTHENTICATED_LABELS) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
-    for (const label of GUEST_LABELS) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
-    }
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    await screen.findByText('Is there anything else I can help with?', {}, { timeout: 3000 });
 
+    await triggerAuthRecheck(true);
     // Still the same widget instance -- the header greeting now reflects
     // the signed-in user, proving this was a live state flip, not a reload.
     expect(await screen.findByText(/👤 Alice/)).toBeInTheDocument();
-  });
 
-  it('signing out (authenticated -> guest) swaps back to the guest menu without remounting', async () => {
+    // Fresh navigation, now authenticated -- a new snapshot.
+    await answerAQuestionAndReturnToMenu();
+    await expandLoginAccountMenu();
+
+    for (const label of AUTHENTICATED_LABELS) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    // The earlier guest-flavored message's own text is still in the
+    // transcript (see answeredOptionGroupIds) -- only its now-answered
+    // option group's buttons are gone; what matters is the NEW message is
+    // authenticated-flavored, which the assertions above confirm.
+  }, 30_000); // two full navigations, each with a real ~1.2s guided-message delay
+
+  it('signing out (authenticated -> guest) makes a fresh navigation show the guest menu, not the stale authenticated one', async () => {
     mockAuthenticated = true;
+    sendSessionMessage.mockResolvedValueOnce({
+      message_id: 'm1', session_id: 'backend-sess-1', content: 'Some answer.', timestamp: '2026-01-01T00:01:00Z',
+      role: 'assistant', category: 'profile_building', confidence: 0.9, requires_escalation: false,
+    });
     await openWidget();
     await expandLoginAccountMenu();
 
@@ -150,18 +236,30 @@ describe('Login & Account menu -- live switching between guest and authenticated
       expect(screen.getByText(label)).toBeInTheDocument();
     }
 
-    await triggerAuthRecheck(false);
-
-    await waitFor(() => {
-      expect(screen.getByText(GUEST_LABELS[0])).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText(AUTHENTICATED_LABELS[0]));
     });
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    await screen.findByText('Is there anything else I can help with?', {}, { timeout: 3000 });
+
+    // A real sign-out resets the whole transcript back to the bare welcome
+    // screen (see ChatApp.tsx's "Logout detected" branch, startNewAccountGeneration
+    // + initializeChat) -- unlike signing IN mid-conversation, which keeps it.
+    // Never leave a signed-out visitor's conversation on screen for whoever
+    // uses the device next. So there's no "I have more questions" follow-up
+    // to click through afterward -- the next navigation starts fresh.
+    await triggerAuthRecheck(false);
+    await waitFor(() => {
+      expect(screen.queryByText(/👤 Alice/)).not.toBeInTheDocument();
+    });
+    await screen.findByText(/Hi! I'm CareerBot/i, {}, { timeout: 3000 });
+
+    await expandLoginAccountMenu();
+
     for (const label of GUEST_LABELS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    for (const label of AUTHENTICATED_LABELS) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
-    }
-  });
+  }, 30_000);
 
   it('a related-questions bucket already on screen flips flavor (guest cross-links -> authenticated cross-links) after sign-in', async () => {
     mockAuthenticated = false;

@@ -84,4 +84,14 @@ describe('ClientLayout — chatbot widget mount gate', () => {
     render(<ClientLayout>{null}</ClientLayout>);
     expect(await screen.findByTestId('chatbot-widget-marker')).toBeInTheDocument();
   });
+
+  // usePathname reflects the current route on first render regardless of
+  // how it was reached (client navigation, refresh, or a direct URL) -- a
+  // fresh render with this pathname is exactly what a refresh/direct nav
+  // looks like, so this one test covers both.
+  it('does not mount the chatbot widget (launcher or greeting popup) on the guest support ticket portal, on a fresh render', () => {
+    mockPathname = '/support/tickets/new';
+    render(<ClientLayout>{null}</ClientLayout>);
+    expect(screen.queryByTestId('chatbot-widget-marker')).not.toBeInTheDocument();
+  });
 });
