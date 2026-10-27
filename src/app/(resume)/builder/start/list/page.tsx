@@ -1,21 +1,27 @@
 "use client"
-import React, { useEffect, useState, useCallback, Suspense } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react'
 import { toast } from 'sonner';
-import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, getResumeById, ResumeResponse } from '@/api/resumeApi';
+import { getAllResumesUnified, downloadResume, getBuilderScore, getResumeById, ResumeResponse } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
-import { downloadEnhancedResume } from '@/api/enhancerApi';
+import { downloadEnhancedResume, getEnhancedResume } from '@/api/enhancerApi';
 import type { ATSScore, EnhancedResumeSummary } from '@/types/api.types';
 import { getEnhancedCurrentScore } from '@/app/(resume)/builder/creation/_utils/enhancedScore';
 import { formatDateResume } from '@/utils/formatDateResume';
-import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
+import ResumeCard from '../_components/ResumeCard';
+import { computeEnhancedCompletion, computeResumeCompletion, readEnhancedTargetRole } from '../_components/resumeCompletion';
 import ResumeTableRow from '../_components/ResumeTableRow';
+import { getPrimaryResumeId, setPrimaryResumeId } from '@/lib/primaryResume';
+import SortSelect, { type SortOption } from '../_components/SortSelect';
+import ViewModeSelect, { type ViewMode } from '../_components/ViewModeSelect';
 import AddResumeModal from '../_components/AddResumeModal';
 import UploadResumeModal from '../_components/UploadResumeModal';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Search } from 'lucide-react';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
 import { computePreviewScore } from '../../creation/_lib/computePreviewScore';
+import { enhancedReadBudget } from '../_components/enhancedReadQueue';
 
 export interface Resume {
   id: string;
@@ -29,21 +35,87 @@ export interface Resume {
   updatedAt: string;
   primary: boolean;
   source?: 'enhanced' | 'builder';
+  /** % of the core sections that have content (filled in by the card view's progress bar). */
+  completion?: number | null;
 }
+
+/** How many uploaded resumes are read at the same time (the enhanced-resume endpoint is rate limited). */
+const ENHANCED_READ_CONCURRENCY = 4;
+
+/**
+ * Runs `worker` over `items`, never more than `limit` at a time. Each item first waits for `budget`
+ * (the per-minute read budget), and no new item starts once `isActive()` is false (page left).
+ */
+const forEachWithLimit = async <T,>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+  { budget, isActive = () => true }: { budget?: { acquire: (shouldContinue: () => boolean) => Promise<boolean> }; isActive?: () => boolean } = {},
+): Promise<void> => {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length && isActive()) {
+      const item = items[next++];
+      if (budget && !(await budget.acquire(isActive))) return;
+      if (!isActive()) return;
+      await worker(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+};
 
 const ResumeListContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [primaryId, setPrimaryId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+
+  useEffect(() => { setPrimaryId(getPrimaryResumeId()); }, []);
+
+  // Background reads stop starting new requests once the page is left.
+  const activeRef = useRef(true);
+  useEffect(() => {
+    activeRef.current = true;
+    return () => { activeRef.current = false; };
+  }, []);
+
+  const handleSetPrimary = (resume: Resume) => {
+    setPrimaryResumeId(resume.id);
+    setPrimaryId(resume.id);
+    toast.success(`"${resume.name}" is now your primary resume`);
+  };
+
+  // The primary resume is flagged but not pinned: every resume follows the chosen sort.
+  const displayResumes = useMemo(() => {
+    const flagged = resumes.map(r => ({ ...r, primary: r.id === primaryId }));
+    const time = (r: Resume) => {
+      const t = Date.parse(r.updatedAt);
+      return Number.isNaN(t) ? 0 : t;
+    };
+    const compare: Record<SortOption, (a: Resume, b: Resume) => number> = {
+      recent: (a, b) => time(b) - time(a),
+      oldest: (a, b) => time(a) - time(b),
+      name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      score: (a, b) => (b.score ?? 0) - (a.score ?? 0),
+    };
+    const ordered = [...flagged].sort(compare[sortBy]);
+    const term = searchTerm.trim().toLowerCase();
+    return ordered.filter(r => {
+      if (!term) return true;
+      // 'No Target Role' is only a placeholder shown on the card, not text to search
+      return `${r.name} ${r.job === 'No Target Role' ? '' : r.job}`.toLowerCase().includes(term);
+    });
+  }, [resumes, primaryId, searchTerm, sortBy]);
 
   const buildCreationUrl = useCallback((resumeId: string, source?: Resume["source"]) => {
     const params = new URLSearchParams();
@@ -66,7 +138,7 @@ const ResumeListContent = () => {
       .slice(0, 2);
   };
 
-  const transformResumeData = (backendData: ResumeResponse[], userProfileName?: string): Resume[] => {
+  const transformResumeData = (backendData: ResumeResponse[], userProfileName?: string, includeCompletion = false): Resume[] => {
     return backendData.map((item) => {
       // Debug: Log what we're getting from backend
       logger.info('Resume data from backend:', {
@@ -105,6 +177,7 @@ const ResumeListContent = () => {
         createdAt: item.createdAt, // ✅ Store raw timestamp
         updatedAt: item.updatedAt, // ✅ Store raw timestamp
         primary: false,
+        ...(includeCompletion ? { completion: computeResumeCompletion(item) } : {}),
       };
     });
   };
@@ -174,6 +247,25 @@ const ResumeListContent = () => {
       setResumes([...transformResumeData(builderList.map(withoutUnverifiedBuilderScore), profileName), ...transformedEnhanced]);
       setLoading(false);
 
+      // Enhanced resumes: the list only has a summary, so read each record once to see how many of
+      // its core sections are filled. This runs alongside the builder hydration below. A record that
+      // cannot be read gets completion null ("—"), so the card never waits forever. Each card is updated
+      // as soon as its own record has been read.
+      void forEachWithLimit(transformedEnhanced, ENHANCED_READ_CONCURRENCY, async (row) => {
+        let completion: number | null = null;
+        let role = '';
+        try {
+          const record = await getEnhancedResume(row.id);
+          completion = computeEnhancedCompletion(record);
+          role = readEnhancedTargetRole(record);
+        } catch {
+          completion = null;
+        }
+        setResumes(prev => prev.map(item => (item.id === row.id
+          ? { ...item, completion, ...(role ? { job: role } : {}) }
+          : item)));
+      }, { budget: enhancedReadBudget, isActive: () => activeRef.current });
+
       // Then hydrate every builder resume and re-score it against the same
       // complete data the editor loads, in ONE batched update. Kept in its own
       // try: the list is already on screen by now, so a failure here must leave
@@ -181,12 +273,16 @@ const ResumeListContent = () => {
       // raise "Failed to fetch resumes" over an already-populated table (the
       // pre-existing per-row background fetch swallowed its own errors).
       try {
+        // Builder resumes whose full record could not be read: their completion stays unknown ("—")
+        // instead of being counted from the compact list payload, which has too little in it.
+        const unreadable = new Set<string>();
         const fullBuilderResumes = await Promise.all(
           builderList.map(async (resume) => {
             const [resumeResult, scoreResult] = await Promise.allSettled([
               getResumeById(resume.id),
               getBuilderScore(resume.id),
             ]);
+            if (resumeResult.status !== 'fulfilled') unreadable.add(resume.id);
             const fullResume = withoutUnverifiedBuilderScore(
               resumeResult.status === 'fulfilled' ? resumeResult.value : resume,
             );
@@ -202,19 +298,19 @@ const ResumeListContent = () => {
           }),
         );
         const scored = new Map(
-          transformResumeData(fullBuilderResumes, profileName).map(row => [row.id, row] as const),
+          transformResumeData(fullBuilderResumes, profileName, true)
+            .map(row => [row.id, unreadable.has(row.id) ? { ...row, completion: null } : row] as const),
         );
-        // MERGE into current state; do NOT replace the array. The list has been
-        // interactive since the paint above, so a row can be deleted while these
-        // requests are in flight -- rebuilding from the pre-delete `builderList`
-        // snapshot puts the deleted row back on screen. Mapping over current
-        // state can only update rows that are still present, which is the
-        // property develop2's per-row `setResumes(prev => prev.map(...))` had and
-        // the wholesale replacement lost. Enhanced rows are absent from `scored`,
-        // so they pass through untouched.
+        // MERGE into current state; do NOT replace the array. The enhanced-resume
+        // completion pass above updates rows at the same time as these requests, so
+        // rebuilding from the earlier `builderList` snapshot would overwrite its
+        // results. Mapping over current state only updates the rows present now.
+        // Enhanced rows are absent from `scored`, so they pass through untouched.
         setResumes(prev => prev.map(row => scored.get(row.id) ?? row));
       } catch (hydrationErr) {
         logger.warn('Builder resume hydration failed; keeping the compact preview scores', hydrationErr);
+        // Without the full records there is no trustworthy progress to show.
+        setResumes(prev => prev.map(row => (row.source !== 'enhanced' && row.completion === undefined ? { ...row, completion: null } : row)));
       }
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
@@ -235,35 +331,6 @@ const ResumeListContent = () => {
   useEffect(() => {
     fetchResumes();
   }, [fetchResumes]);
-
-  const handleDeleteResume = async (resumeId: string) => {
-    try {
-      setDeleting(true);
-
-      // ✅ No manual token check needed - httpClient sends cookies automatically
-      await deleteResumeApi(resumeId);
-      // Functional update: `resumes` is the render-time snapshot, and the
-      // background hydration above can commit between this click and the
-      // delete request resolving.
-      setResumes(prev => prev.filter(r => r.id !== resumeId));
-      toast.success("Resume deleted successfully");
-      setDeleteConfirmId(null);
-
-    } catch (err) {
-      const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
-      if (error.response?.status === 401) {
-        toast.error("Session expired. Please log in again");
-      } else if (error.response?.status === 403) {
-        toast.error("You don't have permission to delete this resume");
-      } else if (error.response?.status === 404) {
-        toast.error("Resume not found");
-      } else {
-        toast.error(error.response?.data?.detail || error.message || "Failed to delete resume");
-      }
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   const handleDownloadResume = async (resumeId: string, format: 'pdf' | 'docx') => {
     try {
@@ -322,14 +389,23 @@ const ResumeListContent = () => {
     }
   };
 
-  const PageShell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-[#f5f7fa]">
+  // Plain render function, not a component: a component declared in render gets a new
+  // identity every render, which remounts the tree and drops focus from the search box.
+  const renderPageShell = (children: React.ReactNode) => (
+    <div className="min-h-screen bg-[#f7f9fc]">
       {/* Page header */}
-      <div className="px-8 pt-8 pb-6">
+      <div className="mx-auto max-w-[1180px] px-8 pt-4 pb-4">
+        <button
+          type="button"
+          onClick={() => router.push('/builder/start')}
+          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#1d4fa8] hover:underline mb-2"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Resume Management
+        </button>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Resumes</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Manage, analyze and optimize your resumes with AI</p>
+            <h1 className="text-[24px] font-bold text-gray-900 tracking-tight leading-tight">My Resumes</h1>
+            <p className="text-sm text-gray-600 mt-1">Manage and continue editing your saved resumes.</p>
           </div>
 
           {/* Add Resume button + dropdown */}
@@ -373,96 +449,117 @@ const ResumeListContent = () => {
   );
 
   if (loading) {
-    return (
-      <PageShell>
-        <div className="px-8 pb-8">
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
-            style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
-            <div className="px-6 py-4 border-b border-gray-50 flex gap-8">
-              {[180, 140, 80, 120, 120, 60].map((w, i) => (
-                <div key={i} className="h-2.5 rounded-full bg-gray-100 animate-pulse" style={{ width: w }} />
-              ))}
-            </div>
-            {[1, 2, 3].map((row) => (
-              <div key={row} className="flex items-center gap-6 px-6 py-4 border-b border-gray-50 last:border-0">
-                <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-36 rounded-full bg-gray-100 animate-pulse" />
-                  <div className="h-2 w-24 rounded-full bg-gray-100 animate-pulse" />
+    return renderPageShell(
+      <>
+        <div className="mx-auto max-w-[1180px] px-8 pb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((card) => (
+            <div key={card} className="bg-white rounded-xl border border-[#e3e9f2] p-4">
+              <div className="flex gap-3.5">
+                <div className="w-[68px] h-[84px] rounded-md bg-gray-100 animate-pulse shrink-0" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="h-3 w-32 rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-2 w-20 rounded-full bg-gray-100 animate-pulse" />
                 </div>
-                <div className="w-28 h-2.5 rounded-full bg-gray-100 animate-pulse" />
                 <div className="w-12 h-12 rounded-full bg-gray-100 animate-pulse" />
-                <div className="w-24 h-2.5 rounded-full bg-gray-100 animate-pulse" />
-                <div className="w-24 h-2.5 rounded-full bg-gray-100 animate-pulse" />
-                <div className="w-8 h-8 rounded-lg bg-gray-100 animate-pulse" />
               </div>
-            ))}
-          </div>
+              <div className="h-9 rounded-md bg-gray-100 animate-pulse mt-4" />
+            </div>
+          ))}
         </div>
-      </PageShell>
+      </>
     );
   }
 
-  return (
-    <PageShell>
-      <div className="px-8 pb-8">
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
-          style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Resume</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Target Role</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Score</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Last Modified</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Created</th>
-                <th className="px-6 py-3.5 bg-gray-50/50" />
-              </tr>
-            </thead>
-            <tbody>
-              {resumes.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                        style={{ background: "linear-gradient(135deg,#e8f0fb,#c7d9f5)" }}>
-                        <svg className="w-6 h-6 text-[#2557a7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </div>
-                      <p className="text-sm font-medium text-gray-500">No resumes yet</p>
-                      <p className="text-xs text-gray-400">Click <strong className="text-[#2557a7]">Add Resume</strong> to get started</p>
-                    </div>
-                  </td>
+  return renderPageShell(
+    <>
+      <div className="mx-auto max-w-[1180px] px-8 pb-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
+          <div className="relative w-full sm:max-w-[345px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search resumes"
+              aria-label="Search resumes"
+              className="w-full h-10 pl-10 pr-3.5 rounded-xl border border-[#e3e9f2] bg-white text-sm text-gray-800 placeholder:text-gray-500 outline-none focus:border-[#1d4fa8] focus:ring-2 focus:ring-[#1d4fa8]/15 transition"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <SortSelect value={sortBy} onChange={setSortBy} />
+            <ViewModeSelect value={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
+
+        {displayResumes.length === 0 && resumes.length > 0 ? (
+          <div className="bg-white rounded-xl border border-[#e3e9f2] py-16 text-center">
+            <p className="text-sm font-medium text-gray-600">No matching resumes</p>
+            <p className="text-xs text-gray-400 mt-1">Try a different search.</p>
+          </div>
+        ) : displayResumes.length === 0 ? (
+          <div className="bg-white rounded-xl border border-[#e3e9f2] py-20 text-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#eaf1fb]">
+                <svg className="w-6 h-6 text-[#1d4fa8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-gray-500">No resumes yet</p>
+              <p className="text-xs text-gray-400">Click <strong className="text-[#1d4fa8]">Add Resume</strong> to get started</p>
+            </div>
+          </div>
+        ) : viewMode === 'card' ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {displayResumes.map((resume, i) => (
+              <ResumeCard
+                key={resume.id}
+                resume={resume}
+                index={i}
+                onDownload={() => {
+                  setSelectedResumeId(resume.id);
+                  setDownloadModalOpen(true);
+                }}
+                onSetPrimary={() => handleSetPrimary(resume)}
+                creationUrl={buildCreationUrl(resume.id, resume.source)}
+                downloading={downloading}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+            style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Resume</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Target Role</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Score</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Last Modified</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Created</th>
+                  <th className="px-6 py-3.5 bg-gray-50/50" />
                 </tr>
-              ) : (
-                resumes.map((resume, i) => (
+              </thead>
+              <tbody>
+                {displayResumes.map((resume, i) => (
                   <ResumeTableRow
                     key={resume.id}
                     resume={resume}
                     index={i}
-                    onDelete={() => setDeleteConfirmId(resume.id)}
                     onDownload={() => {
                       setSelectedResumeId(resume.id);
                       setDownloadModalOpen(true);
                     }}
+                    onSetPrimary={() => handleSetPrimary(resume)}
                     creationUrl={buildCreationUrl(resume.id, resume.source)}
                     downloading={downloading}
                   />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteConfirmId}
-        onClose={() => setDeleteConfirmId(null)}
-        onConfirm={() => deleteConfirmId && handleDeleteResume(deleteConfirmId)}
-        deleting={deleting}
-      />
 
       <DownloadModal
         isOpen={downloadModalOpen && !!selectedResumeId}
@@ -473,7 +570,7 @@ const ResumeListContent = () => {
         onDownload={(format) => selectedResumeId && handleDownloadResume(selectedResumeId, format)}
         downloading={downloading}
       />
-    </PageShell>
+    </>
   );
 };
 

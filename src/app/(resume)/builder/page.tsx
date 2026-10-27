@@ -3,19 +3,15 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getAllResumesUnified, createResumeWithAuth } from "@/api/resumeApi";
 import httpClient from "@/lib/http";
-import { toast } from "sonner";
 import Image from "next/image";
 import {
   ArrowRight,
   BarChart3,
-  CheckCircle2,
   Clock,
   Download,
   FileText,
   LayoutTemplate,
-  PenLine,
   ScanSearch,
   Sparkles,
   Target,
@@ -31,29 +27,6 @@ const proofStats = [
   { value: "18+", label: "ATS templates" },
   { value: "PDF", label: "export ready" },
   { value: "Free", label: "plan available" },
-];
-
-const paths = [
-  {
-    icon: Upload,
-    title: "Enhance an existing resume",
-    description: "Upload your resume, fix weak wording, improve ATS readability, and get a cleaner version faster.",
-    cta: "Enhance My Resume",
-    href: "/builder/start?action=enhance",
-    action: "enhance" as const,
-    accent: "from-[#2557a7] to-[#0f766e]",
-    checks: ["Upload PDF or DOCX", "AI rewrites weak bullets", "Keyword and formatting guidance"],
-  },
-  {
-    icon: PenLine,
-    title: "Build a new resume",
-    description: "Start from an ATS-friendly template and follow guided sections with AI suggestions as you write.",
-    cta: "Build New Resume",
-    href: "/builder/start",
-    action: "build" as const,
-    accent: "from-[#2557a7] to-[#1e4a94]",
-    checks: ["Guided resume sections", "Template-first workflow", "Ready-to-export document"],
-  },
 ];
 
 const improvementCards = [
@@ -186,46 +159,10 @@ function HeroMock() {
 
 export default function ResumeLandingPage() {
   const router = useRouter();
-  const [signinNext, setSigninNext] = useState<"dashboard" | "builder" | "new-resume" | null>(null);
-  const [buildingResume, setBuildingResume] = useState(false);
+  const [signinNext, setSigninNext] = useState<"dashboard" | "builder" | null>(null);
 
-  const navigateToBuilder = useCallback(async () => {
-    try {
-      const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
-      const hasResumes = builder_resumes.length > 0 || enhanced_resumes.length > 0;
-      router.push(hasResumes ? "/builder/start/list" : "/builder/start");
-    } catch {
-      router.push("/builder/start");
-    }
-  }, [router]);
-
-  const createAndNavigate = useCallback(async () => {
-    setBuildingResume(true);
-    try {
-      const newResume = await createResumeWithAuth();
-      localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
-      localStorage.setItem("current_resume_id", newResume.id);
-      router.push("/templates");
-    } catch (err) {
-      const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
-      const status = error.response?.status;
-      const detail = (error.response?.data?.detail || error.message || "").toLowerCase();
-      if (
-        status === 409 ||
-        detail.includes("already") ||
-        detail.includes("limit") ||
-        detail.includes("maximum") ||
-        detail.includes("one resume") ||
-        detail.includes("exists")
-      ) {
-        toast.error("You have already created a resume. Free access allows only one resume — your existing resume is in the list.", { duration: 6000 });
-        router.push("/builder/start/list");
-      } else {
-        toast.error(error.response?.data?.detail || "Failed to create resume. Please try again.");
-      }
-    } finally {
-      setBuildingResume(false);
-    }
+  const navigateToBuilder = useCallback(() => {
+    router.push("/builder/start");
   }, [router]);
 
   const handleSigninSuccess = useCallback(async () => {
@@ -233,12 +170,10 @@ export default function ResumeLandingPage() {
     setSigninNext(null);
     if (next === "dashboard") {
       router.push("/dashboard");
-    } else if (next === "new-resume") {
-      await createAndNavigate();
     } else {
-      await navigateToBuilder();
+      navigateToBuilder();
     }
-  }, [signinNext, router, navigateToBuilder, createAndNavigate]);
+  }, [signinNext, router, navigateToBuilder]);
 
   const checkAuthSilent = useCallback(async (): Promise<boolean> => {
     try {
@@ -253,19 +188,11 @@ export default function ResumeLandingPage() {
 
   const handleStartFree = useCallback(async () => {
     if (await checkAuthSilent()) {
-      await navigateToBuilder();
+      navigateToBuilder();
     } else {
       setSigninNext("builder");
     }
   }, [checkAuthSilent, navigateToBuilder]);
-
-  const handleBuildNewResume = useCallback(async () => {
-    if (await checkAuthSilent()) {
-      await createAndNavigate();
-    } else {
-      setSigninNext("new-resume");
-    }
-  }, [checkAuthSilent, createAndNavigate]);
 
 
   return (
@@ -315,10 +242,10 @@ export default function ResumeLandingPage() {
                   Start Free
                 </button>
                 <Link
-                  href="#choose-path"
+                  href="#quality-checks"
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-7 py-3.5 text-sm font-semibold text-slate-700 transition-all hover:border-[#2557a7] hover:bg-blue-50 hover:text-[#2557a7]"
                 >
-                  Compare Options
+                  See What You Get
                 </Link>
               </div>
 
@@ -342,72 +269,6 @@ export default function ResumeLandingPage() {
               <p className="mt-1 text-sm text-slate-500">{stat.label}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section id="choose-path" className="scroll-mt-20 bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] pb-24 pt-14">
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-10 grid gap-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
-            <div>
-              <span className="rounded-full border border-blue-100 bg-white px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-[#2557a7] shadow-sm">
-                Choose Your Path
-              </span>
-              <h2 className="mt-5 bg-gradient-to-r from-slate-950 via-[#2557a7] to-teal-600 bg-clip-text text-3xl font-black tracking-tight text-transparent md:text-4xl">
-                Start where your resume is today
-              </h2>
-            </div>
-            <p className="max-w-2xl text-base leading-relaxed text-slate-500 lg:justify-self-end">
-              Improve the resume you already have, or create a polished resume from a guided,
-              recruiter-friendly workflow.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {paths.map((path) => {
-              const Icon = path.icon;
-              return (
-                <div key={path.title} className="group overflow-hidden rounded-3xl border border-white bg-white shadow-xl shadow-slate-200/70 ring-1 ring-slate-200/80 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-100/70">
-                  <div className={`bg-gradient-to-r ${path.accent} p-6 text-white`}>
-                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
-                      <Icon size={22} />
-                    </div>
-                    <h3 className="text-2xl font-black">{path.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-white/85">{path.description}</p>
-                  </div>
-                  <div className="p-6">
-                    <div className="space-y-3">
-                      {path.checks.map((check) => (
-                        <div key={check} className="flex items-center gap-2.5 text-sm text-slate-700">
-                          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-                          {check}
-                        </div>
-                      ))}
-                    </div>
-                    {path.action === "build" ? (
-                      <button
-                        onClick={handleBuildNewResume}
-                        disabled={buildingResume}
-                        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7] disabled:opacity-70"
-                      >
-                        {buildingResume
-                          ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Creating…</>
-                          : <>{path.cta}<ArrowRight size={15} /></>
-                        }
-                      </button>
-                    ) : (
-                      <Link
-                        href={path.href}
-                        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7]"
-                      >
-                        {path.cta}
-                        <ArrowRight size={15} />
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       </section>
 
@@ -498,7 +359,7 @@ export default function ResumeLandingPage() {
               Ready to build a resume you can actually use?
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-blue-100">
-              Start free, choose your path, and move into the builder when you are ready.
+              Start free and move into the builder when you are ready.
             </p>
             <button
               onClick={handleStartFree}

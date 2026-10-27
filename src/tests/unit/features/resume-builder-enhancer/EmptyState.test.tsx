@@ -61,14 +61,14 @@ describe('EmptyState', () => {
   it('renders both entry cards and core feature bullets', () => {
     renderEmptyState();
 
-    expect(screen.getByText('Build from Scratch')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Build from Scratch' })).toBeInTheDocument();
     expect(screen.getByText('Upload Existing Resume')).toBeInTheDocument();
     expect(screen.getByText('ATS-friendly formatting')).toBeInTheDocument();
     expect(screen.getByText('AI-powered enhancement')).toBeInTheDocument();
     expect(screen.getByText('PDF · DOCX')).toBeInTheDocument();
   });
 
-  it('reuses an existing builder resume and opens it in the builder', async () => {
+  it('tells the user they already have a builder resume instead of opening or creating one', async () => {
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [{ id: 'existing-builder-1', name: 'Existing Resume' }],
       enhanced_resumes: [],
@@ -76,24 +76,117 @@ describe('EmptyState', () => {
 
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/builder/creation/existing-builder-1');
+      expect(mockToast.info).toHaveBeenCalledWith(
+        expect.stringContaining('already have a resume in the builder'),
+        expect.anything(),
+      );
     });
+    expect(mockPush).not.toHaveBeenCalled();
     expect(mockCreateResumeWithAuth).not.toHaveBeenCalled();
-    expect(onSelect).toHaveBeenCalledWith('builder');
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('current_resume_id', 'existing-builder-1');
-    expect(window.localStorage.setItem).toHaveBeenCalledWith(
-      'cached_resume_data',
-      expect.stringContaining('"resumeId":"existing-builder-1"')
+    // loading state ends
+    expect(screen.queryByText('Creating your resume…')).not.toBeInTheDocument();
+  });
+
+  it('shows the same message when the backend rejects a second resume', async () => {
+    mockCreateResumeWithAuth.mockRejectedValue({
+      response: { status: 409, data: { detail: 'One resume already exists' } },
+    });
+
+    renderEmptyState();
+
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
+
+    await waitFor(() => {
+      expect(mockToast.info).toHaveBeenCalledWith(
+        expect.stringContaining('already have a resume in the builder'),
+        expect.anything(),
+      );
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.queryByText('Creating your resume…')).not.toBeInTheDocument();
+  });
+
+  // careerbot-api answers a POST /resumes/ 500 with detail as an object ({ error, message }) and a FastAPI 422 with an
+  // array; the failure handler must not throw on them, or no toast shows and the card stays on "Creating your resume…".
+  const requestFailed = (status: number, detail: unknown) =>
+    Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data: { detail } } });
+
+  it('shows the readable message of an object detail instead of the generic request error', async () => {
+    mockCreateResumeWithAuth.mockRejectedValue(
+      requestFailed(500, { error: 'internal_error', message: 'Could not create the resume' }),
     );
+
+    renderEmptyState();
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith('Could not create the resume');
+    });
+    expect(await screen.findByText('Create your resume step by step with AI assistance.')).toBeInTheDocument();
+  });
+
+  it('treats an object detail that says a resume already exists as the second-resume case', async () => {
+    mockCreateResumeWithAuth.mockRejectedValue(
+      requestFailed(400, { error: 'resume_exists', message: 'A resume already exists for this user' }),
+    );
+
+    renderEmptyState();
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
+
+    await waitFor(() => {
+      expect(mockToast.info).toHaveBeenCalledWith(
+        expect.stringContaining('already have a resume in the builder'),
+        expect.anything(),
+      );
+    });
+  });
+
+  it.each([
+    ['an array (422)', [{ loc: ['body', 'name'], msg: 'field required', type: 'missing' }]],
+  ])('shows the error and leaves the creating state when the failure detail is %s', async (_label, detail) => {
+    mockCreateResumeWithAuth.mockRejectedValue(requestFailed(detail instanceof Array ? 422 : 500, detail));
+
+    renderEmptyState();
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(expect.stringContaining('Request failed with status code'));
+    });
+    expect(await screen.findByText('Create your resume step by step with AI assistance.')).toBeInTheDocument();
+    expect(screen.queryByText('Creating your resume…')).not.toBeInTheDocument();
+  });
+
+  it('does not tell a rate-limited user they already have a resume', async () => {
+    mockCreateResumeWithAuth.mockRejectedValue(requestFailed(429, 'Rate limit exceeded, try again later'));
+
+    renderEmptyState();
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith('Request failed with status code 429');
+    });
+    expect(mockToast.info).not.toHaveBeenCalled();
+    expect(await screen.findByText('Create your resume step by step with AI assistance.')).toBeInTheDocument();
+  });
+
+  it('only the buttons start an action, not the whole card', () => {
+    renderEmptyState();
+
+    fireEvent.click(screen.getByRole('heading', { name: 'Build from Scratch' }).closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('heading', { name: 'Upload Existing Resume' }).closest('div') as HTMLElement);
+
+    expect(mockGetAllResumesUnified).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Upload resume modal' })).not.toBeInTheDocument();
   });
 
   it('creates a new resume when no builder resume exists and caches it', async () => {
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/builder/creation/created-resume-1');
@@ -111,7 +204,7 @@ describe('EmptyState', () => {
     search.params = new URLSearchParams({ return_to: returnTo });
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(expected);
@@ -123,7 +216,7 @@ describe('EmptyState', () => {
 
     renderEmptyState();
 
-    const buildCard = screen.getByText('Build from Scratch').closest('div') as HTMLElement;
+    const buildCard = screen.getByRole('button', { name: /Build from Scratch/ });
     fireEvent.click(buildCard);
 
     expect(await screen.findByText('Creating your resume…')).toBeInTheDocument();
@@ -135,7 +228,7 @@ describe('EmptyState', () => {
 
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
 
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith('Please sign in to create a resume');
@@ -148,12 +241,12 @@ describe('EmptyState', () => {
 
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
 
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith('Creation quota reached');
     });
-    expect(await screen.findByText('Step-by-step builder with AI assistance to craft a standout resume.')).toBeInTheDocument();
+    expect(await screen.findByText('Create your resume step by step with AI assistance.')).toBeInTheDocument();
   });
 
   it('shows generic error for non-Error build failures', async () => {
@@ -161,7 +254,7 @@ describe('EmptyState', () => {
 
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Build from Scratch').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Build from Scratch/ }));
 
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith('Failed to create resume. Please try again.');
@@ -171,7 +264,7 @@ describe('EmptyState', () => {
   it('opens upload modal, marks upload selected, and clears selection on close', () => {
     renderEmptyState();
 
-    fireEvent.click(screen.getByText('Upload Existing Resume').closest('div') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: /Upload Resume/ }));
 
     expect(onSelect).toHaveBeenCalledWith('upload');
     expect(screen.getByRole('dialog', { name: 'Upload resume modal' })).toBeInTheDocument();
@@ -185,7 +278,7 @@ describe('EmptyState', () => {
   it('applies selected styling to the chosen card', () => {
     const { rerender } = renderEmptyState('builder');
 
-    expect(screen.getByText('Build from Scratch').closest('.relative')).toHaveClass('border-[#2557a7]');
+    expect(screen.getByRole('heading', { name: 'Build from Scratch' }).closest('.relative')).toHaveClass('border-[#2557a7]');
 
     rerender(<EmptyState selected="upload" onSelect={onSelect} />);
 

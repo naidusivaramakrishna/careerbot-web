@@ -4,19 +4,20 @@ import '@testing-library/jest-dom';
 import ResumeListPage from '@/app/(resume)/builder/start/list/page';
 import {
   createResumeWithAuth,
-  deleteResume,
   downloadResume,
   getAllResumesUnified,
   getBuilderScore,
   getResumeById,
 } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
-import { downloadEnhancedResume } from '@/api/enhancerApi';
+import { downloadEnhancedResume, getEnhancedResume } from '@/api/enhancerApi';
 import { toast } from 'sonner';
 import { computePreviewScore } from '@/app/(resume)/builder/creation/_lib/computePreviewScore';
+import { enhancedReadBudget } from '@/app/(resume)/builder/start/_components/enhancedReadQueue';
 
-const { mockPush } = vi.hoisted(() => ({
+const { mockPush, search } = vi.hoisted(() => ({
   mockPush: vi.fn(),
+  search: { params: new URLSearchParams() },
 }));
 
 const mockRouter = {
@@ -25,7 +26,7 @@ const mockRouter = {
 
 vi.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => search.params,
 }));
 
 vi.mock('@/api/userApi', () => ({
@@ -34,7 +35,6 @@ vi.mock('@/api/userApi', () => ({
 
 vi.mock('@/api/resumeApi', () => ({
   createResumeWithAuth: vi.fn(),
-  deleteResume: vi.fn(),
   downloadResume: vi.fn(),
   getAllResumesUnified: vi.fn(),
   getBuilderScore: vi.fn(),
@@ -43,6 +43,7 @@ vi.mock('@/api/resumeApi', () => ({
 
 vi.mock('@/api/enhancerApi', () => ({
   downloadEnhancedResume: vi.fn(),
+  getEnhancedResume: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -52,31 +53,37 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-vi.mock('../../../../app/(resume)/builder/start/_components/ResumeTableRow', () => ({
+vi.mock('../../../../app/(resume)/builder/start/_components/ResumeCard', () => ({
   default: ({
     resume,
-    onDelete,
     onDownload,
+    onSetPrimary,
     downloading,
   }: {
-    resume: { id: string; name: string; source?: string; score: number };
-    onDelete: () => void;
+    resume: { id: string; name: string; source?: string; score: number; primary?: boolean; completion?: number | null; job?: string };
     onDownload: () => void;
+    onSetPrimary: () => void;
     downloading: boolean;
   }) => (
-    <tr data-testid={`resume-row-${resume.id}`}>
+    <div data-testid={`resume-row-${resume.id}`} data-primary={String(!!resume.primary)} data-completion={String(resume.completion)} data-job={resume.job ?? ''}>
+      <button type="button" onClick={onSetPrimary}>
+        Set primary {resume.id}
+      </button>
+      <span>{resume.name}</span>
+      <span>{resume.source || 'builder'}</span>
+      <span>{resume.score}%</span>
+      <span>{String(downloading)}</span>
+      <button type="button" onClick={onDownload}>
+        Download {resume.id}
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock('../../../../app/(resume)/builder/start/_components/ResumeTableRow', () => ({
+  default: ({ resume, creationUrl }: { resume: { id: string; name: string }; creationUrl?: string }) => (
+    <tr data-testid={`resume-table-row-${resume.id}`} data-creation-url={creationUrl ?? ''}>
       <td>{resume.name}</td>
-      <td>{resume.source || 'builder'}</td>
-      <td>{resume.score}%</td>
-      <td>{String(downloading)}</td>
-      <td>
-        <button type="button" onClick={onDownload}>
-          Download {resume.id}
-        </button>
-        <button type="button" onClick={onDelete}>
-          Delete {resume.id}
-        </button>
-      </td>
     </tr>
   ),
 }));
@@ -109,31 +116,6 @@ vi.mock('../../../../app/(resume)/builder/start/_components/UploadResumeModal', 
       <div role="dialog" aria-label="Upload resume modal">
         <button type="button" onClick={onClose}>
           Close upload
-        </button>
-      </div>
-    ) : null,
-}));
-
-vi.mock('../../../../app/(resume)/builder/start/_components/DeleteConfirmModal', () => ({
-  default: ({
-    isOpen,
-    onClose,
-    onConfirm,
-    deleting,
-  }: {
-    isOpen: boolean;
-    onClose: () => void;
-    onConfirm: () => void;
-    deleting: boolean;
-  }) =>
-    isOpen ? (
-      <div role="dialog" aria-label="Delete resume modal">
-        <p>Deleting: {String(deleting)}</p>
-        <button type="button" onClick={onClose}>
-          Cancel delete
-        </button>
-        <button type="button" onClick={onConfirm}>
-          Confirm delete
         </button>
       </div>
     ) : null,
@@ -175,7 +157,6 @@ const mockGetProfile = vi.mocked(getProfile);
 const mockGetAllResumesUnified = vi.mocked(getAllResumesUnified);
 const mockGetBuilderScore = vi.mocked(getBuilderScore);
 const mockGetResumeById = vi.mocked(getResumeById);
-const mockDeleteResume = vi.mocked(deleteResume);
 const mockDownloadResume = vi.mocked(downloadResume);
 const mockDownloadEnhancedResume = vi.mocked(downloadEnhancedResume);
 const mockCreateResumeWithAuth = vi.mocked(createResumeWithAuth);
@@ -203,6 +184,10 @@ const enhancedResume = {
 describe('ResumeListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    search.params = new URLSearchParams();
+    enhancedReadBudget.reset();
+    // an earlier test may leave a never-resolving implementation behind (clearAllMocks keeps it)
+    vi.mocked(getEnhancedResume).mockReset();
     mockGetProfile.mockResolvedValue({ full_name: 'Profile Name', username: 'profile' } as never);
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [builderResume],
@@ -210,7 +195,6 @@ describe('ResumeListPage', () => {
     } as never);
     mockGetResumeById.mockResolvedValue(builderResume as never);
     mockGetBuilderScore.mockRejectedValue(new Error('No current server score'));
-    mockDeleteResume.mockResolvedValue(undefined as never);
     mockDownloadResume.mockResolvedValue(new Blob(['builder']) as never);
     mockDownloadEnhancedResume.mockResolvedValue(new Blob(['enhanced']) as never);
     mockCreateResumeWithAuth.mockResolvedValue({ id: 'created-resume-1' } as never);
@@ -330,6 +314,289 @@ describe('ResumeListPage', () => {
     expect(screen.getByText(/Click/)).toBeInTheDocument();
   });
 
+  it('shows card view by default and switches to the original list view from the view dropdown', async () => {
+    render(<ResumeListPage />);
+
+    await screen.findByTestId('resume-row-builder-1');
+    expect(screen.queryByTestId('resume-table-row-builder-1')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change view' })).toHaveTextContent('Card view');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change view' }));
+    fireEvent.click(screen.getByRole('option', { name: /List view/ }));
+
+    expect(screen.getByTestId('resume-table-row-builder-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Target Role' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change view' }));
+    fireEvent.click(screen.getByRole('option', { name: /Card view/ }));
+    expect(screen.getByTestId('resume-row-builder-1')).toBeInTheDocument();
+  });
+
+  it('marks one resume as primary and remembers it', async () => {
+    render(<ResumeListPage />);
+
+    await screen.findByTestId('resume-row-builder-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Set primary enhanced-1' }));
+
+    expect(window.localStorage.setItem).toHaveBeenCalledWith('primary_resume_id', 'enhanced-1');
+    // primary is only a label: the resume the interview and prep pages use is not changed
+    expect(window.localStorage.setItem).not.toHaveBeenCalledWith('current_resume_id', expect.anything());
+    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('primary resume'));
+    expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-primary', 'true');
+    expect(screen.getByTestId('resume-row-builder-1')).toHaveAttribute('data-primary', 'false');
+
+    // switching primary moves the flag - only one resume is primary at a time
+    fireEvent.click(screen.getByRole('button', { name: 'Set primary builder-1' }));
+    expect(screen.getByTestId('resume-row-builder-1')).toHaveAttribute('data-primary', 'true');
+    expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-primary', 'false');
+  });
+
+  it('sorts by recently updated by default and from the sort dropdown, and filters by the search box', async () => {
+    window.localStorage.clear(); // an earlier test may have chosen a primary resume, which is always listed first
+    render(<ResumeListPage />);
+
+    await screen.findByTestId('resume-row-builder-1');
+    const order = () => screen.getAllByTestId(/^resume-row-/).map((el) => el.getAttribute('data-testid'));
+    expect(screen.queryByRole('button', { name: 'Filter by resume type' })).not.toBeInTheDocument();
+
+    // default: most recently updated first (the enhanced one is newer)
+    expect(screen.getByRole('button', { name: 'Sort resumes' })).toHaveTextContent('Sort by: Recently updated');
+    expect(order()).toEqual(['resume-row-enhanced-1', 'resume-row-builder-1']);
+
+    // a primary resume is flagged but not pinned: it follows the sort like the others
+    fireEvent.click(screen.getByRole('button', { name: 'Set primary builder-1' }));
+    expect(order()).toEqual(['resume-row-enhanced-1', 'resume-row-builder-1']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort resumes' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Oldest updated' }));
+    expect(order()).toEqual(['resume-row-builder-1', 'resume-row-enhanced-1']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort resumes' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Name (A-Z)' }));
+    expect(screen.getByRole('button', { name: 'Sort resumes' })).toHaveTextContent('Sort by: Name (A-Z)');
+    expect(order()).toEqual(['resume-row-builder-1', 'resume-row-enhanced-1']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort resumes' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Highest ATS score' }));
+    expect(order()).toEqual(['resume-row-enhanced-1', 'resume-row-builder-1']);
+
+    // search
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search resumes' }), { target: { value: 'avery' } });
+    expect(screen.getByTestId('resume-row-builder-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('resume-row-enhanced-1')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search resumes' }), { target: { value: 'zzz-nothing' } });
+    expect(screen.getByText('No matching resumes')).toBeInTheDocument();
+  });
+
+  it('does not match the "No Target Role" placeholder when searching', async () => {
+    const noRole = { ...builderResume, professionalSummary: undefined };
+    mockGetAllResumesUnified.mockResolvedValue({ builder_resumes: [noRole], enhanced_resumes: [] } as never);
+    mockGetResumeById.mockResolvedValue(noRole as never);
+
+    render(<ResumeListPage />);
+    await screen.findByTestId('resume-row-builder-1');
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search resumes' }), { target: { value: 'target' } });
+    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search resumes' }), { target: { value: 'avery' } });
+    expect(screen.getByTestId('resume-row-builder-1')).toBeInTheDocument();
+  });
+
+  it('keeps the search box mounted (and focused) while typing', async () => {
+    render(<ResumeListPage />);
+
+    await screen.findByTestId('resume-row-builder-1');
+    const input = screen.getByRole('textbox', { name: 'Search resumes' });
+    input.focus();
+    fireEvent.change(input, { target: { value: 'a' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search resumes' }), { target: { value: 'av' } });
+
+    expect(screen.getByRole('textbox', { name: 'Search resumes' })).toBe(input);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('gives each resume a % complete from its filled core sections, once the full record is read', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      enhanced_data: {
+        headline: ['Senior Platform Engineer'],
+        personalInfo: { fullname: 'Uploaded Person', email: 'u@example.com', phone: '123' },
+        professionalSummary: { summary: 'Summary text' },
+        education: [{ degree: 'B.Tech' }],
+        workExperience: [{ company: 'Acme' }],
+      },
+    } as never);
+
+    render(<ResumeListPage />);
+
+    // 4 of the 8 core sections are filled in the enhanced record -> 50%
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '50');
+    });
+    // an enhanced resume without a target role shows the parser headline in its place
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-job', 'Senior Platform Engineer');
+    });
+    // the builder resume gets a number from its full record too
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-builder-1').getAttribute('data-completion')).toMatch(/^\d+$/);
+    });
+  });
+
+  it('counts an uploaded resume saved in the parser field names the same way the editor does', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      enhanced_data: {
+        contact: { name: 'Uploaded Person', email: 'u@example.com', phone: '123' },
+        summary: 'A summary of the candidate',
+        education: [{ degree: 'B.Tech', institution: 'JNTU' }],
+        skills: { programming_languages: [{ id: 's1', name: 'TypeScript' }, { id: 's2', name: 'Python' }] },
+        experience: [{ company: 'Acme', position: 'Engineer' }],
+        project_details: [{ title: 'Portfolio', description: 'A site' }],
+        certificates: [{ name: 'AWS Cloud Practitioner' }],
+      },
+    } as never);
+
+    render(<ResumeListPage />);
+
+    // personal info, summary, education, skills, work, projects and certifications are filled: 7 of 8 core sections
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '88');
+    });
+  });
+
+  it('does not count the list placeholder name as the candidate name', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    // the list summary row says "Uploaded Resume" when it has no display_name; the record has none either
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      enhanced_data: { contact: { email: 'u@example.com', phone: '123' } },
+    } as never);
+    mockGetAllResumesUnified.mockResolvedValue({
+      builder_resumes: [],
+      enhanced_resumes: [{ id: 'enhanced-1', ats_score: 60, updated_at: '2026-01-16T10:00:00.000Z', created_at: '2026-01-11T10:00:00.000Z' }],
+    } as never);
+
+    render(<ResumeListPage />);
+
+    // no name anywhere -> Personal Info is not complete, as in the editor
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '0');
+    });
+  });
+
+  it('counts the record display name as the name when the parser found none, as the editor does', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      display_name: 'Jane Doe',
+      enhanced_data: { contact: { email: 'u@example.com', phone: '123' }, summary: 'A summary' },
+    } as never);
+
+    render(<ResumeListPage />);
+
+    // personal info (name from display_name) + summary = 2 of 8
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '25');
+    });
+  });
+
+  it('uses the enhancer state copy when the saved certifications are empty shells, as the editor does', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      enhanced_data: { contact: { name: 'Jane', email: 'u@example.com', phone: '123' }, certifications: [{}, {}] },
+      enhancer_state: { resume: { certifications: [{ name: 'AWS Cloud Practitioner' }] } },
+    } as never);
+
+    render(<ResumeListPage />);
+
+    // personal info + certifications = 2 of 8
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '25');
+    });
+  });
+
+  it('shows completion as unknown for a builder resume whose full record could not be loaded', async () => {
+    mockGetResumeById.mockRejectedValueOnce(new Error('Resume is not ready'));
+
+    render(<ResumeListPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-builder-1')).toHaveAttribute('data-completion', 'null');
+    });
+  });
+
+  it('shows each uploaded resume completion as soon as its own read finishes', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    const summaries = Array.from({ length: 12 }, (_, i) => ({
+      id: `enhanced-${i + 1}`,
+      display_name: `Upload ${i + 1}`,
+      ats_score: 60,
+      updated_at: '2026-01-16T10:00:00.000Z',
+      created_at: '2026-01-11T10:00:00.000Z',
+    }));
+    mockGetAllResumesUnified.mockResolvedValue({ builder_resumes: [], enhanced_resumes: summaries } as never);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const record = { enhanced_data: { contact: { name: 'A', email: 'a@b.c', phone: '1' } } };
+    vi.mocked(getEnhancedResume).mockImplementation((async (id: string) => {
+      if (Number(id.replace('enhanced-', '')) > 4) await gate;
+      return record;
+    }) as never);
+
+    render(<ResumeListPage />);
+
+    // the first reads are done, the rest are still waiting: the finished cards must not wait for them
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '13');
+    });
+    expect(screen.getByTestId('resume-row-enhanced-12')).toHaveAttribute('data-completion', 'undefined');
+    release();
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-12')).toHaveAttribute('data-completion', '13');
+    });
+  });
+
+  it('reads uploaded resumes a few at a time instead of all at once', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    const summaries = Array.from({ length: 12 }, (_, i) => ({
+      id: `enhanced-${i + 1}`,
+      display_name: `Upload ${i + 1}`,
+      ats_score: 60,
+      updated_at: '2026-01-16T10:00:00.000Z',
+      created_at: '2026-01-11T10:00:00.000Z',
+    }));
+    mockGetAllResumesUnified.mockResolvedValue({ builder_resumes: [], enhanced_resumes: summaries } as never);
+    let inFlight = 0;
+    let peak = 0;
+    vi.mocked(getEnhancedResume).mockImplementation((async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { enhanced_data: { personalInfo: { fullname: 'A', email: 'a@b.c', phone: '1' } } };
+    }) as never);
+
+    render(<ResumeListPage />);
+
+    // every upload still gets its completion in the end
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-12')).toHaveAttribute('data-completion', '13');
+    });
+    expect(vi.mocked(getEnhancedResume)).toHaveBeenCalledTimes(12);
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+
+  it('links back to the Resume Management start page', async () => {
+    render(<ResumeListPage />);
+
+    await screen.findByTestId('resume-row-builder-1');
+    fireEvent.click(screen.getByRole('button', { name: /Back to Resume Management/ }));
+
+    expect(mockPush).toHaveBeenCalledWith('/builder/start');
+  });
+
   it('routes back to start on an expired session', async () => {
     mockGetAllResumesUnified.mockRejectedValue({ response: { status: 401 } });
 
@@ -368,56 +635,6 @@ describe('ResumeListPage', () => {
     expect(screen.getByRole('dialog', { name: 'Upload resume modal' })).toBeInTheDocument();
   });
 
-  it('deletes a resume after confirmation and removes it from the list', async () => {
-    render(<ResumeListPage />);
-
-    await screen.findByTestId('resume-row-builder-1');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete builder-1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
-
-    await waitFor(() => {
-      expect(mockDeleteResume).toHaveBeenCalledWith('builder-1');
-    });
-    expect(mockToast.success).toHaveBeenCalledWith('Resume deleted successfully');
-    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
-  });
-
-  // Regression: the list paints from the compact payload and hydrates in the
-  // background, which opens a window where the user can delete a row while the
-  // 2N hydration requests are still in flight. The hydration must MERGE into
-  // current state -- replacing the array wholesale rebuilds the deleted row
-  // from the pre-delete `builderList` snapshot and it reappears on screen.
-  // develop2 did this with `setResumes(prev => prev.map(...))`, which could not
-  // resurrect a row because it only ever mapped over rows still present.
-  it('does not bring back a resume deleted while the background hydration is in flight', async () => {
-    let releaseHydration: (value: unknown) => void = () => undefined;
-    const hydrationGate = new Promise(resolve => { releaseHydration = resolve; });
-    mockGetResumeById.mockImplementation((async () => {
-      await hydrationGate;
-      return builderResume;
-    }) as never);
-
-    render(<ResumeListPage />);
-
-    // First paint comes from the compact payload, before hydration resolves.
-    await screen.findByTestId('resume-row-builder-1');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete builder-1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
-    await waitFor(() => {
-      expect(mockDeleteResume).toHaveBeenCalledWith('builder-1');
-    });
-    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
-
-    // Now let the in-flight hydration land.
-    releaseHydration(undefined);
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('resume-row-enhanced-1')).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId('resume-row-builder-1')).not.toBeInTheDocument();
-  });
-
   it('downloads builder and enhanced resumes through their correct APIs', async () => {
     render(<ResumeListPage />);
 
@@ -435,5 +652,86 @@ describe('ResumeListPage', () => {
     await waitFor(() => {
       expect(mockDownloadEnhancedResume).toHaveBeenCalledWith('enhanced-1', 'docx');
     });
+  }, 20000);
+  it('reads no more than the per-minute budget (50) at once, and fills those cards without waiting for the rest', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    const many = Array.from({ length: 55 }, (_, i) => ({
+      ...enhancedResume,
+      id: `enhanced-${i + 1}`,
+      display_name: `Uploaded ${i + 1}`,
+    }));
+    mockGetAllResumesUnified.mockResolvedValue({ builder_resumes: [], enhanced_resumes: many } as never);
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      enhanced_data: { personalInfo: { fullname: 'U', email: 'u@example.com', phone: '1' } },
+    } as never);
+
+    render(<ResumeListPage />);
+
+    await waitFor(() => expect(vi.mocked(getEnhancedResume)).toHaveBeenCalledTimes(50));
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-50')).toHaveAttribute('data-completion', '13');
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(vi.mocked(getEnhancedResume)).toHaveBeenCalledTimes(50);
+    expect(screen.getByTestId('resume-row-enhanced-51')).toHaveAttribute('data-completion', 'undefined');
+  });
+
+  it('starts no new enhanced reads after the page is left', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    const many = Array.from({ length: 10 }, (_, i) => ({ ...enhancedResume, id: `enhanced-${i + 1}` }));
+    mockGetAllResumesUnified.mockResolvedValue({ builder_resumes: [], enhanced_resumes: many } as never);
+    const pending: Array<() => void> = [];
+    vi.mocked(getEnhancedResume).mockImplementation(() => new Promise((resolve) => {
+      pending.push(() => resolve({ enhanced_data: {} } as never));
+    }));
+
+    const { unmount } = render(<ResumeListPage />);
+    await waitFor(() => expect(pending.length).toBe(4));
+    unmount();
+    pending.splice(0).forEach((release) => release());
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(vi.mocked(getEnhancedResume)).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps the enhanced completion when the builder hydration lands after it', async () => {
+    const { getEnhancedResume } = await import('@/api/enhancerApi');
+    vi.mocked(getEnhancedResume).mockResolvedValue({
+      enhanced_data: {
+        personalInfo: { fullname: 'Uploaded Person', email: 'u@example.com', phone: '123' },
+        professionalSummary: { summary: 'Summary text' },
+        education: [{ degree: 'B.Tech' }],
+        workExperience: [{ company: 'Acme' }],
+      },
+    } as never);
+    let releaseBuilder: () => void = () => undefined;
+    mockGetResumeById.mockImplementationOnce(() => new Promise((resolve) => {
+      releaseBuilder = () => resolve(builderResume as never);
+    }));
+
+    render(<ResumeListPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '50');
+    });
+    releaseBuilder();
+    await waitFor(() => {
+      expect(screen.getByTestId('resume-row-builder-1').getAttribute('data-completion')).toMatch(/^\d+$/);
+    });
+    expect(screen.getByTestId('resume-row-enhanced-1')).toHaveAttribute('data-completion', '50');
+  });
+
+  it('passes the same creation link (with return_to) to list-view rows as to cards', async () => {
+    search.params = new URLSearchParams({ return_to: '/cover-letter/new' });
+    render(<ResumeListPage />);
+
+    await screen.findByTestId('resume-row-builder-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Change view' }));
+    fireEvent.click(screen.getByRole('option', { name: /List view/ }));
+
+    expect(screen.getByTestId('resume-table-row-builder-1'))
+      .toHaveAttribute('data-creation-url', '/builder/creation/builder-1?return_to=%2Fcover-letter%2Fnew');
+    expect(screen.getByTestId('resume-table-row-enhanced-1'))
+      .toHaveAttribute('data-creation-url', '/builder/creation/enhanced-1?source=enhanced&return_to=%2Fcover-letter%2Fnew');
   });
 });

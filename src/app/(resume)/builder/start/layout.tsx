@@ -42,8 +42,8 @@ export default function ResumeLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="antialiased">
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased" suppressHydrationWarning>
         <DashboardProvider>
           <Header />
           <div className="flex pt-14 bg-white min-h-screen">

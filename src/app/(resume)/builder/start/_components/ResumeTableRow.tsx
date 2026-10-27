@@ -1,5 +1,5 @@
 "use client";
-import { CircleCheck, Download, EllipsisVertical, Share2, Sparkles, Star } from "lucide-react";
+import { CircleCheck, Download, EllipsisVertical, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -10,12 +10,16 @@ import logger from "@/lib/logger";
 const ResumeTableRow = ({
   resume,
   onDownload,
+  onSetPrimary,
+  creationUrl,
   downloading
 }: {
   resume: Resume;
   index: number;
-  onDelete: () => void;
   onDownload: () => void;
+  onSetPrimary?: () => void;
+  /** Where the resume opens (keeps return_to); defaults to the plain editor route. */
+  creationUrl?: string;
   downloading: boolean;
 }) => {
   const router = useRouter();
@@ -72,9 +76,9 @@ const ResumeTableRow = ({
     logger.info("Opening resume:", resume.id);
     localStorage.removeItem("resumeData");
     localStorage.setItem("current_resume_id", resume.id);
-    const url = resume.source === 'enhanced'
+    const url = creationUrl ?? (resume.source === 'enhanced'
       ? `/builder/creation/${resume.id}?source=enhanced`
-      : `/builder/creation/${resume.id}`;
+      : `/builder/creation/${resume.id}`);
     router.push(url);
   };
 
@@ -102,13 +106,13 @@ const ResumeTableRow = ({
               <p className="font-semibold text-sm text-gray-900 group-hover:text-[#1f4e98] transition-colors">{resume.name}</p>
               {resume.primary && <CircleCheck className="w-3.5 h-3.5 text-[#2557a7]" />}
             </div>
-            {resume.primary ? (
-              <span className="text-[10px] font-semibold text-[#1f4e98] bg-blue-50 px-1.5 py-0.5 rounded-full">
-                Primary
-              </span>
-            ) : (
-              <span className="text-xs text-gray-400">{resume.source === 'enhanced' ? 'Enhanced' : 'Builder'}</span>
-            )}
+            <div className="flex items-center gap-2">
+              {resume.primary && (
+                <span className="text-[10px] font-semibold text-[#1f4e98] bg-blue-50 px-1.5 py-0.5 rounded-full">
+                  Primary
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </td>
@@ -168,25 +172,17 @@ const ResumeTableRow = ({
             className="bg-white border border-gray-200 rounded-2xl w-52 overflow-hidden"
           >
             <div className="p-1.5">
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors text-left group">
+              <button
+                onClick={() => { onSetPrimary?.(); setIsOpen(false); }}
+                disabled={resume.primary}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors text-left group disabled:cursor-default disabled:hover:bg-transparent"
+              >
                 <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                  <Star className="w-3.5 h-3.5 text-amber-500" />
+                  <Star className={`w-3.5 h-3.5 text-amber-500 ${resume.primary ? "fill-amber-400" : ""}`} />
                 </div>
-                <span className="text-sm text-gray-700 font-medium">Set as Primary</span>
-              </button>
-
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-blue-50 transition-colors text-left group">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-3.5 h-3.5 text-[#2557a7]" />
-                </div>
-                <span className="text-sm text-gray-700 font-medium group-hover:text-[#1f4e98]">Optimize for Job</span>
-              </button>
-
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors text-left">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <Share2 className="w-3.5 h-3.5 text-gray-500" />
-                </div>
-                <span className="text-sm text-gray-700 font-medium">Share</span>
+                <span className="text-sm text-gray-700 font-medium">
+                  {resume.primary ? "Primary resume" : "Set as Primary"}
+                </span>
               </button>
 
               <button

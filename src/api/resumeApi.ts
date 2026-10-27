@@ -946,23 +946,6 @@ export const getResumeScore = async (
   }
 };
 
-// ==================== DELETE RESUME ====================
-export const deleteResume = async (resumeId: string): Promise<void> => {
-
-  try {
-    logger.debug("🗑️ Deleting resume:", resumeId);
-
-    await httpClient.delete(`/resumes/${resumeId}`);
-
-    logger.info("✅ Resume deleted");
-    localStorage.removeItem("current_resume_id");
-
-  } catch (error) {
-    logger.error('❌ Error deleting resume:', error);
-    throw error;
-  }
-};
-
 // ==================== AUTO-SAVE RESUME ====================
 export type AutoSaveResumeResponse = ResumeResponse & { warnings?: Array<string | { field?: string; message?: string; severity?: string; type?: string }> };
 
@@ -1107,6 +1090,41 @@ export const downloadResume = async (
     logger.error('❌ Error downloading:', error);
     throw error;
   }
+};
+
+// A small server-rendered picture of a resume, for the thumbnails on the resume list (ResumeThumbnail).
+// It uses the same backend PDF generator as the download (format=png: the generated PDF rendered to ONE tall
+// image with every page stacked, the thumbnail shows its top), so it matches the exported file. The builder's own live preview does not use it: that is the React
+// template, adjusted by the Style & Layout settings (usePreviewLayout).
+export const getResumePreviewImage = async (
+  resumeId: string,
+  catalogueTemplateId?: string,
+  domainTemplateId?: string,
+  sectionBgColor?: string,
+  accentColor?: string,
+  sectionOrder?: string[],
+  fontFamily?: string,
+  lineSpacing?: string,
+  careerLevel?: string,
+  signal?: AbortSignal,
+  layout?: LayoutOptions
+): Promise<Blob> => {
+  const params = new URLSearchParams({ format: 'png' });
+  if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
+  if (domainTemplateId) params.append('template_id', domainTemplateId);
+  if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
+  if (accentColor) params.append('accent_color', accentColor);
+  if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
+  if (fontFamily) params.append('font_family', fontFamily);
+  if (lineSpacing) params.append('line_height', lineSpacing);
+  if (careerLevel) params.append('career_level', careerLevel);
+  appendLayoutParams(params, layout);
+
+  const response = await httpClient.get<Blob>(
+    `/resumes/${resumeId}/download?${params.toString()}`,
+    { responseType: 'blob', signal }
+  );
+  return response.data;
 };
 
 // getTemplatesByCategory: every template, as an array (all callers use it

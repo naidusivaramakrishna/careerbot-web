@@ -2,9 +2,15 @@
 import React, { useEffect, useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { getAllResumesUnified } from '@/api/resumeApi';
+import { getAllResumesUnified, getResumeById } from '@/api/resumeApi';
 import { toSameOriginPath } from '@/lib/internalPath';
 import EmptyState from './_components/EmptyState';
+import YourResumes from './_components/YourResumes';
+import { formatDateResume } from '@/utils/formatDateResume';
+import { computePreviewScore } from '../creation/_lib/computePreviewScore';
+import { getEnhancedCurrentScore } from '../creation/_utils/enhancedScore';
+import type { ResumeResponse } from '@/api/resumeApi';
+import type { ATSScore, EnhancedResumeSummary } from '@/types/api.types';
 
 export interface Resume {
   id: string;
@@ -20,27 +26,25 @@ export interface Resume {
   updatedAt?: string;
 }
 
+export interface StartResume {
+  id: string;
+  name: string;
+  score: number;
+  modified: string;
+  updatedAt: string;
+  source: 'enhanced' | 'builder';
+}
+
+// How many resumes "Your Resumes" shows
+const SHOWN_RESUMES = 3;
+
 const PageShell = ({ children }: { children: React.ReactNode }) => (
-  <div className="min-h-screen bg-gray-50">
-    <div className="px-6 pt-6 pb-2">
-      <div className="flex items-center gap-3">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}
-        >
-          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 leading-tight">Resume Management</h1>
-          <p className="text-xs text-gray-500">Manage, analyze and optimize your resumes with AI</p>
-        </div>
-      </div>
+  <div className="min-h-screen bg-[#f7f9fc]">
+    <div className="mx-auto max-w-[1180px] px-8 pt-4 pb-10">
+      <h1 className="text-[24px] font-bold text-gray-900 leading-tight tracking-tight">Resume Management</h1>
+      <p className="text-sm text-gray-600 mt-1">Manage, analyze and optimize your resumes with AI.</p>
+      <div className="mt-4">{children}</div>
     </div>
-    <div className="mx-6 mt-4 border-t border-gray-200" />
-    {children}
   </div>
 );
 
@@ -65,6 +69,7 @@ const ResumePageContent = () => {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  const [resumes, setResumes] = useState<StartResume[]>([]);
 
   const checkForResumes = useCallback(async () => {
     try {
@@ -100,10 +105,51 @@ const ResumePageContent = () => {
         }
       }
 
-      if (!returnTo && (builder_resumes.length > 0 || enhanced_resumes.length > 0)) {
-        router.push('/builder/start/list');
-        return;
-      }
+      // Show the most recently edited resumes under the creation choices.
+      // A builder_score on the compact list payload has no calculation time, so it can be
+      // stale; the list page ignores it too. Score from the resume content instead.
+      const builderRows: StartResume[] = (builder_resumes as unknown as ResumeResponse[]).map((item) => ({
+        id: item.id,
+        name: item.personalInfo?.fullname || item.personalInfo?.email?.split('@')[0] || 'Untitled Resume',
+        score: computePreviewScore({ ...item, builder_score: undefined }).score,
+        modified: formatDateResume(item.updatedAt),
+        updatedAt: item.updatedAt,
+        source: 'builder',
+      }));
+      const enhancedRows: StartResume[] = enhanced_resumes.map((item: EnhancedResumeSummary) => ({
+        id: item.id,
+        name: item.display_name || 'Uploaded Resume',
+        score: Math.round(
+          typeof item.ats_score === 'number'
+            ? item.ats_score
+            : getEnhancedCurrentScore(item.ats_score as ATSScore | undefined),
+        ),
+        modified: formatDateResume(item.updated_at),
+        updatedAt: item.updated_at,
+        source: 'enhanced',
+      }));
+      const sorted = [...builderRows, ...enhancedRows].sort(
+        (a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0),
+      );
+
+      // The compact list payload leaves out most sections, so scoring it gives a number that is too low.
+      // Only the cards that are shown (see YourResumes) are read in full, like the list page does for every row.
+      const shownBuilderIds = sorted.slice(0, SHOWN_RESUMES).filter((r) => r.source === 'builder').map((r) => r.id);
+      const fullRecords = await Promise.allSettled(shownBuilderIds.map((id) => getResumeById(id)));
+      const scoredFromContent = new Map<string, { score: number; name?: string }>();
+      fullRecords.forEach((result, i) => {
+        if (result.status !== 'fulfilled') return; // keep the compact score for a record that cannot be read
+        scoredFromContent.set(shownBuilderIds[i], {
+          score: computePreviewScore({ ...result.value, builder_score: undefined }).score,
+          name: result.value.personalInfo?.fullname || undefined,
+        });
+      });
+      setResumes(
+        sorted.map((r) => {
+          const full = scoredFromContent.get(r.id);
+          return full && r.source === 'builder' ? { ...r, score: full.score, name: full.name ?? r.name } : r;
+        }),
+      );
 
       // No builder resume for this return flow - show the creation choices.
     } catch (err: unknown) {
@@ -128,11 +174,14 @@ const ResumePageContent = () => {
 
   return (
     <PageShell>
-      {/* Subtle intro text */}
-      <div className="px-6 pt-6 pb-2 text-center">
-        <p className="text-sm text-gray-400">Choose how you&apos;d like to get started</p>
+      <div className="rounded-2xl border border-[#e3e9f2] bg-[#f1f5fb] p-6">
+        <h2 className="text-[22px] font-bold text-gray-900 leading-tight">Choose how you&apos;d like to get started</h2>
+        <p className="text-sm text-gray-600 mt-1.5 mb-5">
+          Create a new resume or upload an existing one to save time and improve it with AI.
+        </p>
+        <EmptyState selected={selected} onSelect={setSelected} />
       </div>
-      <EmptyState selected={selected} onSelect={setSelected} />
+      <YourResumes resumes={resumes} />
     </PageShell>
   );
 };

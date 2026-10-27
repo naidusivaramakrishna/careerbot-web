@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ResumeStartPage from '@/app/(resume)/builder/start/page';
-import { getAllResumesUnified } from '@/api/resumeApi';
+import { getAllResumesUnified, getResumeById } from '@/api/resumeApi';
+import { computePreviewScore } from '@/app/(resume)/builder/creation/_lib/computePreviewScore';
 import { toast } from 'sonner';
 
 const { mockPush, mockSearchParams } = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/api/resumeApi', () => ({
   getAllResumesUnified: vi.fn(),
+  getResumeById: vi.fn(),
   createResumeWithAuth: vi.fn(),
 }));
 
@@ -42,12 +44,14 @@ vi.mock('../../../../app/(resume)/builder/start/_components/EmptyState', () => (
 }));
 
 const mockGetAllResumesUnified = vi.mocked(getAllResumesUnified);
+const mockGetResumeById = vi.mocked(getResumeById);
 const mockToast = vi.mocked(toast);
 
 describe('ResumeStartPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchParams.mockReturnValue(new URLSearchParams());
+    mockGetResumeById.mockRejectedValue(new Error('not found'));
     mockGetAllResumesUnified.mockResolvedValue({
       builder_resumes: [],
       enhanced_resumes: [],
@@ -72,30 +76,81 @@ describe('ResumeStartPage', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('redirects to the resume list when builder resumes exist', async () => {
+  it('lists saved builder resumes under the creation choices instead of redirecting', async () => {
     mockGetAllResumesUnified.mockResolvedValue({
-      builder_resumes: [{ id: 'builder-1' }],
+      builder_resumes: [{ id: 'builder-1', personalInfo: { fullname: 'Jane Dev' }, updatedAt: '2024-09-28T00:00:00Z', builder_score: { score: 78 } }],
       enhanced_resumes: [],
     } as never);
 
     render(<ResumeStartPage />);
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/builder/start/list');
-    });
+    expect(await screen.findByText('Your Resumes')).toBeInTheDocument();
+    expect(screen.getByText('Jane Dev')).toBeInTheDocument();
+    // the compact payload's builder_score is unverified, so the card scores the content instead
+    expect(screen.queryByText('78% score')).not.toBeInTheDocument();
+    expect(screen.getByText(/^\d+% score$/)).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('redirects to the resume list when only enhanced resumes exist', async () => {
+  it('scores a builder resume from its full record, because the compact list leaves out sections', async () => {
+    const full = {
+      id: 'builder-1',
+      personalInfo: { fullname: 'Jane Dev', email: 'jane@example.com', phone: '123' },
+      professionalSummary: 'Backend engineer with eight years of experience building reliable payment systems.',
+      skills: { programming_languages: [{ id: '1', name: 'Go' }, { id: '2', name: 'SQL' }] },
+      updatedAt: '2024-09-28T00:00:00Z',
+    };
     mockGetAllResumesUnified.mockResolvedValue({
-      builder_resumes: [],
-      enhanced_resumes: [{ id: 'enhanced-1' }],
+      builder_resumes: [{ id: 'builder-1', personalInfo: { fullname: 'Jane Dev' }, updatedAt: '2024-09-28T00:00:00Z' }],
+      enhanced_resumes: [],
+    } as never);
+    mockGetResumeById.mockResolvedValue(full as never);
+    const expected = computePreviewScore({ ...full, builder_score: undefined } as never).score;
+    const compact = computePreviewScore({ id: 'builder-1', personalInfo: { fullname: 'Jane Dev' } } as never).score;
+    expect(expected).toBeGreaterThan(compact);
+
+    render(<ResumeStartPage />);
+
+    expect(await screen.findByText(`${expected}% score`)).toBeInTheDocument();
+    expect(mockGetResumeById).toHaveBeenCalledWith('builder-1');
+  });
+
+  it('reads in full only the resumes that are shown', async () => {
+    const row = (n: number) => ({ id: `builder-${n}`, personalInfo: { fullname: `Person ${n}` }, updatedAt: `2024-09-${10 + n}T00:00:00Z` });
+    mockGetAllResumesUnified.mockResolvedValue({
+      builder_resumes: [row(1), row(2), row(3), row(4), row(5)],
+      enhanced_resumes: [],
+    } as never);
+
+    render(<ResumeStartPage />);
+    await screen.findByText('Your Resumes');
+
+    expect(mockGetResumeById.mock.calls.map((c) => c[0]).sort()).toEqual(['builder-3', 'builder-4', 'builder-5']);
+  });
+
+  it('keeps the compact score when the full record cannot be read', async () => {
+    mockGetAllResumesUnified.mockResolvedValue({
+      builder_resumes: [{ id: 'builder-1', personalInfo: { fullname: 'Jane Dev' }, updatedAt: '2024-09-28T00:00:00Z' }],
+      enhanced_resumes: [],
     } as never);
 
     render(<ResumeStartPage />);
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/builder/start/list');
-    });
+    expect(await screen.findByText('Jane Dev')).toBeInTheDocument();
+    expect(screen.getByText(/^\d+% score$/)).toBeInTheDocument();
+    expect(mockToast.error).not.toHaveBeenCalled();
+  });
+
+  it('lists enhanced resumes when only enhanced resumes exist', async () => {
+    mockGetAllResumesUnified.mockResolvedValue({
+      builder_resumes: [],
+      enhanced_resumes: [{ id: 'enhanced-1', display_name: 'Uploaded CV', ats_score: 60, updated_at: '2024-09-10T00:00:00Z' }],
+    } as never);
+
+    render(<ResumeStartPage />);
+
+    expect(await screen.findByText('Uploaded CV')).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('opens the active builder resume directly when returning to Cover Letter', async () => {

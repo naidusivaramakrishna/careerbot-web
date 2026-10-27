@@ -651,13 +651,15 @@ export async function previewEnhancedResume(enhanced_id: string): Promise<{
  * For new code, use previewEnhancedResume() which returns full data + PDF
  *
  * @param enhanced_id - ID of enhanced resume
+ * @param signal - optional; aborting it cancels the request
  * @returns Blob of the PDF for inline preview
  * @deprecated Use previewEnhancedResume() instead
  */
-export async function previewEnhancedResumePDFOnly(enhanced_id: string): Promise<Blob> {
+export async function previewEnhancedResumePDFOnly(enhanced_id: string, signal?: AbortSignal): Promise<Blob> {
   try {
     const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/preview`, {
       responseType: 'blob',
+      signal,
     });
     return response.data as Blob;
   } catch (err: unknown) {
