@@ -25,6 +25,7 @@ import { isAxiosError } from "axios";
 import { httpClient } from "@/lib/http";
 import logger from "@/lib/logger";
 import { isUserAuthenticated } from "@/api/chatbotAuth";
+import { refreshAccessToken } from "@/api/authApi";
 
 /** HTTP status of a failed httpClient call (undefined for network/non-HTTP errors). */
 const errorStatus = (error: unknown): number | undefined =>
@@ -110,6 +111,10 @@ export interface EscalationRequest {
   /** Optional: ids returned by uploadTicketAttachment. A screenshot is
    * never required to raise a ticket -- omit or send an empty array. */
   attachment_ids?: string[];
+  /** The caller's confirmed auth mode (a successful profile fetch), when it
+   * has one: decides the first request shape instead of the
+   * isUserAuthenticated() guess. Not sent to the backend. */
+  authenticated?: boolean;
 }
 
 /** Response from POST /tickets/attachments/upload */
@@ -161,8 +166,8 @@ export interface EscalationResponse {
    * Only populated for guest tickets with a linked attachment -- each entry
    * is a single-use, time-limited link that works without logging in (see
    * GET /tickets/attachments/guest/{token}). Authenticated tickets get an
-   * empty array here; they already have a working, owner-authorized URL
-   * via getTicketAttachmentUrl.
+   * empty array here; owners/staff open theirs through
+   * openOrDownloadTicketAttachment.
    */
   attachments?: Array<{ attachment_id: string; filename: string; view_url: string }>;
 }
@@ -171,7 +176,7 @@ export interface EscalationResponse {
  * Support ticket item in list (careerbot-api TicketResponse)
  */
 /** Display-only metadata for a ticket attachment -- NOT the file itself.
- * Pair with getTicketAttachmentUrl() to build the actual download link. */
+ * Open it with openOrDownloadTicketAttachment() (or its view_url, guests). */
 export interface TicketAttachmentSummary {
   attachment_id: string;
   filename: string;
@@ -187,6 +192,10 @@ export interface SupportTicket {
   status: string;
   /** 'normal' | 'urgent' */
   priority: string;
+  /** Finer-grained subcategory within affected_feature (e.g. 'forgot_password'
+   * under account_organization) -- undefined for tickets raised before this
+   * field existed, or with no subcategory picked. Never fabricated when missing. */
+  issue_type?: string | null;
   user_email: string;
   user_name?: string | null;
   created_at: string;
@@ -473,6 +482,9 @@ const buildTicketBody = (request: EscalationRequest, forAuthenticated: boolean) 
         description: request.issue_description,
         affected_feature: mapFeatureToBackend(request.issue_category),
         priority: mapPriorityToBackend(request.issue_details?.priority),
+        ...(request.issue_details?.issue_type && {
+          issue_type: request.issue_details.issue_type
+        }),
         ...(request.issue_details?.steps_to_reproduce && {
           steps_to_reproduce: request.issue_details.steps_to_reproduce
         }),
@@ -492,6 +504,9 @@ const buildTicketBody = (request: EscalationRequest, forAuthenticated: boolean) 
         user_type: request.issue_details?.user_type || 'other',
         name: request.issue_details?.requester_name,
         priority: mapPriorityToBackend(request.issue_details?.priority),
+        ...(request.issue_details?.issue_type && {
+          issue_type: request.issue_details.issue_type
+        }),
         ...(request.issue_details?.steps_to_reproduce && {
           steps_to_reproduce: request.issue_details.steps_to_reproduce
         }),
@@ -550,16 +565,108 @@ export const uploadTicketAttachment = async (
 };
 
 /**
- * Build the download/view URL for a ticket attachment. Reuses the exact
- * same backend base URL every other ticket call already uses (not a new
- * env var/config) -- a direct <a href>, same as the "View Attachment" link
- * in the confirmation emails. The URL is not a secret: the real
- * authorization check (ticket owner or support staff) is enforced
- * server-side on GET /tickets/{ticket_id}/attachments/{attachment_id}
- * regardless of who navigates to it.
+ * URL of the owner/staff attachment route. Not for a plain <a href>: that
+ * gets 403 once the access cookie expires (see
+ * openOrDownloadTicketAttachment, which every in-app caller uses). Guest
+ * tickets use the backend's own view_url instead.
  */
 export const getTicketAttachmentUrl = (ticketId: string, attachmentId: string): string =>
   `${httpClient.defaults.baseURL}/tickets/${pathSegment(ticketId)}/attachments/${pathSegment(attachmentId)}`;
+
+const triggerBlobDownload = (objectUrl: string, filename: string) => {
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
+// Explicit allowlist, not a startsWith('image/') prefix match: the preview
+// tab is navigated to a same-origin blob URL (URL.createObjectURL inherits
+// the app's own origin), so letting it preview inline is only safe for
+// formats that cannot embed/execute script -- image/svg+xml can carry a
+// <script> or event-handler attribute, which would then run with the app's
+// own cookies, storage, and credentialed fetch access. Matches exactly what
+// the upload form itself accepts (.png/.jpg/.jpeg/.pdf) -- nothing else is
+// ever a legitimate attachment in the first place.
+const PREVIEWABLE_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
+
+/**
+ * Open (image/PDF preview) or download an authenticated ticket attachment.
+ * Deliberately NOT a plain <a href> to GET /tickets/{id}/attachments/{id}:
+ * that endpoint returns 403 "Please log in to view attachments" -- not 401
+ * -- whenever the access-token cookie is missing or has expired (its
+ * 30-minute TTL is normally invisible because httpClient's response
+ * interceptor silently refreshes+retries on 401; it explicitly does NOT do
+ * that for 403, which it also uses to mean "tenant mismatch" elsewhere). A
+ * raw anchor navigation bypasses that interceptor entirely, so an otherwise
+ * legitimate, already-logged-in ticket owner who simply hasn't made another
+ * API call in the last half hour gets told to log in. Fetching through
+ * httpClient and retrying once via the same refresh-token flow the
+ * interceptor itself uses (refreshAccessToken) fixes that without touching
+ * the backend's authorization check at all -- a genuinely unauthenticated
+ * or unauthorized caller still gets rejected after the retry.
+ */
+export const openOrDownloadTicketAttachment = async (
+  ticketId: string,
+  attachmentId: string,
+  filename: string,
+): Promise<void> => {
+  const url = `/tickets/${pathSegment(ticketId)}/attachments/${pathSegment(attachmentId)}`;
+  const fetchBlob = () => httpClient.get<Blob>(url, { responseType: 'blob' });
+
+  // Opened synchronously, before any `await`, so the browser still treats
+  // it as a direct result of the user's click rather than a blocked popup,
+  // even though the blob that fills it in arrives after an async fetch.
+  //
+  // Deliberately NOT passing the 'noopener' feature to window.open: per the
+  // HTML spec, a 'noopener' open returns null for the new window reference
+  // (the tab still opens, but there's nothing left to navigate to or close)
+  // -- every use of previewTab below would be a no-op, so images/PDFs never
+  // actually preview and a blank about:blank tab is left open on every
+  // click. Setting .opener = null immediately after getting the reference
+  // achieves the same "new tab can't reach back into window.opener"
+  // protection, without losing the reference this function needs.
+  const previewTab = window.open('', '_blank');
+  if (previewTab) previewTab.opener = null;
+
+  try {
+    let response;
+    try {
+      response = await fetchBlob();
+    } catch (error: unknown) {
+      if (errorStatus(error) === 403 && isUserAuthenticated()) {
+        await refreshAccessToken();
+        response = await fetchBlob();
+      } else {
+        throw error;
+      }
+    }
+
+    const contentType = String(response.headers?.['content-type'] || response.data.type || '');
+    // Media type only, before any ';' parameter (e.g. "application/pdf;
+    // charset=binary") -- a strict equality check on the raw header was
+    // silently sending real PDFs with extra parameters to download instead
+    // of preview.
+    const mediaType = contentType.split(';')[0].trim().toLowerCase();
+    const objectUrl = URL.createObjectURL(response.data);
+    const isPreviewable = PREVIEWABLE_CONTENT_TYPES.has(mediaType);
+
+    if (isPreviewable && previewTab) {
+      previewTab.location.href = objectUrl;
+    } else {
+      previewTab?.close();
+      triggerBlobDownload(objectUrl, filename);
+    }
+    // Revoke later -- the new tab/download needs time to actually load the
+    // blob URL before it's freed.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    previewTab?.close();
+    throw error;
+  }
+};
 
 export const escalateToSupport = async (
   request: EscalationRequest
@@ -582,7 +689,7 @@ export const escalateToSupport = async (
   // timestamp hasn't expired yet. Send our best guess, and if the backend
   // reports the shape doesn't match the real session, retry once with the
   // other shape instead of failing the whole submission.
-  let authenticated = isUserAuthenticated();
+  let authenticated = request.authenticated ?? isUserAuthenticated();
 
   const attempt = async (forAuthenticated: boolean) => {
     const ticketBody = buildTicketBody(request, forAuthenticated);
@@ -914,6 +1021,7 @@ const chatbotApi = {
   getTicketDetails,
   uploadTicketAttachment,
   getTicketAttachmentUrl,
+  openOrDownloadTicketAttachment,
   escalateToSupport,
   getFeatureCosts,
   getBillingSummary,

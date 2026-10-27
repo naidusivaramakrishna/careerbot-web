@@ -59,9 +59,20 @@ describe('isChatbotAllowedOnPage', () => {
     expect(isChatbotAllowedOnPage('/jobslogin/smart-match')).toBe(false);
   });
 
+  it('hides the chatbot on the guest support ticket portal, reached from the chatbot itself', () => {
+    expect(isChatbotAllowedOnPage('/support/tickets/new')).toBe(false);
+    expect(isChatbotAllowedOnPage('/support')).toBe(false);
+  });
+
   it('defaults to allowed for ordinary pages and a missing pathname', () => {
     expect(isChatbotAllowedOnPage('/dashboard')).toBe(true);
     expect(isChatbotAllowedOnPage(null)).toBe(true);
     expect(isChatbotAllowedOnPage(undefined)).toBe(true);
+  });
+
+  it('hides the chatbot on its own full-screen Support & History destination, but not elsewhere in the dashboard', () => {
+    expect(isChatbotAllowedOnPage('/dashboard/support-history')).toBe(false);
+    expect(isChatbotAllowedOnPage('/dashboard')).toBe(true);
+    expect(isChatbotAllowedOnPage('/dashboard/profile')).toBe(true);
   });
 });

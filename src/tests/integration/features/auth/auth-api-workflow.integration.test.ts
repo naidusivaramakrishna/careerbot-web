@@ -425,4 +425,49 @@ describe('Auth API — refreshAccessToken', () => {
 
     await expect(refreshAccessToken()).rejects.toThrow('Token expired');
   });
+
+  it('joins an already in-flight refresh instead of posting a second request', async () => {
+    // Models useTokenRefresh.ts's proactive refresh and the attachment
+    // download 403 handler calling refreshAccessToken() concurrently -- the
+    // backend's refresh_token is single-use/rotating, so a second POST sent
+    // before the first resolves would race against an already-consumed
+    // token and fail even though the session itself is fine.
+    let resolvePost!: (value: AxiosResponse) => void;
+    const postSpy = vi.spyOn(httpClient, 'post').mockReturnValueOnce(
+      new Promise((resolve) => { resolvePost = resolve; }),
+    );
+
+    const first = refreshAccessToken();
+    const second = refreshAccessToken();
+
+    expect(postSpy).toHaveBeenCalledTimes(1);
+
+    resolvePost(makeResponse({ token_type: 'bearer', expires_in: 1800 }));
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toEqual({ token_type: 'bearer', expires_in: 1800 });
+    expect(secondResult).toBe(firstResult);
+    expect(postSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts a fresh request for a refresh that begins after the previous one has already settled', async () => {
+    const postSpy = vi.spyOn(httpClient, 'post')
+      .mockResolvedValueOnce(makeResponse({ token_type: 'bearer', expires_in: 1800 }))
+      .mockResolvedValueOnce(makeResponse({ token_type: 'bearer', expires_in: 1800 }));
+
+    await refreshAccessToken();
+    await refreshAccessToken();
+
+    expect(postSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the next refresh start fresh after a shared in-flight refresh fails', async () => {
+    const postSpy = vi.spyOn(httpClient, 'post')
+      .mockRejectedValueOnce(new Error('Token refresh failed'))
+      .mockResolvedValueOnce(makeResponse({ token_type: 'bearer', expires_in: 1800 }));
+
+    await expect(refreshAccessToken()).rejects.toThrow('Token refresh failed');
+    await expect(refreshAccessToken()).resolves.toEqual({ token_type: 'bearer', expires_in: 1800 });
+    expect(postSpy).toHaveBeenCalledTimes(2);
+  });
 });

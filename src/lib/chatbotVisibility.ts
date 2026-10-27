@@ -9,7 +9,18 @@
 // Routes with their own dedicated chat UI, or that have no room for a
 // floating widget (admin/recruiter tooling).
 // /jobslogin has Nancy chat widget that would overlap with floating CareerBot launcher.
-const EXCLUDED_PATH_PREFIXES = ['/chatbot', '/admin', '/recruiter', '/jobslogin'];
+// /support is the guest ticket-raising portal reached from the chatbot's
+// own "Raise a support ticket" link -- the floating launcher/greeting
+// popup re-appearing there would be a confusing, redundant "contact us
+// inside contact us" loop, so the whole /support/* namespace is excluded
+// rather than just /support/tickets/new, matching the broad-prefix
+// pattern already used for /admin and /recruiter above.
+// /dashboard/support-history is the chatbot's OWN full-screen History
+// destination (see ChatApp.tsx's History button) -- the floating launcher
+// must not sit on top of it. "Continue conversation" / "New Conversation"
+// there navigate back to a non-excluded page (/dashboard) specifically so
+// the chatbot is available again to actually open the resumed/new chat.
+const EXCLUDED_PATH_PREFIXES = ['/chatbot', '/admin', '/recruiter', '/jobslogin', '/support', '/dashboard/support-history'];
 
 // /mock-test/<segment> sub-paths that are browsing/results pages, not the
 // live timed test itself (e.g. /mock-test/<id> is the live attempt).

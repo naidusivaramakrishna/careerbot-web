@@ -1,4 +1,5 @@
 import { httpClient } from "@/lib/http";
+import { coordinatedUserRefreshPost } from "@/lib/userRefreshCoordinator";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
 import { clearPendingVerification } from '@/lib/pendingVerification';
@@ -396,20 +397,31 @@ export interface TokenRefreshResponse {
  *
  * @returns New access token and expiry information
  */
+// The POST itself is deduped by coordinatedUserRefreshPost, SHARED with
+// http.ts's response interceptor -- an ordinary 401 on some other request
+// can trigger the interceptor's own reactive refresh at the same moment
+// useTokenRefresh.ts (proactive) or chatbotApi.ts's attachment-download
+// 403 handler calls this function. The backend's refresh_token is
+// single-use/rotating, so any two concurrent POSTs race: whichever loses
+// gets an already-consumed token and fails, even though the session
+// itself is perfectly fine. See userRefreshCoordinator.ts for why this
+// needs to be shared ACROSS files, not just deduped within this one.
 export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
     // Same Next proxy route as the http.ts interceptor: it strips the tokens
     // from the body and rewrites the rotated cookies (see src/lib/http.ts).
-    const response = await httpClient.post<TokenRefreshResponse>(
-      "/api/backend/auth/refresh",
-      {},
-      {
-        baseURL: "",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-Id": getTenantId(),
-        },
-      }
+    const response = await coordinatedUserRefreshPost(() =>
+      httpClient.post<TokenRefreshResponse>(
+        "/api/backend/auth/refresh",
+        {},
+        {
+          baseURL: "",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Tenant-Id": getTenantId(),
+          },
+        }
+      )
     );
     // ✅ Backend reads refresh_token from httpOnly cookie automatically
     // Backend sets new access_token as httpOnly cookie in response

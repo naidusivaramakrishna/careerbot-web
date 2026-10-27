@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import './ChatApp.css';
 import {
   sendChatMessage,
   escalateToSupport,
   uploadTicketAttachment,
-  getTicketAttachmentUrl,
+  openOrDownloadTicketAttachment,
   getSupportTickets,
   getTicketDetails,
   cancelTicket,
@@ -36,6 +37,14 @@ import {
   PaymentBillingIcon,
   AccountOrganizationIcon,
 } from './FeatureIcons';
+import {
+  MAX_TICKET_ATTACHMENTS,
+  MAX_TICKET_ATTACHMENT_BYTES,
+  MAX_TICKET_SUBJECT_CHARS,
+  MAX_TICKET_QA_CHARS,
+  TICKET_CONTEXT_PARAM,
+  stashTicketContext,
+} from '@/lib/ticketCategories';
 
 interface Message {
   id: string;
@@ -289,13 +298,6 @@ const buildLoginTriggerHref = (destination: string): string =>
 // Ticket ids look like CB-00001. A ?ticket= value with anything else in it
 // ('/', '.', '%', ...; e.g. '../admin') is rejected before any request.
 const isValidTicketId = (id: string): boolean => /^[A-Za-z0-9_-]{1,64}$/.test(id);
-
-// careerbot-api ticket limits (ticket_models.py, support_tickets_public.py).
-// Over them the whole ticket create fails with 422, so enforce them here.
-const MAX_TICKET_ATTACHMENTS = 5;
-const MAX_TICKET_ATTACHMENT_BYTES = 5 * 1024 * 1024;
-const MAX_TICKET_SUBJECT_CHARS = 200;
-const MAX_TICKET_QA_CHARS = 5000;
 
 /**
  * Pure function, no rendering -- derives the inline action link (if any)
@@ -612,6 +614,7 @@ const MessageIcon = () => (
 );
 
 const ChatApp: React.FC = () => {
+  const router = useRouter();
   const hasOpenedRef = useRef(false);
   const [isMinimized, setIsMinimized] = useState(true);
   const [isClosed, setIsClosed] = useState(false);
@@ -641,12 +644,28 @@ const ChatApp: React.FC = () => {
   const [deepLinkTicketId] = useState<string | null>(() =>
     typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('ticket')
   );
+  // Populated once, from ?chat_session= in the URL -- the deep link the
+  // dashboard's Support History page's "Continue conversation" button
+  // points at (see getChatSession / the effect below). Not ?session=:
+  // other pages own that (e.g. /cover-letter/new's extension hand-off).
+  const [deepLinkSessionId] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('chat_session')
+  );
+  // Populated once, from ?chat=new in the URL -- the dashboard's Support
+  // History page's "New Conversation" button points here. Guarded by
+  // deepLinkNewChatHandledRef so it fires startNewChat exactly once, not on
+  // every re-render after hasInitialized flips true.
+  const [deepLinkNewChat] = useState<boolean>(() =>
+    typeof window === 'undefined' ? false : new URLSearchParams(window.location.search).get('chat') === 'new'
+  );
+  const deepLinkNewChatHandledRef = useRef(false);
   // Set once initializeApp (below) finishes its own setMessages([welcomeMessage])
   // reset -- the deep-link effect must not race that reset with its own
   // setMessages call, or whichever one lands second wins and silently
   // drops the other's message.
   const [hasInitialized, setHasInitialized] = useState(false);
   const [isCancellingTicket, setIsCancellingTicket] = useState(false);
+  const [attachmentOpenError, setAttachmentOpenError] = useState<{ ticketId: string; message: string } | null>(null);
   const [messageFeedback, setMessageFeedback] = useState<Map<string, 'yes' | 'no'>>(new Map());
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -1235,7 +1254,7 @@ const ChatApp: React.FC = () => {
     }
 
     if (!isLocallyAuthenticated) {
-      const loginHref = buildLoginTriggerHref(`/chatbot?ticket=${deepLinkTicketId}`);
+      const loginHref = buildLoginTriggerHref(`/chatbot?ticket=${encodeURIComponent(deepLinkTicketId)}`);
       setMessages((prev) => [
         ...prev,
         {
@@ -1288,6 +1307,130 @@ const ChatApp: React.FC = () => {
       cancelled = true;
     };
   }, [deepLinkTicketId, isLocallyAuthenticated, hasInitialized, accountGeneration]);
+
+  useEffect(() => {
+    if (!deepLinkSessionId) return;
+    setIsMinimized(false);
+  }, [deepLinkSessionId]);
+
+  // The account generation this deep link was actually fetched under --
+  // set on the first run that gets past the login gate below, never
+  // reassigned after. Lets a later switch skip re-fetching (or reusing)
+  // this session under the new account entirely, rather than just
+  // cancelling the in-flight request: the session was never the new
+  // account's to begin with, so there's nothing to retry it as.
+  const deepLinkSessionGenerationRef = useRef<number | null>(null);
+
+  // Re-runs when auth state OR the account itself changes, same reasoning
+  // as the ticket deep link above: a signed-out user who follows the link
+  // gets prompted to log in, then lands on the same conversation once
+  // they're back. accountGeneration in the dependency array is what makes
+  // this safe across an account switch specifically -- without it, a
+  // switch mid-fetch doesn't re-run this effect, so `cancelled` is never
+  // set, and the OLD account's session detail can still land (restoring
+  // its messages, and setting sessionId/isBackendSession to ITS session)
+  // after the new account is already active.
+  useEffect(() => {
+    if (!deepLinkSessionId || !hasInitialized) return;
+
+    if (!isLocallyAuthenticated) {
+      // A logout (which bumps accountGeneration, see startNewAccountGeneration
+      // in the "Logout detected" branch above) is a fresh start, not a
+      // "switch to guard against" -- without this reset, logging back in
+      // afterward (even as the SAME account) would permanently look like
+      // a later, unrelated generation to the check below and never fetch
+      // again. Signing in is what the message/link just below exists for.
+      deepLinkSessionGenerationRef.current = null;
+      const loginHref = buildLoginTriggerHref(`/chatbot?chat_session=${encodeURIComponent(deepLinkSessionId)}`);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `deep-link-login-${deepLinkSessionId}`,
+          type: 'assistant',
+          text: `Please log in to continue this conversation.`,
+          timestamp: new Date(),
+          actionLink: { sentence: '', linkText: 'Log in to continue', href: loginHref, requiresLogin: true },
+        },
+      ]);
+      return;
+    }
+
+    if (deepLinkSessionGenerationRef.current === null) {
+      deepLinkSessionGenerationRef.current = accountGeneration;
+    } else if (deepLinkSessionGenerationRef.current !== accountGeneration) {
+      // A later account's re-run of this effect, with no intervening
+      // logout (that resets the ref above) -- the cleanup below, from the
+      // generation that actually owns this fetch, already cancels it.
+      // Nothing here belongs to the new account.
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await getChatSession(deepLinkSessionId);
+        if (cancelled) return;
+        const restoredMessages: Message[] = detail.messages.map((m) => ({
+          id: m.message_id,
+          type: m.role,
+          text: m.content,
+          timestamp: new Date(m.timestamp),
+        }));
+        if (detail.status === 'closed') {
+          // The transcript is still worth showing, but NOT as the active
+          // session: a follow-up message into a closed session 409s. Leave
+          // sessionId/isBackendSession alone so "New Chat"/sending a message
+          // starts a fresh session instead of retrying the closed one.
+          setMessages([
+            ...restoredMessages,
+            {
+              id: `${deepLinkSessionId}-closed`,
+              type: 'system',
+              text: 'This conversation is closed. Start a new chat to continue.',
+              timestamp: new Date(),
+            },
+          ]);
+          return;
+        }
+        setMessages([
+          ...restoredMessages,
+          { id: `${deepLinkSessionId}-restored`, type: 'system', text: RESTORED_NOTICE_TEXT, timestamp: new Date() },
+        ]);
+        setSessionId(deepLinkSessionId);
+        setIsBackendSession(true);
+      } catch (error) {
+        if (cancelled) return;
+        console.error(`Failed to load deep-linked session ${deepLinkSessionId}:`, error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `deep-link-error-${deepLinkSessionId}`,
+            type: 'assistant',
+            text: "Sorry, I couldn't load that conversation. Please try again.",
+            timestamp: new Date(),
+          },
+        ]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkSessionId, isLocallyAuthenticated, hasInitialized, accountGeneration]);
+
+  // ?chat=new -- the dashboard's "New Conversation" button. Just opens the
+  // widget onto a fresh chat; startNewChat already handles archiving
+  // whatever was open before (a no-op here since nothing has been sent yet).
+  useEffect(() => {
+    if (!deepLinkNewChat) return;
+    setIsMinimized(false);
+  }, [deepLinkNewChat]);
+
+  useEffect(() => {
+    if (!deepLinkNewChat || !hasInitialized || deepLinkNewChatHandledRef.current) return;
+    deepLinkNewChatHandledRef.current = true;
+    startNewChat();
+  }, [deepLinkNewChat, hasInitialized]);
 
   const loadSettings = () => {
     try {
@@ -2348,6 +2491,41 @@ const ChatApp: React.FC = () => {
     initializeChat();
   };
 
+  // Sends the user to the real ticketing page instead of the in-widget
+  // modal below (openTicketModal/submitTicket, left in place rather than
+  // removed in this pass). /support/tickets/new handles both guest and
+  // authenticated users (see its own getProfile() fallback), so every
+  // caller here goes to the same destination today.
+  //
+  // NOTE: /dashboard/support-history (this branch) has its OWN purpose-
+  // built reception logic for this redirect (?raise=1&question=&answer=,
+  // see that file's own comment on raiseContext) that nothing currently
+  // feeds -- an earlier version of this comment claimed no such page
+  // existed "on this branch", which this branch itself now contradicts.
+  // Whether authenticated users should land there instead of here is an
+  // open product decision, not resolved by this comment fix.
+  const redirectToTicketPage = (context?: { originalQuestion?: string; chatbotAnswer?: string }) => {
+    const { originalQuestion, chatbotAnswer } = context || {};
+    const params = new URLSearchParams();
+    // Capped here, at the source, same limit the backend enforces on
+    // original_question/chatbot_answer -- an uncapped KB answer could run
+    // to several thousand characters and the receiving form must not have
+    // to guess whether to trust what showed up in the URL.
+    const question = (originalQuestion || '').slice(0, MAX_TICKET_QA_CHARS);
+    const answer = (chatbotAnswer || '').slice(0, MAX_TICKET_QA_CHARS);
+    // Out of the URL when sessionStorage works (see stashTicketContext).
+    const contextId = question || answer ? stashTicketContext(question, answer) : null;
+    if (contextId) params.set(TICKET_CONTEXT_PARAM, contextId);
+    else {
+      if (question) params.set('question', question);
+      if (answer) params.set('answer', answer);
+    }
+    const query = params.toString();
+    setIsMinimized(true);
+    router.push(`/support/tickets/new${query ? `?${query}` : ''}`);
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy modal, kept (see redirectToTicketPage)
   const openTicketModal = async (context?: { originalQuestion?: string; chatbotAnswer?: string }) => {
     const { originalQuestion, chatbotAnswer } = context || {};
     // Subject is a concise issue title describing what the customer asked
@@ -3278,7 +3456,7 @@ const ChatApp: React.FC = () => {
                           <p>
                             <button
                               className="link-btn"
-                              onClick={() => openTicketModal({
+                              onClick={() => redirectToTicketPage({
                                 originalQuestion: findPrecedingUserQuestion(messageIndex),
                                 chatbotAnswer: message.text,
                               })}
@@ -3373,7 +3551,7 @@ const ChatApp: React.FC = () => {
           </div>
 
           <p className="input-footer">
-            Can&apos;t find an answer? <button className="link-btn" onClick={() => openTicketModal()}>Raise a support ticket</button>
+            Can&apos;t find an answer? <button className="link-btn" onClick={() => redirectToTicketPage()}>Raise a support ticket</button>
           </p>
         </div>
       </main>
@@ -3885,14 +4063,21 @@ const ChatApp: React.FC = () => {
                         <div key={att.attachment_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                           <span>📎 {att.filename}</span>
                           {isLocallyAuthenticated ? (
-                            <a
-                              href={getTicketAttachmentUrl(selectedTicket.id, att.attachment_id)}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            // Credentialed fetch, not a raw <a href>: that 403s
+                            // once the access cookie expires (see
+                            // openOrDownloadTicketAttachment).
+                            <button
+                              type="button"
                               className="link-btn"
+                              onClick={() => {
+                                const ticketId = selectedTicket.id;
+                                setAttachmentOpenError(null);
+                                openOrDownloadTicketAttachment(ticketId, att.attachment_id, att.filename).catch(() =>
+                                  setAttachmentOpenError({ ticketId, message: "Couldn't open this attachment. Please try again." }));
+                              }}
                             >
                               View Attachment
-                            </a>
+                            </button>
                           ) : (
                             // Guests can never view ticket content by ID at all
                             // (same policy as get_ticket_details and the
@@ -3904,6 +4089,9 @@ const ChatApp: React.FC = () => {
                           )}
                         </div>
                       ))}
+                      {attachmentOpenError?.ticketId === selectedTicket.id && (
+                        <p style={{ fontSize: '12px', color: '#dc2626' }}>{attachmentOpenError.message}</p>
+                      )}
                     </div>
                   </>
                 )}

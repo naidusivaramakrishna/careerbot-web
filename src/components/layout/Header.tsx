@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Settings, LogOut, CheckCheck, X, ChevronRight, Crown,
-  ArrowUpRight, GraduationCap,
+  ArrowUpRight, GraduationCap, MessageSquareText,
 } from 'lucide-react';
 import {
   EnterpriseInterviewPrepIcon as IcoInterview,
@@ -627,6 +627,14 @@ export default function Header() {
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>
                   )}
                 </div>
+                <Link
+                  href="/dashboard/support-history"
+                  onClick={() => setShowMenu(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <MessageSquareText size={15} className="text-gray-400 shrink-0" />
+                  Support History
+                </Link>
                 <Link
                   href="/settings"
                   onClick={() => setShowMenu(false)}

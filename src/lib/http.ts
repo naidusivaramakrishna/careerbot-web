@@ -11,6 +11,7 @@ import {
 import { getTenantId, clearTenantId } from './tenantStorage';
 import { sanitizeAuthRedirect } from './authRedirect';
 import { collegeFeatureFromError, notifyCollegeFeatureRefused } from './collegeFeatures';
+import { coordinatedUserRefreshPost } from './userRefreshCoordinator';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
   console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to proxy. Set this in production.');
@@ -421,7 +422,7 @@ client.interceptors.response.use(
       const endpoint = isAdmin
         ? '/api/backend/admin/auth/refresh'
         : '/api/backend/auth/refresh';
-      await client.post(
+      const postRefresh = () => client.post(
         endpoint,
         {},
         {
@@ -432,6 +433,14 @@ client.interceptors.response.use(
           },
         }
       );
+      // User refresh only: shared with authApi.refreshAccessToken(), which
+      // useTokenRefresh.ts (proactive) and chatbotApi.ts's attachment 403
+      // handler both call -- an ordinary 401 reaching this interceptor at
+      // the same moment either of those is already refreshing would
+      // otherwise fire a second, competing POST against the backend's
+      // single-use refresh_token. Admin refresh is a separate endpoint/
+      // flow, not part of that shared coordinator.
+      await (isAdmin ? postRefresh() : coordinatedUserRefreshPost(postRefresh));
       window.dispatchEvent(
         new Event(isAdmin ? 'adminTokenUpdated' : 'tokenUpdated')
       );

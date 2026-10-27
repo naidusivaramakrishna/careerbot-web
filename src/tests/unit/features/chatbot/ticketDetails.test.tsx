@@ -16,6 +16,15 @@ import './chatAppSuiteSetup';
  * exact point. The details modal renders each of those fields
  * conditionally, so a freshly-created ticket silently showed fewer fields
  * than one later reloaded from the backend's full ticket list.
+ *
+ * The tests that created a ticket via the in-widget modal to exercise
+ * this (via a "Raise a support ticket" click) were removed: that entry
+ * point now navigates to /support/tickets/new instead of opening the
+ * modal (openTicketModal has no remaining callers), so there is no UI
+ * path left to reach it. The tests below only cover tickets already
+ * present in getSupportTickets/getTicketDetails -- no creation step --
+ * which remain fully reachable via the Tickets tab and the ?ticket=
+ * deep link.
  */
 
 Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
@@ -33,16 +42,16 @@ vi.mock('@/api/userApi', () => ({
 }));
 
 const getSupportTickets = vi.fn().mockResolvedValue({ data: [] });
-const escalateToSupport = vi.fn();
-const uploadTicketAttachment = vi.fn();
 const getTicketDetails = vi.fn();
+const openOrDownloadTicketAttachment = vi.fn();
 
 vi.mock('@/api/chatbotApi', () => ({
   sendChatMessage: vi.fn(),
-  escalateToSupport: (...args: unknown[]) => escalateToSupport(...args),
-  uploadTicketAttachment: (...args: unknown[]) => uploadTicketAttachment(...args),
+  escalateToSupport: vi.fn(),
+  uploadTicketAttachment: vi.fn(),
   getTicketAttachmentUrl: (ticketId: string, attachmentId: string) =>
     `https://backend.example.com/api/v1/tickets/${ticketId}/attachments/${attachmentId}`,
+  openOrDownloadTicketAttachment: (...args: unknown[]) => openOrDownloadTicketAttachment(...args),
   getSupportTickets: (...args: unknown[]) => getSupportTickets(...args),
   getTicketDetails: (...args: unknown[]) => getTicketDetails(...args),
   cancelTicket: vi.fn(),
@@ -74,26 +83,6 @@ const openTicketsTab = async () => {
   });
 };
 
-const openTicketModal = async () => {
-  await act(async () => {
-    fireEvent.click(screen.getByText('Raise a support ticket'));
-  });
-  await screen.findByText('🎫 Raise a Support Ticket');
-};
-
-const fillMinimalAuthenticatedForm = async () => {
-  await act(async () => {
-    fireEvent.change(screen.getByPlaceholderText('Brief summary of your issue'), {
-      target: { value: 'Something is broken' },
-    });
-    fireEvent.change(
-      screen.getByPlaceholderText('Describe what happened, what you expected, and what actually happened...'),
-      { target: { value: 'This is a sufficiently long description of the problem I am facing.' } },
-    );
-    fireEvent.click(screen.getByText('Other'));
-  });
-};
-
 const backendTicket = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ticket_id: 'CB-00023',
   subject: 'Unable to login',
@@ -114,10 +103,11 @@ beforeEach(() => {
   mockAuthenticated = true;
   getSupportTickets.mockReset().mockResolvedValue({ data: [] });
   // The ticket list is shown only for a confirmed account (a profile with an
-  // email); afterEach's restoreAllMocks clears the module-level mock's value.
+  // email); afterEach's restoreAllMocks clears the module-level mock's value
+  // (vi.fn() has no "original" to restore to, so it resets to undefined),
+  // so every test after the first would otherwise see getProfile() resolve
+  // to nothing, fail the owner check in loadTickets, and get an empty list.
   vi.mocked(getProfile).mockResolvedValue({ email: 'alice@example.com', full_name: 'Alice' } as Awaited<ReturnType<typeof getProfile>>);
-  escalateToSupport.mockReset();
-  uploadTicketAttachment.mockReset();
   getTicketDetails.mockReset();
   window.history.pushState(null, '', '/chatbot');
 });
@@ -126,65 +116,40 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Ticket details -- a freshly-created ticket shows every field immediately, no reload needed', () => {
-  it('shows Description, Category, Priority, Ticket ID, and Last Updated right after creation', async () => {
-    escalateToSupport.mockResolvedValue({
-      success: true, ticket_id: 'CB-00032', status: 'open', message: 'Created',
-    });
-
-    await openWidget();
-    await openTicketModal();
-    await fillMinimalAuthenticatedForm();
-    await act(async () => {
-      fireEvent.click(screen.getByText('Submit Ticket'));
-    });
-    await waitFor(() => expect(escalateToSupport).toHaveBeenCalledTimes(1));
-
-    await openTicketsTab();
-    await act(async () => {
-      fireEvent.click(screen.getByText('Something is broken'));
-    });
-
-    const modal = screen.getByText('Ticket ID').closest('.ticket-modal') as HTMLElement;
-    expect(within(modal).getByText('CB-00032')).toBeInTheDocument();
-    expect(within(modal).getByText('Description')).toBeInTheDocument();
-    expect(within(modal).getByText('This is a sufficiently long description of the problem I am facing.')).toBeInTheDocument();
-    expect(within(modal).getByText('Category')).toBeInTheDocument();
-    expect(within(modal).getByText('Priority')).toBeInTheDocument();
-    expect(within(modal).getByText('Normal')).toBeInTheDocument();
-    expect(within(modal).getByText('Last Updated')).toBeInTheDocument();
-  });
-});
-
 describe('Ticket details -- Attachments section', () => {
   it('is hidden entirely when the ticket has no attachments', async () => {
     getSupportTickets.mockResolvedValue({ data: [backendTicket({ attachments: [] })] });
 
     await openWidget();
     await openTicketsTab();
+    const ticketRow = await screen.findByText('Unable to login');
     await act(async () => {
-      fireEvent.click(screen.getByText('Unable to login'));
+      fireEvent.click(ticketRow);
     });
 
     expect(screen.queryByText('Attachments')).not.toBeInTheDocument();
   });
 
-  it('authenticated: shows the filename and a working View Attachment link', async () => {
+  it('authenticated: View Attachment opens through the credentialed fetch (not a raw link that 403s after token expiry)', async () => {
     getSupportTickets.mockResolvedValue({
       data: [backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] })],
     });
 
     await openWidget();
     await openTicketsTab();
+    const ticketRow = await screen.findByText('Unable to login');
     await act(async () => {
-      fireEvent.click(screen.getByText('Unable to login'));
+      fireEvent.click(ticketRow);
     });
 
     expect(screen.getByText('Attachments')).toBeInTheDocument();
     expect(screen.getByText(/screenshot\.png/)).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'View Attachment' });
-    expect(link).toHaveAttribute('href', 'https://backend.example.com/api/v1/tickets/CB-00023/attachments/att-1');
-    expect(link).toHaveAttribute('target', '_blank');
+    openOrDownloadTicketAttachment.mockRejectedValueOnce(new Error('403'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'View Attachment' }));
+    });
+    expect(openOrDownloadTicketAttachment).toHaveBeenCalledWith('CB-00023', 'att-1', 'screenshot.png');
+    expect(await screen.findByText("Couldn't open this attachment. Please try again.")).toBeInTheDocument();
   });
 
   // There is currently no UI path for a guest to open the ticket details
@@ -203,11 +168,12 @@ describe('Ticket details -- Attachments section', () => {
 
     await openWidget();
     await openTicketsTab();
+    const ticketRow = await screen.findByText('Unable to login');
     await act(async () => {
-      fireEvent.click(screen.getByText('Unable to login'));
+      fireEvent.click(ticketRow);
     });
 
-    expect(screen.getByRole('link', { name: 'View Attachment' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View Attachment' })).toBeInTheDocument();
 
     mockAuthenticated = false;
     await act(async () => {
@@ -215,107 +181,10 @@ describe('Ticket details -- Attachments section', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole('link', { name: 'View Attachment' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'View Attachment' })).not.toBeInTheDocument();
     });
     expect(screen.getByText('Sign in to view')).toBeInTheDocument();
     expect(screen.getByText(/error\.png/)).toBeInTheDocument();
-  });
-
-  it('a ticket created WITH a screenshot shows the Attachments section immediately, no reload needed', async () => {
-    uploadTicketAttachment.mockResolvedValue({
-      success: true, attachment_id: 'att-3', filename: 'bug.png', content_type: 'image/png', size: 100,
-    });
-    escalateToSupport.mockResolvedValue({
-      success: true, ticket_id: 'CB-00033', status: 'open', message: 'Created',
-    });
-
-    await openWidget();
-    await openTicketModal();
-    await fillMinimalAuthenticatedForm();
-
-    const file = new File(['x'], 'bug.png', { type: 'image/png' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(fileInput, { target: { files: [file] } });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByText('Submit Ticket'));
-    });
-    await waitFor(() => expect(escalateToSupport).toHaveBeenCalledTimes(1));
-
-    // Close the success modal first -- it also shows the just-attached
-    // filename (see the ?ticket= deep link / success-modal attachment
-    // tests below), so leaving it open makes "bug.png" ambiguous once the
-    // details modal opens too.
-    await act(async () => {
-      fireEvent.click(screen.getByText('Close'));
-    });
-
-    await openTicketsTab();
-    await act(async () => {
-      fireEvent.click(screen.getByText('Something is broken'));
-    });
-
-    expect(screen.getByText('Attachments')).toBeInTheDocument();
-    expect(screen.getByText(/bug\.png/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View Attachment' })).toHaveAttribute(
-      'href', 'https://backend.example.com/api/v1/tickets/CB-00033/attachments/att-3',
-    );
-  });
-});
-
-describe('Ticket success modal -- attachment view links from the create response', () => {
-  it('renders a clickable link when the backend returns a view_url for the attachment', async () => {
-    uploadTicketAttachment.mockResolvedValue({
-      success: true, attachment_id: 'att-5', filename: 'bug.png', content_type: 'image/png', size: 100,
-    });
-    escalateToSupport.mockResolvedValue({
-      success: true, ticket_id: 'CB-00050', status: 'open', message: 'Created',
-      attachments: [{ attachment_id: 'att-5', filename: 'bug.png', view_url: 'https://backend.example.com/api/v1/tickets/attachments/guest/tok-abc' }],
-    });
-
-    await openWidget();
-    await openTicketModal();
-    await fillMinimalAuthenticatedForm();
-
-    const file = new File(['x'], 'bug.png', { type: 'image/png' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(fileInput, { target: { files: [file] } });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByText('Submit Ticket'));
-    });
-    await waitFor(() => expect(escalateToSupport).toHaveBeenCalledTimes(1));
-
-    const link = await screen.findByRole('link', { name: 'bug.png' });
-    expect(link).toHaveAttribute('href', 'https://backend.example.com/api/v1/tickets/attachments/guest/tok-abc');
-  });
-
-  it('shows the filename with no link when the response has no attachments at all', async () => {
-    uploadTicketAttachment.mockResolvedValue({
-      success: true, attachment_id: 'att-6', filename: 'bug.png', content_type: 'image/png', size: 100,
-    });
-    escalateToSupport.mockResolvedValue({
-      success: true, ticket_id: 'CB-00051', status: 'open', message: 'Created',
-    });
-
-    await openWidget();
-    await openTicketModal();
-    await fillMinimalAuthenticatedForm();
-
-    const file = new File(['x'], 'bug.png', { type: 'image/png' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(fileInput, { target: { files: [file] } });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByText('Submit Ticket'));
-    });
-    await waitFor(() => expect(escalateToSupport).toHaveBeenCalledTimes(1));
-
-    expect(await screen.findByText(/bug\.png/)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'bug.png' })).not.toBeInTheDocument();
   });
 });
 

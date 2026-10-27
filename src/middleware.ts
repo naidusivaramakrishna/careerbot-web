@@ -43,6 +43,11 @@ const publicRoutes = [
     "/coding-test",
     // Maintenance page — always accessible
     "/maintenance",
+    // Guest support ticket portal -- reached from the chatbot's "Raise a
+    // support ticket" link without requiring sign-in first (the backend
+    // already accepts guest ticket creation, gated by email OTP
+    // verification rather than auth).
+    "/support/tickets/new",
 ];
 
 // Edge-runtime module-level maintenance cache.
