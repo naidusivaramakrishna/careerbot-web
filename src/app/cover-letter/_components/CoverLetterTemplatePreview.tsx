@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { httpClient } from "@/lib/http";
 
 export type CoverLetterPreviewStyle =
@@ -81,10 +81,12 @@ export function CoverLetterTemplatePreview({
   previewUrl?: string | null;
 }) {
   const ui = sizeClass[size];
-  const authenticatedPreviewUrl = useAuthenticatedPdfUrl(previewUrl);
-  if (authenticatedPreviewUrl) {
+  const previewImage = usePreviewImage(previewUrl);
+  // Until the image is ready (or if it could not be loaded) the code-drawn
+  // preview below stays on screen.
+  if (previewImage.url) {
     return (
-      <PdfPreviewFrame src={authenticatedPreviewUrl} shellClass={ui.shell} />
+      <PreviewImage src={previewImage.url} shellClass={ui.shell} onError={previewImage.onImageError} />
     );
   }
   const initials = getInitials(content.name);
@@ -225,40 +227,16 @@ export function CoverLetterTemplatePreview({
   );
 }
 
-function PdfPreviewFrame({ src, shellClass }: { src: string; shellClass: string }) {
-  const [hasViewerLoaded, setHasViewerLoaded] = useState(false);
-  const [isViewerReady, setIsViewerReady] = useState(false);
-
-  useEffect(() => {
-    setHasViewerLoaded(false);
-    setIsViewerReady(false);
-  }, [src]);
-
-  useEffect(() => {
-    if (!hasViewerLoaded) return;
-    const timer = window.setTimeout(() => setIsViewerReady(true), 900);
-    return () => window.clearTimeout(timer);
-  }, [hasViewerLoaded]);
-
+function PreviewImage({ src, shellClass, onError }: { src: string; shellClass: string; onError: () => void }) {
   return (
     <div className={[shellClass, "relative shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-md"].join(" ")}>
-      {!isViewerReady && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white px-3 text-center" aria-label="Loading template preview">
-          <div className="h-2 w-3/4 animate-pulse rounded-full bg-slate-200" />
-          <div className="h-1.5 w-2/3 animate-pulse rounded-full bg-slate-100" />
-          <div className="h-1.5 w-3/4 animate-pulse rounded-full bg-slate-100" />
-          <span className="mt-1 text-[9px] font-bold text-slate-400">Loading preview...</span>
-        </div>
-      )}
-      <iframe
-        src={`${src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-        title="Template style preview"
-        loading="lazy"
-        tabIndex={-1}
-        // Chromium fires once for the viewer shell, shortly before its PDF
-        // canvas paints. Keep the white placeholder over that black frame.
-        onLoad={() => setHasViewerLoaded(true)}
-        className={`pointer-events-none h-full w-full border-0 transition-opacity duration-200 ${isViewerReady ? "opacity-100" : "opacity-0"}`}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt="Template style preview"
+        onError={onError}
+        className="h-full w-full object-cover object-top"
+        draggable={false}
       />
     </div>
   );
@@ -273,7 +251,7 @@ export function CoverLetterTemplatePreviewModal({
   templateName: string;
   onClose: () => void;
 }) {
-  const authenticatedUrl = useAuthenticatedPdfUrl(previewUrl);
+  const previewImage = usePreviewImage(previewUrl);
   if (!previewUrl) return null;
 
   return (
@@ -290,14 +268,32 @@ export function CoverLetterTemplatePreviewModal({
           </button>
         </header>
         <div className="relative min-h-0 flex-1 bg-slate-100 p-3">
-          {!authenticatedUrl ? (
+          {previewImage.status === "error" ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 rounded-xl bg-white text-center">
+              <p className="text-sm font-bold text-slate-700">Preview unavailable</p>
+              <p className="max-w-xs text-xs font-semibold text-slate-500">
+                The sample for this template could not be loaded.
+              </p>
+              <button
+                type="button"
+                onClick={previewImage.retry}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Try again
+              </button>
+            </div>
+          ) : !previewImage.url ? (
             <div className="flex h-full items-center justify-center rounded-xl bg-white text-sm font-bold text-slate-500">Loading preview...</div>
           ) : (
-            <iframe
-              src={`${authenticatedUrl}#toolbar=1&navpanes=0&view=FitH`}
-              title={`${templateName} template preview`}
-              className="h-full w-full rounded-xl border-0 bg-white"
-            />
+            <div className="h-full overflow-auto rounded-xl bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewImage.url}
+                alt={`${templateName} template preview`}
+                onError={previewImage.onImageError}
+                className="mx-auto block h-auto w-full max-w-3xl"
+              />
+            </div>
           )}
         </div>
       </section>
@@ -305,33 +301,121 @@ export function CoverLetterTemplatePreviewModal({
   );
 }
 
-function useAuthenticatedPdfUrl(previewUrl?: string | null): string | null {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+// Template previews are fixed, non-personal samples that the API serves as
+// immutable images (the same sample as the export PDF, rasterized). Like the
+// resume builder, they show in a plain <img>, with no PDF viewer to start up.
+// Download each one once per page session and share the blob URL between the
+// picker thumbnails and the preview modal (and across reopens).
+
+// Bump to step past an HTTP-cache entry stored under the old URL. The API
+// marks previews immutable, so a bad response (for example the PDF an older
+// backend returns for the unknown `format` parameter) could otherwise be
+// served from the browser cache after the backend is fixed.
+const PREVIEW_IMAGE_CACHE_VERSION = "1";
+
+function toPreviewImageUrl(previewUrl: string): string {
+  const separator = previewUrl.includes("?") ? "&" : "?";
+  return `${previewUrl}${separator}format=png&piv=${PREVIEW_IMAGE_CACHE_VERSION}`;
+}
+
+const previewBlobRequests = new Map<string, Promise<string>>();
+const previewBlobUrls = new Map<string, string>();
+
+function fetchPreviewBlob(imageUrl: string, allowHttpCache: boolean): Promise<Blob> {
+  return httpClient
+    .get<Blob>(imageUrl, {
+      responseType: "blob",
+      // Let the browser's HTTP cache serve the immutable image (see lib/http.ts).
+      ...(allowHttpCache ? { headers: { "X-Allow-Http-Cache": "true" } } : {}),
+    })
+    .then(({ data }) => data);
+}
+
+const isImageBlob = (blob: Blob) => blob.type.startsWith("image/");
+
+function loadPreviewBlobUrl(previewUrl: string): Promise<string> {
+  const existing = previewBlobRequests.get(previewUrl);
+  if (existing) return existing;
+  const imageUrl = toPreviewImageUrl(previewUrl);
+  const request = fetchPreviewBlob(imageUrl, true)
+    // A 2xx that is not an image is a stale or wrong response (for example a
+    // cached PDF). Ask the server directly, bypassing the HTTP cache, once.
+    .then((blob) => (isImageBlob(blob) ? blob : fetchPreviewBlob(imageUrl, false)))
+    .then((blob) => {
+      if (!isImageBlob(blob)) throw new Error("Template preview response was not an image");
+      const objectUrl = URL.createObjectURL(blob);
+      previewBlobUrls.set(previewUrl, objectUrl);
+      return objectUrl;
+    })
+    .catch((error) => {
+      // Do not cache a failure: the next open should try again.
+      previewBlobRequests.delete(previewUrl);
+      throw error;
+    });
+  previewBlobRequests.set(previewUrl, request);
+  return request;
+}
+
+// Forget a preview whose image could not be displayed, so the next open
+// downloads it again instead of reusing the broken blob.
+function dropPreview(previewUrl: string) {
+  const objectUrl = previewBlobUrls.get(previewUrl);
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  previewBlobUrls.delete(previewUrl);
+  previewBlobRequests.delete(previewUrl);
+}
+
+type PreviewImageState = {
+  url: string | null;
+  status: "idle" | "loading" | "ready" | "error";
+};
+
+function usePreviewImage(previewUrl?: string | null): PreviewImageState & {
+  /** Call from the <img> onError: drops the cached entry and reports an error. */
+  onImageError: () => void;
+  /** Load again after an error. */
+  retry: () => void;
+} {
+  const [state, setState] = useState<PreviewImageState>(() => {
+    const cached = previewUrl ? previewBlobUrls.get(previewUrl) : undefined;
+    if (cached) return { url: cached, status: "ready" };
+    return { url: null, status: previewUrl ? "loading" : "idle" };
+  });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!previewUrl) {
-      setObjectUrl(null);
+      setState({ url: null, status: "idle" });
       return;
     }
+    const cached = previewBlobUrls.get(previewUrl);
+    if (cached) {
+      setState({ url: cached, status: "ready" });
+      return;
+    }
+    setState({ url: null, status: "loading" });
     let cancelled = false;
-    let nextObjectUrl: string | null = null;
-    void httpClient.get<Blob>(previewUrl, { responseType: "blob" })
-      .then(({ data }) => {
-        if (cancelled) return;
-        nextObjectUrl = URL.createObjectURL(data);
-        setObjectUrl(nextObjectUrl);
+    loadPreviewBlobUrl(previewUrl)
+      .then((url) => {
+        if (!cancelled) setState({ url, status: "ready" });
       })
       .catch(() => {
-        // Keep the code-rendered preview when the remote PDF is unavailable.
-        if (!cancelled) setObjectUrl(null);
+        // Thumbnails keep the code-drawn preview; the modal shows an error.
+        if (!cancelled) setState({ url: null, status: "error" });
       });
     return () => {
       cancelled = true;
-      if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
     };
+  }, [previewUrl, attempt]);
+
+  const onImageError = useCallback(() => {
+    if (previewUrl) dropPreview(previewUrl);
+    setState({ url: null, status: "error" });
   }, [previewUrl]);
 
-  return objectUrl;
+  const retry = useCallback(() => setAttempt((count) => count + 1), []);
+
+  return { ...state, onImageError, retry };
 }
 
 function getInitials(name: string): string {

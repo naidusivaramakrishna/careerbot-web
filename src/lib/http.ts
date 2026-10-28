@@ -232,12 +232,21 @@ client.interceptors.request.use(
     // If the browser ever needs AI-layer data, proxy it through the backend or
     // a Next.js route handler so the credential stays server-side.
 
-    if (config.method?.toLowerCase() === 'get') {
+    // A request can opt back in to normal HTTP caching with the
+    // X-Allow-Http-Cache header (for immutable, server-cacheable responses such
+    // as the cover-letter template preview PDFs). It is a client-side switch, so
+    // it is removed before the request is sent.
+    const allowHttpCache = config.headers?.get?.('X-Allow-Http-Cache') === 'true';
+    if (allowHttpCache) {
+      config.headers.delete('X-Allow-Http-Cache');
+    }
+
+    if (!allowHttpCache && config.method?.toLowerCase() === 'get') {
       const sep = config.url?.includes('?') ? '&' : '?';
       config.url = `${config.url}${sep}_t=${Date.now()}`;
     }
 
-    if (config.headers) {
+    if (!allowHttpCache && config.headers) {
       config.headers['Cache-Control'] =
         'no-cache, no-store, must-revalidate';
       config.headers['Pragma'] = 'no-cache';
