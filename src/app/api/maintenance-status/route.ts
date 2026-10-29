@@ -12,12 +12,22 @@ const FAILED_PROBE_BACKOFF_MS = 10_000;
 // In-flight deduplication: concurrent requests share one probe promise.
 let probeInFlight: Promise<boolean | null> | null = null;
 
+// Probe path. It must be a real, cheap, unauthenticated route that still goes
+// through careerbot-api's MaintenanceModeMiddleware. /api/v1/health qualifies:
+// that middleware only exempts the ROOT /health prefix (maintenance_mode.py
+// ALLOWED_ROUTES), so /api/v1/health returns 503 MAINTENANCE_MODE when
+// maintenance is on and 200 otherwise; the auth, rate-limit and quota
+// middlewares all exempt it. The bare /api/v1/ used before has no route, so
+// every probe was a 404 -- about 2,400 a day of 404 noise in the API logs,
+// because the container healthcheck hits this route every 30 s (ADO 2827).
+const MAINTENANCE_PROBE_PATH = '/api/v1/health';
+
 // On cold start, probe the Python backend directly to read the real maintenance state.
 // The Python maintenance middleware runs before auth, so maintenance=ON returns 503.
 async function fetchMaintenanceFromBackend(): Promise<boolean | null> {
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     try {
-        const res = await fetch(`${backendUrl}/api/v1/`, {
+        const res = await fetch(`${backendUrl}${MAINTENANCE_PROBE_PATH}`, {
             cache: 'no-store',
             signal: AbortSignal.timeout(1500),
         });
@@ -31,7 +41,7 @@ async function fetchMaintenanceFromBackend(): Promise<boolean | null> {
             if (String(data?.error?.error_code ?? '').toUpperCase() === 'MAINTENANCE_MODE') return true;
             return data ? false : null;
         }
-        // 200, 404, 401 etc. → backend is up, maintenance is off
+        // Any non-503 (normally 200 from /api/v1/health) → backend is up, maintenance is off
         return false;
     } catch {
         // Backend unreachable — return null so the banner fails open (maintenance=false).

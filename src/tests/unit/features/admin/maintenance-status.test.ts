@@ -58,6 +58,22 @@ describe('maintenance-status GET handler', () => {
         expect(res._data).toEqual({ maintenance: false });
     });
 
+    it('probes the real /api/v1/health route, never the route-less bare /api/v1/ (ADO 2827)', async () => {
+        vi.stubEnv('BACKEND_URL', 'http://careerbot-api-nightly:8000');
+        try {
+            mockFetch.mockResolvedValueOnce({ status: 200 });
+            const GET = await importGET();
+            await GET();
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+            const url = String(mockFetch.mock.calls[0][0]);
+            expect(url).toBe('http://careerbot-api-nightly:8000/api/v1/health');
+            // The bare path has no backend route: every probe used to 404.
+            expect(url.endsWith('/api/v1/')).toBe(false);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
     it('returns maintenance:true when backend responds 503 with MAINTENANCE_MODE error_code', async () => {
         mockFetch.mockResolvedValueOnce(make503());
         const GET = await importGET();
