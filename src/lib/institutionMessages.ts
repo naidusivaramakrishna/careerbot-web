@@ -26,6 +26,7 @@ export type InstitutionErrorReason =
   | 'COLLEGE_PAUSED'
   | 'SUBSCRIPTION_EXPIRED'
   | 'FEATURE_NOT_ENTITLED'
+  | 'NO_SEATS_LEFT'
   | 'INVALID_REQUEST'
   | 'NOT_FOUND'
   | 'CONFLICT'
@@ -45,6 +46,12 @@ export const ERROR_MESSAGES: Record<InstitutionErrorReason, string> = {
   SUBSCRIPTION_EXPIRED:
     'Your college subscription has expired. You can still view everything, but changes cannot be saved.',
   FEATURE_NOT_ENTITLED: 'This is switched off for your college.',
+  // Shown with the server's own sentence when there is one (see ErrorNotice):
+  // it says WHICH case -- every seat in use, the seat year ended, the college
+  // being moved onto seats right now, or the seat year not set up. Each needs a
+  // different action, so this fallback (no server sentence) claims none of them.
+  NO_SEATS_LEFT:
+    'Your college has no free seat right now, so this student cannot be added.',
   INVALID_REQUEST: 'Check the highlighted field and try again.',
   NOT_FOUND: 'That student is no longer in your college.',
   // Shown with the server's own sentence when there is one (see ErrorNotice):
@@ -56,6 +63,17 @@ export const ERROR_MESSAGES: Record<InstitutionErrorReason, string> = {
   NETWORK: 'Could not reach the server. Check your connection and try again.',
   UNKNOWN: 'Something went wrong. Try again in a moment.',
 };
+
+/**
+ * The next step after a NO_SEATS_LEFT refusal. Seats are added and renewed by
+ * CareerBOT for now (online purchase comes later), so the placement officer is
+ * told who to ask. Shown under EVERY seat sentence (all in use / year ended /
+ * being moved onto seats / year not set up), so it must be true for all four:
+ * it does not say "add" (wrong for a lapsed year) and is conditional (the
+ * "try again in a few minutes" case needs no one).
+ */
+export const NO_SEATS_HINT =
+  'Your CareerBOT account manager adds and renews seats; contact them if you need more.';
 
 /** Longer banner copy for the two read-only states, incl. who to contact. */
 export const READ_ONLY_BANNER: Record<
