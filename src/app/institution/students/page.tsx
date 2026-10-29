@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useStudentsPaged } from '@/hooks/useInstitutionResource';
 import { useStructureNames } from '@/hooks/useStructureNames';
-import { READ_ONLY_CONTROL_HINT, studentStatusLabel } from '@/lib/institutionMessages';
+import { claimStatusLabel, READ_ONLY_CONTROL_HINT, studentStatusLabel } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from '../_components/DataTable';
 import { DownloadRosterButton } from '../_components/DownloadRosterButton';
@@ -298,21 +298,43 @@ function StudentsRoster() {
               render: (s) =>
                 s.claim_status === 'claimed' ? (
                   <span className="text-[12px] text-[#64748b]">Signed up</span>
+                ) : !allows('onboard_student') ? (
+                  // A role that may not issue codes sees the state, not a
+                  // button the server would refuse.
+                  <span className="text-[12px] text-[#64748b]">
+                    {claimStatusLabel(s.claim_status)}
+                  </span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      // The row is a link to the student page; issuing a code
-                      // must not navigate away from the roster.
-                      e.stopPropagation();
-                      e.preventDefault();
-                      setInviteFor(s);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#cbd5e1] bg-white px-2 py-1 text-[12px] font-medium text-[#334155] hover:bg-[#f1f5f9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2557a7]"
-                  >
-                    <KeyRound className="h-3.5 w-3.5" aria-hidden />
-                    {s.claim_status === 'invited' ? 'Reissue code' : 'Invite'}
-                  </button>
+                  // Read-only: WriteGuard explains why, on hover and to screen
+                  // readers (its sr-only hint), as on the student page; a title
+                  // attribute is not announced. The disabled button still cannot
+                  // take keyboard focus. The span keeps a click on the dimmed
+                  // button off the row's link.
+                  <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+                    <WriteGuard
+                      active={Boolean(readOnlyReason)}
+                      hint={readOnlyReason ? READ_ONLY_CONTROL_HINT[readOnlyReason] : ''}
+                    >
+                      <button
+                        type="button"
+                        // Read-only college: the same rule as every other write
+                        // control. The dialog would refuse to issue anyway; the
+                        // button should not invite the click.
+                        disabled={Boolean(readOnlyReason)}
+                        onClick={(e) => {
+                          // The row is a link to the student page; issuing a code
+                          // must not navigate away from the roster.
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setInviteFor(s);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[#cbd5e1] bg-white px-2 py-1 text-[12px] font-medium text-[#334155] hover:bg-[#f1f5f9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2557a7] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                        {s.claim_status === 'invited' ? 'Reissue code' : 'Invite'}
+                      </button>
+                    </WriteGuard>
+                  </span>
                 ),
             },
           ]}

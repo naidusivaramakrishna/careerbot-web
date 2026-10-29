@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useStudentsPaged } from '@/hooks/useInstitutionResource';
 import { useStructureNames } from '@/hooks/useStructureNames';
-import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
+import { claimStatusLabel, READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from './DataTable';
 import { EmptyState } from './EmptyState';
@@ -148,6 +148,24 @@ export function FacultyOverview() {
               width: 'w-[130px]',
               render: (s) => (
                 <LastActivityCell row={rosterIndex.get(s.id)} loading={roster.isLoading} />
+              ),
+            },
+            {
+              // "Who has not signed up yet" is the question a faculty member is
+              // asked to chase. Enrolled (the next column) does not answer it.
+              key: 'signup',
+              header: 'Sign-up',
+              width: 'w-[150px]',
+              render: (s) => (
+                <span
+                  className={
+                    s.claim_status === 'claimed'
+                      ? 'text-[12px] text-[#166534]'
+                      : 'text-[12px] text-[#92400e]'
+                  }
+                >
+                  {claimStatusLabel(s.claim_status)}
+                </span>
               ),
             },
             {

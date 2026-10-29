@@ -1,18 +1,19 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ClipboardPen, SearchX } from 'lucide-react';
+import { ArrowLeft, ClipboardPen, KeyRound, SearchX } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getStudent } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { useInstitutionResource, useStudentProgress } from '@/hooks/useInstitutionResource';
 import { useStructureNames } from '@/hooks/useStructureNames';
-import { activityLabel } from '@/lib/institutionMessages';
+import { activityLabel, claimStatusLabel, READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { ProgressRecord, Student } from '@/types/institution';
 import { DataTable, OptionalCell } from '../../_components/DataTable';
 import { EmptyState } from '../../_components/EmptyState';
+import { InviteCodeDialog } from '../../_components/InviteCodeDialog';
 import { ErrorNotice } from '../../_components/ErrorNotice';
 import { RecordProgressForm } from '../../_components/RecordProgressForm';
 import { RoleGuard } from '../../_components/RoleGuard';
@@ -20,6 +21,7 @@ import { CardListSkeleton, LoadingAnnouncement, TableSkeleton } from '../../_com
 import { ProgressStatusPill, ScoreCell, StudentStatusPill } from '../../_components/StatusPill';
 import { MicroLabel, PageHeader, SectionTitle } from '../../_components/Typography';
 import { CARD, FOCUS_RING } from '../../_components/tokens';
+import { WriteGuard } from '../../_components/WriteGuard';
 
 /**
  * One student.
@@ -34,7 +36,8 @@ import { CARD, FOCUS_RING } from '../../_components/tokens';
  * navigating away and losing their place in the roster.
  */
 function StudentDetail({ studentId }: { studentId: string }) {
-  const { allows } = useInstitution();
+  const { allows, readOnlyReason } = useInstitution();
+  const [inviteOpen, setInviteOpen] = useState(false);
   const fetchStudent = useCallback(() => getStudent(studentId), [studentId]);
   const student = useInstitutionResource<Student>(fetchStudent);
   const progress = useStudentProgress(studentId);
@@ -54,7 +57,13 @@ function StudentDetail({ studentId }: { studentId: string }) {
     </Link>
   );
 
-  if (student.error) {
+  // A refresh that fails while a student is already on screen (the refetch
+  // after a code is issued) keeps the page and reports the error inline:
+  // replacing the page would unmount the invite dialog and lose a code that
+  // is shown only once. A student who is GONE (404/403 on the refresh) still
+  // gets the not-in-view screen, once no dialog is open.
+  const gone = student.error?.reason === 'NOT_FOUND' || student.error?.reason === 'FORBIDDEN';
+  if (student.error && (!student.data || (gone && !inviteOpen))) {
     const notFound = student.error.reason === 'NOT_FOUND' || student.error.reason === 'FORBIDDEN';
     return (
       <>
@@ -96,18 +105,50 @@ function StudentDetail({ studentId }: { studentId: string }) {
   if (!s) return null;
 
   const canRecord = allows('write_progress');
+  // The same capability the roster's Invite button uses, so whoever may issue
+  // a code there may issue it here -- an officer who has just added a student
+  // lands on this page, and it used to offer them no way to send the code.
+  const canInvite = allows('onboard_student') && s.claim_status !== 'claimed';
+  const inviteButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={Boolean(readOnlyReason)}
+      onClick={() => setInviteOpen(true)}
+    >
+      <KeyRound className="mr-1.5 h-4 w-4" aria-hidden />
+      {s.claim_status === 'invited' ? 'Reissue code' : 'Invite'}
+    </Button>
+  );
 
   return (
     <>
       <div className="mb-3">{backLink}</div>
 
+      {student.error ? (
+        <ErrorNotice error={student.error} onRetry={student.refetch} className="mb-4" />
+      ) : null}
+
       <PageHeader
         title={s.full_name}
         description={s.college_email ?? undefined}
-        actions={<StudentStatusPill status={s.status} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StudentStatusPill status={s.status} />
+            {canInvite ? (
+              readOnlyReason ? (
+                <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
+                  {inviteButton}
+                </WriteGuard>
+              ) : (
+                inviteButton
+              )
+            ) : null}
+          </div>
+        }
       />
 
-      <div className={`${CARD} mb-5 grid grid-cols-2 gap-x-6 gap-y-4 p-4 sm:grid-cols-4`}>
+      <div className={`${CARD} mb-5 grid grid-cols-2 gap-x-6 gap-y-4 p-4 sm:grid-cols-5`}>
         <div>
           <MicroLabel as="div">Admission no.</MicroLabel>
           <p className="mt-1 text-[13px] font-medium tabular-nums text-[#0f172a]">
@@ -128,7 +169,22 @@ function StudentDetail({ studentId }: { studentId: string }) {
             {s.batch_year ?? '—'}
           </p>
         </div>
+        <div>
+          <MicroLabel as="div">Sign-up</MicroLabel>
+          <p className="mt-1 text-[13px] font-medium text-[#0f172a]">
+            {claimStatusLabel(s.claim_status)}
+          </p>
+        </div>
       </div>
+
+      {inviteOpen ? (
+        <InviteCodeDialog
+          student={s}
+          writable={!readOnlyReason}
+          onClose={() => setInviteOpen(false)}
+          onIssued={() => void student.refetch()}
+        />
+      ) : null}
 
       <div className={canRecord ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]' : ''}>
         <section className="min-w-0">

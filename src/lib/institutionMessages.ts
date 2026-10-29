@@ -138,3 +138,21 @@ export function progressStatusLabel(value: string): string {
 export function studentStatusLabel(value: string): string {
   return (STUDENT_STATUS_LABELS as Record<string, string>)[value] ?? humanise(value);
 }
+
+/**
+ * Whether a roster row has become a student who can sign in.
+ *
+ * Separate from STUDENT_STATUS_LABELS on purpose: "Enrolled" says the college
+ * has them on the roll, not that they ever opened CareerBOT. A staff member
+ * chasing sign-ups needs this one.
+ */
+export const CLAIM_STATUS_LABELS: Record<string, string> = {
+  claimed: 'Signed up',
+  invited: 'Code sent, not signed up',
+  rostered: 'Not invited yet',
+};
+
+export function claimStatusLabel(value: string | null | undefined): string {
+  if (!value) return CLAIM_STATUS_LABELS.rostered;
+  return CLAIM_STATUS_LABELS[value] ?? humanise(value);
+}

@@ -192,7 +192,7 @@ export function InviteCodeDialog({
             </Button>
           ) : null}
           {issued ? (
-            <Button variant="outline" size="sm" onClick={revoke} disabled={busy}>
+            <Button variant="outline" size="sm" onClick={revoke} disabled={busy || !writable}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
               Cancel this code
             </Button>
