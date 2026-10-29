@@ -10,6 +10,9 @@ import {
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_BASE_DELAY_MS = 5000;
+// A stream that stayed open this long was healthy, so the next error starts
+// the backoff over. Longer than the 30 s server heartbeat on purpose.
+const STABLE_CONNECTION_MS = 60_000;
 
 interface UseNotificationStreamOptions {
   autoConnect?: boolean;
@@ -26,12 +29,16 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const userIdRef = useRef<string | null>(null);
+  // False after unmount, so a token fetch or reconnect timer that resolves
+  // late cannot open a stream nobody will ever close.
+  const mountedRef = useRef(false);
 
   const connectWithUserId = useCallback((userId: string) => {
-    if (eventSourceRef.current) return;
+    if (eventSourceRef.current || !mountedRef.current) return;
 
     try {
-      eventSourceRef.current = subscribeToNotifications(
+      let openedAt = 0;
+      const source: EventSource = subscribeToNotifications(
         userId,
         (notification: Notification) => {
           reconnectAttemptsRef.current = 0;
@@ -40,8 +47,21 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
           onNotification?.(notification);
         },
         () => {
+          // Close before dropping the ref. An EventSource reconnects on its
+          // own after an error, so an unclosed one stays alive next to the one
+          // the timer below opens; past the API's 3-streams-per-user cap
+          // (sse_manager.py) they evict each other in a loop.
+          source.close();
+          if (eventSourceRef.current !== source) return;
           setIsConnected(false);
           eventSourceRef.current = null;
+
+          // Only a stream that stayed up resets the backoff. One evicted
+          // seconds after opening (more than 3 tabs) keeps climbing, so tabs
+          // cannot keep evicting each other at the base rate.
+          if (openedAt && Date.now() - openedAt >= STABLE_CONNECTION_MS) {
+            reconnectAttemptsRef.current = 0;
+          }
 
           if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
             console.warn('[notifications] Max reconnect attempts reached, giving up.');
@@ -55,6 +75,8 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
           }, delay);
         }
       );
+      source.addEventListener('open', () => { openedAt = Date.now(); });
+      eventSourceRef.current = source;
       setIsConnected(true);
     } catch (err) {
       console.error('Failed to connect to notification stream:', err);
@@ -73,6 +95,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
         const data = await res.json() as { user_id: string };
         userIdRef.current = data.user_id;
       }
+      if (!mountedRef.current) return; // unmounted while the token was in flight
       connectWithUserId(userIdRef.current);
     } catch (err) {
       console.error('[NotificationStream] Failed to resolve stream token:', err);
@@ -105,8 +128,10 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
 
   // ── Auto-connect ──────────────────────────────────────────────────────────
   useEffect(() => {
+    mountedRef.current = true;
     if (autoConnect) void connect();
     return () => {
+      mountedRef.current = false;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
