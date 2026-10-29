@@ -196,15 +196,16 @@ export function useStudentsPaged(
   params: ListStudentsParams = {},
   enabled = true,
 ): ResourceState<Paged<Student>> {
-  const { skip, limit, q, status, department_id, batch_year, without_section } =
-    params;
+  const {
+    skip, limit, q, status, department_id, batch_year, without_section, section_id,
+  } = params;
   return useInstitutionResource(
     useCallback(
       () =>
         listStudents({
-          skip, limit, q, status, department_id, batch_year, without_section,
+          skip, limit, q, status, department_id, batch_year, without_section, section_id,
         }),
-      [skip, limit, q, status, department_id, batch_year, without_section],
+      [skip, limit, q, status, department_id, batch_year, without_section, section_id],
     ),
     enabled,
   );

@@ -133,6 +133,9 @@ export interface ListStudentsParams {
    *  them -- and at a thousand students that answer cannot come from counting
    *  one page in the browser. */
   without_section?: boolean;
+  /** One class group, so a whole section can be given to one faculty
+   *  member without ticking every row by hand. Not with without_section. */
+  section_id?: string;
 }
 
 /** What the caller may do here, answerable BEFORE they try. */
@@ -467,6 +470,30 @@ export interface Student {
    *  which told the faculty member their student did not exist and sent them
    *  into a retry the unique admission-number index refuses. */
   faculty_assignment_pending?: boolean;
+}
+
+/** GET /institution/faculty-assignments?faculty_membership_id= */
+export interface FacultyRoster {
+  faculty_membership_id: string;
+  student_ids: string[];
+  count: number;
+}
+
+/** POST /institution/faculty-assignments/remove */
+export interface RemoveAssignmentsResult {
+  removed: number;
+}
+
+/** POST /institution/faculty-assignments/move */
+export interface MoveAssignmentsRequest {
+  from_membership_id: string;
+  to_membership_id: string;
+  student_ids: string[];
+}
+
+export interface MoveAssignmentsResult {
+  assigned: number;
+  removed: number;
 }
 
 export interface CreateStudentRequest {

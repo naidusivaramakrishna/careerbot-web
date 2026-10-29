@@ -32,3 +32,13 @@ export function facultyOptionLabel(member: {
     .filter(Boolean)
     .join(' · ');
 }
+
+
+/**
+ * Above this many students one faculty member cannot follow everyone closely
+ * (owner, 2026-10-28: 20-25 per faculty). A warning on the assignments screen,
+ * not a limit: the server does not refuse more, and some colleges will choose
+ * to. Kept here, not in the page file, because a Next.js page may only export
+ * its own page fields.
+ */
+export const ROSTER_WARNING_SIZE = 25;

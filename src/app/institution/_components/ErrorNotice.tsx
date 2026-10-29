@@ -76,7 +76,9 @@ export function ErrorNotice({
           </span>
         ) : null}
         {retryable && onRetry ? (
-          <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+          // type="button": a notice inside a <form> (the assignments roster)
+          // must retry, not also submit the form and assign the ticked rows.
+          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetry}>
             Try again
           </Button>
         ) : null}

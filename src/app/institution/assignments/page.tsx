@@ -1,18 +1,30 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-import { assignStudentsToFaculty, InstitutionApiError } from '@/api/institutionApi';
+import {
+  assignStudentsToFaculty,
+  InstitutionApiError,
+  listFacultyAssignments,
+  moveStudentsBetweenFaculty,
+  removeStudentsFromFaculty,
+} from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import {
+  useActiveInstitutionId,
   useDepartments,
   useMembers,
+  useSections,
   useStudentsPaged,
 } from '@/hooks/useInstitutionResource';
 import { useStructureNames } from '@/hooks/useStructureNames';
-import { assignmentOutcomeMessage, facultyOptionLabel } from '@/lib/facultyAssignment';
+import {
+  assignmentOutcomeMessage,
+  facultyOptionLabel,
+  ROSTER_WARNING_SIZE,
+} from '@/lib/facultyAssignment';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import { EmptyState } from '../_components/EmptyState';
 import { ErrorNotice, FormError } from '../_components/ErrorNotice';
@@ -72,6 +84,29 @@ function FacultyAssignments() {
   }, [query]);
 
   const [facultyMembershipId, setFacultyMembershipId] = useState('');
+  // One class group at a time: a branch of 60-100+ students is split by
+  // section, and ticking a whole section by hand is the job this replaces.
+  const [sectionFilter, setSectionFilter] = useState('');
+  // Who is ALREADY on the chosen faculty member's roster, as ids from the
+  // server, so the table can say it and Remove/Move act on real rows.
+  const [roster, setRoster] = useState<Set<string> | null>(null);
+  const [rosterError, setRosterError] = useState<InstitutionApiError | null>(null);
+  const [moveTo, setMoveTo] = useState('');
+  // THE ROSTER BELONGS TO ONE VISIT OF ONE COLLEGE. Switching college in the
+  // shell does not remount this page, and college A's membership ids and
+  // student ids mean nothing in college B. Every await below checks the visit
+  // before writing. A counter, not the college id: A -> B -> A is a new
+  // visit, and an answer from the first one must not land in the third.
+  const institutionId = useActiveInstitutionId();
+  const [rosterCollege, setRosterCollege] = useState(institutionId);
+  const [collegeVisit, setCollegeVisit] = useState(0);
+  const visitRef = useRef(collegeVisit);
+  visitRef.current = collegeVisit;
+  // What is on screen NOW, for a write that settles after a college switch.
+  const collegeRef = useRef(institutionId);
+  collegeRef.current = institutionId;
+  const facultyRef = useRef(facultyMembershipId);
+  facultyRef.current = facultyMembershipId;
   // A faculty member teaches in ONE department and the server refuses the whole
   // request if any ticked student is in another. So the table is limited to the
   // chosen faculty member's department: the mistake cannot be made, rather than
@@ -79,18 +114,79 @@ function FacultyAssignments() {
   const facultyDepartmentId =
     (faculty.data ?? []).find((m) => m.membership_id === facultyMembershipId)?.department_id ??
     undefined;
+  const sections = useSections(facultyDepartmentId, Boolean(facultyDepartmentId));
   const students = useStudentsPaged({
     q: search || undefined,
     department_id: facultyDepartmentId,
+    section_id: sectionFilter || undefined,
     skip: page * PAGE_SIZE,
     limit: PAGE_SIZE,
   });
+
+  // ONLY THE LATEST REQUEST MAY WRITE THE ROSTER. Switching from one faculty
+  // member to another quickly would otherwise let the first answer arrive
+  // last and label the second faculty member's table with the first one's
+  // roster -- and Remove/Move would then act on that wrong list.
+  const rosterRequest = useRef(0);
+  const loadRoster = async (membershipId: string) => {
+    const ticket = ++rosterRequest.current;
+    const visit = visitRef.current;
+    setRosterError(null);
+    setRoster(null);
+    if (!membershipId) return;
+    try {
+      const out = await listFacultyAssignments(membershipId);
+      if (ticket !== rosterRequest.current || visit !== visitRef.current) return;
+      setRoster(new Set(out.student_ids));
+    } catch (err) {
+      if (ticket !== rosterRequest.current || visit !== visitRef.current) return;
+      setRosterError(
+        err instanceof InstitutionApiError ? err : new InstitutionApiError({ reason: 'UNKNOWN' }),
+      );
+    }
+  };
+  useEffect(() => {
+    void loadRoster(facultyMembershipId);
+  }, [facultyMembershipId]);
+  // A write from an EARLIER visit still changed the server. Its message and
+  // ticks are dropped, but if it was in this same college (A -> B -> A) the
+  // roster on screen now may predate it, so read that roster again.
+  const afterStaleWrite = (college: string | null) => {
+    if (college === collegeRef.current && facultyRef.current) {
+      void loadRoster(facultyRef.current);
+    }
+  };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<InstitutionApiError | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
+  // A college switch starts this screen afresh: the faculty member, section,
+  // roster and ticks were all college A's. Cleared DURING RENDER, the way
+  // useInstitutionResource clears its data, so no frame shows A's roster
+  // count or Yes/No column under B's name.
+  if (rosterCollege !== institutionId) {
+    setRosterCollege(institutionId);
+    setCollegeVisit((v) => v + 1);
+    setFacultyMembershipId('');
+    setSectionFilter('');
+    setMoveTo('');
+    setRoster(null);
+    setRosterError(null);
+    setSelected(new Set());
+    setPage(0);
+    setError(null);
+    setDone(null);
+    // An action still in flight belongs to the previous visit; its answer is
+    // dropped below, and its `finally` no longer touches this flag, so it
+    // can neither keep these controls disabled nor unlock a newer action.
+    setSubmitting(false);
+  }
+
   const rows = students.data?.items;
+  // The rows on screen belong to the PREVIOUS page, search or section while
+  // the next answer loads, and after it fails: they cannot be ticked then.
+  const rowsStale = students.isLoading || Boolean(students.error);
   const total = students.data?.total ?? 0;
   const shownFrom = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const shownTo = Math.min(page * PAGE_SIZE + (rows?.length ?? 0), total);
@@ -133,8 +229,13 @@ function FacultyAssignments() {
     )?.department_id;
     if (nextDepartment !== facultyDepartmentId) {
       setSelected(new Set());
-      setPage(0);
     }
+    // Any change of faculty starts the table afresh: a section chosen for the
+    // previous faculty member is not a choice about this one.
+    setPage(0);
+    setSectionFilter('');
+    setMoveTo('');
+    setDone(null);
     setFacultyMembershipId(membershipId);
   };
   const writable = canWrite('assign_faculty');
@@ -169,6 +270,59 @@ function FacultyAssignments() {
     });
   };
 
+  // Move targets: other faculty in the SAME department (assignments are per
+  // department; the server refuses anything else).
+  const moveOptions = facultyOptions.filter((o) => {
+    if (o.value === facultyMembershipId) return false;
+    const m = (faculty.data ?? []).find((x) => x.membership_id === o.value);
+    return m?.department_id === facultyDepartmentId;
+  });
+  const selectedOnRoster = roster ? Array.from(selected).filter((id) => roster.has(id)) : [];
+  const rosterCount = roster?.size ?? 0;
+  const newlyAdded = roster ? Array.from(selected).filter((id) => !roster.has(id)).length : 0;
+  const overWarning = roster !== null && rosterCount + newlyAdded > ROSTER_WARNING_SIZE;
+
+  const runRosterAction = async (kind: 'remove' | 'move') => {
+    if (!writable || submitting || selectedOnRoster.length === 0) return;
+    if (kind === 'move' && !moveTo) return;
+    const visit = visitRef.current;
+    const college = collegeRef.current;
+    setSubmitting(true);
+    setError(null);
+    setDone(null);
+    try {
+      if (kind === 'remove') {
+        const out = await removeStudentsFromFaculty({
+          faculty_membership_id: facultyMembershipId,
+          student_ids: selectedOnRoster,
+        });
+        if (visit !== visitRef.current) return afterStaleWrite(college);
+        setDone(`${out.removed} ${out.removed === 1 ? 'student' : 'students'} removed from this faculty member.`);
+      } else {
+        const out = await moveStudentsBetweenFaculty({
+          from_membership_id: facultyMembershipId,
+          to_membership_id: moveTo,
+          student_ids: selectedOnRoster,
+        });
+        if (visit !== visitRef.current) return afterStaleWrite(college);
+        setDone(`${out.removed} ${out.removed === 1 ? 'student' : 'students'} moved.`);
+      }
+      setSelected(new Set());
+      await loadRoster(facultyMembershipId);
+    } catch (err) {
+      if (visit !== visitRef.current) return afterStaleWrite(college);
+      setError(
+        err instanceof InstitutionApiError ? err : new InstitutionApiError({ reason: 'UNKNOWN' }),
+      );
+      // A FAILED action can still have changed the roster: Move assigns before
+      // it removes, and Remove stops part-way when a row cannot be removed
+      // (careerbot-api #508). Show what is on the roster now, not before.
+      await loadRoster(facultyMembershipId);
+    } finally {
+      if (visit === visitRef.current) setSubmitting(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writable || submitting) return;
@@ -194,6 +348,8 @@ function FacultyAssignments() {
       return;
     }
 
+    const visit = visitRef.current;
+    const college = collegeRef.current;
     setSubmitting(true);
     setError(null);
     setDone(null);
@@ -203,18 +359,23 @@ function FacultyAssignments() {
         faculty_membership_id: facultyMembershipId,
         student_ids: Array.from(selected),
       });
+      if (visit !== visitRef.current) return afterStaleWrite(college);
       // From the RESPONSE, not from the number of ticked rows: students already on
       // this roster are skipped by the server and are not in the list it returns.
       // The endpoint returns the rows it CREATED (an array); no fallback to `requested`, which
       // would report every tick as newly assigned if the shape ever changed.
       setDone(assignmentOutcomeMessage(requested, created.length));
       setSelected(new Set());
+      await loadRoster(facultyMembershipId);
     } catch (err) {
+      if (visit !== visitRef.current) return afterStaleWrite(college);
       setError(
         err instanceof InstitutionApiError ? err : new InstitutionApiError({ reason: 'UNKNOWN' }),
       );
+      // Same as Remove/Move: the roster count must not stay at its old value.
+      await loadRoster(facultyMembershipId);
     } finally {
-      setSubmitting(false);
+      if (visit === visitRef.current) setSubmitting(false);
     }
   };
 
@@ -253,7 +414,10 @@ function FacultyAssignments() {
           <TableSkeleton rows={6} columns={4} />
           <LoadingAnnouncement label="Loading students" />
         </>
-      ) : rows && rows.length === 0 && !search ? (
+      ) : rows && rows.length === 0 && !search && !sectionFilter && !facultyMembershipId ? (
+        // Only for a college with no students at all. With a faculty member or
+        // a section chosen, an empty table keeps the form, so those choices
+        // can still be changed (it used to replace the whole form).
         <EmptyState
           icon={Users}
           title="No students to assign yet"
@@ -273,7 +437,7 @@ function FacultyAssignments() {
               label="Faculty member"
               required
               value={facultyMembershipId}
-              disabled={!writable || faculty.isLoading || facultyOptions.length === 0}
+              disabled={!writable || submitting || faculty.isLoading || facultyOptions.length === 0}
               error={fieldErrors.faculty_membership_id}
               options={facultyOptions}
               placeholder={
@@ -290,6 +454,24 @@ function FacultyAssignments() {
               }
               onChange={(e) => changeFaculty(e.target.value)}
             />
+            {facultyMembershipId ? (
+              <div className="mt-3" aria-live="polite">
+                {rosterError ? (
+                  <ErrorNotice error={rosterError} onRetry={() => void loadRoster(facultyMembershipId)} />
+                ) : roster ? (
+                  <p className="text-[13px] text-[#334155]">
+                    {rosterCount} {rosterCount === 1 ? 'student' : 'students'} on this roster
+                    {newlyAdded > 0 ? `, ${newlyAdded} more ticked to add` : ''}.
+                  </p>
+                ) : null}
+                {overWarning ? (
+                  <p className="mt-1 rounded-lg bg-[#fffbeb] px-3 py-2 text-[12px] text-[#92400e]">
+                    More than {ROSTER_WARNING_SIZE} students for one faculty member makes close
+                    monitoring hard. Consider sharing this section with another faculty member.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
@@ -303,7 +485,41 @@ function FacultyAssignments() {
                     : `${shownFrom}–${shownTo} of ${total}`}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {facultyDepartmentId ? (
+                <select
+                  value={sectionFilter}
+                  onChange={(e) => {
+                    setSectionFilter(e.target.value);
+                    setPage(0);
+                  }}
+                  aria-label="Filter by section"
+                  className={cn(
+                    'rounded-lg border border-[#cbd5e1] bg-white px-2.5 py-1.5 text-[13px] leading-5',
+                    FOCUS_RING,
+                  )}
+                >
+                  <option value="">All sections</option>
+                  {/* While a department's sections load, and after a failed
+                      load, the list may still be the PREVIOUS department's,
+                      so offer none (and a retry after a failure). */}
+                  {(sections.error || sections.isLoading ? [] : sections.data ?? []).map((sec) => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {facultyDepartmentId && sections.error ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void sections.refetch()}
+                >
+                  Retry sections
+                </Button>
+              ) : null}
               <input
                 type="search"
                 value={query}
@@ -316,7 +532,15 @@ function FacultyAssignments() {
                   FOCUS_RING,
                 )}
               />
-              <Button type="button" variant="outline" size="sm" onClick={toggleAllVisible}>
+              {/* Disabled while the next page, search or section loads (or
+                  failed): the rows on screen are still the previous ones. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={rowsStale}
+                onClick={toggleAllVisible}
+              >
                 {allVisibleSelected ? 'Clear page' : 'Select page'}
               </Button>
             </div>
@@ -330,7 +554,7 @@ function FacultyAssignments() {
                   <th scope="col" className="w-10 border-b border-[#e2e8f0] bg-[#f8fafc] px-3 py-2.5">
                     <span className="sr-only">Selected</span>
                   </th>
-                  {['Student', 'Admission no.', 'Section', 'Status'].map((h) => (
+                  {['Student', 'Admission no.', 'Section', 'On this roster', 'Status'].map((h) => (
                     <th
                       key={h}
                       scope="col"
@@ -357,7 +581,7 @@ function FacultyAssignments() {
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={!writable}
+                          disabled={!writable || rowsStale}
                           onChange={() => toggle(s.id)}
                           aria-label={`Assign ${s.full_name}`}
                           className={cn('h-4 w-4 accent-[#2557a7]', FOCUS_RING)}
@@ -371,6 +595,9 @@ function FacultyAssignments() {
                       </td>
                       <td className="px-4 py-2.5 text-[13px] text-[#334155]">
                         {sectionName(s.section_id) ?? '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-[13px] text-[#334155]">
+                        {roster === null ? '—' : roster.has(s.id) ? 'Yes' : 'No'}
                       </td>
                       <td className="px-4 py-2.5">
                         <StudentStatusPill status={s.status} />
@@ -421,6 +648,54 @@ function FacultyAssignments() {
             ) : (
               saveButton
             )}
+            {roster && selectedOnRoster.length > 0 ? (
+              <WriteGuard
+                active={Boolean(readOnlyReason)}
+                hint={readOnlyReason ? READ_ONLY_CONTROL_HINT[readOnlyReason] : ''}
+              >
+                <span className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  disabled={submitting || !writable}
+                  onClick={() => void runRosterAction('remove')}
+                >
+                  Remove {selectedOnRoster.length} from this faculty member
+                </Button>
+                {moveOptions.length > 0 ? (
+                  <span className="flex items-center gap-2">
+                    <select
+                      value={moveTo}
+                      onChange={(e) => setMoveTo(e.target.value)}
+                      aria-label="Move to faculty member"
+                      disabled={submitting || !writable}
+                      className={cn(
+                        'rounded-lg border border-[#cbd5e1] bg-white px-2.5 py-1.5 text-[13px] leading-5',
+                        FOCUS_RING,
+                      )}
+                    >
+                      <option value="">Move to…</option>
+                      {moveOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="md"
+                      disabled={submitting || !writable || !moveTo}
+                      onClick={() => void runRosterAction('move')}
+                    >
+                      Move {selectedOnRoster.length}
+                    </Button>
+                  </span>
+                ) : null}
+                </span>
+              </WriteGuard>
+            ) : null}
             {offPageSelected > 0 ? (
               <span className="text-[12px] leading-4 text-[#64748b]">
                 {offPageSelected} selected on other pages

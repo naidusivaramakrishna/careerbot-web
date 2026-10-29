@@ -48,6 +48,10 @@ import type {
   CreateProgressRequest,
   CreateSectionRequest,
   CreateStudentRequest,
+  FacultyRoster,
+  RemoveAssignmentsResult,
+  MoveAssignmentsRequest,
+  MoveAssignmentsResult,
   Department,
   FacultyAssignmentResult,
   InstitutionMembership,
@@ -759,6 +763,53 @@ export async function assignStudentsToFaculty(
   try {
     const response = await httpClient.post<FacultyAssignmentResult>(
       `${BASE}/faculty-assignments`,
+      body,
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** The student ids on one faculty member's roster (CPO, HOD). */
+export async function listFacultyAssignments(
+  facultyMembershipId: string,
+): Promise<FacultyRoster> {
+  try {
+    const response = await httpClient.get<FacultyRoster>(
+      `${BASE}/faculty-assignments`,
+      { ...withInstitutionAuth(), params: { faculty_membership_id: facultyMembershipId } },
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Take students off a faculty member's roster. Students not on it are skipped. */
+export async function removeStudentsFromFaculty(
+  body: CreateFacultyAssignmentRequest,
+): Promise<RemoveAssignmentsResult> {
+  try {
+    const response = await httpClient.post<RemoveAssignmentsResult>(
+      `${BASE}/faculty-assignments/remove`,
+      body,
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Hand students to another faculty member (assigns first, then removes). */
+export async function moveStudentsBetweenFaculty(
+  body: MoveAssignmentsRequest,
+): Promise<MoveAssignmentsResult> {
+  try {
+    const response = await httpClient.post<MoveAssignmentsResult>(
+      `${BASE}/faculty-assignments/move`,
       body,
       withInstitutionAuth(),
     );
