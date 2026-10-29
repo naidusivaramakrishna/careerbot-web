@@ -11,8 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { onboardableRoles } from '@/lib/institutionPermissions';
 
 describe('onboardableRoles', () => {
-  it('a placement officer can grant Head of Department only', () => {
-    expect(onboardableRoles('cpo')).toEqual(['hod']);
+  it('a placement officer can grant Head of Department and Faculty (T23)', () => {
+    expect(onboardableRoles('cpo')).toEqual(['hod', 'faculty']);
   });
 
   it('a head of department can grant Faculty only', () => {
@@ -32,7 +32,7 @@ describe('onboardableRoles', () => {
     }
   });
 
-  it('a placement officer is not offered Faculty (the head of department adds faculty)', () => {
-    expect(onboardableRoles('cpo')).not.toContain('faculty');
+  it('the head of department still adds faculty (the usual path)', () => {
+    expect(onboardableRoles('hod')).toContain('faculty');
   });
 });

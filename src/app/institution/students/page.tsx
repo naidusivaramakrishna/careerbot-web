@@ -298,9 +298,10 @@ function StudentsRoster() {
               render: (s) =>
                 s.claim_status === 'claimed' ? (
                   <span className="text-[12px] text-[#64748b]">Signed up</span>
-                ) : !allows('onboard_student') ? (
-                  // A role that may not issue codes sees the state, not a
-                  // button the server would refuse.
+                ) : !allows('onboard_student') || (s.status ?? 'enrolled') !== 'enrolled' ? (
+                  // A role that may not issue codes, or a student who has left
+                  // (no code can be claimed), sees the state, not a button the
+                  // server would refuse.
                   <span className="text-[12px] text-[#64748b]">
                     {claimStatusLabel(s.claim_status)}
                   </span>

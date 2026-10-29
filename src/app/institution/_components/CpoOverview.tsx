@@ -140,7 +140,7 @@ export function CpoOverview() {
         title="College overview"
         description="Everything across your college — counts first, then the students who need attention."
         actions={
-          allows('onboard_student') ? (
+          allows('add_people') ? (
             readOnlyReason ? (
               <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
                 {addPeopleButton}

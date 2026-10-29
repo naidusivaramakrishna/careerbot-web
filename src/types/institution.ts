@@ -472,6 +472,25 @@ export interface Student {
   faculty_assignment_pending?: boolean;
 }
 
+/** PATCH /institution/students/{id}. Send only what changes; null clears the
+ *  optional fields. department_id is not editable here (a student's faculty
+ *  assignments belong to their department); the server refuses it. */
+export interface UpdateStudentRequest {
+  full_name?: string;
+  admission_number?: string;
+  college_email?: string | null;
+  section_id?: string | null;
+  batch_year?: number | null;
+}
+
+/** PUT /institution/students/{id}/status. */
+export interface StudentStatusResult extends Student {
+  /** Unused codes cancelled by this change (leaving cancels them). */
+  invites_revoked?: number;
+  /** College memberships switched off (leaving) or back on (re-enrolling). */
+  memberships_changed?: number;
+}
+
 /** GET /institution/faculty-assignments?faculty_membership_id= */
 export interface FacultyRoster {
   faculty_membership_id: string;

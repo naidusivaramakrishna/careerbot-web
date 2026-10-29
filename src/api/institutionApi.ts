@@ -48,6 +48,9 @@ import type {
   CreateProgressRequest,
   CreateSectionRequest,
   CreateStudentRequest,
+  UpdateStudentRequest,
+  StudentStatus,
+  StudentStatusResult,
   FacultyRoster,
   RemoveAssignmentsResult,
   MoveAssignmentsRequest,
@@ -647,6 +650,27 @@ export async function issueInvite(
   }
 }
 
+/**
+ * Email the code the issuing screen is still showing, WITHOUT reissuing it.
+ * The server keeps only the code's digest, so it needs the code back; it
+ * emails it only when it matches the student's live invite, and only to the
+ * email on record. Reissuing instead would revoke a code already handed out.
+ */
+export async function emailCurrentInvite(
+  studentId: string, code: string,
+): Promise<{ emailed: boolean; email_error: string | null }> {
+  try {
+    const response = await httpClient.post<{ emailed: boolean; email_error: string | null }>(
+      `${BASE}/students/${encodeURIComponent(studentId)}/invite/email`,
+      { code },
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /** Cancel every live code for a student without issuing a new one. */
 export async function revokeInvites(studentId: string): Promise<number> {
   try {
@@ -698,6 +722,47 @@ export async function getStudent(studentId: string): Promise<Student> {
   try {
     const response = await httpClient.get<Student>(
       `${BASE}/students/${encodeURIComponent(studentId)}`,
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Correct a student's details (CPO only). Send only the fields that change;
+ * null clears college_email, section_id or batch_year. A 409 means the
+ * admission number or email is already on the roster, or someone else changed
+ * this student a moment ago.
+ */
+export async function updateStudent(
+  studentId: string, changes: UpdateStudentRequest,
+): Promise<Student> {
+  try {
+    const response = await httpClient.patch<Student>(
+      `${BASE}/students/${encodeURIComponent(studentId)}`,
+      changes,
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Mark a student enrolled, graduated, withdrawn or suspended (CPO only).
+ * Anything but enrolled cancels unused codes and switches off their college
+ * access; enrolled switches it back on.
+ */
+export async function setStudentStatus(
+  studentId: string, status: StudentStatus,
+): Promise<StudentStatusResult> {
+  try {
+    const response = await httpClient.put<StudentStatusResult>(
+      `${BASE}/students/${encodeURIComponent(studentId)}/status`,
+      { status },
       withInstitutionAuth(),
     );
     return response.data;

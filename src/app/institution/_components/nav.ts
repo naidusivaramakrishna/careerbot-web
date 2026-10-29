@@ -91,7 +91,9 @@ const NAV_GROUPS: InstitutionNavGroup[] = [
         label: 'Add people',
         href: '/institution/people',
         icon: UserPlus,
-        capability: 'onboard_student',
+        // Any onboarding: the CPO adds HODs, faculty and students; the HOD
+        // adds faculty. Faculty add nobody (T8).
+        capability: 'add_people',
       },
       {
         id: 'import',

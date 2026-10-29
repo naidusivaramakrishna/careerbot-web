@@ -3,7 +3,7 @@
 import React, { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ClipboardPen, KeyRound, SearchX } from 'lucide-react';
+import { ArrowLeft, ClipboardPen, KeyRound, PencilLine, SearchX } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getStudent } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
@@ -12,6 +12,7 @@ import { useStructureNames } from '@/hooks/useStructureNames';
 import { activityLabel, claimStatusLabel, READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { ProgressRecord, Student } from '@/types/institution';
 import { DataTable, OptionalCell } from '../../_components/DataTable';
+import { EditStudentDialog } from '../../_components/EditStudentDialog';
 import { EmptyState } from '../../_components/EmptyState';
 import { InviteCodeDialog } from '../../_components/InviteCodeDialog';
 import { ErrorNotice } from '../../_components/ErrorNotice';
@@ -38,6 +39,7 @@ import { WriteGuard } from '../../_components/WriteGuard';
 function StudentDetail({ studentId }: { studentId: string }) {
   const { allows, readOnlyReason } = useInstitution();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const fetchStudent = useCallback(() => getStudent(studentId), [studentId]);
   const student = useInstitutionResource<Student>(fetchStudent);
   const progress = useStudentProgress(studentId);
@@ -63,7 +65,7 @@ function StudentDetail({ studentId }: { studentId: string }) {
   // is shown only once. A student who is GONE (404/403 on the refresh) still
   // gets the not-in-view screen, once no dialog is open.
   const gone = student.error?.reason === 'NOT_FOUND' || student.error?.reason === 'FORBIDDEN';
-  if (student.error && (!student.data || (gone && !inviteOpen))) {
+  if (student.error && (!student.data || (gone && !inviteOpen && !editOpen))) {
     const notFound = student.error.reason === 'NOT_FOUND' || student.error.reason === 'FORBIDDEN';
     return (
       <>
@@ -108,7 +110,25 @@ function StudentDetail({ studentId }: { studentId: string }) {
   // The same capability the roster's Invite button uses, so whoever may issue
   // a code there may issue it here -- an officer who has just added a student
   // lands on this page, and it used to offer them no way to send the code.
-  const canInvite = allows('onboard_student') && s.claim_status !== 'claimed';
+  // Not for a student who has left: the server refuses a code for anyone not
+  // enrolled (it could never be claimed).
+  const canInvite = allows('onboard_student') && s.claim_status !== 'claimed'
+    && (s.status ?? 'enrolled') === 'enrolled';
+  // The placement officer alone corrects the row and records who has left
+  // (EDIT_STUDENT). Offered whatever the sign-up state: a signed-up student's
+  // name can be misspelt too.
+  const canEdit = allows('edit_student');
+  const editButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={Boolean(readOnlyReason)}
+      onClick={() => setEditOpen(true)}
+    >
+      <PencilLine className="mr-1.5 h-4 w-4" aria-hidden />
+      Edit
+    </Button>
+  );
   const inviteButton = (
     <Button
       variant="outline"
@@ -135,6 +155,15 @@ function StudentDetail({ studentId }: { studentId: string }) {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <StudentStatusPill status={s.status} />
+            {canEdit ? (
+              readOnlyReason ? (
+                <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
+                  {editButton}
+                </WriteGuard>
+              ) : (
+                editButton
+              )
+            ) : null}
             {canInvite ? (
               readOnlyReason ? (
                 <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
@@ -176,6 +205,15 @@ function StudentDetail({ studentId }: { studentId: string }) {
           </p>
         </div>
       </div>
+
+      {editOpen ? (
+        <EditStudentDialog
+          student={s}
+          writable={!readOnlyReason}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => void student.refetch()}
+        />
+      ) : null}
 
       {inviteOpen ? (
         <InviteCodeDialog

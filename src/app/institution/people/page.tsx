@@ -39,13 +39,49 @@ import { CARD } from '../_components/tokens';
  * chain, so the UI never offers a choice that ends in a 403.
  */
 function AddPeople() {
-  const { readOnlyReason, role, canWrite, activeMembership } = useInstitution();
+  const { readOnlyReason, role, canWrite, allows, activeMembership } = useInstitution();
   const departments = useDepartments();
   const batches = useBatches();
   const [activeTab, setActiveTab] = useState('access');
 
   if (!role) return null;
   const allowedRoles = onboardableRoles(role);
+  // Student records are the CPO's alone (T8); the HOD sees only the staff tab.
+  const canAddStudents = allows('onboard_student');
+  const readOnlyHint = readOnlyReason ? READ_ONLY_CONTROL_HINT[readOnlyReason] : null;
+  const accessTab = {
+    label: 'access',
+    text: 'Give access',
+    icon: <UserPlus className="h-4 w-4" aria-hidden />,
+    content: (
+      <MemberForm
+        allowedRoles={allowedRoles}
+        departments={departments.data ?? []}
+        defaultDepartmentId={activeMembership?.department_id ?? ''}
+        writable={canWrite('add_people')}
+        readOnlyHint={readOnlyHint}
+        canAddStudents={canAddStudents}
+      />
+    ),
+  };
+  const studentTab = {
+    label: 'student',
+    text: 'Create a student record',
+    icon: <GraduationCap className="h-4 w-4" aria-hidden />,
+    content: (
+      <StudentForm
+        departments={departments.data ?? []}
+        batchYears={(batches.data ?? []).map((b) => b.academic_year)}
+        defaultDepartmentId={activeMembership?.department_id ?? ''}
+        writable={canWrite('onboard_student')}
+        readOnlyHint={readOnlyHint}
+      />
+    ),
+  };
+  const tabs = [
+    ...(allowedRoles.length > 0 ? [accessTab] : []),
+    ...(canAddStudents ? [studentTab] : []),
+  ];
 
   return (
     <>
@@ -59,38 +95,9 @@ function AddPeople() {
       ) : null}
 
       <Tabs
-        active={activeTab}
+        active={tabs.some((t) => t.label === activeTab) ? activeTab : (tabs[0]?.label ?? '')}
         onChange={setActiveTab}
-        tabs={[
-          {
-            label: 'access',
-            text: 'Give access',
-            icon: <UserPlus className="h-4 w-4" aria-hidden />,
-            content: (
-              <MemberForm
-                allowedRoles={allowedRoles}
-                departments={departments.data ?? []}
-                defaultDepartmentId={activeMembership?.department_id ?? ''}
-                writable={canWrite('onboard_student')}
-                readOnlyHint={readOnlyReason ? READ_ONLY_CONTROL_HINT[readOnlyReason] : null}
-              />
-            ),
-          },
-          {
-            label: 'student',
-            text: 'Create a student record',
-            icon: <GraduationCap className="h-4 w-4" aria-hidden />,
-            content: (
-              <StudentForm
-                departments={departments.data ?? []}
-                batchYears={(batches.data ?? []).map((b) => b.academic_year)}
-                defaultDepartmentId={activeMembership?.department_id ?? ''}
-                writable={canWrite('onboard_student')}
-                readOnlyHint={readOnlyReason ? READ_ONLY_CONTROL_HINT[readOnlyReason] : null}
-              />
-            ),
-          },
-        ]}
+        tabs={tabs}
       />
     </>
   );
@@ -137,12 +144,15 @@ function MemberForm({
   defaultDepartmentId,
   writable,
   readOnlyHint,
+  canAddStudents,
 }: {
   allowedRoles: OnboardableRole[];
   departments: { id: string; name: string }[];
   defaultDepartmentId: string;
   writable: boolean;
   readOnlyHint: string | null;
+  /** Whether the student tab is there to point at (T8: CPO only). */
+  canAddStudents: boolean;
 }) {
   const [accountId, setAccountId] = useState('');
   const [email, setEmail] = useState('');
@@ -236,8 +246,10 @@ function MemberForm({
       </MicroLabel>
       <Body className="mb-4">
         The person needs a CareerBOT account already. This links that account to your college with a
-        role. To add a student, use the next tab: create their student record, then they join by
-        entering an invite code.
+        role.{' '}
+        {canAddStudents
+          ? 'To add a student, use the next tab: create their student record, then they join by entering an invite code.'
+          : 'Students are added by your placement officer; ask them to add anyone who is missing.'}
       </Body>
 
       <FormError error={error} />
@@ -543,7 +555,7 @@ function StudentForm({
 
 export default function AddPeoplePage() {
   return (
-    <RoleGuard capability="onboard_student">
+    <RoleGuard capability="add_people">
       <AddPeople />
     </RoleGuard>
   );

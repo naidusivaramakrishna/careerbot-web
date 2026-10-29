@@ -121,7 +121,9 @@ export function HodOverview() {
         title="Department overview"
         description="Your department at a glance — the staff who teach in it, and the students in it."
         actions={
-          allows('onboard_student') ? (
+          // Add people opens for an HOD to add faculty (T8: students are the
+          // placement officer's to add).
+          allows('add_people') ? (
             readOnlyReason ? (
               <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
                 {addPeopleButton}
@@ -298,7 +300,7 @@ export function HodOverview() {
           <EmptyState
             icon={GraduationCap}
             title="No students yet"
-            body="No students have been added to your department yet. Add them from “Add people”, or ask your placement officer to onboard them."
+            body="No students have been added to your department yet. Your placement officer adds students; ask them to add any who are missing."
           />
         ) : (
           <DataTable<Student>

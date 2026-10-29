@@ -33,6 +33,7 @@ vi.mock('@/hooks/useInstitutionResource', () => ({
   useRosterReport: mocks.useRosterReport,
   useInstitutionResource: mocks.useInstitutionResource,
   useStudentProgress: mocks.useStudentProgress,
+  useSections: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
 }));
 vi.mock('@/hooks/useStructureNames', () => ({
   useStructureNames: mocks.useStructureNames,
@@ -41,6 +42,8 @@ vi.mock('@/api/institutionApi', () => ({
   getStudent: vi.fn(),
   issueInvite: vi.fn(),
   revokeInvites: vi.fn(),
+  updateStudent: vi.fn(),
+  setStudentStatus: vi.fn(),
   InstitutionApiError: class extends Error {},
 }));
 vi.mock('@/app/institution/_components/RecordProgressForm', () => ({
@@ -52,7 +55,7 @@ import StudentsPage from '@/app/institution/students/page';
 import StudentDetailPage from '@/app/institution/students/[studentId]/page';
 import { claimStatusLabel, ERROR_MESSAGES, READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import * as institutionApi from '@/api/institutionApi';
-import type { ClaimStatus, Student } from '@/types/institution';
+import type { ClaimStatus, Student, StudentStatus } from '@/types/institution';
 
 function state<T>(data: T, extra: Record<string, unknown> = {}) {
   return { data, isLoading: false, error: null, refetch: vi.fn(), ...extra };
@@ -67,12 +70,15 @@ function student(claim_status: ClaimStatus, over: Partial<Student> = {}): Studen
   } as Student;
 }
 
-function institution({ canOnboard = true, readOnlyReason = null as string | null } = {}) {
+function institution({
+  canOnboard = true, canEdit = false, readOnlyReason = null as string | null,
+} = {}) {
   mocks.useInstitution.mockReturnValue({
     role: 'cpo',
     readOnlyReason,
     allows: (cap: string) =>
-      cap === 'read_students' || (canOnboard && cap === 'onboard_student'),
+      cap === 'read_students' || (canOnboard && cap === 'onboard_student')
+      || (canEdit && cap === 'edit_student'),
   });
   mocks.useStructureNames.mockReturnValue({
     departmentName: (id: string) => id,
@@ -166,6 +172,32 @@ describe('student page', () => {
     expect(refetch).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /done/i }));
     expect(screen.queryByText(/invite code for ravi kumar/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('student page: edit and status (T5)', () => {
+  function renderPage(s: Student) {
+    mocks.useInstitutionResource.mockReturnValue(state(s));
+    mocks.useStudentProgress.mockReturnValue(state([]));
+    render(<StudentDetailPage />);
+  }
+
+  it('offers Edit to the placement officer', () => {
+    institution({ canEdit: true });
+    renderPage(student('claimed'));
+    expect(screen.getByRole('button', { name: /^edit$/i })).toBeEnabled();
+  });
+
+  it('offers no Edit to any other role', () => {
+    institution({ canEdit: false });
+    renderPage(student('claimed'));
+    expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument();
+  });
+
+  it('offers no Invite for a student who has left', () => {
+    institution();
+    renderPage(student('rostered', { status: 'withdrawn' }));
+    expect(screen.queryByRole('button', { name: /invite|reissue/i })).not.toBeInTheDocument();
   });
 });
 
@@ -347,5 +379,83 @@ describe('roster Account column: read-only reason', () => {
     fireEvent.click(within(row).getByRole('button', { name: /invite/i }));
     expect(screen.getByText(/invite code for roster student/i)).toBeInTheDocument();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
+// ai-review f36884fb P2: the roster's "no Invite unless enrolled" rule.
+describe('roster Account column: only an enrolled student can be sent a code', () => {
+  function renderRow(status: StudentStatus) {
+    institution();
+    mocks.useStudentsPaged.mockReturnValue(state({
+      items: [student('rostered', { id: 's9', full_name: 'Roster Student', status })],
+      total: 1, skip: 0, limit: 50,
+    }));
+    render(<StudentsPage />);
+    return screen.getByText('Roster Student').closest('tr') as HTMLElement;
+  }
+
+  it.each<StudentStatus>(['withdrawn', 'graduated', 'suspended'])('a %s student shows the state, not Invite', (status) => {
+    const row = renderRow(status);
+    expect(within(row).queryByRole('button', { name: /invite|reissue/i })).not.toBeInTheDocument();
+    expect(within(row).getByText('Not invited yet')).toBeInTheDocument();
+  });
+
+  it('control: an enrolled student still gets Invite', () => {
+    const row = renderRow('enrolled');
+    expect(within(row).getByRole('button', { name: /invite/i })).toBeEnabled();
+  });
+});
+
+// The same refetch mechanism as the invite dialog: the edit dialog's onSaved
+// refetches the student, and a failed refresh must not unmount the dialog
+// (and with it the "Details saved." confirmation).
+describe('student page: a failed refresh after an edit keeps the edit dialog', () => {
+  it('keeps the dialog and its confirmation on screen', async () => {
+    institution({ canEdit: true });
+    const s = student('claimed');
+    const failed = {
+      ...state(s),
+      error: { reason: 'NETWORK', message: '', fieldErrors: [], isReadOnlyState: false },
+    };
+    let current: Record<string, unknown> = state(s);
+    const refetch = vi.fn(() => { current = { ...failed, refetch }; });
+    current = { ...state(s), refetch };
+    mocks.useInstitutionResource.mockImplementation(() => current);
+    mocks.useStudentProgress.mockReturnValue(state([]));
+    vi.mocked(institutionApi.updateStudent).mockResolvedValue({ ...s, full_name: 'Ravi K' });
+    const view = render(<StudentDetailPage />);
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Ravi K' } });
+    fireEvent.click(screen.getByRole('button', { name: /save details/i }));
+    await screen.findByText('Details saved.');
+    expect(refetch).toHaveBeenCalled();
+    view.rerender(<StudentDetailPage />);
+    expect(screen.getByText('Details saved.')).toBeInTheDocument();
+    expect(screen.getByText(ERROR_MESSAGES.NETWORK)).toBeInTheDocument();
+  });
+
+  it('gone on the refresh after an edit: the dialog stays until Close, then not-in-view', async () => {
+    institution({ canEdit: true });
+    const s = student('claimed');
+    let current: Record<string, unknown> = state(s);
+    const refetch = vi.fn(() => {
+      current = {
+        ...state(s), refetch,
+        error: { reason: 'NOT_FOUND', message: '', fieldErrors: [], isReadOnlyState: false },
+      };
+    });
+    current = { ...state(s), refetch };
+    mocks.useInstitutionResource.mockImplementation(() => current);
+    mocks.useStudentProgress.mockReturnValue(state([]));
+    vi.mocked(institutionApi.updateStudent).mockResolvedValue({ ...s, full_name: 'Ravi K' });
+    const view = render(<StudentDetailPage />);
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Ravi K' } });
+    fireEvent.click(screen.getByRole('button', { name: /save details/i }));
+    await screen.findByText('Details saved.');
+    view.rerender(<StudentDetailPage />);
+    expect(screen.getByText('Details saved.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+    expect(screen.getByText('That student is not in your view')).toBeInTheDocument();
   });
 });

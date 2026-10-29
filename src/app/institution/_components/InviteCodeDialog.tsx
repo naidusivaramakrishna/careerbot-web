@@ -4,7 +4,12 @@ import React, { useState } from 'react';
 import { Check, Copy, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { issueInvite, revokeInvites, InstitutionApiError } from '@/api/institutionApi';
+import {
+  emailCurrentInvite,
+  issueInvite,
+  revokeInvites,
+  InstitutionApiError,
+} from '@/api/institutionApi';
 import type { IssuedInvite, Student } from '@/types/institution';
 import { ErrorNotice } from './ErrorNotice';
 import { Body, Caption, SectionTitle } from './Typography';
@@ -47,6 +52,22 @@ export function InviteCodeDialog({
     try {
       setIssued(await issueInvite(student.id, 30, canEmail && sendEmail));
       onIssued?.();
+    } catch (err) {
+      setError(err instanceof InstitutionApiError ? err : null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Email the code still on screen, without reissuing it (which would revoke
+  // a code the officer may already have read out or written down).
+  const emailIt = async () => {
+    if (!issued) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await emailCurrentInvite(student.id, issued.code);
+      setIssued({ ...issued, emailed: out.emailed, email_error: out.email_error });
     } catch (err) {
       setError(err instanceof InstitutionApiError ? err : null);
     } finally {
@@ -168,16 +189,21 @@ export function InviteCodeDialog({
                 send costs a delivery, not the invitation -- if this hid the
                 code on "emailed" and the mail bounced, the officer would
                 reissue and revoke a code that had already arrived. */}
-            {issued.emailed ? (
-              <Caption className="mt-1 text-emerald-700">
-                Emailed to {student.college_email}.
-              </Caption>
-            ) : issued.email_error ? (
-              <Caption className="mt-1 text-amber-700">
-                Not emailed: {issued.email_error}. The code above still works —
-                read it out or send it yourself.
-              </Caption>
-            ) : null}
+            <div role="status" aria-live="polite">
+              {issued.emailed ? (
+                <Caption className="mt-1 text-emerald-700">
+                  Emailed to {student.college_email}.
+                </Caption>
+              ) : issued.email_error ? (
+                <Caption className="mt-1 text-amber-700">
+                  Not emailed: {issued.email_error}. The code above still works —
+                  read it out or send it yourself.
+                </Caption>
+              ) : null}
+            </div>
+            {/* A failed "Email this code" or "Cancel this code" is shown here:
+                the error block above belongs to the not-yet-issued view. */}
+            {error ? <ErrorNotice error={error} className="mt-3" /> : null}
           </>
         )}
 
@@ -189,6 +215,11 @@ export function InviteCodeDialog({
               ) : (
                 'Issue code'
               )}
+            </Button>
+          ) : null}
+          {issued && canEmail && !issued.emailed ? (
+            <Button variant="outline" size="sm" onClick={emailIt} disabled={busy || !writable}>
+              {busy ? 'Working…' : 'Email this code'}
             </Button>
           ) : null}
           {issued ? (
