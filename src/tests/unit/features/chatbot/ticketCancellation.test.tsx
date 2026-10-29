@@ -6,9 +6,12 @@ import './chatAppSuiteSetup';
 
 /**
  * Cancel Ticket: PATCH /api/v1/tickets/{ticket_id}/status, wired into the
- * ticket detail modal in the chatbot's Tickets tab. Only tickets in a
- * cancellable status (open/in_progress/waiting_user) show the action;
- * resolved/closed/cancelled tickets must not.
+ * chatbot's ticket detail modal (opened via the ?ticket= deep link -- the
+ * old in-widget History sidebar's own "Tickets" tab, a separate client-side
+ * list, has been removed; ticket management now lives entirely on the
+ * dashboard's Support & History page). Only tickets in a cancellable status
+ * (open/in_progress/waiting_user) show the action; resolved/closed/cancelled
+ * tickets must not.
  */
 
 Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
@@ -25,12 +28,14 @@ vi.mock('@/api/userApi', () => ({
 }));
 
 const getSupportTickets = vi.fn();
+const getTicketDetails = vi.fn();
 const cancelTicket = vi.fn();
 
 vi.mock('@/api/chatbotApi', () => ({
   sendChatMessage: vi.fn(),
   escalateToSupport: vi.fn(),
   getSupportTickets: (...args: unknown[]) => getSupportTickets(...args),
+  getTicketDetails: (...args: unknown[]) => getTicketDetails(...args),
   cancelTicket: (...args: unknown[]) => cancelTicket(...args),
   sendTicketOtp: vi.fn(),
   verifyTicketOtp: vi.fn(),
@@ -43,21 +48,13 @@ vi.mock('@/api/chatbotApi', () => ({
 import ChatApp from '@/app/(ai)/chatbot/_components/ChatApp';
 import { getProfile } from '@/api/userApi';
 
-const openWidget = async () => {
+// Opens the ticket details modal via the ?ticket= deep link -- the only
+// remaining way to reach it from inside the widget now that the old
+// History sidebar's "Tickets" tab is gone.
+const openTicketViaDeepLink = async (ticketId: string) => {
+  window.history.pushState(null, '', `/chatbot?ticket=${ticketId}`);
   render(<ChatApp />);
-  const toggle = screen.getByTitle('Chatbot Support');
-  await act(async () => {
-    fireEvent.click(toggle);
-  });
-  await waitFor(() => {
-    expect(screen.getByText(/How can I help you today/i)).toBeInTheDocument();
-  });
-};
-
-const openTicketsTab = async () => {
-  await act(async () => {
-    fireEvent.click(screen.getByText('🎫 Tickets'));
-  });
+  await waitFor(() => expect(screen.getByText('Ticket ID').closest('.ticket-modal')).toBeInTheDocument());
 };
 
 const ticket = (overrides: Partial<Record<string, unknown>> = {}) => ({
@@ -77,11 +74,13 @@ const ticket = (overrides: Partial<Record<string, unknown>> = {}) => ({
 describe('ChatApp — Cancel Ticket', () => {
   beforeEach(() => {
     localStorage.clear();
-    getSupportTickets.mockReset();
+    getSupportTickets.mockReset().mockResolvedValue({ data: [] });
+    getTicketDetails.mockReset();
     cancelTicket.mockReset();
-    // The ticket list is shown only for a confirmed account (a profile with an
+    // The ticket is shown only for a confirmed account (a profile with an
     // email); afterEach's restoreAllMocks clears the module-level mock's value.
     vi.mocked(getProfile).mockResolvedValue({ email: 'alice@example.com', full_name: 'Alice' } as Awaited<ReturnType<typeof getProfile>>);
+    window.history.pushState(null, '', '/chatbot');
   });
 
   afterEach(() => {
@@ -89,17 +88,11 @@ describe('ChatApp — Cancel Ticket', () => {
   });
 
   it('shows the Cancel Ticket action for an open ticket and calls the cancel endpoint', async () => {
-    getSupportTickets.mockResolvedValue({ data: [ticket({ status: 'open' })] });
+    getTicketDetails.mockResolvedValue(ticket({ status: 'open' }));
     cancelTicket.mockResolvedValue(ticket({ status: 'cancelled', updated_at: '2026-01-02T00:00:00Z' }));
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    await openWidget();
-    await openTicketsTab();
-
-    const card = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(card);
-    });
+    await openTicketViaDeepLink('CB-00025');
 
     const cancelButton = await screen.findByText('Cancel Ticket');
     await act(async () => {
@@ -107,24 +100,15 @@ describe('ChatApp — Cancel Ticket', () => {
     });
 
     await waitFor(() => expect(cancelTicket).toHaveBeenCalledWith('CB-00025'));
-    // Status pill in the now-updated modal reflects the new state. Scoped to
-    // the modal: the (still-mounted) card behind it updates to the same
-    // label, so an unscoped query would match twice.
     const modal = document.querySelector('.ticket-modal') as HTMLElement;
     expect(within(modal).getByText('Cancelled')).toBeInTheDocument();
   });
 
   it('does not call cancelTicket if the confirmation dialog is dismissed', async () => {
-    getSupportTickets.mockResolvedValue({ data: [ticket({ status: 'open' })] });
+    getTicketDetails.mockResolvedValue(ticket({ status: 'open' }));
     vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    await openWidget();
-    await openTicketsTab();
-
-    const card = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(card);
-    });
+    await openTicketViaDeepLink('CB-00025');
 
     const cancelButton = await screen.findByText('Cancel Ticket');
     await act(async () => {
@@ -135,46 +119,28 @@ describe('ChatApp — Cancel Ticket', () => {
   });
 
   it('does not show Cancel Ticket for a resolved ticket', async () => {
-    getSupportTickets.mockResolvedValue({ data: [ticket({ status: 'resolved' })] });
+    getTicketDetails.mockResolvedValue(ticket({ status: 'resolved' }));
 
-    await openWidget();
-    await openTicketsTab();
-
-    const card = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(card);
-    });
+    await openTicketViaDeepLink('CB-00025');
 
     expect(screen.queryByText('Cancel Ticket')).not.toBeInTheDocument();
   });
 
   it('does not show Cancel Ticket for an already-cancelled ticket', async () => {
-    getSupportTickets.mockResolvedValue({ data: [ticket({ status: 'cancelled' })] });
+    getTicketDetails.mockResolvedValue(ticket({ status: 'cancelled' }));
 
-    await openWidget();
-    await openTicketsTab();
-
-    const card = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(card);
-    });
+    await openTicketViaDeepLink('CB-00025');
 
     expect(screen.queryByText('Cancel Ticket')).not.toBeInTheDocument();
   });
 
   it('surfaces an error and leaves the ticket unchanged when cancellation fails', async () => {
-    getSupportTickets.mockResolvedValue({ data: [ticket({ status: 'open' })] });
+    getTicketDetails.mockResolvedValue(ticket({ status: 'open' }));
     cancelTicket.mockRejectedValue(new Error('This ticket can no longer be cancelled.'));
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
-    await openWidget();
-    await openTicketsTab();
-
-    const card = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(card);
-    });
+    await openTicketViaDeepLink('CB-00025');
 
     const cancelButton = await screen.findByText('Cancel Ticket');
     await act(async () => {

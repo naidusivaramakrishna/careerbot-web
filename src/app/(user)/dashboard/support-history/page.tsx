@@ -16,11 +16,13 @@ import {
   Plus,
   Search,
   Ticket as TicketIcon,
+  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getChatSessionHistory,
+  deleteChatSession,
   getSupportTickets,
   getTicketDetails,
   cancelTicket,
@@ -366,6 +368,7 @@ function ConversationHistorySection({ searchQuery }: { searchQuery: string }) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -415,6 +418,28 @@ function ConversationHistorySection({ searchQuery }: { searchQuery: string }) {
 
   const startNewConversation = () => {
     window.location.href = `/dashboard?chat=new`;
+  };
+
+  // DELETE only closes a session on the backend (it is not erased) -- the
+  // same semantics the old in-widget History sidebar's "Remove from
+  // history" used, before conversation history moved to this page. Closed
+  // sessions are already filtered out of visibleSessions above, but the
+  // row is also dropped from `sessions`/`total` directly here so it
+  // disappears immediately instead of waiting on that filter alone.
+  const handleDeleteSession = async (session: ChatSessionSummary, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!window.confirm("Remove this conversation from your history?")) return;
+
+    setDeletingSessionId(session.session_id);
+    try {
+      await deleteChatSession(session.session_id);
+      setSessions((prev) => prev.filter((s) => s.session_id !== session.session_id));
+      setTotal((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      toast.error(describeError(err, "Failed to remove conversation. Please try again."));
+    } finally {
+      setDeletingSessionId(null);
+    }
   };
 
   if (loading) {
@@ -496,7 +521,7 @@ function ConversationHistorySection({ searchQuery }: { searchQuery: string }) {
               {visibleSessions.map((session) => (
                 <li
                   key={session.session_id}
-                  className="flex cursor-pointer items-center gap-3 px-5 py-4 transition hover:bg-gray-50 sm:px-6"
+                  className="group flex cursor-pointer items-center gap-3 px-5 py-4 transition hover:bg-gray-50 sm:px-6"
                   role="button"
                   tabIndex={0}
                   onClick={() => continueConversation(session.session_id)}
@@ -518,6 +543,20 @@ function ConversationHistorySection({ searchQuery }: { searchQuery: string }) {
                     <p>{formatDate(session.updated_at || session.created_at)}</p>
                     <p>{session.message_count} message{session.message_count === 1 ? "" : "s"}</p>
                   </div>
+                  <button
+                    type="button"
+                    aria-label="Remove from history"
+                    title="Remove from history"
+                    disabled={deletingSessionId === session.session_id}
+                    onClick={(event) => handleDeleteSession(session, event)}
+                    className="shrink-0 rounded-lg p-1.5 text-gray-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 focus-visible:opacity-100 disabled:opacity-50 group-hover:opacity-100"
+                  >
+                    {deletingSessionId === session.session_id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </button>
                   <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
                 </li>
               ))}

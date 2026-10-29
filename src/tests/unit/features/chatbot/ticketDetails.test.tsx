@@ -21,10 +21,12 @@ import './chatAppSuiteSetup';
  * this (via a "Raise a support ticket" click) were removed: that entry
  * point now navigates to /support/tickets/new instead of opening the
  * modal (openTicketModal has no remaining callers), so there is no UI
- * path left to reach it. The tests below only cover tickets already
- * present in getSupportTickets/getTicketDetails -- no creation step --
- * which remain fully reachable via the Tickets tab and the ?ticket=
- * deep link.
+ * path left to reach it. The old in-widget History sidebar (which had its
+ * own "Tickets" tab, a client-side list independent of the modal) was also
+ * removed -- conversation history and ticket management now live entirely
+ * on the dashboard's Support & History page. The ?ticket= deep link below
+ * is therefore the only remaining way to open this modal from inside the
+ * widget, so every test here opens it that way.
  */
 
 Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
@@ -70,23 +72,6 @@ vi.mock('@/api/chatbotApi', () => ({
 import ChatApp from '@/app/(ai)/chatbot/_components/ChatApp';
 import { getProfile } from '@/api/userApi';
 
-const openWidget = async () => {
-  render(<ChatApp />);
-  const toggle = screen.getByTitle('Chatbot Support');
-  await act(async () => {
-    fireEvent.click(toggle);
-  });
-  await waitFor(() => {
-    expect(screen.getByText(/How can I help you today/i)).toBeInTheDocument();
-  });
-};
-
-const openTicketsTab = async () => {
-  await act(async () => {
-    fireEvent.click(screen.getByText('🎫 Tickets'));
-  });
-};
-
 const backendTicket = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ticket_id: 'CB-00023',
   subject: 'Unable to login',
@@ -121,31 +106,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Opens the ticket details modal via the ?ticket= deep link -- the only
+// remaining way to reach it from inside the widget now that the old
+// History sidebar's "Tickets" tab is gone.
+const openTicketViaDeepLink = async (ticketId: string) => {
+  window.history.pushState(null, '', `/chatbot?ticket=${ticketId}`);
+  render(<ChatApp />);
+  await waitFor(() => expect(screen.getByText('Ticket ID').closest('.ticket-modal')).toBeInTheDocument());
+};
+
 describe('Ticket details -- Attachments section', () => {
   it('is hidden entirely when the ticket has no attachments', async () => {
-    getSupportTickets.mockResolvedValue({ data: [backendTicket({ attachments: [] })] });
+    getTicketDetails.mockResolvedValue(backendTicket({ attachments: [] }));
 
-    await openWidget();
-    await openTicketsTab();
-    const ticketRow = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(ticketRow);
-    });
+    await openTicketViaDeepLink('CB-00023');
 
     expect(screen.queryByText('Attachments')).not.toBeInTheDocument();
   });
 
   it('authenticated: shows the filename as a clickable attachment that fetches and opens it', async () => {
-    getSupportTickets.mockResolvedValue({
-      data: [backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] })],
-    });
+    getTicketDetails.mockResolvedValue(
+      backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] }),
+    );
 
-    await openWidget();
-    await openTicketsTab();
-    const ticketRow = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(ticketRow);
-    });
+    await openTicketViaDeepLink('CB-00023');
 
     expect(screen.getByText('Attachments')).toBeInTheDocument();
     const button = screen.getByRole('button', { name: /screenshot\.png/ });
@@ -159,15 +143,11 @@ describe('Ticket details -- Attachments section', () => {
 
   it('shows an inline error if opening the attachment fails', async () => {
     openOrDownloadTicketAttachment.mockRejectedValue(new Error('Network error'));
-    getSupportTickets.mockResolvedValue({
-      data: [backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] })],
-    });
+    getTicketDetails.mockResolvedValue(
+      backendTicket({ attachments: [{ attachment_id: 'att-1', filename: 'screenshot.png' }] }),
+    );
 
-    await openWidget();
-    await openTicketsTab();
-    await act(async () => {
-      fireEvent.click(screen.getByText('Unable to login'));
-    });
+    await openTicketViaDeepLink('CB-00023');
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /screenshot\.png/ }));
@@ -177,25 +157,20 @@ describe('Ticket details -- Attachments section', () => {
   });
 
   // There is currently no UI path for a guest to open the ticket details
-  // modal at all: the entire "Tickets" sidebar tab (and therefore
-  // setSelectedTicket) is gated behind isLocallyAuthenticated (a
-  // pre-existing, unrelated structural fact, confirmed by reading the
-  // component -- not something this fix changes or could meaningfully
-  // test via the real UI). The guest-safe branch in the Attachments
-  // section is still real, reachable code, though: a user who signs out
-  // in another tab while this modal happens to still be open must not be
-  // left looking at a button that will now 403. That IS testable.
+  // modal at all: both the ?ticket= deep link and setSelectedTicket's only
+  // caller are gated behind isLocallyAuthenticated (a pre-existing,
+  // unrelated structural fact, confirmed by reading the component -- not
+  // something this fix changes or could meaningfully test via the real
+  // UI). The guest-safe branch in the Attachments section is still real,
+  // reachable code, though: a user who signs out in another tab while this
+  // modal happens to still be open must not be left looking at a button
+  // that will now 403. That IS testable.
   it('a clickable attachment is replaced with "Sign in to view" if the user signs out while the modal is still open', async () => {
-    getSupportTickets.mockResolvedValue({
-      data: [backendTicket({ attachments: [{ attachment_id: 'att-2', filename: 'error.png' }] })],
-    });
+    getTicketDetails.mockResolvedValue(
+      backendTicket({ attachments: [{ attachment_id: 'att-2', filename: 'error.png' }] }),
+    );
 
-    await openWidget();
-    await openTicketsTab();
-    const ticketRow = await screen.findByText('Unable to login');
-    await act(async () => {
-      fireEvent.click(ticketRow);
-    });
+    await openTicketViaDeepLink('CB-00023');
 
     expect(screen.getByRole('button', { name: /error\.png/ })).toBeInTheDocument();
 

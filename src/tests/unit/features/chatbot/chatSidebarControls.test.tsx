@@ -7,11 +7,12 @@ import path from 'node:path';
 import './chatAppSuiteSetup';
 
 /**
- * The signed-in History sidebar's own controls (ai-review P2s at 5a6b2e73):
- * - its "New Conversation" button must still close the sidebar overlay
- *   (startNewChat is shared with the bottom-nav "New Chat" button);
- * - the header's ☰ toggle and the sidebar's New Conversation button are
- *   still rendered, so ChatApp.css must still style them.
+ * ChatApp.css coverage that isn't tied to any one component test. The old
+ * in-widget History sidebar (☰ toggle, History/Tickets tabs, session and
+ * ticket cards, "New Conversation" button) was removed -- conversation
+ * history and ticket management now live entirely on the dashboard's
+ * Support & History page (see the bottom-nav "History" button, which
+ * navigates there) -- so this file no longer covers sidebar controls.
  */
 
 Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
@@ -40,7 +41,6 @@ vi.mock('@/api/chatbotApi', () => ({
   verifyTicketOtp: vi.fn(),
   createChatSession: vi.fn(),
   sendSessionMessage: vi.fn(),
-  getChatSessionHistory: vi.fn().mockResolvedValue({ total: 0, skip: 0, limit: 20, sessions: [] }),
   getChatSession: vi.fn(),
 }));
 
@@ -55,27 +55,14 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe('History sidebar -- New Conversation', () => {
-  it('closes the sidebar and its scrim, not just resets the chat behind it', async () => {
+describe('ChatApp.css -- launcher reduced-motion support', () => {
+  it('turns the guest launcher swing off for reduced-motion users', async () => {
     render(<ChatApp />);
-    await act(async () => {
-      fireEvent.click(screen.getByTitle('Chatbot Support'));
-    });
-    await waitFor(() => expect(screen.getByText(/Hi! I'm CareerBot/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTitle('Chatbot Support')).toBeInTheDocument());
 
-    await act(async () => {
-      fireEvent.click(await screen.findByTitle('Toggle History'));
-    });
-    const sidebar = document.querySelector('.chat-sidebar');
-    expect(sidebar).toHaveClass('active');
-    expect(document.querySelector('.sidebar-scrim')).not.toBeNull();
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('✨ New Conversation'));
-    });
-
-    expect(sidebar).not.toHaveClass('active');
-    expect(document.querySelector('.sidebar-scrim')).toBeNull();
+    expect(CHAT_APP_CSS).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.message-icon-rotate\s*\{[^}]*animation:\s*none/,
+    );
   });
 
   it('control: the bottom-nav New Chat button still starts a fresh conversation in place', async () => {
@@ -90,24 +77,6 @@ describe('History sidebar -- New Conversation', () => {
     });
 
     expect(await screen.findByText(/Hi! I'm CareerBot/i)).toBeInTheDocument();
-    expect(document.querySelector('.chat-sidebar')).not.toHaveClass('active');
-  });
-});
-
-describe('ChatApp.css -- still-rendered sidebar controls keep their styles', () => {
-  it.each(['sidebar-toggle', 'new-chat-btn'])('has a .%s rule (the class is still rendered)', async (className) => {
-    render(<ChatApp />);
-    await act(async () => {
-      fireEvent.click(screen.getByTitle('Chatbot Support'));
-    });
-    await waitFor(() => expect(document.querySelector(`.${className}`)).not.toBeNull());
-
-    expect(CHAT_APP_CSS).toMatch(new RegExp(`(^|\\n)\\.${className}\\s*\\{`));
-  });
-
-  it('turns the guest launcher swing off for reduced-motion users', () => {
-    expect(CHAT_APP_CSS).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.message-icon-rotate\s*\{[^}]*animation:\s*none/,
-    );
+    expect(document.querySelector('.chat-sidebar')).toBeNull();
   });
 });

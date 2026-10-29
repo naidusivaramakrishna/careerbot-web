@@ -14,7 +14,6 @@ import {
   verifyTicketOtp,
   createChatSession,
   sendSessionMessage,
-  getChatSessionHistory,
   getChatSession,
   deleteChatSession,
 } from '@/api/chatbotApi';
@@ -76,13 +75,12 @@ interface ChatSession {
   // Owner's email for per-user isolation
   userEmail?: string;
   // Which store this row came from. 'backend' rows are MongoDB-persisted
-  // (the source of truth going forward) and never carry `messages` inline
-  // -- loadSessionMessages fetches the full transcript on demand. 'local'
-  // rows are legacy localStorage entries saved before backend persistence
-  // existed; they already carry their full transcript (or a preview
-  // fallback) and are never written to again. Undefined for sessions
-  // created before this field existed -- treated as 'local' for restore
-  // purposes, same as today.
+  // (the source of truth going forward) and never carry `messages` inline.
+  // 'local' rows are legacy localStorage entries saved before backend
+  // persistence existed; they already carry their full transcript (or a
+  // preview fallback) and are never written to again. Undefined for
+  // sessions created before this field existed -- treated as 'local' for
+  // restore purposes, same as today.
   source?: 'backend' | 'local';
 }
 
@@ -102,8 +100,6 @@ interface TicketInfo {
   user_name?: string | null;
   attachments?: TicketAttachmentSummary[];
 }
-
-type SidebarTab = 'history' | 'tickets';
 
 type StoredMessage = Omit<Message, 'timestamp'> & { timestamp: string };
 type StoredChatSession = Omit<ChatSession, 'date' | 'messages'> & {
@@ -620,8 +616,6 @@ const ChatApp: React.FC = () => {
   const hasOpenedRef = useRef(false);
   const [isMinimized, setIsMinimized] = useState(true);
   const [isClosed, setIsClosed] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('history');
   // Generic "this message's interactive option group has been resolved"
   // tracker -- shared by every kind of chatbot choice (guided-flow
   // menuOptions: welcome/topic/subtopic/leaf-question/follow-up, AND a KB
@@ -672,8 +666,6 @@ const ChatApp: React.FC = () => {
   // and fall through to the original stateless sendChatMessage() path --
   // this is a fallback, never a hard dependency.
   const [isBackendSession, setIsBackendSession] = useState(false);
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [tickets, setTickets] = useState<TicketInfo[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<TicketInfo | null>(null);
   // Populated once, from ?ticket= in the URL -- the deep link the
@@ -1097,7 +1089,6 @@ const ChatApp: React.FC = () => {
     const initializeApp = async () => {
       await ensureToken();
       await initializeChat();
-      loadChatHistory();
       // Load tickets for both authenticated and unauthenticated users
       await loadTickets();
 
@@ -1179,7 +1170,6 @@ const ChatApp: React.FC = () => {
         cachedEmailRef.current = null;
         setUserName('');
         setTickets([]);
-        setChatSessions([]);
         setSelectedTicket(null);
         setIsLocallyAuthenticated(true);
         // The open conversation (and its backend session) belongs to the
@@ -1201,8 +1191,7 @@ const ChatApp: React.FC = () => {
           if (userProfile?.full_name) {
             setUserName(userProfile.full_name);
           }
-          // Reload history and tickets for the new user (using real profile email)
-          await loadChatHistory(currentUserEmail, generation);
+          // Reload tickets for the new user (using real profile email)
           await loadTickets(currentUserEmail, generation);
         } catch (error) {
           console.error('Failed to load new account profile:', error);
@@ -1221,7 +1210,6 @@ const ChatApp: React.FC = () => {
         setIsLocallyAuthenticated(false);
         setUserName('');
         setTickets([]);
-        setChatSessions([]);
         // Never let a guest keep writing into the signed-out user's backend
         // session, or see their conversation.
         startNewAccountGeneration();
@@ -1233,7 +1221,7 @@ const ChatApp: React.FC = () => {
         setIsLocallyAuthenticated(true);
         const generation = accountGenerationRef.current;
 
-        // Load user profile and history
+        // Load user profile and tickets
         try {
           const userProfile = await getProfile();
           if (generation !== accountGenerationRef.current) return;
@@ -1248,9 +1236,8 @@ const ChatApp: React.FC = () => {
           if (userProfile?.full_name) {
             setUserName(userProfile.full_name);
           }
-          // Reload history and tickets for the logged-in user (using real profile email)
+          // Reload tickets for the logged-in user (using real profile email)
           if (currentUserEmail) {
-            await loadChatHistory(currentUserEmail, generation);
             await loadTickets(currentUserEmail, generation);
           }
         } catch (error) {
@@ -1412,10 +1399,9 @@ const ChatApp: React.FC = () => {
 
   // Mirrors the ?ticket= deep link above, for "Continue conversation" on
   // the dashboard's Support & History page. Fetches the session directly
-  // via getChatSession rather than looking it up in `chatSessions` state --
-  // that state is only populated once the widget's own History tab has been
-  // opened, so depending on it here would race (or simply miss) a session
-  // opened via this link before that ever happens.
+  // via getChatSession -- the widget itself keeps no local session list to
+  // look it up in (History/conversation listing lives entirely on that
+  // dashboard page now).
   useEffect(() => {
     if (!deepLinkSessionId) return;
     setIsMinimized(false);
@@ -1970,34 +1956,7 @@ const ChatApp: React.FC = () => {
     }
   };
 
-  // Legacy localStorage reader. MongoDB is the source of truth for history
-  // going forward (loadChatHistory below reads the backend first), but
-  // conversations archived here before that existed are never migrated or
-  // deleted automatically -- see CHAT_SESSIONS_STORAGE_KEY's comment. This
-  // keeps them visible, tagged `source: 'local'`, instead of silently
-  // disappearing from the History tab.
-  const loadLocalLegacyHistory = (userEmail: string): ChatSession[] => {
-    try {
-      const savedSessions = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
-      if (!savedSessions) return [];
-
-      const allSessions: StoredChatSession[] = JSON.parse(savedSessions);
-      const userSessions = allSessions.filter((s) => s.userEmail === userEmail || !s.userEmail);
-
-      return userSessions.map((s) => ({
-        ...s,
-        userEmail,
-        date: new Date(s.date),
-        messages: s.messages?.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
-        source: 'local' as const,
-      }));
-    } catch (error) {
-      console.error('Failed to load legacy local chat sessions:', error);
-      return [];
-    }
-  };
-
-  // Read AFTER a History/ticket load's last request, before anything is
+  // Read AFTER a ticket load's last request, before anything is
   // shown or saved for `expected` (the account the load is for). null: the
   // account changed meanwhile -- signed out / switched (new generation), or
   // the profile names another account (it signed in and no auth check has
@@ -2019,208 +1978,11 @@ const ChatApp: React.FC = () => {
 
   // `generation`: the account this load is for (default: the current one).
   // A load whose account is no longer signed in writes nothing.
-  const loadChatHistory = async (authedEmail?: string, generation = accountGenerationRef.current) => {
-    // Only load chat history for authenticated users
-    if (!isUserAuthenticated()) {
-      setChatSessions([]);
-      return;
-    }
-
-    // The account this load is for: the given email, else the one the auth
-    // check last confirmed, else (before the first check) the profile's.
-    // Get user email from profile for security - prevent one user from accessing another's history
-    // ALWAYS use getProfile().email, NEVER use localStorage.user_email (which is a fake guest email)
-    let expectedEmail = authedEmail ?? userEmailRef.current;
-    if (!expectedEmail) {
-      try {
-        const profile = await getProfile();
-        expectedEmail = profile?.email || null;
-      } catch {
-        console.error('Failed to get profile for history loading');
-        if (generation === accountGenerationRef.current) setChatSessions([]);
-        return;
-      }
-      if (generation !== accountGenerationRef.current) return;
-    }
-
-    if (!expectedEmail) {
-      setChatSessions([]);
-      return;
-    }
-
-    // Backend (MongoDB) is the source of truth going forward. Legacy local
-    // sessions are appended after it so nothing already in a user's History
-    // tab disappears -- see loadLocalLegacyHistory's comment. A failure to
-    // reach the backend falls back to local-only rather than showing
-    // nothing.
-    let backendSessions: ChatSession[] = [];
-    try {
-      // The backend's maximum page (100): closed rows are filtered out
-      // below, so the default 20 would shrink with every removal.
-      const { sessions } = await getChatSessionHistory(0, 100);
-      // DELETE only closes a session on the backend (it is not erased), and
-      // history still returns closed ones: hide them, so "Remove from
-      // history" sticks.
-      backendSessions = sessions.filter((s) => s.status !== 'closed').map((s: ChatSessionSummary) => ({
-        id: s.session_id,
-        title: s.title,
-        preview: s.preview,
-        date: new Date(s.updated_at || s.created_at),
-        source: 'backend' as const,
-      }));
-    } catch (error) {
-      console.error('Failed to load backend chat history, showing local history only:', error);
-    }
-
-    // Signed out / switched account while this loaded: not theirs.
-    // Not confirmed, or another account: show none (unless a sign-out /
-    // switch now owns the screen).
-    const userEmail = await confirmedOwnerEmail(expectedEmail, generation);
-    if (!userEmail) {
-      if (generation === accountGenerationRef.current) setChatSessions([]);
-      return;
-    }
-    const localSessions = loadLocalLegacyHistory(userEmail);
-    setChatSessions([...backendSessions, ...localSessions]);
-  };
-
-  // loadChatHistory only runs once per widget-open (gated by hasOpenedRef in
-  // the mount effect), so without this, a backend session created by the
-  // first message sent after opening would never appear here -- the History
-  // tab would keep showing whatever was loaded before that conversation
-  // started. Re-fetch on every open instead of trusting the stale snapshot.
-  const openHistory = () => {
-    setIsHistoryOpen(true);
-    loadChatHistory();
-  };
-
-  // Remove a session from History. Backend-sourced rows call DELETE, which
-  // closes the session (the backend keeps it; loadChatHistory hides closed
-  // ones, see deleteChatSession's comment); legacy local rows have no
-  // backend counterpart, so they're removed from the localStorage blob
-  // directly instead. If the removed session is the one currently open,
-  // reset to a fresh chat rather than leaving the UI pointing at it.
-  const handleDeleteSession = async (session: ChatSession, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('Remove this conversation from your history?')) {
-      return;
-    }
-
-    setDeletingSessionId(session.id);
-    const generation = accountGenerationRef.current;
-    try {
-      if (session.source === 'backend') {
-        await deleteChatSession(session.id);
-        // Signed out / switched account meanwhile: the conversation on
-        // screen is the next account's now; leave it alone.
-        if (generation !== accountGenerationRef.current) return;
-      } else {
-        try {
-          const raw = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
-          if (raw) {
-            const allSessions: StoredChatSession[] = JSON.parse(raw);
-            localStorage.setItem(
-              CHAT_SESSIONS_STORAGE_KEY,
-              JSON.stringify(allSessions.filter((s) => s.id !== session.id))
-            );
-          }
-        } catch (error) {
-          console.error('Failed to delete local chat session:', error);
-        }
-      }
-
-      setChatSessions((prev) => prev.filter((s) => s.id !== session.id));
-
-      if (sessionId === session.id) {
-        initializeChat();
-      }
-    } catch (error: unknown) {
-      alert(describeError(error, 'Failed to remove conversation. Please try again.'));
-    } finally {
-      setDeletingSessionId(null);
-    }
-  };
-
-  // Load messages for a specific session
-  const loadSessionMessages = async (sessionId: string) => {
-    const session = chatSessions.find(s => s.id === sessionId);
-    if (!session) return;
-
-    const restoredNotice: Message = {
-      id: `${sessionId}-restored`,
-      type: 'system',
-      text: RESTORED_NOTICE_TEXT,
-      timestamp: new Date(),
-    };
-
-    if (session.source === 'backend') {
-      // Backend rows only carry title/preview in the History list -- fetch
-      // the full transcript now that the user wants to open it. Sending a
-      // follow-up message into this session must keep using the backend
-      // (this id is a real MongoDB session id, not a client-generated one).
-      const generation = accountGenerationRef.current;
-      try {
-        const detail = await getChatSession(sessionId);
-        // Signed out / switched account while this loaded: not theirs.
-        if (generation !== accountGenerationRef.current) return;
-        const restoredMessages: Message[] = detail.messages.map((m) => ({
-          id: m.message_id,
-          type: m.role,
-          text: m.content,
-          timestamp: new Date(m.timestamp),
-        }));
-        setMessages([...restoredMessages, restoredNotice]);
-      } catch (error) {
-        if (generation !== accountGenerationRef.current) return;
-        console.error('Failed to load conversation from backend:', error);
-        setMessages([{
-          id: 'error',
-          type: 'assistant',
-          text: "Sorry, I couldn't load that conversation. Please try again.",
-          timestamp: new Date(),
-        }]);
-      }
-      setIsHistoryOpen(false);
-      setSessionId(sessionId);
-      setIsBackendSession(true);
-      return;
-    }
-
-    // Legacy local session -- its id is client-generated, not a backend
-    // session id, so a follow-up message must NOT be routed to the
-    // session-message endpoint (there is nothing in MongoDB to find it).
-    setIsBackendSession(false);
-
-    if (session.messages && session.messages.length > 0) {
-      // Full transcript was saved — restore the actual conversation as-is.
-      setMessages([...session.messages, restoredNotice]);
-    } else {
-      // Backward compatibility: sessions saved before the full transcript
-      // was persisted only have a title/preview snapshot — fall back to that.
-      // Older saves could set title === preview, so only show the preview
-      // when it actually adds something beyond the title.
-      const hasDistinctPreview = session.preview && session.preview.trim() !== session.title.trim();
-      const sessionMessages: Message[] = [
-        {
-          id: `${sessionId}-1`,
-          type: 'assistant',
-          text: hasDistinctPreview ? `📋 ${session.title}\n\n${session.preview}` : `📋 ${session.title}`,
-          timestamp: session.date,
-        },
-        restoredNotice,
-      ];
-      setMessages(sessionMessages);
-    }
-
-    setIsHistoryOpen(false);
-    setSessionId(sessionId);
-  };
-
-  // `generation`: as in loadChatHistory.
   const loadTickets = async (authedEmail?: string, generation = accountGenerationRef.current) => {
     const isAuth = isUserAuthenticated();
     console.log('[loadTickets] Starting - is authenticated:', isAuth);
-    // The account this load is for (as in loadChatHistory).
+    // The account this load is for: the given email, else the one the auth
+    // check last confirmed.
     let expectedEmail = authedEmail ?? userEmailRef.current;
     if (isAuth && !expectedEmail) {
       try {
@@ -2407,11 +2169,20 @@ const ChatApp: React.FC = () => {
           setSessionId(activeSessionId);
           setIsBackendSession(false);
         }
+        // A session THIS call created (as opposed to one already open from
+        // an earlier message or a restored conversation) has no messages in
+        // it yet. If posting the first message into it then fails, the
+        // session is left behind as an empty "New Chat" / 0-messages row in
+        // History forever -- closing it here instead (see
+        // cleanupOrphanedSession below) means only a session with at least
+        // one real message ever shows up there.
+        let justCreatedSessionId: string | null = null;
         const startBackendSession = async () => {
           const created = await createChatSession();
           if (accountChanged()) return;
           activeSessionId = created.session_id;
           activeIsBackendSession = true;
+          justCreatedSessionId = created.session_id;
           setSessionId(activeSessionId);
           setIsBackendSession(true);
         };
@@ -2430,6 +2201,14 @@ const ChatApp: React.FC = () => {
             category: r.category,
             sources: [] as string[],
           }));
+        const cleanupOrphanedSession = async (id: string) => {
+          if (justCreatedSessionId !== id) return;
+          try {
+            await deleteChatSession(id);
+          } catch (cleanupError) {
+            console.error('Failed to clean up an empty chat session after a failed first message:', cleanupError);
+          }
+        };
 
         // Always answer from the backend's real knowledge base -- never the
         // hardcoded frontend question/answer map, which duplicates backend
@@ -2451,7 +2230,10 @@ const ChatApp: React.FC = () => {
             // 403/404: it belongs to another account (a switch not yet
             // noticed) or is gone. Continue in a new session of this account.
             const status = getHttpStatus(error);
-            if (status !== 409 && status !== 403 && status !== 404) throw error;
+            if (status !== 409 && status !== 403 && status !== 404) {
+              await cleanupOrphanedSession(activeSessionId);
+              throw error;
+            }
             let replaced = false;
             try {
               await startBackendSession();
@@ -2466,9 +2248,14 @@ const ChatApp: React.FC = () => {
               setIsBackendSession(false);
             }
             if (accountChanged()) return;
-            data = replaced
-              ? await askSession(activeSessionId)
-              : await sendChatMessage(messageText, activeSessionId);
+            try {
+              data = replaced
+                ? await askSession(activeSessionId)
+                : await sendChatMessage(messageText, activeSessionId);
+            } catch (sendError) {
+              if (replaced) await cleanupOrphanedSession(activeSessionId);
+              throw sendError;
+            }
             if (accountChanged()) return;
             setMessages((prev) => [...prev, {
               id: `${activeSessionId}-continued`,
@@ -2753,7 +2540,6 @@ const ChatApp: React.FC = () => {
       if (nothingNewSinceRestore) {
         setMessages([]);
         setInputValue('');
-        setIsHistoryOpen(false);
         initializeChat();
         return;
       }
@@ -2782,14 +2568,10 @@ const ChatApp: React.FC = () => {
       const generation = accountGenerationRef.current;
       getProfile()
         .then((profile) => {
-          const sameAccount = generation === accountGenerationRef.current;
           if (!owner || profile?.email !== owner) return;
           if (profile?.email) {
-            // saveSessionToStorage returns the user's visible sessions after save
-            const visibleSessions = saveSessionToStorage(newSession, profile.email);
-            if (!sameAccount) return;
+            saveSessionToStorage(newSession, profile.email);
             cachedEmailRef.current = profile.email;
-            setChatSessions(visibleSessions);
           }
         })
         .catch((error) => {
@@ -2798,17 +2580,13 @@ const ChatApp: React.FC = () => {
           if (!owner || cachedEmailRef.current !== owner) return;
           // Use cached email if getProfile fails (prevents silent loss)
           if (cachedEmailRef.current) {
-            const visibleSessions = saveSessionToStorage(newSession, cachedEmailRef.current);
-            setChatSessions(visibleSessions);
+            saveSessionToStorage(newSession, cachedEmailRef.current);
           }
         });
     }
 
     setMessages([]);
     setInputValue('');
-    // The sidebar's "New Conversation" button calls this too: close the
-    // overlay (a no-op for the bottom-nav New Chat, where it is closed).
-    setIsHistoryOpen(false);
     initializeChat();
   };
 
@@ -3384,136 +3162,11 @@ const ChatApp: React.FC = () => {
       <div className="ambient-blob blob-a" />
       <div className="ambient-blob blob-b" />
 
-      {/* Sidebar */}
-      <aside className={`chat-sidebar ${isHistoryOpen ? 'active' : ''}`}>
-        <div className="sidebar-header">
-          {isLocallyAuthenticated && (
-            <div className="user-profile-section" style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', marginBottom: '8px' }}>
-              <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Logged in as</div>
-              <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{userName || 'User'}</div>
-            </div>
-          )}
-          <div className="sidebar-header-row">
-            {isLocallyAuthenticated && (
-              <div className="sidebar-tabs">
-                <button
-                  className={`tab-btn ${sidebarTab === 'history' ? 'active' : ''}`}
-                  onClick={() => setSidebarTab('history')}
-                >
-                  💬 History
-                </button>
-                <button
-                  className={`tab-btn ${sidebarTab === 'tickets' ? 'active' : ''}`}
-                  onClick={() => setSidebarTab('tickets')}
-                >
-                  🎫 Tickets
-                  {tickets.length > 0 && <span className="tab-count">{tickets.length}</span>}
-                </button>
-              </div>
-            )}
-            <button className="close-btn" onClick={() => setIsHistoryOpen(false)}>✕</button>
-          </div>
-        </div>
-
-        {isLocallyAuthenticated ? (
-          <>
-            {sidebarTab === 'history' ? (
-              <div className="sessions-list">
-                {chatSessions.length === 0 ? (
-                  <div className="empty-tickets">
-                    <span className="empty-tickets-icon">💬</span>
-                    <p>No messages</p>
-                    <small>No chat history available. Your past conversations will show up here.</small>
-                  </div>
-                ) : (
-                  chatSessions.map((session) => (
-                    <div
-                      key={session.id}
-                      className="session-item"
-                      onClick={() => loadSessionMessages(session.id)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="session-item-header">
-                        <div className="session-title">{session.title}</div>
-                        <button
-                          className="session-delete-btn"
-                          title="Remove from history"
-                          disabled={deletingSessionId === session.id}
-                          onClick={(e) => handleDeleteSession(session, e)}
-                        >
-                          {deletingSessionId === session.id ? '…' : '🗑️'}
-                        </button>
-                      </div>
-                      <div className="session-preview">{session.preview}</div>
-                      <div className="session-date">
-                        {session.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            ) : (
-              <div className="sessions-list">
-                {tickets.length === 0 ? (
-                  <div className="empty-tickets">
-                    <span className="empty-tickets-icon">🎫</span>
-                    <p>No tickets yet</p>
-                    <small>Raise one when you need human help</small>
-                  </div>
-                ) : (
-                  tickets.map((ticket, index) => {
-                    const meta = STATUS_META[ticket.status] || STATUS_META.open;
-                    return (
-                      <div
-                        key={ticket.id || `ticket-${index}`}
-                        className="ticket-card"
-                        onClick={() => setSelectedTicket(ticket)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className="ticket-card-top">
-                          <span className={`status-pill ${meta.color}`}>{meta.label}</span>
-                          {ticket.priority === 2 && <span className="priority-flag">🔥 Urgent</span>}
-                        </div>
-                        <div className="ticket-card-subject">{ticket.subject}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                          <div className="ticket-card-id">#{(ticket.id || 'N/A').toString().slice(-8)}</div>
-                          <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: 600 }}>Notified</span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-
-            <button className="new-chat-btn" onClick={startNewChat}>
-              ✨ New Conversation
-            </button>
-          </>
-        ) : (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-            <p style={{ fontSize: '14px', marginBottom: '10px' }}>📝 Chat history is available only for logged-in users</p>
-            <p style={{ fontSize: '12px' }}>Please sign in to view your conversation history and tickets</p>
-          </div>
-        )}
-      </aside>
-
-      {isHistoryOpen && <div className="sidebar-scrim" onClick={() => setIsHistoryOpen(false)} />}
-
       {/* Main Chat Area */}
       <main className="chat-main">
         {/* Header */}
         <header className="chat-header">
           <div className="header-content">
-            {isLocallyAuthenticated && (
-              <button
-                className="sidebar-toggle"
-                onClick={() => (isHistoryOpen ? setIsHistoryOpen(false) : openHistory())}
-                title="Toggle History"
-              >
-                ☰
-              </button>
-            )}
             <div className="header-avatar">
               <span className="bot-glyph">🤖</span>
               <span className="status-dot" />
@@ -4805,7 +4458,7 @@ const ChatApp: React.FC = () => {
 // Storage constants and helpers
 // Single localStorage key holding EVERY account's sessions on this device.
 // Per-user isolation is by the `userEmail` field on each session (filtered in
-// loadChatHistory and in saveSessionToStorage's return value), NOT by the key.
+// saveSessionToStorage's return value), NOT by the key.
 export const CHAT_SESSIONS_STORAGE_KEY = 'saved_chat_sessions';
 const MAX_STORED_SESSIONS = 50;
 const MAX_MESSAGES_PER_SESSION = 500;
@@ -4887,9 +4540,8 @@ export const saveSessionToStorage = (newSession: ChatSession, userEmail: string 
   allSessions = capSessionsPerOwner(allSessions, MAX_STORED_SESSIONS);
 
   // Persist. A write failure (quota exceeded, storage blocked in private mode)
-  // must NOT empty the caller's History list: it assigns this return value
-  // straight into chatSessions state, and the already-stored sessions are
-  // still on disk. Report the failure and return the computed view.
+  // must NOT be treated as data loss: the already-stored sessions are still
+  // on disk. Report the failure and return the computed view.
   try {
     localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(allSessions));
   } catch (error) {

@@ -14,6 +14,8 @@
  *   Conversation History
  *     - Shows real session titles/previews (not generic placeholders)
  *     - Clicking a row reopens the chatbot widget on that exact session
+ *     - Its delete button removes a conversation from the list (after
+ *       confirmation) without also triggering the row's own click-to-open
  *   Support Tickets
  *     - Summary cards (All / Pending / Solved-Closed) reflect actual data
  *     - Priority is shown in the ticket table, from the API, never defaulted
@@ -35,6 +37,7 @@ vi.mock('@/api/userApi', () => ({
 }));
 
 const mockGetChatSessionHistory = vi.fn();
+const mockDeleteChatSession = vi.fn();
 const mockGetSupportTickets = vi.fn();
 const mockGetTicketDetails = vi.fn();
 const mockCancelTicket = vi.fn();
@@ -44,6 +47,7 @@ const mockOpenOrDownloadTicketAttachment = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/api/chatbotApi', () => ({
   getChatSessionHistory: (...args: unknown[]) => mockGetChatSessionHistory(...args),
+  deleteChatSession: (...args: unknown[]) => mockDeleteChatSession(...args),
   getSupportTickets: (...args: unknown[]) => mockGetSupportTickets(...args),
   getTicketDetails: (...args: unknown[]) => mockGetTicketDetails(...args),
   cancelTicket: (...args: unknown[]) => mockCancelTicket(...args),
@@ -82,6 +86,7 @@ beforeEach(() => {
   mockSearchParams = new URLSearchParams();
   mockGetProfile.mockReset().mockResolvedValue({ email: 'alice@example.com', full_name: 'Alice' });
   mockGetChatSessionHistory.mockReset().mockResolvedValue({ total: 0, skip: 0, limit: 20, sessions: [] });
+  mockDeleteChatSession.mockReset().mockResolvedValue(undefined);
   mockGetSupportTickets.mockReset().mockResolvedValue({ data: [], page: 1, limit: 100, total_records: 0, total_pages: 1 });
   mockGetTicketDetails.mockReset();
   mockCancelTicket.mockReset();
@@ -354,6 +359,70 @@ describe('Conversation History', () => {
 
     expect(await screen.findByText('No conversations match your search')).toBeInTheDocument();
     expect(screen.getByText('Try a different search term.')).toBeInTheDocument();
+  });
+
+  it('removes a conversation from the list after confirming its delete button, without reopening it', async () => {
+    mockGetChatSessionHistory.mockResolvedValue({
+      total: 1,
+      skip: 0,
+      limit: 20,
+      sessions: [session({ session_id: 'sess-99', title: 'Delete me' })],
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<SupportHistoryPage />);
+    await screen.findByText('Delete me');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Remove from history' }));
+    });
+
+    await waitFor(() => expect(mockDeleteChatSession).toHaveBeenCalledWith('sess-99'));
+    expect(screen.queryByText('Delete me')).not.toBeInTheDocument();
+    // Clicking the delete button must not also trigger the row's own
+    // click handler (which would navigate to reopen the conversation).
+    expect(window.location.href).toBe('');
+  });
+
+  it('does not delete when the confirmation dialog is dismissed', async () => {
+    mockGetChatSessionHistory.mockResolvedValue({
+      total: 1,
+      skip: 0,
+      limit: 20,
+      sessions: [session({ session_id: 'sess-98', title: 'Keep me' })],
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<SupportHistoryPage />);
+    await screen.findByText('Keep me');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Remove from history' }));
+    });
+
+    expect(mockDeleteChatSession).not.toHaveBeenCalled();
+    expect(screen.getByText('Keep me')).toBeInTheDocument();
+  });
+
+  it('shows an error toast and keeps the row if the delete request fails', async () => {
+    mockGetChatSessionHistory.mockResolvedValue({
+      total: 1,
+      skip: 0,
+      limit: 20,
+      sessions: [session({ session_id: 'sess-97', title: 'Stays after failure' })],
+    });
+    mockDeleteChatSession.mockRejectedValue(new Error('Backend is unreachable'));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<SupportHistoryPage />);
+    await screen.findByText('Stays after failure');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Remove from history' }));
+    });
+
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Backend is unreachable'));
+    expect(screen.getByText('Stays after failure')).toBeInTheDocument();
   });
 });
 
