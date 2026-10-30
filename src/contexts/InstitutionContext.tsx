@@ -36,11 +36,35 @@ import {
 } from '@/lib/institutionSession';
 import { primeCollegeMemberships } from '@/hooks/useCollegeMembership';
 import { can, type InstitutionCapability } from '@/lib/institutionPermissions';
-import type { InstitutionMembership, InstitutionRole } from '@/types/institution';
+import type {
+  InstitutionContext as InstitutionContextInfo,
+  InstitutionMembership,
+  InstitutionRole,
+} from '@/types/institution';
+import type { ReadOnlyReason } from '@/lib/institutionMessages';
 
 const STALE_RECOVERY_WINDOW_MS = 30_000;
 
-export type ReadOnlyReason ='COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED';
+export type { ReadOnlyReason };
+
+/**
+ * Which read-only state GET /context describes, or null when writable.
+ *
+ * A trial that ended unpaid also reports subscription_status "expired", but
+ * its effective tier is "free". Those two cases need different people (CareerBOT
+ * activates a trial; the college administration renews a subscription), so
+ * expired + free is TRIAL_ENDED and only expired + anything else is
+ * SUBSCRIPTION_EXPIRED. A missing tier (older server) keeps the old answer.
+ */
+export function readOnlyReasonFromContext(
+  ctx: Pick<InstitutionContextInfo, 'writable' | 'subscription_status' | 'tier'>,
+): ReadOnlyReason | null {
+  if (ctx.writable) return null;
+  if (ctx.subscription_status === 'expired') {
+    return ctx.tier === 'free' ? 'TRIAL_ENDED' : 'SUBSCRIPTION_EXPIRED';
+  }
+  return 'COLLEGE_PAUSED';
+}
 
 interface InstitutionContextValue {
   /** All memberships for the signed-in account. `[]` means "not a college user". */
@@ -174,12 +198,8 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
       try {
         const ctx = await getInstitutionContext();
         if (!alive || !mountedRef.current) return;
-        if (ctx.writable) return;
-        setReadOnlyReason(
-          ctx.subscription_status === 'expired'
-            ? 'SUBSCRIPTION_EXPIRED'
-            : 'COLLEGE_PAUSED',
-        );
+        const reason = readOnlyReasonFromContext(ctx);
+        if (reason) setReadOnlyReason(reason);
       } catch {
         // see above -- advisory only
       }

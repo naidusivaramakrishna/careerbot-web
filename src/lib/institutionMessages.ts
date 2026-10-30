@@ -25,6 +25,7 @@ export type InstitutionErrorReason =
   | 'FORBIDDEN'
   | 'COLLEGE_PAUSED'
   | 'SUBSCRIPTION_EXPIRED'
+  | 'TRIAL_ENDED'
   | 'FEATURE_NOT_ENTITLED'
   | 'NO_SEATS_LEFT'
   | 'INVALID_REQUEST'
@@ -35,9 +36,10 @@ export type InstitutionErrorReason =
   | 'UNKNOWN';
 
 /**
- * The two subscription states are deliberately NOT collapsed: a paused college
+ * The three read-only states are deliberately NOT collapsed: a paused college
  * is recoverable by the placement officer, an expired one needs the college
- * administration to renew. Different action, different person, different copy.
+ * administration to renew, and a college whose free trial ended is activated by
+ * CareerBOT. Different action, different person, different copy.
  */
 export const ERROR_MESSAGES: Record<InstitutionErrorReason, string> = {
   FORBIDDEN: 'You do not have access to this.',
@@ -45,6 +47,8 @@ export const ERROR_MESSAGES: Record<InstitutionErrorReason, string> = {
     'Your college subscription is paused. You can still view everything, but changes cannot be saved.',
   SUBSCRIPTION_EXPIRED:
     'Your college subscription has expired. You can still view everything, but changes cannot be saved.',
+  TRIAL_ENDED:
+    "Your college's free trial has ended. You can still view everything, but changes cannot be saved.",
   FEATURE_NOT_ENTITLED: 'This is switched off for your college.',
   // Shown with the server's own sentence when there is one (see ErrorNotice):
   // it says WHICH case -- every seat in use, the seat year ended, the college
@@ -75,11 +79,22 @@ export const ERROR_MESSAGES: Record<InstitutionErrorReason, string> = {
 export const NO_SEATS_HINT =
   'Your CareerBOT account manager adds and renews seats; contact them if you need more.';
 
-/** Longer banner copy for the two read-only states, incl. who to contact. */
-export const READ_ONLY_BANNER: Record<
-  'COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED',
-  { title: string; body: string }
-> = {
+/** The reasons that mean "readable but not writable". */
+export type ReadOnlyReason = 'COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED' | 'TRIAL_ENDED';
+
+const READ_ONLY_REASONS: readonly InstitutionErrorReason[] = [
+  'COLLEGE_PAUSED',
+  'SUBSCRIPTION_EXPIRED',
+  'TRIAL_ENDED',
+];
+
+/** Single check for "this refusal means the college is read-only". */
+export function isReadOnlyReason(reason: InstitutionErrorReason): reason is ReadOnlyReason {
+  return READ_ONLY_REASONS.includes(reason);
+}
+
+/** Longer banner copy for the read-only states, incl. who to contact. */
+export const READ_ONLY_BANNER: Record<ReadOnlyReason, { title: string; body: string }> = {
   COLLEGE_PAUSED: {
     title: 'Read-only — your college subscription is paused',
     body: 'Everything is still visible. New entries and edits cannot be saved until the subscription resumes. Your placement officer can restart it.',
@@ -88,15 +103,32 @@ export const READ_ONLY_BANNER: Record<
     title: 'Read-only — your college subscription has expired',
     body: 'Everything is still visible. New entries and edits cannot be saved until the subscription is renewed. Your college administration handles the renewal.',
   },
+  // Activated by CareerBOT, not by anyone at the college -- so the body names
+  // the account manager rather than the placement officer or administration.
+  TRIAL_ENDED: {
+    title: "Read-only — your college's free trial has ended",
+    body: 'Everything is still visible. Nothing new can be saved until your college is activated. CareerBOT activates it; contact your CareerBOT account manager.',
+  },
 };
 
 /** Tooltip on a control that is visible but disabled by the read-only state. */
-export const READ_ONLY_CONTROL_HINT: Record<
-  'COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED',
-  string
-> = {
+export const READ_ONLY_CONTROL_HINT: Record<ReadOnlyReason, string> = {
   COLLEGE_PAUSED: 'Paused subscription — changes cannot be saved right now.',
   SUBSCRIPTION_EXPIRED: 'Expired subscription — changes cannot be saved right now.',
+  TRIAL_ENDED: 'Trial ended — changes cannot be saved right now.',
+};
+
+/**
+ * Invite-code claim refusals that are NOT about the code.
+ *
+ * A wrong / expired / used code gets the uniform refusal (see the join page);
+ * this is only for a valid code at a college that cannot take new students
+ * yet. The read-only ERROR_MESSAGES copy ("you can still view everything") is
+ * wrong here: the person is not in the college yet, so there is nothing to view.
+ */
+export const CLAIM_REFUSAL_MESSAGES: Partial<Record<InstitutionErrorReason, string>> = {
+  TRIAL_ENDED:
+    "This college's free trial has ended, so new students cannot join yet. Try again after the college is activated.",
 };
 
 // ── labels ────────────────────────────────────────────────────

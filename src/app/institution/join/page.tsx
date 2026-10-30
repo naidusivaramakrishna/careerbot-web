@@ -8,6 +8,8 @@ import Header from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { claimWithInviteCode, InstitutionApiError } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
+import { Alert, AlertDescription } from '@/components/ui/Alert';
+import { CLAIM_REFUSAL_MESSAGES } from '@/lib/institutionMessages';
 import { ErrorNotice } from '../_components/ErrorNotice';
 import { TextField } from '../_components/FormField';
 import { Body, Caption, PageTitle } from '../_components/Typography';
@@ -23,6 +25,10 @@ import { Body, Caption, PageTitle } from '../_components/Typography';
  * The refusal is the same for every cause -- wrong, expired, already used,
  * or someone else's. That is the server's design and this page must not
  * embellish it: guessing which one it was is the attack.
+ *
+ * The one exception is a refusal about the COLLEGE rather than the code (its
+ * free trial ended, reason TRIAL_ENDED): that is not a code to guess at, and
+ * the person needs to know trying again later will work.
  */
 export default function JoinCollegePage() {
   const router = useRouter();
@@ -91,7 +97,7 @@ export default function JoinCollegePage() {
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCode(e.target.value)}
         />
 
-        {error ? <ErrorNotice error={error} className="mt-4" /> : null}
+        {error ? <ClaimError error={error} /> : null}
 
         <Button type="submit" className="mt-4 w-full" disabled={busy || !code.trim()}>
           {busy ? (
@@ -106,6 +112,21 @@ export default function JoinCollegePage() {
         No code? Ask your placement office — they can issue one.
       </Caption>
     </Frame>
+  );
+}
+
+/** A college-state refusal gets its own sentence; everything else stays on
+ *  the shared notice (the uniform refusal for a bad code). Branches on the
+ *  canonical reason only, never on the server's message. */
+function ClaimError({ error }: { error: InstitutionApiError }) {
+  const collegeRefusal = CLAIM_REFUSAL_MESSAGES[error.reason];
+  if (!collegeRefusal) return <ErrorNotice error={error} className="mt-4" />;
+  return (
+    <Alert variant="warning" className="mt-4" role="alert">
+      <AlertDescription>
+        <span className="block text-[13px] font-medium leading-5">{collegeRefusal}</span>
+      </AlertDescription>
+    </Alert>
   );
 }
 

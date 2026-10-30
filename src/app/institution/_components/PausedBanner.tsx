@@ -8,7 +8,7 @@ import type { ReadOnlyReason } from '@/contexts/InstitutionContext';
 /**
  * The read-only bar.
  *
- * A paused or expired college can still READ everything — only writes are
+ * A paused, expired or trial-ended college can still READ everything — only writes are
  * refused. So this is a persistent, calm, non-blocking strip that names the
  * state and the person who can fix it. It is deliberately NOT a red error, NOT
  * a modal and NOT a lockout screen: nothing has failed, and the user's work for

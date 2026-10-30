@@ -34,8 +34,8 @@
 import axios from 'axios';
 import { httpClient } from '@/lib/http';
 import { institutionAuthHeader } from '@/lib/institutionSession';
-import type { InstitutionErrorReason } from '@/lib/institutionMessages';
-import { ERROR_MESSAGES } from '@/lib/institutionMessages';
+import type { InstitutionErrorReason, ReadOnlyReason } from '@/lib/institutionMessages';
+import { ERROR_MESSAGES, isReadOnlyReason } from '@/lib/institutionMessages';
 import type {
   Batch,
   BulkImportResponse,
@@ -130,7 +130,7 @@ export class InstitutionApiError extends Error {
 
   /** True when the college is readable but not writable. */
   get isReadOnlyState(): boolean {
-    return this.reason === 'COLLEGE_PAUSED' || this.reason === 'SUBSCRIPTION_EXPIRED';
+    return isReadOnlyReason(this.reason);
   }
 }
 
@@ -143,7 +143,7 @@ export class InstitutionApiError extends Error {
  * refusal in one corner disables write affordances everywhere instead of each
  * screen rediscovering it. See the report note on the missing status route.
  */
-type ReadOnlyListener = (reason: 'COLLEGE_PAUSED' | 'SUBSCRIPTION_EXPIRED') => void;
+type ReadOnlyListener = (reason: ReadOnlyReason) => void;
 const readOnlyListeners = new Set<ReadOnlyListener>();
 
 export function onInstitutionReadOnly(listener: ReadOnlyListener): () => void {
@@ -216,7 +216,7 @@ function publishReadOnly(error: InstitutionApiError): void {
   const reason = error.reason;
   // Capture into a local first: narrowing on a property is discarded inside the
   // forEach closure, so `error.reason` would widen back to the full union.
-  if (reason !== 'COLLEGE_PAUSED' && reason !== 'SUBSCRIPTION_EXPIRED') return;
+  if (!isReadOnlyReason(reason)) return;
   readOnlyListeners.forEach((listener) => listener(reason));
 }
 
@@ -238,6 +238,7 @@ const KNOWN_REASONS: readonly InstitutionErrorReason[] = [
   'FORBIDDEN',
   'COLLEGE_PAUSED',
   'SUBSCRIPTION_EXPIRED',
+  'TRIAL_ENDED',
   'FEATURE_NOT_ENTITLED',
   'NO_SEATS_LEFT',
   'INVALID_REQUEST',
@@ -357,6 +358,16 @@ function fail(err: unknown): never {
     carriedCollegeToken(err),
   );
   throw mapped;
+}
+
+/** Map and rethrow WITHOUT publishing college state.
+ *
+ *  For calls that are not about the active college -- the invite claim names
+ *  a college the person is not in yet. A trial-ended refusal there is about
+ *  THAT college; publishing it would flip whatever college is currently open
+ *  into read-only mode. */
+function failWithoutPublishing(err: unknown): never {
+  throw mapError(err);
 }
 
 // ── request config ────────────────────────────────────────────
@@ -697,7 +708,8 @@ export async function claimWithInviteCode(code: string): Promise<ClaimResult> {
       `${BASE}/claim`, { code }, { headers: SKIP_REDIRECT_HEADERS });
     return response.data;
   } catch (err) {
-    return fail(err);
+    // Refusals here are about the college being joined, not the open one.
+    return failWithoutPublishing(err);
   }
 }
 

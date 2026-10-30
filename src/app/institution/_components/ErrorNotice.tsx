@@ -11,9 +11,9 @@ import type { InstitutionErrorReason } from '@/lib/institutionMessages';
  * Renders a failed request, branching on the canonical `reason` — never on the
  * backend's free text.
  *
- * The two subscription reasons are handled elsewhere (`PausedBanner`), because
- * they are a persistent state of the college rather than a failure of this
- * screen; if one reaches here it renders as calm information, not as a red
+ * The read-only reasons (paused, expired, trial ended) are handled elsewhere
+ * (`PausedBanner`), because they are a persistent state of the college rather
+ * than a failure of this screen; if one reaches here it renders as calm information, not as a red
  * error. `error_id` is surfaced only for the failures a user cannot act on, so
  * they have something to quote to support.
  */
