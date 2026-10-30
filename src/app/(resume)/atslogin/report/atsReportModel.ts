@@ -8,12 +8,15 @@ import { getScoreSectionAction } from "@/app/(resume)/builder/creation/_utils/sc
  * explains the score. Fixing happens in the enhancer (see `buildEnhancerFixUrl`).
  */
 
+/** careerbot-ai's own impact levels (by the points a fix recovers: over 5 high, over 2 medium, else low). */
 export type ReportImpact = "high" | "medium" | "low";
 /** auto = the AI can write it; manual = needs the user's input; info = nothing to click, explanation only. */
 export type ReportFixKind = "auto" | "manual" | "info";
 
 export interface ReportItem {
   id: string;
+  /** The ATS section the suggestion belongs to, so it can be named when it is listed by impact. */
+  section: string;
   title: string;
   /** Why it was flagged (or what is missing). */
   reason: string | null;
@@ -59,7 +62,6 @@ export interface AtsReportModel {
   /** Score reachable by applying the fixes, when it can be told. */
   potentialScore: number | null;
   sections: ReportSection[];
-  completeness: { scorePct: number; missingFields: string[] } | null;
   /** Fixes already applied by the scan (mode "auto"); the score and the lists above include them. */
   autoFixed: AutoFixedItem[];
   /** Every fix the scan applied, including ones the ledger cannot describe (not in `autoFixed`). */
@@ -136,13 +138,14 @@ function impactOf(value: unknown, points: number | null): ReportImpact {
   return "low";
 }
 
-function toItem(raw: Rec): ReportItem | null {
+function toItem(raw: Rec, section: string): ReportItem | null {
   const id = text(raw.id);
   if (!id || isBulkId(id)) return null;
   const reason = text(raw.reason) ?? (text(raw.message) && !text(raw.after_example) ? text(raw.message) : null);
   const points = num(raw.penalty_pts);
   return {
     id,
+    section,
     title: titleFor(id, reason),
     reason,
     before: text(raw.before_example),
@@ -164,6 +167,53 @@ function bySeverity(a: ReportItem, b: ReportItem): number {
   return (b.points ?? 0) - (a.points ?? 0);
 }
 
+/** The impact levels in the order the report lists them, and the words it uses for them. */
+export const IMPACT_ORDER: readonly ReportImpact[] = ["high", "medium", "low"];
+export const IMPACT_LABEL: Record<ReportImpact, string> = {
+  high: "High impact",
+  medium: "Medium impact",
+  low: "Low impact",
+};
+
+/** One section's suggestions of one impact level. */
+export interface ImpactSectionGroup {
+  section: ReportSection;
+  items: ReportItem[];
+}
+
+export interface ImpactGroup {
+  impact: ReportImpact;
+  /** Every suggestion of this level, across sections, most urgent first. */
+  items: ReportItem[];
+  /** The same suggestions under the sections they belong to; the section with the most urgent one comes first. */
+  sections: ImpactSectionGroup[];
+  /** Points the suggestions of this level recover together. */
+  points: number;
+}
+
+/**
+ * The suggestions of every applicable section, grouped by their impact (high first), most urgent first inside a group,
+ * and inside a group again by section. A level with no suggestion has no group.
+ */
+export function groupByImpact(sections: ReportSection[]): ImpactGroup[] {
+  const applicable = sections.filter((section) => !section.notApplicable);
+  const items = applicable.flatMap((section) => section.items);
+  return IMPACT_ORDER.map((impact) => {
+    const inGroup = items.filter((item) => item.impact === impact).sort(bySeverity);
+    const bySection: ImpactSectionGroup[] = [];
+    for (const item of inGroup) {
+      const existing = bySection.find((entry) => entry.section.name === item.section);
+      if (existing) {
+        existing.items.push(item);
+        continue;
+      }
+      const section = applicable.find((candidate) => candidate.name === item.section);
+      if (section) bySection.push({ section, items: [item] });
+    }
+    return { impact, items: inGroup, sections: bySection, points: round1(inGroup.reduce((sum, item) => sum + (item.points ?? 0), 0)) };
+  }).filter((group) => group.items.length > 0);
+}
+
 function sectionFrom(raw: Rec, actionItems: Rec): ReportSection | null {
   const name = text(raw.name);
   if (!name) return null;
@@ -177,7 +227,7 @@ function sectionFrom(raw: Rec, actionItems: Rec): ReportSection | null {
       if (reason) reasons.push(reason);
       continue;
     }
-    const item = toItem(row);
+    const item = toItem(row, name);
     if (item) items.push(item);
   }
   return {
@@ -206,7 +256,7 @@ function legacySections(atsScore: Rec | undefined, raw: Rec): ReportSection[] {
   const listed = new Set<Rec>();          // a suggestion is listed once, even if two keys differ only in case
   const itemsFor = (name: string) => suggestions
     .filter((row) => !listed.has(row) && text(row.section)?.toLowerCase() === name.trim().toLowerCase())
-    .map((row) => { listed.add(row); return toItem(row); })
+    .map((row) => { listed.add(row); return toItem(row, name); })
     .filter((item): item is ReportItem => item !== null)
     .sort(bySeverity);
   const sections: ReportSection[] = [];
@@ -297,23 +347,12 @@ export function buildAtsReport(raw: unknown): AtsReportModel | null {
   const potentialScore = estimate !== undefined ? Math.round(estimate)
     : fixablePoints > 0 ? Math.min(100, Math.round(score + fixablePoints)) : null;
 
-  const completenessRaw = isRec(display?.completeness) ? (display!.completeness as Rec) : null;
-  const completeness = completenessRaw
-    ? {
-        scorePct: Math.round(num(completenessRaw.score_pct) ?? 0),
-        missingFields: Array.isArray(completenessRaw.missing_fields)
-          ? completenessRaw.missing_fields.filter((f): f is string => typeof f === "string")
-          : [],
-      }
-    : null;
-
   const autoFixed = autoFixedFrom(raw.applied_fixes);
   return {
     score: round1(score),
     band: bandFor(Math.round(score)),                  // the ring shows the rounded score; the band must agree with it
     potentialScore: potentialScore !== null && potentialScore > Math.round(score) ? potentialScore : null,
     sections,
-    completeness,
     autoFixed,
     autoFixedCount: autoFixedTotal(raw.applied_fixes),
     issueCount,

@@ -29,21 +29,21 @@ describe("runAtsScan (dashboard ATS step) finds the role on the stored resume", 
     mocks.getResume.mockResolvedValue(storedDoc({ contact: { name: "Asha" }, headline: "Software Developer" }));
 
     await expect(runAtsScan("r-1")).resolves.toBe(72);
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "auto", target_role: "Software Developer" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "manual", target_role: "Software Developer" });
   });
 
   it("scores for the latest job kept in the v1 parser's llm_data wrapper", async () => {
     mocks.getResume.mockResolvedValue(storedDoc({ contact: { name: "Asha" }, llm_data: { experience: [{ title: "Data Engineer" }] } }));
 
     await expect(runAtsScan("r-1")).resolves.toBe(72);
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "auto", target_role: "Data Engineer" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "manual", target_role: "Data Engineer" });
   });
 
   it("uses a role the caller passes without reading the resume", async () => {
     await runAtsScan("r-1", "  Data Analyst ");
 
     expect(mocks.getResume).not.toHaveBeenCalled();
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "auto", target_role: "Data Analyst" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "r-1", mode: "manual", target_role: "Data Analyst" });
   });
 
   it("keeps the fixes the scan applied in the stored scan, so the report can list them", async () => {

@@ -52,6 +52,13 @@ const storedWrites = () => [
 ];
 
 const reportShown = () => waitFor(() => expect(screen.getByTestId("ats-score")).toBeTruthy());
+// The suggestions, and each section's Fix button, are inside impact tabs. One tab is open at a time (High when the
+// report loads), so opening one closes the other.
+const openImpactPanel = (impact: string) => {
+  const heading = screen.getAllByTestId("impact-heading").find((el) => el.closest("[data-impact]")?.getAttribute("data-impact") === impact);
+  if (!heading) throw new Error(`no ${impact} impact tab`);
+  if (heading.getAttribute("aria-expanded") !== "true") fireEvent.click(heading);
+};
 
 describe("ATS scan report page", () => {
   beforeEach(() => {
@@ -79,13 +86,20 @@ describe("ATS scan report page", () => {
       await reportShown();
 
       expect(screen.getByTestId("ats-score").textContent).toBe("61");
-      expect(screen.getAllByTestId("ats-section").map((s) => s.getAttribute("aria-label"))).toEqual(["Contact", "Summary"]);
+      // Every section here has suggestions, so each one is inside an impact panel, none is a card of its own.
+      expect(screen.queryAllByTestId("ats-section")).toHaveLength(0);
+      // High opens by itself and this scan has none, so nothing is open; each tab opens in turn and closes the one before.
+      expect(screen.queryByText("Rewrite your summary")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /Medium impact/ }));
+      expect(screen.getAllByTestId("impact-section").map((s) => s.getAttribute("aria-label"))).toEqual(["Summary"]);
       expect(screen.getByText("Rewrite your summary")).toBeTruthy();
-      expect(screen.queryByText("Hard working student.")).toBeNull();             // the example opens on request
-      fireEvent.click(screen.getByRole("button", { name: "See example" }));
-      expect(screen.getByText("Hard working student.")).toBeTruthy();
-      expect(screen.getByText("CS graduate building Python APIs.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /Low impact/ }));
+      expect(screen.getAllByTestId("impact-section").map((s) => s.getAttribute("aria-label"))).toEqual(["Contact"]);
       expect(screen.getByText("Missing LinkedIn profile")).toBeTruthy();
+      expect(screen.queryByText("Rewrite your summary")).toBeNull();
+      // a suggestion has no example boxes
+      expect(screen.queryByRole("button", { name: /example/i })).toBeNull();
+      expect(screen.queryByText("Hard working student.")).toBeNull();
     });
 
     it("has no resume preview or editor: it is only a report", async () => {
@@ -120,6 +134,7 @@ describe("ATS scan report page", () => {
       vi.mocked(getEnhancedResume).mockResolvedValue({ id: "enh-1", original_resume_id: "src-1", enhanced_data: {}, applied_fixes: [] } as never);
       render(<ATSLoginReportPage />);
       await reportShown();
+      openImpactPanel("medium");
       await waitFor(() => expect((screen.getByRole("button", { name: "Fix this section: Summary" }) as HTMLButtonElement).disabled).toBe(false));
     };
 
@@ -131,6 +146,7 @@ describe("ATS scan report page", () => {
 
     it("opens the enhancer on the matching section for another suggestion", async () => {
       await open();
+      openImpactPanel("low");                                   // Contact's suggestion is Low impact
       fireEvent.click(screen.getByRole("button", { name: "Fix this section: Contact" }));
       expect(nav.router.push).toHaveBeenCalledWith("/builder/creation/enh-1?source=enhanced&from_ats=true&open_section=Contact");
     });
@@ -148,6 +164,7 @@ describe("ATS scan report page", () => {
 
       render(<ATSLoginReportPage />);
       await reportShown();
+      openImpactPanel("medium");
 
       const fix = screen.getByRole("button", { name: "Fix this section: Summary" }) as HTMLButtonElement;
       expect(fix.disabled).toBe(true);
@@ -245,6 +262,7 @@ describe("ATS scan report page", () => {
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Service unavailable"));
     expect(screen.getByTestId("ats-score").textContent).toBe("64");
+    openImpactPanel("medium");
     expect((screen.getByRole("button", { name: "Fix this section: Summary" }) as HTMLButtonElement).disabled).toBe(true);
 
     vi.mocked(enhanceResume).mockResolvedValueOnce({ success: true, enhanced_resume_id: "enh-3", enhanced_resume: {}, applied_fixes: [] } as never);
@@ -457,7 +475,7 @@ describe("ATS scan report page", () => {
 
       fireEvent.click(screen.getByText("Yes, start fresh"));
       await waitFor(() => expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull());
-      expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Software Developer", force_refresh: true });
+      expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Software Developer", force_refresh: true });
       // The fresh record reuses the old ID: what this browser kept for it (green
       // cards, highlights) must be forgotten or the enhancer shows old fixes.
       expect(clearStored).toHaveBeenCalledWith("enh-2");
@@ -574,7 +592,7 @@ describe("ATS scan report page", () => {
 
       await reportShown();
       await waitFor(() => expect(enhanceResume).toHaveBeenCalledTimes(1));
-      expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Software Developer" });
+      expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Software Developer" });
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
@@ -590,7 +608,7 @@ describe("ATS scan report page", () => {
       render(<ATSLoginReportPage />);
 
       await waitFor(() => expect(enhanceResume).toHaveBeenCalledTimes(1));
-      expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Student" });
+      expect(enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Student" });
     });
 
     it("asks again, like the upload dialog, when the service keeps the saved fixes on a fresh scan", async () => {
@@ -636,7 +654,7 @@ describe("ATS scan report page", () => {
       fireEvent.click(screen.getByText("Yes, start fresh"));
 
       await waitFor(() => expect(screen.queryByTestId("prior-fixes-dialog")).toBeNull());
-      expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Software Developer", force_refresh: true, ats_breakdown: "bd-9" });
+      expect(enhanceResume).toHaveBeenLastCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Software Developer", force_refresh: true, ats_breakdown: "bd-9" });
     });
   });
 });

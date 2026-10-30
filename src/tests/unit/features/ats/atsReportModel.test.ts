@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAtsReport, buildEnhancerFixUrl, bandFor } from "@/app/(resume)/atslogin/report/atsReportModel";
+import { buildAtsReport, buildEnhancerFixUrl, bandFor, groupByImpact, IMPACT_LABEL, IMPACT_ORDER } from "@/app/(resume)/atslogin/report/atsReportModel";
 
 // Shape the backend stores after a scan (careerbot-ai /enhance/resume, adapted by careerbot-api).
 const scan = () => ({
@@ -51,11 +51,11 @@ describe("buildAtsReport", () => {
     expect(buildAtsReport({ ats_display: { sections: [] } })).toBeNull();
   });
 
-  it("reads the score, band, completeness and the recoverable points", () => {
+  it("reads the score, band and the recoverable points, and carries no completeness", () => {
     const model = buildAtsReport(scan())!;
     expect(model.score).toBe(61.4);
     expect(model.band).toEqual({ label: "Fair", tone: "fair" });
-    expect(model.completeness).toEqual({ scorePct: 90, missingFields: ["LinkedIn"] });
+    expect(model).not.toHaveProperty("completeness");                 // the scan sends it, the report does not show it
     expect(model.issueCount).toBe(5);
     expect(model.recoverablePoints).toBe(10.3);
     expect(model.potentialScore).toBe(71); // 61.4 + 9.1 the user can fix (not the 1.2-point ATS-format finding), rounded
@@ -287,5 +287,126 @@ describe("buildEnhancerFixUrl", () => {
 
   it("encodes the id", () => {
     expect(buildEnhancerFixUrl("a/b")).toContain("/builder/creation/a%2Fb?");
+  });
+});
+
+describe("groupByImpact: suggestions by the impact careerbot-ai gave them", () => {
+  const sections = (list: Array<{ name: string; na?: boolean; fixes: Array<Record<string, unknown>> }>) =>
+    buildAtsReport({ ats_display: { score: 50, sections: list.map((s) => ({
+      name: s.name, score_pct: 50, weighted_pts: 5, max_pts: 10, is_not_applicable: s.na === true, fixes: s.fixes,
+    })) } })!.sections;
+  const fix = (id: string, impact: string | undefined, rank: number, pts: number) => ({
+    id, fix_type: "manual", ...(impact ? { impact } : {}), rank, penalty_pts: pts, reason: `reason of ${id}`,
+  });
+
+  it("uses the three levels the AI service defines, in this order", () => {
+    expect(IMPACT_ORDER).toEqual(["high", "medium", "low"]);
+    expect(IMPACT_LABEL).toEqual({ high: "High impact", medium: "Medium impact", low: "Low impact" });
+  });
+
+  it("groups every section's suggestions by impact, High first", () => {
+    const groups = groupByImpact(sections([
+      { name: "Summary", fixes: [fix("suggested_summary_0", "low", 6, 1), fix("headline_missing", "high", 1, 6)] },
+      { name: "Skills", fixes: [fix("skills_missing", "medium", 3, 3), fix("soft_skills_missing", "high", 2, 5.5)] },
+    ]));
+
+    expect(groups.map((g) => g.impact)).toEqual(["high", "medium", "low"]);
+    expect(groups.map((g) => g.items.map((i) => i.id))).toEqual([
+      ["headline_missing", "soft_skills_missing"],
+      ["skills_missing"],
+      ["suggested_summary_0"],
+    ]);
+  });
+
+  it("records the section of each suggestion", () => {
+    const [high] = groupByImpact(sections([
+      { name: "Summary", fixes: [fix("headline_missing", "high", 1, 6)] },
+      { name: "Skills", fixes: [fix("skills_missing", "high", 2, 5.5)] },
+    ]));
+
+    expect(high.items.map((i) => i.section)).toEqual(["Summary", "Skills"]);
+  });
+
+  it("orders a group by priority across sections, not section by section", () => {
+    const [high] = groupByImpact(sections([
+      { name: "Skills", fixes: [fix("skills_missing", "high", 3, 6)] },
+      { name: "Summary", fixes: [fix("headline_missing", "high", 1, 6), fix("suggested_summary_0", "high", 2, 6)] },
+    ]));
+
+    expect(high.items.map((i) => i.id)).toEqual(["headline_missing", "suggested_summary_0", "skills_missing"]);
+  });
+
+  it("adds up the points of a group", () => {
+    const groups = groupByImpact(sections([
+      { name: "Skills", fixes: [fix("skills_missing", "high", 1, 6.2), fix("soft_skills_missing", "high", 2, 5.4), fix("cert_1_year", "low", 3, 0.4)] },
+    ]));
+
+    expect(groups.map((g) => [g.impact, g.points])).toEqual([["high", 11.6], ["low", 0.4]]);
+  });
+
+  it("lists, inside a group, each section with its own suggestions of that level", () => {
+    const [high, low] = groupByImpact(sections([
+      { name: "Summary", fixes: [fix("headline_missing", "high", 1, 6), fix("suggested_summary_0", "low", 6, 1)] },
+      { name: "Skills", fixes: [fix("skills_missing", "high", 2, 5.5), fix("soft_skills_missing", "high", 3, 5.2)] },
+    ]));
+
+    expect(high.sections.map((g) => [g.section.name, g.items.map((i) => i.id)])).toEqual([
+      ["Summary", ["headline_missing"]],
+      ["Skills", ["skills_missing", "soft_skills_missing"]],
+    ]);
+    expect(low.sections.map((g) => [g.section.name, g.items.map((i) => i.id)])).toEqual([["Summary", ["suggested_summary_0"]]]);
+  });
+
+  it("puts first the section that holds the most urgent suggestion of the level", () => {
+    const [high] = groupByImpact(sections([
+      { name: "Contact", fixes: [fix("contact_issue_0", "high", 4, 6)] },
+      { name: "Skills", fixes: [fix("skills_missing", "high", 1, 6)] },
+    ]));
+
+    expect(high.sections.map((g) => g.section.name)).toEqual(["Skills", "Contact"]);
+  });
+
+  it("hands over the section itself, with its score and explanation rows", () => {
+    const [group] = groupByImpact(buildAtsReport({ ats_display: { score: 50, sections: [
+      { name: "Summary", score_pct: 40, weighted_pts: 2.8, max_pts: 7, is_not_applicable: false, fixes: [
+        { penalty_pts: 4, reason: "Your summary names no role." }, fix("headline_missing", "high", 1, 6)] },
+    ] } })!.sections);
+
+    expect(group.sections[0].section).toMatchObject({ name: "Summary", scorePct: 40, reasons: ["Your summary names no role."] });
+  });
+
+  it("leaves out a level that has no suggestion", () => {
+    const groups = groupByImpact(sections([{ name: "Skills", fixes: [fix("skills_missing", "medium", 1, 3)] }]));
+
+    expect(groups.map((g) => g.impact)).toEqual(["medium"]);
+  });
+
+  it("is empty when there is nothing to fix", () => {
+    expect(groupByImpact(sections([{ name: "Skills", fixes: [] }]))).toEqual([]);
+    expect(groupByImpact([])).toEqual([]);
+  });
+
+  it("ignores sections that do not apply to the profile", () => {
+    const groups = groupByImpact(sections([
+      { name: "Experience", na: true, fixes: [fix("experience_none", "high", 1, 8)] },
+      { name: "Skills", fixes: [fix("skills_missing", "low", 2, 1)] },
+    ]));
+
+    expect(groups.map((g) => g.impact)).toEqual(["low"]);
+  });
+
+  it("derives the level from the points when the AI sends none, as the AI service itself does", () => {
+    const groups = groupByImpact(sections([
+      { name: "Skills", fixes: [fix("a_big", undefined, 1, 6), fix("a_mid", undefined, 2, 3), fix("a_small", undefined, 3, 1)] },
+    ]));
+
+    expect(groups.map((g) => [g.impact, g.items[0].id])).toEqual([["high", "a_big"], ["medium", "a_mid"], ["low", "a_small"]]);
+  });
+
+  it("puts every suggestion in exactly one group", () => {
+    const model = buildAtsReport(scan())!;
+    const groups = groupByImpact(model.sections);
+
+    expect(groups.reduce((n, g) => n + g.items.length, 0)).toBe(model.issueCount);
   });
 });

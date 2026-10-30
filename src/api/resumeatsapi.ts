@@ -324,7 +324,7 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
       enhanceResult = await enhanceResume({
         resume_id: resumeId,
         // The scan applies the automatic fixes itself; the report lists what still needs the user.
-        mode: "auto",
+        mode: "manual",
         target_role: role,
       });
     } catch (enhanceErr) {
@@ -405,8 +405,13 @@ export const processResumeComplete = async (file: File, options: ScanOptions = {
       enhanced_resume: enhancedResume,
       ats_score: atsBreakdown,
       ats_display: atsDisplay || null,
-      // The fixes the scan applied for the user (mode "auto"), so the report can say what changed.
+      // The fixes the scan applied for the user, so the report can say what changed.
       applied_fixes: Array.isArray(enhanceResultRec.applied_fixes) ? enhanceResultRec.applied_fixes : [],
+      // The server's own projection (current score, points possible ...) and its estimate of the score after the
+      // fixes, so the report shows that number instead of guessing one from the points. The estimate is kept only
+      // when it makes sense (between the current score and 100), under the one name the report reads.
+      ...Object.fromEntries(Object.entries(scoreProjection).filter(([key]) => key !== "estimated_score_after_fixes")),
+      ...(estimatedScore !== undefined ? { estimated_score_after_fixes: estimatedScore } : {}),
       finalWeightedScore: finalScore,
       missingFields: [],
       scanned_pdf: false,
@@ -452,7 +457,7 @@ export const runAtsScan = async (resumeId: string, targetRole?: string): Promise
   // A failed read (session, network) is reported as it is: only a resume that names no role asks for one.
   if (!role) role = resolveTargetRole(await getResume(resumeId));
   if (!role) throw targetRoleRequired();
-  const enhanceResult = await enhanceResume({ resume_id: resumeId, mode: "auto", target_role: role });
+  const enhanceResult = await enhanceResume({ resume_id: resumeId, mode: "manual", target_role: role });
   const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
   const atsDisplay = enhanceResult.ats_display;
   const atsBreakdownRec = atsBreakdown as Record<string, unknown>;

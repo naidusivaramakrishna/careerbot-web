@@ -214,7 +214,7 @@ function ATSLoginReport() {
 
     const result = await enhanceResume({
       resume_id: resumeId,
-      mode: "auto",
+      mode: "manual",
       target_role: reportRole(d),
       ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),
     });
@@ -247,7 +247,7 @@ function ATSLoginReport() {
       const result = await enhanceResume({
         resume_id: resumeId,
         force_refresh: true,
-        mode: "auto",
+        mode: "manual",
         target_role: reportRole(d),
         // Same breakdown the first scan was tied to.
         ...(typeof d.ats_breakdown_id === "string" ? { ats_breakdown: d.ats_breakdown_id } : {}),

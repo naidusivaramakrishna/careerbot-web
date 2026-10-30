@@ -59,7 +59,7 @@ describe('dashboard ATS scan: a resume that names no role', { timeout: 30_000 },
     fireEvent.click(screen.getByRole('button', { name: 'Scan my resume' }));
 
     expect(await screen.findByText('72')).toBeInTheDocument();
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: 'r-1', mode: 'auto', target_role: 'Software Developer' });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: 'r-1', mode: 'manual', target_role: 'Software Developer' });
   });
 
   it('cancel closes the question without a scan; the next run asks again with an empty field', async () => {
@@ -108,7 +108,7 @@ describe('dashboard ATS scan: a resume that names no role', { timeout: 30_000 },
     fireEvent.click(await screen.findByRole('button', { name: 'Try Again' }));
     expect(await screen.findByText('72')).toBeInTheDocument();
     expect(mocks.enhanceResume).toHaveBeenCalledTimes(2);
-    expect(mocks.enhanceResume).toHaveBeenLastCalledWith({ resume_id: 'r-1', mode: 'auto', target_role: 'Software Developer' });
+    expect(mocks.enhanceResume).toHaveBeenLastCalledWith({ resume_id: 'r-1', mode: 'manual', target_role: 'Software Developer' });
   });
 
   it('a resume that names its role is scored without asking (control)', async () => {
@@ -117,7 +117,7 @@ describe('dashboard ATS scan: a resume that names no role', { timeout: 30_000 },
 
     expect(await screen.findByText('72')).toBeInTheDocument();
     expect(screen.queryByLabelText('Target role')).toBeNull();
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: 'r-1', mode: 'auto', target_role: 'Data Analyst' });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: 'r-1', mode: 'manual', target_role: 'Data Analyst' });
   });
 
   it('any other failure still shows the error with Try Again (control)', async () => {

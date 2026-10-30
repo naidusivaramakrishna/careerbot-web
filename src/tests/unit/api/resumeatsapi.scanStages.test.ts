@@ -60,13 +60,56 @@ describe("processResumeComplete reports what it is really doing", () => {
     expect(mocks.enhanceResume).not.toHaveBeenCalled();
   });
 
+  describe("keeps the server's estimate of the score after the fixes with the scan", () => {
+    const scanned = (extra: Record<string, unknown>, score = 60) => {
+      mockParse(parsedOk);
+      mocks.enhanceResume.mockResolvedValue({
+        success: true, enhanced_resume_id: "enh-1", ats_display: { score, sections: [] }, enhancer_state: { resume: {} }, ...extra,
+      });
+      return processResumeComplete(file());
+    };
+
+    it("stores the estimate the service sent, and the rest of its projection", async () => {
+      const result = await scanned({ estimated_score_after_fixes: 88, points_possible: 28, issues_count: 5 });
+
+      expect(result).toMatchObject({ estimated_score_after_fixes: 88, points_possible: 28, issues_count: 5 });
+      expect(JSON.parse(localStorage.getItem("atsAnalysisData") ?? "{}")).toMatchObject({ estimated_score_after_fixes: 88 });
+    });
+
+    it("reads the estimate under any of the names the service has used", async () => {
+      const result = await scanned({ projected_score: 81 });
+
+      expect(result).toMatchObject({ estimated_score_after_fixes: 81 });
+    });
+
+    it("ignores an estimate that is below the current score or above 100", async () => {
+      expect(await scanned({ estimated_score_after_fixes: 40 })).not.toHaveProperty("estimated_score_after_fixes");
+      expect(await scanned({ estimated_score_after_fixes: 140 })).not.toHaveProperty("estimated_score_after_fixes");
+    });
+
+    it("adds nothing when the service sent no projection", async () => {
+      const result = await scanned({});
+
+      expect(result).not.toHaveProperty("estimated_score_after_fixes");
+      expect(result).not.toHaveProperty("points_possible");
+    });
+
+    it("is what the report then shows as the score the fixes could reach", async () => {
+      await scanned({ estimated_score_after_fixes: 88 });
+      const stored = JSON.parse(localStorage.getItem("atsAnalysisData") ?? "{}");
+      const { buildAtsReport } = await import("@/app/(resume)/atslogin/report/atsReportModel");
+
+      expect(buildAtsReport(stored)?.potentialScore).toBe(88);
+    });
+  });
+
   it("sends the role the user typed with the enhance request", async () => {
     mockParse(parsedOk);
     mocks.enhanceResume.mockResolvedValue({ success: true, enhanced_resume_id: "enh-1", ats_display: { score: 50, sections: [] }, enhancer_state: { resume: {} } });
 
     await processResumeComplete(file(), { targetRole: "  Software Developer " });
 
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Software Developer" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Software Developer" });
   });
 
   it("asks again, and sends no scan request, when the typed role is a placeholder the API rejects", async () => {
@@ -84,7 +127,7 @@ describe("processResumeComplete reports what it is really doing", () => {
 
     await processResumeComplete(file());
 
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Software Developer" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Software Developer" });
   });
 
   it("asks for a role, and sends no scan request, when the resume names none", async () => {
@@ -112,7 +155,7 @@ describe("processResumeComplete reports what it is really doing", () => {
 
     expect(second).toMatchObject({ success: true });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);                     // one upload + parse for the whole scan
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Support Engineer" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Support Engineer" });
     expect(stages).toEqual(["scoring", "finishing"]);                      // no "parsing" stage: it was already done
   });
 
@@ -156,7 +199,7 @@ describe("processResumeComplete reports what it is really doing", () => {
 
     const result = await processResumeComplete(file(), { targetRole: "Data Analyst" });
 
-    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "auto", target_role: "Data Analyst" });
+    expect(mocks.enhanceResume).toHaveBeenCalledWith({ resume_id: "src-1", mode: "manual", target_role: "Data Analyst" });
     expect(result).toMatchObject({ success: true, enhanced_resume_id: "enh-2", target_role: "Data Analyst" });
   });
 
